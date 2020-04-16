@@ -1,0 +1,19 @@
+### Trident 
+
+### Learning Trident 
+
+You can learn more about using and contributing to CNTK with the following resources:
+
+* [General documentation](https://docs.microsoft.com/en-us/cognitive-toolkit/)
+* [CNTK Examples](./exsamples_cntk)
+* [Pytorch Examples](./exsamples_tensorflow)
+* [Tensorflow Examples](./exsamples_pytorch)
+* [Pretrained models](./PretrainedModels)
+* [License](./LICENSE.md)
+
+### More information
+
+* [Contribute to CNTK](https://docs.microsoft.com/en-us/cognitive-toolkit/Contributing-to-CNTK)
+* [FAQ](https://docs.microsoft.com/en-us/cognitive-toolkit/CNTK-FAQ)
+* [Feedback](https://docs.microsoft.com/en-us/cognitive-toolkit/Feedback-Channels)
+

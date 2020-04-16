@@ -1,0 +1,38 @@
+Metadata-Version: 2.1
+Name: tridentx
+Version: 0.4.0
+Summary: Multiverse for Deep Learning Developers without Pitfall
+Home-page: UNKNOWN
+Author: Allan Yiin
+Author-email: allan@datadecision.ai
+License: MIT
+Download-URL: https://test.pypi.org/project/tridentx
+Description: ### Trident 
+        
+        ### Learning Trident 
+        
+        You can learn more about using and contributing to CNTK with the following resources:
+        
+        * [General documentation](https://docs.microsoft.com/en-us/cognitive-toolkit/)
+        * [CNTK Examples](./exsamples_cntk)
+        * [Pytorch Examples](./exsamples_tensorflow)
+        * [Tensorflow Examples](./exsamples_pytorch)
+        * [Pretrained models](./PretrainedModels)
+        * [License](./LICENSE.md)
+        
+        
+        
+Platform: UNKNOWN
+Classifier: Development Status :: 4 - Beta
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Education
+Classifier: Intended Audience :: Science/Research
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Topic :: Software Development :: Libraries
+Classifier: Topic :: Software Development :: Libraries :: Python Modules
+Requires-Python: >=3
+Description-Content-Type: text/markdown
+Provides-Extra: visualize
+Provides-Extra: tests
