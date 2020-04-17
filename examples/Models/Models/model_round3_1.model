@@ -1,5380 +1,0 @@
-
-version("
-uidBCompositeFunction3866ìÊ
-primitive_functionsÓÊ	ZËÊ
-®
-b§
-version(
-typeBPrimitiveFunction
-uidBStopGradient2829*
-inputs 	Z
-BBlock2821_Output_0
-op(@
-
-attributes
-b
-È
-bÁ
-version(
-uidB	Minus2832
-typeBPrimitiveFunctionK
-inputsA	Z;
-BBlock2486_Output_0
-BStopGradient2829_Output_0
-
-attributes
-b
-op(
-È
-bÁ
-version(
-typeBPrimitiveFunction
-uidBElementTimes2835D
-inputs:	Z4
-BMinus2832_Output_0
-BMinus2832_Output_0
-op(
-
-attributes
-b
-á
-bÚ
-version(
-uidBReduceElements2842
-typeBPrimitiveFunction¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(')
-inputs	Z
-BPlaceholder126406 
-nameB_static_axes_subop
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126406
-uidB	Block2845
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126404Â
-block_function_composite¥
-b
-version("
-uidBCompositeFunction2843
-typeBCompositeFunction 
-rootBReduceElements2842 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126404
-Æ
-b¿
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126404
-uidB	Block2850
-typeBPrimitiveFunction1
-inputs'	Z!
-BElementTimes2835_Output_0•
-block_function_compositey
-bs
-version("
-uidBCompositeFunction2846
-typeBCompositeFunction
-rootB	Block2845»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(9.
-block_function_op_nameBReduceElementsX
--block_function_composite_arguments_map_values'	Z!
-BElementTimes2835_Output_0
-º
-b³
-version(
-uidBPlus2862
-typeBPrimitiveFunction>
-inputs4	Z.
-BBlock2850_Output_0
-BConstant2861
-
-attributes
-b
-op(
-á
-bÚ
-version(
-uidBReduceElements2813
-typeBPrimitiveFunction¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(')
-inputs	Z
-BPlaceholder126396 
-nameB_static_axes_subop
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126396
-uidB	Block2816
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126394Â
-block_function_composite¥
-b
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2814 
-rootBReduceElements2813 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126394
-¸
-b±
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126394
-uidB	Block2821
-typeBPrimitiveFunction*
-inputs 	Z
-BBlock2486_Output_0•
-block_function_compositey
-bs
-version("
-uidBCompositeFunction2817
-typeBCompositeFunction
-rootB	Block2816»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(9.
-block_function_op_nameBReduceElementsQ
--block_function_composite_arguments_map_values 	Z
-BBlock2486_Output_0
-®
-b§
-version(
-typeBPrimitiveFunction
-uidBStopGradient2010*
-inputs 	Z
-BBlock2002_Output_0
-op(@
-
-attributes
-b
-È
-bÁ
-version(
-typeBPrimitiveFunction
-uidB	Minus2013K
-inputsA	Z;
-BBlock1733_Output_0
-BStopGradient2010_Output_0
-op(
-
-attributes
-b
-È
-bÁ
-version(
-typeBPrimitiveFunction
-uidBElementTimes2016D
-inputs:	Z4
-BMinus2013_Output_0
-BMinus2013_Output_0
-op(
-
-attributes
-b
-á
-bÚ
-version(
-uidBReduceElements2023
-typeBPrimitiveFunction¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(')
-inputs	Z
-BPlaceholder126362 
-nameB_static_axes_subop
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126362
-uidB	Block2026
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126360Â
-block_function_composite¥
-b
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2024 
-rootBReduceElements2023 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126360
-Æ
-b¿
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126360
-uidB	Block2031
-typeBPrimitiveFunction1
-inputs'	Z!
-BElementTimes2016_Output_0•
-block_function_compositey
-bs
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2027
-rootB	Block2026»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3
-reductionOpName
-BMean!
-reductionKeepDimensions
-op(9.
-block_function_op_nameBReduceElementsX
--block_function_composite_arguments_map_values'	Z!
-BElementTimes2016_Output_0
-º
-b³
-version(
-uidBPlus2043
-typeBPrimitiveFunction>
-inputs4	Z.
-BBlock2031_Output_0
-BConstant2042
-
-attributes
-b
-op(
-á
-bÚ
-version(
-uidBReduceElements1994
-typeBPrimitiveFunction¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(')
-inputs	Z
-BPlaceholder126352 
-nameB_static_axes_subop
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126352
-uidB	Block1997
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126350Â
-block_function_composite¥
-b
-version(
-typeBCompositeFunction"
-uidBCompositeFunction1995 
-rootBReduceElements1994 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126350
-¸
-b±
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126350
-uidB	Block2002
-typeBPrimitiveFunction*
-inputs 	Z
-BBlock1733_Output_0•
-block_function_compositey
-bs
-version("
-uidBCompositeFunction1998
-typeBCompositeFunction
-rootB	Block1997»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(9.
-block_function_op_nameBReduceElementsQ
--block_function_composite_arguments_map_values 	Z
-BBlock1733_Output_0
-®
-b§
-version(
-typeBPrimitiveFunction
-uidBStopGradient1320*
-inputs 	Z
-BBlock1312_Output_0
-op(@
-
-attributes
-b
-È
-bÁ
-version(
-typeBPrimitiveFunction
-uidB	Minus1323K
-inputsA	Z;
-BBlock1110_Output_0
-BStopGradient1320_Output_0
-op(
-
-attributes
-b
-È
-bÁ
-version(
-typeBPrimitiveFunction
-uidBElementTimes1326D
-inputs:	Z4
-BMinus1323_Output_0
-BMinus1323_Output_0
-op(
-
-attributes
-b
-á
-bÚ
-version(
-typeBPrimitiveFunction
-uidBReduceElements1333)
-inputs	Z
-BPlaceholder126317 
-nameB_static_axes_subop
-op('¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0
-reductionOpName
-BMean!
-reductionKeepDimensions
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126317
-uidB	Block1336
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126315Â
-block_function_composite¥
-b
-version("
-uidBCompositeFunction1334
-typeBCompositeFunction 
-rootBReduceElements1333 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126315
-Æ
-b¿
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126315
-uidB	Block1341
-typeBPrimitiveFunction1
-inputs'	Z!
-BElementTimes1326_Output_0•
-block_function_compositey
-bs
-version("
-uidBCompositeFunction1337
-typeBCompositeFunction
-rootB	Block1336»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(9.
-block_function_op_nameBReduceElementsX
--block_function_composite_arguments_map_values'	Z!
-BElementTimes1326_Output_0
-º
-b³
-version(
-typeBPrimitiveFunction
-uidBPlus1353>
-inputs4	Z.
-BBlock1341_Output_0
-BConstant1352
-op(
-
-attributes
-b
-á
-bÚ
-version(
-typeBPrimitiveFunction
-uidBReduceElements1304)
-inputs	Z
-BPlaceholder126307 
-nameB_static_axes_subop
-op('¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0
-reductionOpName
-BMean!
-reductionKeepDimensions
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126307
-uidB	Block1307
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126305Â
-block_function_composite¥
-b
-version(
-typeBCompositeFunction"
-uidBCompositeFunction1305 
-rootBReduceElements1304 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126305
-¸
-b±
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126305
-uidB	Block1312
-typeBPrimitiveFunction*
-inputs 	Z
-BBlock1110_Output_0•
-block_function_compositey
-bs
-version(
-typeBCompositeFunction"
-uidBCompositeFunction1308
-rootB	Block1307»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3
-reductionOpName
-BMean!
-reductionKeepDimensions
-op(9.
-block_function_op_nameBReduceElementsQ
--block_function_composite_arguments_map_values 	Z
-BBlock1110_Output_0
-¬
-b¥
-version(
-uidBStopGradient767
-typeBPrimitiveFunction)
-inputs	Z
-BBlock759_Output_0
-
-attributes
-b
-op(@
-Å
-b¾
-version(
-uidBMinus770
-typeBPrimitiveFunctionI
-inputs?	Z9
-BBlock623_Output_0
-BStopGradient767_Output_0
-
-attributes
-b
-op(
-Å
-b¾
-version(
-uidBElementTimes773
-typeBPrimitiveFunctionB
-inputs8	Z2
-BMinus770_Output_0
-BMinus770_Output_0
-
-attributes
-b
-op(
-à
-bÙ
-version(
-uidBReduceElements780
-typeBPrimitiveFunction¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(')
-inputs	Z
-BPlaceholder126273 
-nameB_static_axes_subop
-»
-b´
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126273
-uidBBlock783
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126271À
-block_function_composite£
-bœ
-version(
-typeBCompositeFunction!
-uidBCompositeFunction781
-rootBReduceElements780 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126271
-Á
-bº
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126271
-uidBBlock788
-typeBPrimitiveFunction0
-inputs&	Z 
-BElementTimes773_Output_0“
-block_function_compositew
-bq
-version(
-typeBCompositeFunction!
-uidBCompositeFunction784
-rootBBlock783»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3
-reductionOpName
-BMean!
-reductionKeepDimensions
-op(9.
-block_function_op_nameBReduceElementsW
--block_function_composite_arguments_map_values&	Z 
-BElementTimes773_Output_0
-·
-b°
-version(
-uidBPlus800
-typeBPrimitiveFunction<
-inputs2	Z,
-BBlock788_Output_0
-BConstant799
-
-attributes
-b
-op(
-à
-bÙ
-version(
-uidBReduceElements751
-typeBPrimitiveFunction¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(')
-inputs	Z
-BPlaceholder126263 
-nameB_static_axes_subop
-»
-b´
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126263
-uidBBlock754
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126261À
-block_function_composite£
-bœ
-version(
-typeBCompositeFunction!
-uidBCompositeFunction752
-rootBReduceElements751 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126261
-³
-b¬
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126261
-uidBBlock759
-typeBPrimitiveFunction)
-inputs	Z
-BBlock623_Output_0“
-block_function_compositew
-bq
-version(
-typeBCompositeFunction!
-uidBCompositeFunction755
-rootBBlock754»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3
-reductionOpName
-BMean!
-reductionKeepDimensions
-op(9.
-block_function_op_nameBReduceElementsP
--block_function_composite_arguments_map_values	Z
-BBlock623_Output_0
-¬
-b¥
-version(
-uidBStopGradient346
-typeBPrimitiveFunction)
-inputs	Z
-BBlock338_Output_0
-
-attributes
-b
-op(@
-Å
-b¾
-version(
-uidBMinus349
-typeBPrimitiveFunctionI
-inputs?	Z9
-BBlock268_Output_0
-BStopGradient346_Output_0
-
-attributes
-b
-op(
-Å
-b¾
-version(
-typeBPrimitiveFunction
-uidBElementTimes352B
-inputs8	Z2
-BMinus349_Output_0
-BMinus349_Output_0
-op(
-
-attributes
-b
-à
-bÙ
-version(
-typeBPrimitiveFunction
-uidBReduceElements359)
-inputs	Z
-BPlaceholder126229 
-nameB_static_axes_subop
-op('¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0
-reductionOpName
-BMean!
-reductionKeepDimensions
-»
-b´
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126229
-uidBBlock362
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126227À
-block_function_composite£
-bœ
-version(!
-uidBCompositeFunction360
-typeBCompositeFunction
-rootBReduceElements359 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126227
-Á
-bº
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126227
-uidBBlock367
-typeBPrimitiveFunction0
-inputs&	Z 
-BElementTimes352_Output_0“
-block_function_compositew
-bq
-version(!
-uidBCompositeFunction363
-typeBCompositeFunction
-rootBBlock362»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(9.
-block_function_op_nameBReduceElementsW
--block_function_composite_arguments_map_values&	Z 
-BElementTimes352_Output_0
-·
-b°
-version(
-typeBPrimitiveFunction
-uidBPlus379<
-inputs2	Z,
-BBlock367_Output_0
-BConstant378
-op(
-
-attributes
-b
-à
-bÙ
-version(
-typeBPrimitiveFunction
-uidBReduceElements330)
-inputs	Z
-BPlaceholder126219 
-nameB_static_axes_subop
-op('¥
-
-attributes–
-bI
-axisVec>	Z8
-RstaticAxisIdx=1
-RstaticAxisIdx=0
-reductionOpName
-BMean!
-reductionKeepDimensions
-»
-b´
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126219
-uidBBlock333
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126217À
-block_function_composite£
-bœ
-version(!
-uidBCompositeFunction331
-typeBCompositeFunction
-rootBReduceElements330 
-nameB_static_axes_subop
-
-attributes
-b
-op(9/
-block_function_op_nameBMultiAxisReduceP
--block_function_composite_arguments_map_values	Z
-BPlaceholder126217
-³
-b¬
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126217
-uidBBlock338
-typeBPrimitiveFunction)
-inputs	Z
-BBlock268_Output_0“
-block_function_compositew
-bq
-version(!
-uidBCompositeFunction334
-typeBCompositeFunction
-rootBBlock333»
-
-attributes¬
-b¥_
-axisVecT	ZN
-%RşÿÿÿÿÿÿÿÿstaticAxisIdx=-2
-%RıÿÿÿÿÿÿÿÿstaticAxisIdx=-3!
-reductionKeepDimensions
-reductionOpName
-BMean
-op(9.
-block_function_op_nameBReduceElementsP
--block_function_composite_arguments_map_values	Z
-BBlock268_Output_0
-’
-b‹
-version(
-typeBPrimitiveFunction
-uidBConvolution57;
-inputs1	Z+
-B
-Parameter5
-BPlaceholder126189
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-º
-b³
-version(
-typeBPrimitiveFunction
-uidBPlus59@
-inputs6	Z0
-BConvolution57_Output_0
-B
-Parameter6
-op(
-
-attributes
-b
-½
-b¶
-version(
-typeBPrimitiveFunction
-uidBElementTimes66;
-inputs1	Z+
-B
-Constant20
-BPlaceholder126196
-op(
-
-attributes
-b
-µ
-b®
-version(
-typeBPrimitiveFunction
-uidBLess63;
-inputs1	Z+
-BPlaceholder126196
-B
-Constant16
-op(
-
-attributes
-b
-Û
-bÔ
-version(
-typeBPrimitiveFunction
-uidBSelect69_
-inputsU	ZO
-BLess63_Output_0
-BElementTimes66_Output_0
-BPlaceholder126196
-op(*
-
-attributes
-b
-¾
-b·
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126196
-uidBBlock75
-typeBPrimitiveFunctionK
-inputsA	Z;
-B
-Constant16
-B
-Constant20
-BPlus59_Output_0’
-block_function_compositev
-bp
-version( 
-uidBCompositeFunction70
-typeBCompositeFunction
-rootBSelect69.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUN
--block_function_composite_arguments_map_values	Z
-BPlus59_Output_0
-Æ
-b¿
-version(
-typeBPrimitiveFunction
-uidBClip81L
-inputsB	Z<
-BBlock75_Output_0
-B
-Constant34
-B
-Constant35
-op()
-
-attributes
-b
-Ş
-b×
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126189
-uidBBlock95
-typeBPrimitiveFunction‹
-inputs€	Zz
-B
-Constant16
-B
-Constant20
-B
-Parameter5
-B
-Parameter6
-B
-Constant34
-B
-Constant35
-BInput3
-block_function_compositet
-bn
-version( 
-uidBCompositeFunction82
-typeBCompositeFunction
-rootBClip81
-
-attributes
-b
-op(9+
-block_function_op_nameBConvolutionE
--block_function_composite_arguments_map_values	Z
-BInput3
-Å
-b¾
-version(
-typeBPrimitiveFunction
-uidBClip168J
-inputs@	Z:
-BParameter142
-BConstant146
-BConstant147
-op()
-
-attributes
-b
-™
-b’
-version(
-typeBPrimitiveFunction
-uidBConvolution172A
-inputs7	Z1
-BClip168_Output_0
-BPlaceholder126205
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-¾
-b·
-version(
-typeBPrimitiveFunction
-uidBPlus174C
-inputs9	Z3
-BConvolution172_Output_0
-BParameter143
-op(
-
-attributes
-b
-Ô
-bÍ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126205
-uidBBlock181
-typeBPrimitiveFunctionv
-inputsl	Zf
-BParameter142
-BConstant146
-BConstant147
-BParameter143
-BBlock95_Output_0’
-block_function_compositev
-bp
-version(!
-uidBCompositeFunction175
-typeBCompositeFunction
-rootBPlus174
-
-attributes
-b
-op(9*
-block_function_op_nameB
-GCD_Conv2DO
--block_function_composite_arguments_map_values	Z
-BBlock95_Output_0
-Å
-b¾
-version(
-typeBPrimitiveFunction
-uidBClip255J
-inputs@	Z:
-BParameter229
-BConstant233
-BConstant234
-op()
-
-attributes
-b
-™
-b’
-version(
-uidBConvolution259
-typeBPrimitiveFunctionA
-inputs7	Z1
-BClip255_Output_0
-BPlaceholder126211ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
- 
- 
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-op(!
-¾
-b·
-version(
-uidBPlus261
-typeBPrimitiveFunctionC
-inputs9	Z3
-BConvolution259_Output_0
-BParameter230
-
-attributes
-b
-op(
-ò
-bë
-version(
-uidBBlock268
-typeBPrimitiveFunction’
-block_function_compositev
-bp
-version(
-typeBCompositeFunction!
-uidBCompositeFunction262
-rootBPlus261
-
-attributes
-b
-op(9w
-inputsm	Zg
-BParameter229
-BConstant233
-BConstant234
-BParameter230
-BBlock181_Output_0
-nameBpointwise_kernel&
-block_function_op_nameBConv2DN
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126211P
--block_function_composite_arguments_map_values	Z
-BBlock181_Output_0
-¾
-b·
-version(
-uidBMinus375
-typeBPrimitiveFunctionB
-inputs8	Z2
-BBlock268_Output_0
-BBlock338_Output_0
-
-attributes
-b
-op(
-ª
-b£
-version(
-uidBReciprocal384
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126235
-
-attributes
-b
-op(	
-Ê
-bÃ
-version(
-uidBElementTimes387
-typeBPrimitiveFunctionG
-inputs=	Z7
-BPlaceholder126234
-BReciprocal384_Output_0
-
-attributes
-b
-op(
-Ü
-bÕ
-version(g
-+block_function_composite_arguments_map_keys8	Z2
-BPlaceholder126234
-BPlaceholder126235
-uidBBlock390
-typeBPrimitiveFunctionA
-inputs7	Z1
-BMinus375_Output_0
-BPlus379_Output_0š
-block_function_composite~
-bx
-version(
-typeBCompositeFunction!
-uidBCompositeFunction388
-rootBElementTimes387
-
-attributes
-b
-op(9-
-block_function_op_nameBElementDivideh
--block_function_composite_arguments_map_values7	Z1
-BMinus375_Output_0
-BPlus379_Output_0
-À
-b¹
-version(
-uidBElementTimes399
-typeBPrimitiveFunction=
-inputs3	Z-
-BBlock390_Output_0
-BParameter397
-
-attributes
-b
-op(
-¿
-b¸
-version(
-uidBPlus402
-typeBPrimitiveFunctionD
-inputs:	Z4
-BElementTimes399_Output_0
-BParameter398
-
-attributes
-b
-op(
-¿
-b¸
-version(
-uidBElementTimes411
-typeBPrimitiveFunction<
-inputs2	Z,
-BConstant410
-BPlaceholder126241
-
-attributes
-b
-op(
-·
-b°
-version(
-uidBLess407
-typeBPrimitiveFunction<
-inputs2	Z,
-BPlaceholder126241
-BConstant406
-
-attributes
-b
-op(
-Ş
-b×
-version(
-uidB	Select414
-typeBPrimitiveFunctiona
-inputsW	ZQ
-BLess407_Output_0
-BElementTimes411_Output_0
-BPlaceholder126241
-
-attributes
-b
-op(*
-Å
-b¾
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126241
-uidBBlock417
-typeBPrimitiveFunctionN
-inputsD	Z>
-BConstant406
-BConstant410
-BPlus402_Output_0”
-block_function_compositex
-br
-version(
-typeBCompositeFunction!
-uidBCompositeFunction415
-rootB	Select414.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUO
--block_function_composite_arguments_map_values	Z
-BPlus402_Output_0
-Ê
-bÃ
-version(
-uidBClip427
-typeBPrimitiveFunctionO
-inputsE	Z?
-BBlock417_Output_0
-BConstant425
-BConstant426
-
-attributes
-b
-op()
-Å
-b¾
-version(
-uidBClip457
-typeBPrimitiveFunctionJ
-inputs@	Z:
-BParameter431
-BConstant435
-BConstant436
-
-attributes
-b
-op()
-™
-b’
-version(
-uidBConvolution461
-typeBPrimitiveFunctionA
-inputs7	Z1
-BClip457_Output_0
-BPlaceholder126249ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-op(!
-¾
-b·
-version(
-uidBPlus463
-typeBPrimitiveFunctionC
-inputs9	Z3
-BConvolution461_Output_0
-BParameter432
-
-attributes
-b
-op(
-Ô
-bÍ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126249
-uidBBlock470
-typeBPrimitiveFunctionv
-inputsl	Zf
-BParameter431
-BConstant435
-BConstant436
-BParameter432
-BClip427_Output_0’
-block_function_compositev
-bp
-version(
-typeBCompositeFunction!
-uidBCompositeFunction464
-rootBPlus463
-
-attributes
-b
-op(9*
-block_function_op_nameB
-GCD_Conv2DO
--block_function_composite_arguments_map_values	Z
-BClip427_Output_0
-Å
-b¾
-version(
-uidBClip610
-typeBPrimitiveFunctionJ
-inputs@	Z:
-BParameter584
-BConstant588
-BConstant589
-
-attributes
-b
-op()
-™
-b’
-version(
-uidBConvolution614
-typeBPrimitiveFunctionA
-inputs7	Z1
-BClip610_Output_0
-BPlaceholder126255ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
- 
- 
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-op(!
-¾
-b·
-version(
-uidBPlus616
-typeBPrimitiveFunctionC
-inputs9	Z3
-BConvolution614_Output_0
-BParameter585
-
-attributes
-b
-op(
-ò
-bë
-version(
-uidBBlock623
-typeBPrimitiveFunction’
-block_function_compositev
-bp
-version(
-typeBCompositeFunction!
-uidBCompositeFunction617
-rootBPlus616
-
-attributes
-b
-op(9w
-inputsm	Zg
-BParameter584
-BConstant588
-BConstant589
-BParameter585
-BBlock470_Output_0
-nameBpointwise_kernel&
-block_function_op_nameBConv2DN
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126255P
--block_function_composite_arguments_map_values	Z
-BBlock470_Output_0
-¾
-b·
-version(
-uidBMinus796
-typeBPrimitiveFunctionB
-inputs8	Z2
-BBlock623_Output_0
-BBlock759_Output_0
-
-attributes
-b
-op(
-ª
-b£
-version(
-uidBReciprocal805
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126279
-
-attributes
-b
-op(	
-Ê
-bÃ
-version(
-uidBElementTimes808
-typeBPrimitiveFunctionG
-inputs=	Z7
-BPlaceholder126278
-BReciprocal805_Output_0
-
-attributes
-b
-op(
-Ü
-bÕ
-version(g
-+block_function_composite_arguments_map_keys8	Z2
-BPlaceholder126278
-BPlaceholder126279
-uidBBlock811
-typeBPrimitiveFunctionA
-inputs7	Z1
-BMinus796_Output_0
-BPlus800_Output_0š
-block_function_composite~
-bx
-version(
-typeBCompositeFunction!
-uidBCompositeFunction809
-rootBElementTimes808
-
-attributes
-b
-op(9-
-block_function_op_nameBElementDivideh
--block_function_composite_arguments_map_values7	Z1
-BMinus796_Output_0
-BPlus800_Output_0
-À
-b¹
-version(
-uidBElementTimes820
-typeBPrimitiveFunction=
-inputs3	Z-
-BBlock811_Output_0
-BParameter818
-
-attributes
-b
-op(
-¿
-b¸
-version(
-uidBPlus823
-typeBPrimitiveFunctionD
-inputs:	Z4
-BElementTimes820_Output_0
-BParameter819
-
-attributes
-b
-op(
-¿
-b¸
-version(
-uidBElementTimes832
-typeBPrimitiveFunction<
-inputs2	Z,
-BConstant831
-BPlaceholder126285
-
-attributes
-b
-op(
-·
-b°
-version(
-uidBLess828
-typeBPrimitiveFunction<
-inputs2	Z,
-BPlaceholder126285
-BConstant827
-
-attributes
-b
-op(
-Ş
-b×
-version(
-uidB	Select835
-typeBPrimitiveFunctiona
-inputsW	ZQ
-BLess828_Output_0
-BElementTimes832_Output_0
-BPlaceholder126285
-
-attributes
-b
-op(*
-Å
-b¾
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126285
-uidBBlock838
-typeBPrimitiveFunctionN
-inputsD	Z>
-BConstant827
-BConstant831
-BPlus823_Output_0”
-block_function_compositex
-br
-version(!
-uidBCompositeFunction836
-typeBCompositeFunction
-rootB	Select835.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUO
--block_function_composite_arguments_map_values	Z
-BPlus823_Output_0
-Ê
-bÃ
-version(
-typeBPrimitiveFunction
-uidBClip848O
-inputsE	Z?
-BBlock838_Output_0
-BConstant846
-BConstant847
-op()
-
-attributes
-b
-Å
-b¾
-version(
-typeBPrimitiveFunction
-uidBClip878J
-inputs@	Z:
-BParameter852
-BConstant856
-BConstant857
-op()
-
-attributes
-b
-™
-b’
-version(
-typeBPrimitiveFunction
-uidBConvolution882A
-inputs7	Z1
-BClip878_Output_0
-BPlaceholder126293
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-M!
-maxTempMemSizeInSamples( 
-groups(
-¾
-b·
-version(
-typeBPrimitiveFunction
-uidBPlus884C
-inputs9	Z3
-BConvolution882_Output_0
-BParameter853
-op(
-
-attributes
-b
-Ô
-bÍ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126293
-uidBBlock891
-typeBPrimitiveFunctionv
-inputsl	Zf
-BParameter852
-BConstant856
-BConstant857
-BParameter853
-BClip848_Output_0’
-block_function_compositev
-bp
-version(!
-uidBCompositeFunction885
-typeBCompositeFunction
-rootBPlus884
-
-attributes
-b
-op(9*
-block_function_op_nameB
-GCD_Conv2DO
--block_function_composite_arguments_map_values	Z
-BClip848_Output_0
-É
-bÂ
-version(
-typeBPrimitiveFunction
-uidBClip1097M
-inputsC	Z=
-BParameter1071
-BConstant1075
-BConstant1076
-op()
-
-attributes
-b
-›
-b”
-version(
-typeBPrimitiveFunction
-uidBConvolution1101B
-inputs8	Z2
-BClip1097_Output_0
-BPlaceholder126299
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
- 
- 
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidBPlus1103E
-inputs;	Z5
-BConvolution1101_Output_0
-BParameter1072
-op(
-
-attributes
-b
-ù
-bò
-version(
-uidB	Block1110
-typeBPrimitiveFunction”
-block_function_compositex
-br
-version("
-uidBCompositeFunction1104
-typeBCompositeFunction
-rootBPlus1103
-
-attributes
-b
-op(9{
-inputsq	Zk
-BParameter1071
-BConstant1075
-BConstant1076
-BParameter1072
-BBlock891_Output_0
-nameBpointwise_kernel&
-block_function_op_nameBConv2DN
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126299P
--block_function_composite_arguments_map_values	Z
-BBlock891_Output_0
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidB	Minus1349D
-inputs:	Z4
-BBlock1110_Output_0
-BBlock1312_Output_0
-op(
-
-attributes
-b
-«
-b¤
-version(
-typeBPrimitiveFunction
-uidBReciprocal1358)
-inputs	Z
-BPlaceholder126323
-op(	
-
-attributes
-b
-Ì
-bÅ
-version(
-typeBPrimitiveFunction
-uidBElementTimes1361H
-inputs>	Z8
-BPlaceholder126322
-BReciprocal1358_Output_0
-op(
-
-attributes
-b
-ä
-bİ
-version(g
-+block_function_composite_arguments_map_keys8	Z2
-BPlaceholder126322
-BPlaceholder126323
-uidB	Block1364
-typeBPrimitiveFunctionC
-inputs9	Z3
-BMinus1349_Output_0
-BPlus1353_Output_0
-block_function_composite€
-bz
-version("
-uidBCompositeFunction1362
-typeBCompositeFunction
-rootBElementTimes1361
-
-attributes
-b
-op(9-
-block_function_op_nameBElementDividej
--block_function_composite_arguments_map_values9	Z3
-BMinus1349_Output_0
-BPlus1353_Output_0
-Ã
-b¼
-version(
-typeBPrimitiveFunction
-uidBElementTimes1373?
-inputs5	Z/
-BBlock1364_Output_0
-BParameter1371
-op(
-
-attributes
-b
-Â
-b»
-version(
-typeBPrimitiveFunction
-uidBPlus1376F
-inputs<	Z6
-BElementTimes1373_Output_0
-BParameter1372
-op(
-
-attributes
-b
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidBElementTimes1385=
-inputs3	Z-
-BConstant1384
-BPlaceholder126329
-op(
-
-attributes
-b
-¹
-b²
-version(
-typeBPrimitiveFunction
-uidBLess1381=
-inputs3	Z-
-BPlaceholder126329
-BConstant1380
-op(
-
-attributes
-b
-á
-bÚ
-version(
-typeBPrimitiveFunction
-uidB
-Select1388c
-inputsY	ZS
-BLess1381_Output_0
-BElementTimes1385_Output_0
-BPlaceholder126329
-op(*
-
-attributes
-b
-Ì
-bÅ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126329
-uidB	Block1391
-typeBPrimitiveFunctionQ
-inputsG	ZA
-BConstant1380
-BConstant1384
-BPlus1376_Output_0–
-block_function_compositez
-bt
-version("
-uidBCompositeFunction1389
-typeBCompositeFunction
-rootB
-Select1388.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUP
--block_function_composite_arguments_map_values	Z
-BPlus1376_Output_0
-Î
-bÇ
-version(
-typeBPrimitiveFunction
-uidBClip1401R
-inputsH	ZB
-BBlock1391_Output_0
-BConstant1399
-BConstant1400
-op()
-
-attributes
-b
-î
-bç
-version(
-typeBPrimitiveFunction
-uidBDropout1405)
-inputs	Z
-BClip1401_Output_0
-op(\
-
-attributesN
-bH
-	rngOffset( 
-dropoutRate9š™™™™™É?
-rngSeed(
-É
-bÂ
-version(
-typeBPrimitiveFunction
-uidBClip1434M
-inputsC	Z=
-BParameter1408
-BConstant1412
-BConstant1413
-op()
-
-attributes
-b
-›
-b”
-version(
-typeBPrimitiveFunction
-uidBConvolution1438B
-inputs8	Z2
-BClip1434_Output_0
-BPlaceholder126338
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidBPlus1440E
-inputs;	Z5
-BConvolution1438_Output_0
-BParameter1409
-op(
-
-attributes
-b
-ã
-bÜ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126338
-uidB	Block1447
-typeBPrimitiveFunction~
-inputst	Zn
-BParameter1408
-BConstant1412
-BConstant1413
-BParameter1409
-BDropout1405_Output_0”
-block_function_compositex
-br
-version("
-uidBCompositeFunction1441
-typeBCompositeFunction
-rootBPlus1440
-
-attributes
-b
-op(9*
-block_function_op_nameB
-GCD_Conv2DS
--block_function_composite_arguments_map_values"	Z
-BDropout1405_Output_0
-É
-bÂ
-version(
-typeBPrimitiveFunction
-uidBClip1720M
-inputsC	Z=
-BParameter1694
-BConstant1698
-BConstant1699
-op()
-
-attributes
-b
-›
-b”
-version(
-typeBPrimitiveFunction
-uidBConvolution1724B
-inputs8	Z2
-BClip1720_Output_0
-BPlaceholder126344
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
- 
- 
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidBPlus1726E
-inputs;	Z5
-BConvolution1724_Output_0
-BParameter1695
-op(
-
-attributes
-b
-û
-bô
-version(
-uidB	Block1733
-typeBPrimitiveFunction”
-block_function_compositex
-br
-version("
-uidBCompositeFunction1727
-typeBCompositeFunction
-rootBPlus1726
-
-attributes
-b
-op(9|
-inputsr	Zl
-BParameter1694
-BConstant1698
-BConstant1699
-BParameter1695
-BBlock1447_Output_0
-nameBpointwise_kernel&
-block_function_op_nameBConv2DN
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126344Q
--block_function_composite_arguments_map_values 	Z
-BBlock1447_Output_0
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidB	Minus2039D
-inputs:	Z4
-BBlock1733_Output_0
-BBlock2002_Output_0
-op(
-
-attributes
-b
-«
-b¤
-version(
-typeBPrimitiveFunction
-uidBReciprocal2048)
-inputs	Z
-BPlaceholder126368
-op(	
-
-attributes
-b
-Ì
-bÅ
-version(
-typeBPrimitiveFunction
-uidBElementTimes2051H
-inputs>	Z8
-BPlaceholder126367
-BReciprocal2048_Output_0
-op(
-
-attributes
-b
-ä
-bİ
-version(g
-+block_function_composite_arguments_map_keys8	Z2
-BPlaceholder126367
-BPlaceholder126368
-uidB	Block2054
-typeBPrimitiveFunctionC
-inputs9	Z3
-BMinus2039_Output_0
-BPlus2043_Output_0
-block_function_composite€
-bz
-version("
-uidBCompositeFunction2052
-typeBCompositeFunction
-rootBElementTimes2051
-
-attributes
-b
-op(9-
-block_function_op_nameBElementDividej
--block_function_composite_arguments_map_values9	Z3
-BMinus2039_Output_0
-BPlus2043_Output_0
-Ã
-b¼
-version(
-typeBPrimitiveFunction
-uidBElementTimes2063?
-inputs5	Z/
-BBlock2054_Output_0
-BParameter2061
-op(
-
-attributes
-b
-Â
-b»
-version(
-typeBPrimitiveFunction
-uidBPlus2066F
-inputs<	Z6
-BElementTimes2063_Output_0
-BParameter2062
-op(
-
-attributes
-b
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidBElementTimes2075=
-inputs3	Z-
-BConstant2074
-BPlaceholder126374
-op(
-
-attributes
-b
-¹
-b²
-version(
-typeBPrimitiveFunction
-uidBLess2071=
-inputs3	Z-
-BPlaceholder126374
-BConstant2070
-op(
-
-attributes
-b
-á
-bÚ
-version(
-typeBPrimitiveFunction
-uidB
-Select2078c
-inputsY	ZS
-BLess2071_Output_0
-BElementTimes2075_Output_0
-BPlaceholder126374
-op(*
-
-attributes
-b
-Ì
-bÅ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126374
-uidB	Block2081
-typeBPrimitiveFunctionQ
-inputsG	ZA
-BConstant2070
-BConstant2074
-BPlus2066_Output_0–
-block_function_compositez
-bt
-version("
-uidBCompositeFunction2079
-typeBCompositeFunction
-rootB
-Select2078.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUP
--block_function_composite_arguments_map_values	Z
-BPlus2066_Output_0
-Î
-bÇ
-version(
-typeBPrimitiveFunction
-uidBClip2091R
-inputsH	ZB
-BBlock2081_Output_0
-BConstant2089
-BConstant2090
-op()
-
-attributes
-b
-É
-bÂ
-version(
-typeBPrimitiveFunction
-uidBClip2121M
-inputsC	Z=
-BParameter2095
-BConstant2099
-BConstant2100
-op()
-
-attributes
-b
-›
-b”
-version(
-typeBPrimitiveFunction
-uidBConvolution2125B
-inputs8	Z2
-BClip2121_Output_0
-BPlaceholder126382
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-Á
-bº
-version(
-typeBPrimitiveFunction
-uidBPlus2127E
-inputs;	Z5
-BConvolution2125_Output_0
-BParameter2096
-op(
-
-attributes
-b
-İ
-bÖ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126382
-uidB	Block2134
-typeBPrimitiveFunction{
-inputsq	Zk
-BParameter2095
-BConstant2099
-BConstant2100
-BParameter2096
-BClip2091_Output_0”
-block_function_compositex
-br
-version("
-uidBCompositeFunction2128
-typeBCompositeFunction
-rootBPlus2127
-
-attributes
-b
-op(9*
-block_function_op_nameB
-GCD_Conv2DP
--block_function_composite_arguments_map_values	Z
-BClip2091_Output_0
-É
-bÂ
-version(
-typeBPrimitiveFunction
-uidBClip2473M
-inputsC	Z=
-BParameter2447
-BConstant2451
-BConstant2452
-op()
-
-attributes
-b
-›
-b”
-version(
-typeBPrimitiveFunction
-uidBConvolution2477B
-inputs8	Z2
-BClip2473_Output_0
-BPlaceholder126388
-op(!ë
-
-attributesÜ
-bÕ
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
- 
- 
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-!
-maxTempMemSizeInSamples( 
-groups(
-Á
-bº
-version(
-uidBPlus2479
-typeBPrimitiveFunctionE
-inputs;	Z5
-BConvolution2477_Output_0
-BParameter2448
-
-attributes
-b
-op(
-û
-bô
-version(
-uidB	Block2486
-typeBPrimitiveFunction”
-block_function_compositex
-br
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2480
-rootBPlus2479
-
-attributes
-b
-op(9|
-inputsr	Zl
-BParameter2447
-BConstant2451
-BConstant2452
-BParameter2448
-BBlock2134_Output_0
-nameBpointwise_kernel&
-block_function_op_nameBConv2DN
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126388Q
--block_function_composite_arguments_map_values 	Z
-BBlock2134_Output_0
-Á
-bº
-version(
-uidB	Minus2858
-typeBPrimitiveFunctionD
-inputs:	Z4
-BBlock2486_Output_0
-BBlock2821_Output_0
-
-attributes
-b
-op(
-«
-b¤
-version(
-uidBReciprocal2867
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126412
-
-attributes
-b
-op(	
-Ì
-bÅ
-version(
-uidBElementTimes2870
-typeBPrimitiveFunctionH
-inputs>	Z8
-BPlaceholder126411
-BReciprocal2867_Output_0
-
-attributes
-b
-op(
-ä
-bİ
-version(g
-+block_function_composite_arguments_map_keys8	Z2
-BPlaceholder126411
-BPlaceholder126412
-uidB	Block2873
-typeBPrimitiveFunctionC
-inputs9	Z3
-BMinus2858_Output_0
-BPlus2862_Output_0
-block_function_composite€
-bz
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2871
-rootBElementTimes2870
-
-attributes
-b
-op(9-
-block_function_op_nameBElementDividej
--block_function_composite_arguments_map_values9	Z3
-BMinus2858_Output_0
-BPlus2862_Output_0
-Ã
-b¼
-version(
-uidBElementTimes2882
-typeBPrimitiveFunction?
-inputs5	Z/
-BBlock2873_Output_0
-BParameter2880
-
-attributes
-b
-op(
-Â
-b»
-version(
-uidBPlus2885
-typeBPrimitiveFunctionF
-inputs<	Z6
-BElementTimes2882_Output_0
-BParameter2881
-
-attributes
-b
-op(
-Á
-bº
-version(
-uidBElementTimes2894
-typeBPrimitiveFunction=
-inputs3	Z-
-BConstant2893
-BPlaceholder126418
-
-attributes
-b
-op(
-¹
-b²
-version(
-uidBLess2890
-typeBPrimitiveFunction=
-inputs3	Z-
-BPlaceholder126418
-BConstant2889
-
-attributes
-b
-op(
-á
-bÚ
-version(
-uidB
-Select2897
-typeBPrimitiveFunctionc
-inputsY	ZS
-BLess2890_Output_0
-BElementTimes2894_Output_0
-BPlaceholder126418
-
-attributes
-b
-op(*
-Ì
-bÅ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126418
-uidB	Block2900
-typeBPrimitiveFunctionQ
-inputsG	ZA
-BConstant2889
-BConstant2893
-BPlus2885_Output_0–
-block_function_compositez
-bt
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2898
-rootB
-Select2897.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUP
--block_function_composite_arguments_map_values	Z
-BPlus2885_Output_0
-Î
-bÇ
-version(
-uidBClip2910
-typeBPrimitiveFunctionR
-inputsH	ZB
-BBlock2900_Output_0
-BConstant2908
-BConstant2909
-
-attributes
-b
-op()
-™
-b’
-version(
-uidBConvolution2966
-typeBPrimitiveFunction>
-inputs4	Z.
-BParameter2914
-BPlaceholder126426í
-
-attributesŞ
-b×
-lowerPadJ
-   
-
-sequential -
-autoPadding	Z
-
-
- 
-upperPadJ
-   
-outputShape	J
- 
-stridesJ
-ğ
-dilationJ
-)
-sharing	Z
-
-
-
-	transpose 
-kernelShapeJ
-ğ!
-maxTempMemSizeInSamples( 
-groups(
-op(!
-Á
-bº
-version(
-uidBPlus2968
-typeBPrimitiveFunctionE
-inputs;	Z5
-BConvolution2966_Output_0
-BParameter2915
-
-attributes
-b
-op(
-Á
-bº
-version(
-uidBElementTimes2975
-typeBPrimitiveFunction=
-inputs3	Z-
-BConstant2929
-BPlaceholder126433
-
-attributes
-b
-op(
-¹
-b²
-version(
-uidBLess2972
-typeBPrimitiveFunction=
-inputs3	Z-
-BPlaceholder126433
-BConstant2925
-
-attributes
-b
-op(
-á
-bÚ
-version(
-uidB
-Select2978
-typeBPrimitiveFunctionc
-inputsY	ZS
-BLess2972_Output_0
-BElementTimes2975_Output_0
-BPlaceholder126433
-
-attributes
-b
-op(*
-Ì
-bÅ
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126433
-uidB	Block2984
-typeBPrimitiveFunctionQ
-inputsG	ZA
-BConstant2925
-BConstant2929
-BPlus2968_Output_0–
-block_function_compositez
-bt
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2979
-rootB
-Select2978.
-
-attributes 
-b
-alpha9š™™™™™É?
-op(9)
-block_function_op_nameB	LeakyReLUP
--block_function_composite_arguments_map_values	Z
-BPlus2968_Output_0
-Î
-bÇ
-version(
-uidBClip2990
-typeBPrimitiveFunctionR
-inputsH	ZB
-BBlock2984_Output_0
-BConstant2943
-BConstant2944
-
-attributes
-b
-op()
-‰
-b‚
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126426
-uidB	Block3004
-typeBPrimitiveFunction¥
-inputsš	Z“
-BConstant2925
-BConstant2929
-BParameter2914
-BParameter2915
-BConstant2943
-BConstant2944
-BClip2910_Output_0”
-block_function_compositex
-br
-version(
-typeBCompositeFunction"
-uidBCompositeFunction2991
-rootBClip2990
-
-attributes
-b
-op(9+
-block_function_op_nameBConvolutionP
--block_function_composite_arguments_map_values	Z
-BClip2910_Output_0
-ó
-bì
-version(
-uidBPooling3425
-typeBPrimitiveFunction)
-inputs	Z
-BPlaceholder126442à
-
-attributesÑ
-bÊ
-poolingType(
-strides	J
- 
-poolingWindowShape
-J
-
-upperPad	J
- 
-
-ceilOutDim 
-lowerPad	J
- 
-
-includePad 
-autoPadding	Z
- 
-op(
-š
-b“
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126442
-uidB	Block3429
-typeBPrimitiveFunction*
-inputs 	Z
-BBlock3004_Output_0—
-block_function_composite{
-bu
-version(
-typeBCompositeFunction"
-uidBCompositeFunction3426
-rootBPooling3425
-
-attributes
-b
-op(94
-block_function_op_nameBGlobalAveragePoolingQ
--block_function_composite_arguments_map_values 	Z
-BBlock3004_Output_0
-©
-b¢
-version(
-uidBSqueeze3829
-typeBPrimitiveFunction*
-inputs 	Z
-BBlock3429_Output_0
-
-attributes
-b
-op(X
-ğ
-bé
-version(
-uidB	Times3855
-typeBPrimitiveFunction>
-inputs4	Z.
-BParameter3832
-BPlaceholder126446K
-
-attributes=
-b7
-inferInputRankToMap  
-
-outputRank(
-op(
-»
-b´
-version(
-uidBPlus3857
-typeBPrimitiveFunction?
-inputs5	Z/
-BTimes3855_Output_0
-BParameter3833
-
-attributes
-b
-op(
-®
-b§
-version(
-uidBStableSigmoid3859
-typeBPrimitiveFunction)
-inputs	Z
-BPlus3857_Output_0
-
-attributes
-b
-op(K
-À
-b¹
-version(N
-+block_function_composite_arguments_map_keys	Z
-BPlaceholder126446
-uidB	Block3865
-typeBPrimitiveFunctionV
-inputsL	ZF
-BParameter3832
-BParameter3833
-BSqueeze3829_Output_0
-block_function_composite
-b{
-version(
-typeBCompositeFunction"
-uidBCompositeFunction3860
-rootBStableSigmoid3859
-
-attributes
-b
-op(9%
-block_function_op_nameBDenseS
--block_function_composite_arguments_map_values"	Z
-BSqueeze3829_Output_0
-typeBCompositeFunction
-rootB	Block3865²Š
-inputs¦Š	ZŠ
-”
-b
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter3832
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shape
-J
-
-
-¯
-value¥j
-
-
-"“
-Êxü=ÈÜ½O¿Ù¾ôAm¾ª¸P=|Ç?qáÔ¾6ü<1¤>é>Â]>N
-¿ªR©>ı”>iò>ò°½sˆ>¸¾“%6¾MwÀ>ß0\>øa	¿‰ô)¾_4=¾ú_>¿sÅ>4í¾Š€ï>§P=@ÍÙ¾&øE½Õ,=°}÷¾‡C ?¡ÏF¾ J`>kJ>õ“Ğ¾”¸¿fÇ†»P
-";†…î>w›?­óÅ¾ ú¢¾X
-¿Û`…<aÑï¾S‚
-½İâE>wé>x—ş¾™á”¾Ñ=uÊ?¸ÜŠ=U 7¾ ı¡>ÛÅ‰>ºZ>É¨’¾ò˜Ì=-âH=´h>kW…½KB>'Oİ>Û›¾™Å(=ª6Ø¾Â»û¾ 8Õ=Ã·µ>“ª ¿Oı>VÜz>ëå>D¦>ãg)>naC¾Š ¿¢Âl=Ó¯™>F?Ê>9¹R>4îè>"ë,¾šö>ÄOc>‰Uÿ¾Ê¦Ö¾”8ù¾à?Kï?Š°½Á}B½Éó>"Në>Ü…ú½
-¥
-b
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter3833
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shape	J
-
-B
-value9j3
-
-"*
-(Óˆ¹;Ä·»Ç¦İ;<­»h¼5Ÿñº´“»µ±‚;üÈ;’ƒE¼
-ô
-bí
-needs_gradient 
-version(
-	data_type(
-shape	J
-
-
-kind(
-uidBPlaceholder126446
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-
-kind(
-uidBPlaceholder126442
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2925
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2929
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-Šu
-bƒu
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter2914
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-ğ
-¢s
-value˜sj‘s
-ğ
-"ƒs
-€sñá«½Ì5ı;åŒ¯½U=Y‘=g•<sŠo½4lº½»H’=±½#íî:ÿš=I½büÊ<½3B=)¡„=ÿÆ½ç›½Gˆ¥=×›d¼‚²›=‘R±¼ŸÁ<„Ï½Êã»Wöò½ñÓO½yæ=ƒ=læ›½b%z=°}”<B¬Ü=Ò¼7×Ú½b7Û=ñÙÅ½L^€=®==kT=1â½­=á/=8°½/Šó¼gÉ=Å®¼8à=œ›ô=À3ï=ìáÆ½4j½xÙÂ=‘m#;*G3=¶è½o0<% 6=–zô½«àQ¼oĞ=W~F=šY=ÉW‚»ú÷9š›¡½G˜Ø½)ÙÏ½†yë<Úc‚==0±=&L§½…nÊ½”Ú=ìl½Ê•=evÏ¼@Ph½ÑâØºéœ¯½ÓùŒ½˜•=£ ü¹7¹}½,† ;¢÷Î=O ¼y…o=AÊ¨= DÉ=a
-=óÓ¤= E=‚D‘=ê’½0Œš=©Õ=fYÑ=6¸ı½™ıŠ<_®=E&¼ÈK=5ãå=¾¬h=æÌq=fX¢=m0¸¸³™5¼éà½õç½“ã¼Ò¼÷õ—¼¹Ù®½“‚.=”œ=f<½ñ¦*=øĞÉ½®ì,;¶šo½†E½½¿¦ä=vÿ7½€L=87½MÕ½[ç=’ë@=úJæ=ÙÃæ=Óp¢<0ûR;ÎÕ½q¯½NTy=Ğ½â½o§½Õìå=])¾3Uˆ=goŒ½œáã=……Ç½]¾ğ½æHÂ=i¸ó½yñ	=Ë”¼A9¯½ o½áf‘=À2ö=»R¶½Çi_=Ÿ\§<Dù;WTö=êŸ„½Êó­=°Ì®=#e=×ƒ=Zİ†<#:Ê½ŞÖI= mğ½WG¸½î³½ÿ—Ù½°»€²‘¼®J½³¾j½ôŒ=§½½Ä¦<Û¬Ë¼Üa:½‹åğ½_J?½B-‡½ÅNë=¸©r<¥TÑ½A½~¼¤İ¼dQ½C¢é½}µ¼‹Œ¾å(œ½#àe=½¤½Šp¤½\İ½İ7¼”È=Õr‹=RÇ <À ½Šc¾İ”E½ğ6‡=‰QÆ¼à³½öò—½şó¿½"¿m½N`‘< Ê=¼¾À½§'ñ¼E·=lŞ½o¨ë½ü¬¾”§˜=q+½_YÓ=£·';JCã<Âä=ÆòÖ½G¬/½â8£=X½«=%º3½T=^‹½8›-½À¿½<,½Gqº¼¶3=¤[æ½¥’¬=ÎáJ=»™ ¾Åß½õİ1½¯«.=;½7î½;÷9=u§¾ î=ÖÊÃ¼0ÇŒ½/nÚ=é36<EÅ==¯R=e'<İÖÕ=k‹½`µ³¼9J•=	’=1pg½æŠ-½iâÇ<­~Ñ½™c=Áâ†½MÄ<°¸<•£­=@”æ=”šì½/ïŒ<pá=R˜À=á¤=šÜ—=š/©½Ã½P6k¼Ó –=.ñ>;Ì‡½«½R½%]¼P~Á=c<`3Ê=Hå=F¢»=„ƒê=W±Ú½îèÆ½ù|=€ª½fâ…=ïJè½uæœ=znd=ÈèH½¨X½Šv ½k¡Ì½×g{½f‡Á=DqÃ=Rûo=£EK½Zâ®½Xæ•¼8(l=¡=î=LHm=Ÿr¡»l =¨®^½bï¨=xã•=t~„<?Æ=j—O¼Lûº½væO=ıK™=¿=ã¼	é<»(ª½Å]á¼ìR’=~Rá½j½$v=P¥=Çr6=2È`=XŒº=Ë8¼¨½¶?}=™L½=L¤¼g=!˜½Ğ°¸=Eƒ=™´¿¼KàÆ½s‚Ô½5¥8½Ş/Å¼"²½q—=5à6=½I+½Ù½«½<É ¾ºÃS=wyV=¶fÄ½ à½Fï½Ùs=æ‡Š½F/Œ=”xİ½³J®½pÕë=g ½=ÛI=r=øFb=€§ù=y½<¾+	¼Ğó“=†’¼"új=`#P<ÂŠ=ÿîŠ;^¤=°i=A—‡½óFµ;Íf’=âç=>Ö=½4¢=.º½^¹=áÈ½@$¾~nê¼âI=õıÆ=ĞC•¼iEá=ğ×ÿ<[ø¦;êŸ5=Dô½ Š<ÒL=5q£½¼­<5Ö½ÜüÈ<h#&=Õ|™=—~E¼O§n½›ÁÍ=„WÃ=¨†ÿ½^cÁ¼i8ì<š©N==Gâ=À=Ğ™†=öAƒ=Àc-½ Éò=d…6¼d*|½¼Æ\½b^<¹½µã=Ìğ<Es±=vş ¾Îro=¯?’½•÷=–<DÇ=4¾ˆ»,‡<NP_¼)¶è=Ä£=dtå¼ß'½dº®<b¨½z;£<õ¢¼¬¯!½Õíº½Yœƒ½5“¼ñ×˜¹	=ÎŞ=-uî½´Ñï=CÍÉ<WL>;ÙÌ¼ËÎ–½ÌLÀ=›}+=ô*Â¼;¯k½èŸ˜=±8o½}2½vÍw=0½¡j¥;ì‡˜=wë=qõn½ÏÊ½â@=ˆ=hÀ¼tl*=1ó½Œ¡=_lı<Z°=>‰­=ì5‰=“‚¸=
-êÑ<ª‚L=¨I¢=´ ½öP=Ì´Ş½;¯=!H¹=øÍ½¼Z½#ùæ¼èÓ±½
-å =õ´=ãk=¾òš½6ë=ëñ½oB=3;Š½ÎÃ€½¢†Ç½ÒË6½gÄ<’ü™½ ÅK½5F±< ¹k½·½_#U½ÒS¤<&§½ùVş=˜¼½„‹<f¤g=­½>Ë"¼éE<h–ø½½æ˜½¯A½»¥½ë½b<å==Èè½~èö¼ÎjE¼Îóê½IµL½RÄË=O,"<ëÒŸ½Ğ6–=Ä]©½Æê©½ì(Ù=‰z¿½æõ=bÛO=” Q=â¼Àm½¥jé½–3=ÎĞ½.5M½öŸ=ãhÎ=Çiá½±"Á=½(Ò=L°=÷áì½Õ‰¼ÃX|½Ô_G<$¾ûŒå½]	Õ½y¢*½¢É3=ê´ = œÇ½ÖÀ¤=©óf=ìhñ½>ø½—!É¼eğ=vh½7=¿½œs <ÃËã<y”
-½éü^=»M<J–k½",¹;Ô€½Á»> m½ğ™ø½!y%=Ù3£¼@Y’=DK;Ò‰=:á¢=YU\=»g0<m‰[;(/Ü=4ã~½Ó—=­4½¼fõ½{¢½~KÚ¼)¦=e}°=WÁ’<¤[½Ö i½¬‰<ëÓæ»O7:=øõ=WCß½I„×½t6Ä½dâb<d=¯=dY=y€Ë=/~ ½ÌÈj¼¿\Á½ÛH«=ÙÛ<õ7=“PY=»è½f1¶=Ó‡Å=]£=aÚ	<ä…½…;ò<{êï½EŞ=âø=-¬½d!ñ½	ƒÛ=ërè¼¾³'=¾Jˆ<Ï9ê=GÉ=m(.¼3U1½à¿~=O´õ½G+	=±ãŠ=vä=ğÊl½W°‰½²;ˆ<KÀ”<n2v<t¥7=X=Ş9'½ÔšÌ½ì_$¼EH³¼>½æ[ò=Îÿ½õšş½ôŞ8=[W=»ğ=MEª=;œ½•T¸<Êt©½u”K½¹€÷½c­«½¼ã½l¬k=‰G$½Tæ=ÆŸô½˜È½üÚ=Æ=Ç¿ª=Ì\ ½±°6=:Âç=#Å½-›±=ø¿[½üÚ<Å©¼WÂsºĞµ2= ı“½´½pxg½Q«½…TV=‚¸¨½O‹<‹ˆó=ú­Ã=‡Úè=L’=‚ZØ½vÓ=hcô½jb˜½ÓÿN½›Éÿ¼ÄÄq½Ş)ô½tÀ÷=~.»½¢Í½œúY½Ú“;‘.ú=}ş‰½Â“œ½±mŞ=Q!½ÜØm¼5®<u†Ë»Ä¿=ˆQf½.5‘½ËÀâ=]yÇ½€Ÿ½§©±½-0ï=h¯<- ™<bÔG<Çõ²=ë.î=Lè»éi=h÷½¥×´<.Q7<c£–:‘"ê½ò½JE•»úŞ½±e¼»'¿½(Ã‹¼ZMõ½Š“S½÷%Õ=qæn=,m0½<-å<“A`½Ñk=l“=ÛZ ¾µPô¼DL©½²Ø=ucÑ½5ïû=`Ì=ùu;şôv½±¡B=%»O=°w*½~vå=.{=›)¬;pŒ%=L.â½È½jÛ¾½Óâ¼¤±ˆ¼ŠA >Ó0y½üOâ=€—f=õ6Î=zKï=Ä‰€=Š³$=¸x•=À×Ü½sã=Fá=â ¿<û÷È=ˆ´½7N¥=?ŠÌ½Ñ£¸=v$È=õ·=õF½VÛ= ºg½íğº»Ó³=
-n†½†Èİ½N=FB¦¼ÿêh½õã;½÷2=Ûê<\ØÎ=pu¼Ê|¸½T™ö¼E,2=$Ü¼Ÿ >ğJç½^J½c¼­0ğ½ç®=
-M'=qÓï=¶ã½æ´®=¢ÙÛ½ÿî=ˆ“d¼† >&¢¦½<ÙŠ½M»á½e.=é»œ=¢=Pò©=2½bÖ#=¹dı<mU >5—‘½üİ?=Ğ‘>½ˆ(¢;_é&; ¸V=¼t¹½š¸½¾t;=B?ˆ=}7¶=¦B ½…œ=Œ<Õ=¿H¶¼tÂÙ=DT'=?L›½ÒJ=Ï¢<:ã¿½L#½&¤¼ŒÌ“==ßÀ½q›½iü×<ÃÙ=½Mø’=‰Û¡=2Š½šãô=À8¶¼­§µ½¯p¼÷~w½—=¯„½e=ï:t¼‹á»¶#ó=Ó~³=¢ˆà»]|>tà’½ë~q<’¶½&ú½x Û½vÑ¥=!=K‰=eŠÅ=ösÔ½·İ=™‹¿<«+=?¼v½6h	½œŞ=ƒÿ‡½cğ½È?Ê¼Éİ½5>?iE½æÌ=m‹À={q=‘„=­±<^¬D½“v‚<¡…™½®mœ½Léß=ÌQò½<ˆ½şıÙ=1â¼Ò"½Cƒ¢½r7¯½‰ë‹<QÃ½]È4=¹»=qƒ½¨€Ã=,²=W§ó¼!*¯<0Ûó=‰ğ<nYú¼Dñ®½œ†ù=‘å½³–½IqÄ=´æ	=Ò€Ä=Û­°=d!¦=0ßá½ï[»½µ¢<TŠ<¯î½{e½jÖH½`ac<“Œ=‚&=J$=àM¬<°ı½Ìı=jË­=’¼7ñ½õˆ¼½qH~½€Â½ËâY;‡hÅ<u¸—½!¹Á½àKš=Òc‘=À c½>x=XAH=qßd=4»6½üLé½²O=3»F=ö‹[¼yz=¢÷3½£Ò=6ı%=2,==Ã€\<ø¯¿½Pè=4d­¼tÔÛ½çr=•±³=³j½	İÊ¼Úß¦½sÚf¼wÛ!<§vç¼HBø=§Ş«<ıqÛ<7=ß<²=¥Ä½[Åß½rõt¼¸\§¼D†¥;Í9½Èr½¶~ß½•²D¼'y=ŞS³¼¬»,¼6:¾= Q¢=@…½ŠŒz½e§=ŸÎ²½WRßº®nÓ=C±M=’ºŞ½U†=ı¼ÕÌ½"i=Ø‰=<Âø¥=ífg=ußµ<ò–µ=2{J<ÄÍ=³Æ=ôo6=á-=U+“½OKÎ=E|j<Nà=Ùƒ»i}º½Ñ‡½vÿ$½üŸ½±=˜Œa==â×v=í<K½ú‡è=”"R¼'Ê­½¿_»=¨-ƒ½xYØ½vñŸ¼’Û·½Àçx=6îE=6ùp;÷z×=»A/½“±æ=š¿=¡öÇ½Húi»§ËR½gİ	½|r`½Àq½±¬¼š°<Sã÷½#C„= =´=­Ò¼îbù<5HÛ½Zª½ğï=;3½lÂÖ=^‹ê=OùZ½0? ½–ƒÙ½]J¼XºÂ=Ö– =`ã½Ùœü=­®&<–Ë=xL=ô ½,Çª½±AÄ½ÂÑ?½Ù:=|xÏ½Vf¨½ò¬,¼¤v½=’9=yœë=90o½+àé<Èò=oÛ<ké·=®š¼ØrÓ=õİß½<f7Ø½ÿû•½û‘½Ã	f½WsÈ=F˜‰=®<0;â=Šª½#Ì=ìß=q£<%4,½´Üb½®ƒ½ù£=‘§=÷N=ÂLF½e‚º½Ya =µt=:Î	=ˆº=òyÂ½Ü-=Y<%=ÕsÕ½›ïI=*É=%)O½w^Ÿ=r»Ï<Úªı¼‚9¹<iXu=à¢ù½	Z÷:1 @½—©½øÿ³½¶>ƒ½/x‚=D<#=1ñ¾;'Ÿj=ô0h<ø=£_Ó½|AW=›=ĞbÄ=•=úèÏ=nÿè¼Ê>=lââ½î\=Uh½øÂ£¼ª8ï==5ı9u¾‘<Á«Ÿ=Ù¸7½çj=¼QĞ½™¾í½è
-Ş=¦Ÿ•½+>…s½Á-±½¹Õî=ên¼ää½$æN½§€’<£òŒ<…NX<ÕRŠ½ZÎÃ½Ú=ö=Ÿ‚½<;PöÂ½¡.Ò½Ê—µ½q¢¢=ìqØ=ƒ–½aÚ½Ûï<÷#å=;»Ğ½Ò¼¬Äã=
-Vl=+Ö=op½-í¼Šà¢½oWŸ½Ò¾½=Çı=¼ˆ½6šü=ï
-Ô=°Í=©õ=»L£¯;Å±»C>¾¸Á½xó]=3W½¼oÀ=©Şµ=Ä¯ˆ=ağŸ=cuŸ=gÑ»=«å½1¾T=Ué-½†¶±¼JFC=+ë¥=%¿5½¡æt½Zòª½V/‰;òö¼º>®»/wç½~‘o=yı½îq½¼ï¤<Z±†:¸Ç=´kà¼tÜ=>‚ª½óO™;AŒt½ğ[½¨æp½1n½(/å=U—ç½óÊ¡=KAù=}ûĞ=Š¸ =ElH=\½ÔSu=1à<>ìD½7¬—½p”È=)Q˜=wş=¸‰=ğ››½ÔÁ<â«p<ÏBÓ=XÏ½(=ä=‡§Ç¼‚¦½½I½Íj½œîÍ=[Ö,<	`A<nb=«‘ı¼üTá½0­w½9“×<Vk½ef˜»{™='D#=¯[$=Y‹<3ë›;×l’=Nÿá=ÌT•½šĞL½V?Ü½Î´õ<ùT½ôŠí==°<Ä º¼<Òå=ò±Ö¼L¼G=(ı=4ò >ÇÌ½¤5Ê½}¡N¼XßY=™{½ƒÆi=ˆ§†½ûjã½½I¼ù²l½Yó½n‡=SŸ½>zf<áÌ¯=ĞJ<:´=âN½@„â½Z!<Qµ§¼sl=[mZ½1û·=ö<=a½²á=g3n=Õµ„=?“½®“Ş½½mb½…‹=ûA<“M^=Í™Í=•±ã=]ÓA;ƒCÒ½†°<Š0ç½ÅLß< €ö½ ¤é<§ >wÌš=¾<Y½I2¨<û›½âQ;Ï¶½F'½ï^óº\ö÷¼¹tb=)Tş=a®=¡e©½¥o=N(=®a×=ÓÅ'=›ñf½k½xíP½¼«=;qê=QÑ=İám¼i’õ=ÊÀ½EŞ=S²¢=¨=­öN½VtI½§0š;ëØÑ<œ€O½^Î=ªpå=bkø½c=Ï*ğ<Ôô=+yŒ½§dá<â$Ô½¡½†=¶¿Š<®ôQ¼NGÜ½ü—­=áL:q}=ÂÙÈ¼×Âó¼Xi=Ş<¤ùÎ½q
-|½ÿƒ¼_B¹½]R >:MŠ½çª½TËÈ¼Nè=a½½ó¢+=<3½ ~=•¡í=tò½ˆ½„=K¢ü¼1§œ;z²¶¼ÎÒ<½bŒP=(õƒ=¥ŸB½²vÚ½qUÃ½È„\=yr«<ä†œ½İô=rŞ<ÒIÈ=‘ï<ôÍ=·ÓÃ=¸wt=Uò½¥²½I¶<+¸`=”ZÃ½Ì]½z˜ú½©öO½ê‡í=6Q½o61=wË³=¾S½bMË»ùŒ=£ª½Œòº¼|ˆ>~Ò
-½N78½Ã4¸=¿QÓ= 7½±d|=¯=˜Î½†Öt=FÜ£=û„½™sY¼jİé:	=ÅÈ¡=#pw=¶?¼'H(½¸Õô=ìõ|½e½â¼tWŠ=¢=ê=gì=¡†ó=ÂÅÕ½	şƒ={‘=¨Ÿ¾¼€İ½¾½AÁ‰½Ç’Y;S8Ë=&Í³<(§ã½¶ÆÜ=Æ–<%T•½¼2x½‘ıÁ½bA½KI½—¿ç»â¶½´ßg¼fî3<ûĞı=- >@I=z>:¨`<à÷ë»^’=ü9ÿ=SŠ=ÇQ=¯½é°Ó½CÍI<Ê“²=³…é½§y±=kc›½¨Şö½i<ù™é½ÅTÌ½œñÍ=b'½Eøû¼ÖŸº½3.™=¡,¶=;™¿½÷½‡ Ã¼ÍÀ¼ÆÙ’½Zè	;ĞŞÇ=	¨­½è+õ½Ÿ¬¨½ÅeÛ={ç¼V×÷½Ùì.<Í½Z->%€?;çÒÚ=OOB½İ¼C¼p‡ı½§¡Å½ä™Ô½à?ô¼m$»°‘Æ½ªØ½õÖË½v|Ğ=V½½]z;8U½_‹½oc<xı»ër™½¨J5;fÓp½“ÍÌ½5@>±Â©=5½‹½jI=İ¯;Í†[¼MËX½òÔ±=où½u&B¼Cªy=#€=I†ç½ ç÷=´Wî½aú×=xJ=Lù=®½˜…:½Æ©<|â=XS<–Ê’=(•·½(!´½ søº|´½äLê=²Ëò½&‘Ë¼\hQ=Ú÷=:÷=ü–Ü=ÌÔ=B]±=_³İºÔìİ=2½j*a=ä±Ô½¾=«eÇ¼Œ©q½zñ{=A»×¦=T÷½¨3=Móş=FXE<J æ½aU­<»KÅ=zÿ=h å=dğ¼
-or½Ã´®½Ú½†w	;ŸĞ½Ñİ§=ÀÚ=m/Í=(MÑ·Â°=D½¡¢½m£”=+;»½(¥ğ½Nî_½ŒĞr=ï=x5æ=0>"¢;mÀ=3K?=5`Ø=™…½¬$â<
-.>fOD=gw<zñ¶½şË½„¤= ©=Jd·=šïñ<x=ğéä½eÌ½yg=ÖZQ»LCE¼•¥¼mû#<"™î½¤R™¼­å­½5(Ï½A×=¼M=oÊ=E·<}U½¤qÕ=g³š=I7Ø»:æ=ÌıD=éÆù¼¸y@½´©={C½€=8œÜ½I·¼“vf=Í§@¼ANJ=<³½>¼{Ï=ˆAÓ½ê„=5Hô½”7ò<Æ = ƒ=İá9¼:Â=·/È½&8Ê;—|Í=£Ñ.½ÈÀ=ù@â½ÿÚˆ½‡ü >†:‚=­¼-Ï‡½$uI<˜U9<jõ=Ì$¥½Ì¶p½™§¼@Ïä=s Ş=!=V(®=`é+¼ìó½Ã½=åº.ú½·\=Ü•_= =‘YÓ=x›,=•Ş¾½Ì~H½¯Ü¨½ÅØ³='ú=„c†=68±;”á“=ò·=u0ú½9º6=îT½Z–=¸`¬½âÅ =u=?Ší½5ì=Öêá=š½”¼$b_½²»Tª"¼9?™=ëğÔ½=Î >íY6=ÇA=Ä[Z=›äóºó¬è½­¦>äQı=tĞ½ıê½4Ø	=`Ö=õUë»É§”»”=Ce¡=9å=ºæö<bÏm<ª8w½5e‡<Çk£»ƒ >¶ıU:å5“=ÔÑÇ½_…r=]}½5:C9Û½aö==‹k½D˜’½İ]Î½§EŠ=™½tq<½~`¸=ˆÎ@=Ÿ†÷=nI"=+)Õ=mì=°Ü==lOŠ=”áë½¼!¡;ºJ½N^D½‰å=†wÒ¼é½Ã`8½ÈÓ=í»½Á#q==¦®†½ !/=˜à=¡3ó=‚¨==cb><{Ÿ;Ğ|‚=ÚXÌ=TÙŸ¼Ra­=‘Ê½Ã9š½[0@=Ö n;C[‘½£Yš=†=å½ÿü"=Ïò=Æš½”Ãr<¨=+$‘=1Y{=Ì¥ß½7b²¼ƒhÂ½Jô®==†Zº@ z¼uZV¼ÿ’
-;ù¥<¬šƒ=9p²=ºH½ò„«=¯gˆ=¦±½k7Î½ªA½Ü»=_çW½©àŒ½2±=É„<b!½Lƒ§¼?¯=æ_Û=…½Û<Å<öå;íNõ¼µÉ½ŠèÜ½è6n=³½N`¿¼•­5¼V¶»ŒßÚ½j2<=)}±½Éæ½°…<É·<tU¨½ zm=ù'=úÆŒ½è ë½”1<¼=dŸ¦< 
-û=E›=$äô¼Âğ^;‹˜<×k‚=qÚ;œCÎ<Ø8ù¼%R=y/½83=oü< r¼=2»¼Ú1=3˜½l;ÀS$½‚A½—ã½	Pú<ÎCì=h¿Á<
-‰<îáæ½±ê=ë§¥½Â·’½pmr½]w¾½Ş±½j6õ¼
-w¶½‘Ö±=Òÿ6½P¨<°7Ü=óu=wç=ß v=ÊXÜ½û7=Şºã»lM–=:\Ğ½5˜½¢!À=é¤½ñuÚ=Öm8½k|Ñ<œã½¦jJ½”³=ù
-½QwÜ½İZà¼å«¥=·«=ƒş½$ÍD½é}7½Ÿ‘§= LE=9<]=Å' ¾”<V¼Wå1=T–¾—¸Á½»›³¼{u½M¯t¼3ÿÖ½4*½ó¨=3ó5½üĞ¼Jˆ½Zï=•n½máó=êY…=7¨h½ò:ú½Z°<“¸¢½gê=ı¤==XD)<}ø:9Éıß½“A¤½ÿÎt¼Yn÷½’)=È$_=2Ïc=¹Aë<àÑ½x´ä=@˜½{’½`#n=ag‰½|Wæ=Ğ[½‚­=~\,=üè¦=Ğé‰=…Kk<Z¡e=[l±½8ß½!Z‘½.×±<R ­¼g, »ğÃy=Uå½ÛÌ’<Àô=Gf½!øÖ=ËÚ‘=ÓÅK¼“j°½D––¼¬>½Û«“½2£¬=ëZ=RäË=¹µ†=Ñ¼¶ëÁ½ú[¯½˜=ï†½Wø7=wÔÇ=baÑ=¢ii½"9â=#.Æ<9ğ“=(x§=´`·<ˆ1ê;ue\½ßR¼ë:¾éóJ=•¶½£
-=T=³ª¸=°V4=¾Ä¼£uˆ=NĞ<±ª¼ËÊö=vÓ=ú¦=•íÜ½¸¾ğ=<º=
-ı:*‡·=lB…=¹k=œÿµ=è#½Åâ~½ŒAƒ½"2=âv…½èÃ#½û6½_ÑŞ=é}=|4=¿]·=q=Ğ¿¼=ÇS”½ˆ¿=I2=%¤™;ğÀ£»Sİ­½.°/=¯.=½÷ïÈ½·Ş”½@:Ì<Ø|ˆ<Z”=$0µ½½Ôè<eØD½rÎş½é`½L—4<o§œ½Çyõ=øï½@J½GÕ×=ÅG±=­å4½Æn½ïH”½ı´½î½Âm§=fST<c­V=üc=ù¬«½ï>é½S¿ó½d<F½QK=oç=Ê†½Ğ²¤½Xığ;2Ş½†Ò9cöO=<7Ş=ØŸŠ½}Ø=‘p¾½Ü=ò <¡(ß<Ğ‘Û½å‚Â½Í|Y<¸ú½ÔÓ<´ë½ºîÄ<ÒW•½Uş¾£K½çT½~áä=P«½Ñu"=ÌÛ=\ç¯=¸ac½Jûµ½îÈÉ½$×½ì¥ù½Z†ã½›Ş½cİÊ<[WÔ¼uÖ=‰âã=Kœa=?•¾Â½¹Íæ»FmÓ=òá½‰Ù½Q>õ=,+;§;Ñú$½ÙÕå=ŸÒ9¼üÏ½¿Î©;aó=Øl¯=’dL½û~Ç=õ[å½Ë:P=òGØ¼|V*¼ïx‹¼Ìµ|½½Ëœ½jÚG=Æ¦H½KS=«ÎÌ½	¯À½O­Õ=»_j½$‚==¢p½Ä‘™<K3=Üáy¼fB=/W¼Ò‘Æ=ôß’<ÒIk½)=ó’Ë½‡ıt=şÍI½= –g¼u¼‹šÖ<Çÿ=-r<«n=,®¼N)Ä½@ï½Øß_;¢h=°¹¢½˜M=Ö0ù=2d½ôÊò½n;]<P§¹»B¸º½5ù–¼íç½fÈ½¡æÿ½È¶=Ë/½æK½< =İØâ<Ï½nĞ=Âó=1»Ğ¼dˆZ½b?õ<Cì½Z¼=Öß³»³Ü„½b"©½™CÁ½Œ'§½tŒ:²±x<V>=Z‹<Ñ»"“¼4^ì½£c«¼/©½Ùï~=zG1=t+½BÄ³½|{½ÏÒ½ÆÂ²=Wµ¬½Š%H=¸à;«ñÙ½=pS=/¤<İ8ó<A7ç=O&¼eîM½ãµ\¼E{¼ŸÇ“½¸$å=ùÁè=î€;'–è=y¯ó½V#.=ìÈ=ØÜÄ< »À¼³ôı=¼Ë=¯“„º8Ó=Æ/—=ÏV½†¯=}J±½L‘<½¨¹=ŠòÒ=´£q½N
-=ØÏ¼61ë»#ã=İy½ëÈñ½8kÈ=´ÒÂ<*M¦=¬ö½[‰z<<ï›½F•=[R½ßş¾µ]=ùˆ½P´É½†ÒÆ½€÷­½4;¢ù5=›q½}u2½Ñ/§½E¼ ¾}€y½§3 =qs1=ú²½½XÉ¼¶˜ø=,œJ=•‰¶»¬„¤<"8 ¼aÎä<!äù=Î€ã½ÙÉ¾¼×%º=áŸ~=*šQ½@Bø=şK¼Â}=Ài<‡Íé<\Ğñ<Şæ =ºd;d9¼RÊú½<U=;1©½ßò½Ÿ“é=ıˆşºäP¨=W×=aí¾ı$,<HIM=¿eÒ¼ã°†=:ó†=ÿÔ<|·¼–ó²;ÒÒÔ½;g½î'p=f¤u<Nú¨¼üû¼…RI½m”z=ügÓ={D@½Ò¾=‘¿½Ôh½³«¼.³¯=„¸=×&Ê;tÃŒ½lM½ˆ]Í½*€Ú=®æ:¼ãôï½§*½~˜Y½!ïq=13w½^v=*b¥½ğ,=Ùb½©Î¿<±Qß=É¿4½ñ=ßSË=ğ¿q¼§+Ä=…] ¾†½uî8½m¿Ì½H=¥=h½±Èñ¼0Ùù=©—½i¼²¢8±!º½¡³=êáÖ½Q^<í`=¹T½t=# b=ëº»½ªœ=4Ğ=Àÿ
-=ÇXÀ<ŒÅ½ÕòÕ¼À`Á½Ïğq½$9\½™Oİ½ËlÒ<æ½ß
-c½ÌÄ½ëYå½G¾B.‰=~‡‚=,h¦<:X½×+ğ½TÆ¼æz¾eó½rÌ:ò“¦=ôo2½£H½GKf;èÚø¼—{&½	²<¦KÉ½!£%½-°A<æB°=‘½Lyh½BG‡¼ã><}ò•½r¹ö=Š„“=4›»w»J½ƒoA½lÎà=~áŞ<l“•=¤¼=Íì§½³½cÂ=cÁÊ=‡±”<º„½õ[F½O<½|l=ef½Yó½µP_=³e±=(½Ë‰x½Ğ y¼“KÉ½¥Šş½Ü¶…½3Å›½¥(¡<P’·½¼‚ÿ½ƒg…;YÊ ½RÇJ½ÿ^r<di¥½tœ½N’^<‹Ô½-> ¾•vİ=Iù£=BÎ‚½Âq6=“½½^5ò½´Ø=Ø'J½ Hë=R	“=ü
-=<’½æ=”îf=´ê¡=Q‰½İ§½~;¾yıê=¶ä•½AÆí<#Áa=ÄO“½-èÿ=''ò=,5=£›»ÉÆk½)Òê=g[½3*=©<5Í+½zd¾&İÚ½1C­=³Œ<h[»=E`ß½`¯=‚ç½“pÖ=Œ<N%o½s`á½Cò½=P)u½¦‡¼<ãûv= ®%<«Š½“´¨=€ˆ½Òå[=y¼;môä¼tÁ¤= ¹¼Bzä=š$= (=Ì7n»RK×»Û;&`½½Õ*-».óM½–“<%_:Ÿ×Ú<ÇÆ½±ç›9V‹Ô¼Ã¡Ï½¾¯¼–f¦=³hØ=zÓq=ËF½÷H½9¾Ú½>¾g9MóQ½Ïæ¢½Š=½Nıš<€M=Õ[Œ;»Ù½ò’¨»Q‘å½m6ñ½ª²½.†í½Ä=·<ÿàƒ=ÙhN=ÊgB=]Ê$½Ñeğ½ÔîÃ½©Ñ,½r±³=™~“½ª•ºÑÊ6=ŠœD=jã ¾¦ªÃ=DÓˆ½ªÃÖ¼%¼”¹¢½–-Ã¼"d!½
-bÄ½«nÈ=ÉX”=qlÍ=•¢Ú;C ‚½²ry<¥Ùø¼iÊ/<Ó9%½úè¼=XÒ={¸=”Já=&¹Œ=.«ò½½ñ= oD<ï½.ıÍ=]w´½Di=DŒ|½–V½g½‚½üAÄ9úë©½<(Å;ú…=ªä>ë†Æ;ò–¼Ri½¥­»½(8Ç½­S‰½X…†½sqÚ={=:d©¼ø‚V½D=
-¯=k³À=WŠ#<Îşg½¼3¢»C ¯½À½vÅİ½.æ=k{=¤(§½Ä«½ğ‰…=O|	½9à½àÑn½/˜¸¼èÊ½×rİ½‘ß4½§*‰½‹„½6E½¯¼;½í½.´½~ª½¼wğë=(G½®· >_N\=?~5<ó†=©FE=‰û½6J&=ımˆ½Ë©½q¡e½E½<°'8=Ÿ4P½ƒÛ¼o©
-¼´t=…ŠØ½Ò’¼§Â½$	½œî=x}Ü½’D=îŸü½ª=a[‹=>[¼=À=Æ¼¼á3½—ÈÊ=rì=7ıÕ<Í':+\»,š~½Óã`½L'=ãì;šB=BŠ‡½å‰ˆ½'Òº=z0j=ÆíØ=ëŞÎ=?%ğ=†'$=?n¾½RÀë=2–ì<pÂ½b÷¥½œØ¼¼>#F½_]½g}½8Ê½°p‰½VÇ§=ªyü=áÌ[½nÕŒ½iì¡»>"¼Ãb½ú9ñ½p&ï=ZZŒ=MÆõ<­Å¤<|,+½‘Me<Ãº=€ª¼Æ›=Y2‘½T‘=T§ï½Ä
-=³Î‘½ƒw©=bjÌ½êT¼aé÷=İ'½ë@>£mI½=7 ½ÄŒô¼­b‰¼û¾›½x‘,=\bK;9RÄ=rS<\ˆĞ=ï ½í³=\9=Vb®=n½;Ã¼°±*½‹öÍ½†àÉ½ß6!½Ã½ÉšŸ<R;Ş=6Ì½N<<~´Ë¼Êb(½–Ë=j4Â½^‡=Ú_ş<•‡%½^˜æ¼=J½Ÿ$˜=*"½±H¤="ÒÖ½ùe<K©½˜U·½Oñ&½kïŒ¼İ¬½2Q½¬a¾l¼T(2½~¢Ê½B‡ì½€V =ù¤½İ˜°=­é©=o°<D‘½ÿ‡6=bOÀ¼§ñ6½ïóq½7›†=[åÒ½Ş>&½>°±½¸ğö<Ó=§ï½’Æ½£ñ:6Æb=,g÷¼±S
-=€§¼jø+½×ÖF½Æ7=ª½Ø©¸½Vê½wX¦½J%­½‰5‹½ûs=ÍS=Šè„¼“¨\=p^½O¯½c†½õÕ=C ì=Öl©=1Í‰½6fe½()=bwï½Õœe½Ğlì=¥ê½kBM½–i^¼%´}=Ònß=K\»Æğ³=FÍ=Ü=á¼	Ã­½)E`=Ú¬_º“îŒ;Şã­=‘Ğ½½3$«=Ã¨˜=ˆì±=Ë
-¼es¸=¢ş¼Hx¼¿¼ñ½A=÷¯‰½­«Ğ=„n½vÇ˜=ˆo*=n¬½dòí=ë»=œs	=6”…=İ<©ÙŞ=—½ã<"ÅÚ<š|<ã„”<u½Bª®½Í•ú½ø•À=‰ß¢½?)"¼#or½R`®¼¬é<ÖÎp½¨(U½ˆ÷Ï½t:‡=¿À=)éÆ¼e«¾8.=åÃ½1„«=â}½¾ŸZ½¾­°=i5‰=®Ôº‰?u<²Ÿ¹<VÇ½“³=$m=·§=/ıç=h´^=|=•Ë½åø~½Ş†ø½·NÀ=v¿–<Ä`=2Ü<$\U¼?má¼§N½ÚÊ=íÑh½Sêş<™Ü·½×ûY=“_=Ú<A<½WT=…vÛ<œZ–<x@ö»îë‹;Öj¬=*ŒÃ½&5\»X‚L»æ=˜¼¢ß¼€‡=¼­½sóÆ½`¸¡½åæ*=%lã=äŠ½F†É=ßÇ¼––á=8|‡¼ì5½ãl¤=ùt`½Â5s½R¥æ<ğû½X[¼·ëã¼¤>Ã:¿áÆ=“±=H×é½5e=šº=!Ò ¾+Ä=™z¶=šøË=b{Ö=W+½ï(t½O=ÃÕ=¬¼Ô½”ûÏ=í g½·$Ø¼)Tª:mx%½³?<Mâ‘=Fv<™(=s~Ó=£ˆ½\\Û=,U¾£ªQ½½Ò¼1®½½W&Œ¼îN¬½ëÓ=+ùÙ;‰Tñ=%vÛ½†—¸¹ç~½¾mÆ³<›=w·=G„¦=Jn«=|•Ü=ÀÃŞ½’&½‰$â¼h0Ğ½Õ­8½k?c=ø¥=üÏ=
-Y«<¹~c¼İ2½äü½´$=á½Ò<:‘¡=Õ9½ö=b÷¼øh‰=ûÏô=ÚäÀ½D¼ò€½Œ™°=¢4b=™†=¸€°½h“¼Æ(¼=õş<tD_½Ìª•½€ÿ“<ä†n½0óm¼»_ª=wºï;t€½Y«·<Q_¢½Ï»f¨Ì½)û?;çH<óáÏ=˜RK¼ĞU½=#ô¼=Şä¼½Æ½å›‹=z=ˆFŞ=èw´½³ ¾Ğ½jmÜ=°ô™¼œÓû½\—¢½xf0=²YÃ½ÿ½=á«Ö¼#áÀ=ífş¼p¡¬=Ü1ƒ<g®B½|[£¼g5Ç½K½Kæá½ˆß´½õÄ¨½D‹½ÿ=6ºäKç½?_Ì=/ò=i.<ÃĞx=Õ”¾’==YzÉ½Gë ½l‰¹=Yú <ªª="¼<¿ŒŞ½*ò½lH£½LH’½¤³½t™/=¼p=x½©=Ş`½µ½Ì=$ë’¼U_”=XX%=7½¸^¼§á==”:=ñÍè½¢L¾b¬½¾ğ,=,Šr½Pfê½á½ç{Û<ı~Ö=‡Ì°»±oÜ½?OÆ½†
-}=º¢³½BÇÜ¼[ıš=Ü$³=ıîĞ¼Rç˜=XµĞ=(‡X=©‚î¼s>o½-Š»Ğ½Ò=1Ñ›=Uù´=İˆ¼ Y•»	Í½—¦ª½bY¶½nø§<S‰¨=Ó®¼Ì“å½q¶<5íÌ½­¨³={•€½ãT<Şà½ZCè=,\ı½ù8ô½‰qJ=œ”D=Hœ=Ãxâ½¯š½×-½£½ÙÏ;|ùÎ=c¸=	år= e‘½UG¿½«ád¼YÁ½‹4ø=vÙË=sìˆ½]5½¹ B=ËUú¼S¼<¨gê½ÎqÜ=K:Ë½K3Ô<é Û=p¤Y=ãÕƒ½…k½ qø<ÿ•“½4ZÉ=V¦½Ş±÷<Ğ}Â¼³›À=\¤d=±†İ½AÊÍ<Y9ß½ñö}<§ç‡¼¢v:·ç½`=_ÚZ=±=<$òÛ»=ÎiÀ½E>Í½N¤º¼u‘”=M®ã½·’=ÎEù¼ó:Í½ÎT¤<`İA½5ß<–UË=¸±;6Ÿ½¡<õ=šå7=Î÷<ŠJ<åå©½õÃ:DøÈ=7=z=×…ó½—x´½d0ë:ØŠN=RëÙ¼} S½ß5™½Üj=KËÀ=óéé»ÆPT½íj=Ñ}å=)˜æ=ôãy½°íê½Ë¤n<‰Ğ¡½Uƒõ<jğ›<3Q=ƒqø;ñ·=İ	½ãRÙ<@Öğ=Áí=%½Ûë= ô½ºm‚½Uë8=gt½±‘½ı É=ÇµÓ=çÃ›=-{=’…c=ØÀ=İS„=İN,=h[âº´€$¼ïö½Z‹ï¼òA$=~
-;7–<"ùÂ=ˆr¿½Ôôö=t)q½ U<‚]½¡VŒ=S½Û:=š×½¢)N=™»)=ò=r/¢½œŞe½WÄá:Z3¶½”%=Ú X½—¹½ërß½ƒË½ä›¡=9½Jô95äô½Z¥Š½Ärô½Ñ\N½sÇ:½H.¸½Ÿà<ù=½ŠÑ½ú% ¼0Ñ½¼>Z?½‹=½Dbö½@L¶=¼ˆ¨<Õæ¶=«_Ã=S=S½ô\P½ü:¼=©Z½£ÖW<müI=«8É½7!<ì©<n¼ö½}
-"½*<J;UÙÓ¼“»(ö=7ì=÷_U=¶Z­»ìÂ½{=uøå<m¹Ù=¤F=mÅ¼.©¬=E°=F *½¼0«¼ãÈÔ½HÂg½Áè•=}c¸=6U<AÔ=)U<½Ü^¡½\˜½ó¡s½OÏC<gü¸=+‚´:{ î½T‹@½P ,¼'Õ ;I½¼]¨½ÿÉ=…Á½²ª½7ÕÌ=å"¢¼?Ñ= <%Y‚=!ºÓ=¬s"<’7d½*î<¾„=*dj<†xd=i¾Ê=4¦i¼Lî«=ªó«<Ôe½“•$½%‘¸=QÂó=n-È=íMB=Ş‹½%½İ¬Š=»ğ½a#è¼ÆS¡¼z’Ù½·<ô<#şÅ»´áå½·ì=z¾Œ½´·ô=¾¯<´„S¼±0¼àF:Ñø†½'½ş/=Ü’4»3ì½Hi¼fDÒ= í=H½ ÛÛ=a]Ü½‚~<Í"½Û‹= ;;=4|V¼À³¼Ìä“=h»]=¬Ñ¼å¿½uP=Ww—½¤ï¼›‚ø½„FG¼ÿjI=o§+=V£g½)Á=i¼½íõÒ½•;¶B…¼t‡#;b@å=P¹¼ß!›½V½0Ê·;–¤Å¼ÓI¼ÑãŸ¼€€©½#â¥=aˆ:ñ†½×2Š=Uß™=>ñ¿½èia;3ø‹=yá½rK½gS=Ì
-½zl±½Ãı¼j3{¼ê‡µ½Ò¿»“V=˜­=øß½’û½:œ»"É‘=uz½-<Ş½h]½<ÓÓ<à°¼WÉ½¬9o=	l'½B¼­½m~â½OÒ<i<©=|ÏÇ¼A‚ê¼V†®;qµº\¯=¨Ø]=Vk>=q¢è½¶_Q½_Ñ=ÜBL=ËŒı½ÄÕ¬½î	I¼^¡½¦d=ğéS<Pƒ$½èg=ß|‚½ùûÄ<K¶’=}«½ª/‚¼“+Ä=ÙÒ=Ñ*Û=½¨¼XÄd½5[x½Xö<'‡„=SØ½œG¬¼.±¤½5ş2¼û T=Îóµ½	á<1\½£%w<·q°=´İ¶<Êò=®bï<£^ù=ïĞÑ½öï›=TGV½ñv¶=f Â½• ˆ½ÎÓ½¯Ük½’†8=â.b½ƒé=T"Å½ …<XéR½0Má<ûG=Ukë;Øâ½C
-;ø~½Áñc=æ†Ú=1–o=³Ú½r³¼ÁØš=è?š=Ê‚Œ½bi<›b=È%¾-T¥¼Ûßí½!òÚ½‰—=Ùl½ˆ’=oæ=©¿< a=¡â¿=Ê=ñ<Ü½/0’½;uÂ½üğ½ÉC¾<Q*½.Dò½şÒó½¯X½È©=t³R=TbT=|Ş½§á;ˆë¶=§½´½¢¨½‰
-0<‘Ê¼
-©
-b¢
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter2915
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-
-D
-value;j5
-
-"*
-(şİï»ÿæ¶8Î\S:Ã9;‡ñL;¨»ÍJåºÏÇ9‚Ú¸»‘E|º
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2943
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2944
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-
-kind(
-uidBPlaceholder126433
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBPlaceholder126426
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2908
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2909
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2889
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2893
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBPlaceholder126418
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-·
-b°
-needs_gradient
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBParameter2881
-typeBVariable
-dynamic_axis	Z 
-	is_sparse á
-value×jĞ
-ğ"Ã
-ÀYöºõ»æ†;uÇ”º§2»V§ó¹IÅA»Óúº!}»7·¾»R‘:–¼!¨»–»ÊºÆ:t/¢»¨k»¸Ò:ê¤‡;øÄé»áb;ÓÂ‹»—ª%;1©»?ëó;’>°:6İÀ;9R·;ãL»,»Q <ğ–7;/
-ÿ»wÚJ;2A»ÄÅ:ƒa»w‡»ÕF)»Brhº–V‹9›q;¹à&:>	J»S4y;Q[»î¹»n87»ßdÒ»ó¦£»¤y\; +k:¼J}»òkÓ»\se;¯H»øÏ«:‚;n$€;RØ5:,Ü:úâOº/:°»¾8î»49 :¬ÊX:=@;‡:ys’:Óå8;dêÎ»Sğ!;¸#ô;(‰¸Ãìºin:W;+ÕM;=¨0;Oˆ;­ç;¢^§»‘½»ı²;Uó3»§‰;Õ¹¼»*Q»nÒD»†Ê¼¡‘;»ˆ;€=Æ»bµ:2,»4F»
-É»¦O»S÷/»_ñ„;ª  »ÂBŸ»úE²:{‚»‘·¼=*¼ˆ$;»ÖœJ;aœ ;D¾”;“j¤»P&~º“‘»·O»/µÌ;/´à»Ë—;ï+º”¼¼»ƒë¨;
-!Ö¹†ú»_šº;{û»0«$<5î»°Ÿ¿»”@;š»òŒ»P’›º¼N	¼¾Cì8şğ;øœ\;B¶:µ.ƒ;h\D»Y0¬»| ‡;|rçº¬¡*»m<1ºrÈ;1êõ;}âs;vœ¸;;ø‡»³Á½:<KWº»ê¾:Šˆ»À«W»‘Œ;Påaº$» ]`»,ı ;ÛSMº3D)»Vˆ»pÆ%»‡Ò';-;!Ù$;Bº	Â¡;“·ù;~…é6l‰;wÇH»GséºÁî;©§;ÕÏŒ»:·;”e»xÔ»=Z;TË;ê«;Sãæ;ÉAt»-[<Ü?¬;nÆå:Èö¾»çhX:åˆ¹a-¨»’s´;!«Û;Ùˆ ¼ÔLì:Jê>»¤á;¢€;,Ñ¿9‚·ß»íÃ.»pt;­£{;i\$»¸>;N°;+Î;–à8R};! º;ô»ï&•:‘€«;¹|M»C0;¯Rú;f¦<?”ºœ	²;ÙJ;€¹´»Àş´»3Ã»ˆDNº¯ò‹;éN»oÒd;cÆz;œÛ\»/àR9ÉkÅ»u¬:ï%˜;9¤÷ºÜ9:Ê	q;øUºÚVÊ»Ÿy¢º-kš:`–c;£ıåº13;/.G;ÿ†»Búµ;µOĞ»`»û¼Ã;à`‘º¦ºÅ;%ôzºöĞÉ»tß!ºUC¢ºÔ
-<hİ;»›<´»S…	»ßÖT:õˆ;L²ø»ü1;ş›:ôm:C	ƒ»wz»™»–·z»O^‡;á}u»ËÀ»Ly™»€d™»W«»U˜œ»bHÓ;hÕC:d:{@3;’Ğ;h”;ŞnW»şşS;ìâb;?æ¯ºÚ²:C…—»ü V¹Ëâm»ƒV¯;¡oé:æ±;Ï
-‘;z%.ºs9;eÈ»‚wã;üÕŠ:t‚:~w;Å§;|º2U}»5«º£ ç:6;¨wÉ;yoİ;(¡»êÂ»†Ñ;é®À;ÌƒÅºIB3;ëq€»êÇ9ºƒ»HGG;vä»ÍXĞºB¼´N:ãJª¸6Dµ:j:Í;äYºt}›»(Ò›;è‘;ûQ^»=ú»Iª;ö’:I¾îº—ş1;£Şƒ;7­*;Mk€;ŒšÇ:!àr»"^¸º<…+»'7 »²ë†; b”;íVæ;åêT»œÖ;ÎÄ ;ë;&v;ù;‹C;1êÊ:.P»cÜô»Eà…»¿/|8NõÍ;‰É‰;óY®»Àµ©;”ı‹;mÁ8»“/º
-·
-b°
-needs_gradient
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBParameter2880
-typeBVariable
-dynamic_axis	Z 
-	is_sparse á
-value×jĞ
-ğ"Ã
-Àû'~?|ò?s”€?Ã,?9É€?$#€?¹€?È~?Ş ?q€?ry~?{ €?^U€?ä'€?	N€?v €?|…€?p~?2~?ˆ1?ß~?Ç€?~A?Ùe?¨§?àµ?1Ÿ?{8€?Ãš€?Ëa€?a?a/€?/á?=Ş?×g€?ø?Rˆ?‡ö?Ï?0h?
-?•ı€?<€?Ï@€?Èœ€?IË~?©…~?ªa€?:|?FN€?ÉÓ€?Ã~?•€?NE€?g€?“?,2~?ÈV€?_ˆ?Üş€?¸?~€?¹?Åê?Òè?¸‡~?Ù™~?.T€?¾?ÂF?gÌ?¸~?a€?ú”€?Gš€?ƒš?Œ9?¨€?,×?ãÆ~?*-?ß€?x ~?=«€?ÍK€?üê€?L¸€?(€?¬4€?àÍ?D?~?WĞ}?á	?Ò”€?‡?RÑ~?\ €?®›?î?rÄ€?àâ?&ô€?VC?€?‰g€?¹F€?Ïù?ZJ€?9?ßw?]?Ö¤?åR€?uŸ?³E€?Nm?[?a€?­³?|º€?½6?ªK€?À{€??ä?£Ş~?sê?B?»Æ?ùş~?nÍ?¼U€?l~?U™?^,~?N-?,È~?ó#€?À~?K€?ÜÛ€?é€?ƒH€?:z€?*Ï?o\€?¡??x??€n?j­€? €?Vc€?‰§~?"&€?~›€?Ú@€?7‰€?aN€?äù€?Ãa€?Lß~?ÊH€?.€?ã¢€?Á?Ê-€?<?Á€?Ù€?/4?€ş~?u˜?ˆß€?œ€?ôş?÷@€?q€?n€~?^“?F	€?oŒ€?¨à~? ‰~?",€?Ş{?ò~?Ì"~?ğ?3ş?g?:ª~?×f€?Šå?Òú?¤¡€?HÓ?¨.??f~?\?uv€?¯Ã€?ôã?á¤~?"€?Æ3~?è>~?Ñ³?Ÿ€?„y?†€?>‡€?Ïq?_ò~?œ
-€?0Ó~?m9?`?½¨?î?Ë¤~?.ò~?än?ÀD€?êİ€?S?«¸€?%`?Š~?1ó?Ÿt€?”@€?©ˆ?ßŸ}?a €?UT?Õ¥~?I¿~?%d€?9&€?Àò€?ö?™€?Qj?Ä»? ‰€?³ €?f%?wù?äW€?b€?3?øğ?Vú€?ë~?5¶?~?4Æ€?ò€?¿µ?Í*€?€?¥?S€?J ?nB?i€?o?û?ã?å7?)*€?=î€?©¤?‘8€?©?÷Z€?H—€?>O€?!=~?ù?Ç|€?¥3€?x¶~?8?´?-€?K-?ìá~?¸R€?öF€?BH?=G?ü?›F€?|Ä€?ñ>?éç€?Œ?,€?8€?í?u? ô?Ó»~?b9€?ñ?ea€?s€?3w?å[?¥}?cI€?V@?á€?j{?K{€?5€??€?m&€?h±€?)=€?ÿT?Èı~?İÜ~?¥J€?b‚?èR?&i€?ìÔ~?S!€?è?Ç?s.€?%€?ş,?D?‘?ŞG?½#€?º€?FR?•e€?i¢€?ë	€?)€?ø:€?©ó~?n?Š?yß?a”?1C€?f€?O‡?Ê~?¥?Õz?j€?ãª??]€?ÿ?<7?«~?…L~?–š€?§™~?±Y?
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBPlaceholder126411
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBPlaceholder126412
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-Š^
-bƒ^
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter2447
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-ğ¢\
-value˜\j‘\
-ğ"ƒ\
-€\¤®¥½ƒÿ=“èğ¼n¬L=Ú•ñ½_€½ŸéÌ=ø@,=?<W¹=pÙl½VÅÍ½5[Ì=çã¼"´z½âN½õõú¼1- ¾Û­±=
-Şâ=…»N½,Û=fŒ†=™Ü¸=ÿL½ÿ^—»ºÏv¼Ë¾›ÇÎ½¥O=ÅË¼Û¶£=ûYĞ=à9Ï=˜8†½PÈ”½In½ÿŞ¤ºRbû=W^İ½Oú=~À.=’Ç¾¼~ğ½1+Ö<hÍ3½wlÔ½‰†	½öBk½?Ü½|f«;É½€Ğÿ¼JPÒ<‹xõ=î½ğ`´½#R\½Ùü½úÚÌ=òJı¼ÈN=!±¼¤ıy=“?ï=È½e¤=B¹½
-‚m½ª••½ÑC{½f¯¼<ÀAl=]%¡¼}Íş=ËcY½|ª¢=ã?İ=–½ßƒ˜<ÖíÆ¹èM¼½ ­¿=4C=TóH=¿ ½F:;½–øº½€½1æ‰=âN½Ôµ½ñ›÷=o	½å×¼­Ù½+ëª=õıı<“|q=ıe7=a)¼€İ˜=„`Ö½#ùäºZ:	N=™î½dàû=’z»½¯³¼ çs=€°;tïá¼ßbŸ½vP¼„3¼!à;AP†<–ä¾9¥ŞÁ½mú€=g_©;rÏ=iè‰½v“š=ÿx »ˆup=î<(èä½j7­=Ú=á¼ŞÕ=<İ½Ì„'=Z)¡½ğ-ø½[ÄÑ¼Í‡g»‡¦–½Õö=õPC=0P½Õ©ä½ •‰½Ø^=ò.Ø½öÖ¼m]è½
-vé=Ÿ+~½†c½^y_¸ğ"=<@o.¼¹‘²½¾Å=Jf=JBë=LìÅ½pìå¼wa=dŒ/=i¶³½*\½Ñ¢=)Şò=? =<=nÄ²<4­¨½ù:Å:~Ğ°=jÃÃ=ˆ©»åœĞ=–‡¿»Ãµ£=ë­]:Şvü½9Ğ=)½ğdM=ÅŠ³<‹œç=Bş˜½rb:¼“‘=ef$½
-»;öÊu=º%Ø½@›µ½£°k=§*”½%ş¸½™v‚»@õš½\>½úm»½>ü<=×9‡;·=>çXª=¹’½s-µ½‹Ü½ş€½€i³½­õ”½@°P½œ­ó<fjw¼mõ–=6{´=ÿ<$¦=¥Ú˜½Ìó=g=Ê‘=±û=Z7½¢½-yÓ½]Å;ÃQô=“È=qC^=A&½s<™Jk=—»bÒa=(gs¼Uå…=ÚÀ×½ Ç=+›=•·Ã=Ö(¹½xÑ½RI½âÑZ=;l%½67Ö=§a)½ =çT¸=çÂ?;–Vö=£=¸€ã;+QÏ;\¾{ È=QHû<îÇë<ú=×Â=™}½¶»{=áq°=c™K=7±=V9 ="{³=õ“»
-¼mt£=éI¼ûb¥½ğ’“=Äİ½ş?=îZï½
-}s=›Û×½vN=™K2<¢a®½mßĞ½9¼­=ä/½d=ÿËo=Iíù=šğè;)Û{=9ª:­¦=	ûJ<GÜ=XP=Æ¢<Åw*¼ˆ=ù¼½ûf ½‚½”ƒ½•9±=•gş»ïé(½d¨½ı¸Í=-”=3´½Ìæ»=U2Í½5~ø½Ãş¼h‘¼»Òƒ½)¿‡»­·½tO÷½Åà°=ğ Š=•Šš½aÄ½¨”ù¼_¹=ç|Û½† A<ÁÁÃ¼¶_Ï½çÏ½É\ñ=^+í=¸5¢=Ç¿Ã½h‘!=¥é9½	!¼xà®=”Ôç:Èr=Vzc½¨è½¹ÒK=`Ó¥¼€T½¹æ<mÊ—¼h.–½Ã}¾½5”„»b¹b½ÍN:¼1Ñî=IÒ¼B‘À½Ú´©¼Uçe½ˆÒ]=¿hë=v‡t=ê«ò½ô€á½0À½Pnæ=¾´½Ç4ß½Eıš<2ì•=u!Ö=XS«½;6A=ª©¾3m%=-ë½ÖÀn=Aé^½F›‹½½í ¾;‡Í=O­½-<U—½Ç]å</i½*åß½=å­½q=ÅÁ=óF¾½«íÌ½â5½
-?æ½`;‹½Çmµ¼.EÇ=ßà½Il½\Yx<|"¬½E%u½lb=Ò1y½Ÿïï½y‹³½DÂ½Iz¼=@³q½6ÖÀ=¬5=ò-Î=Uûº<$Ôá=Ç_=a/\=iw¥½°‡u½U=Õ	=˜	F½±¼SÂ)½ˆíL½º
-¡½-œN=0MA=rÛñ=_v=¢]=J®¼Ÿ »şXX¼úÌ,½7U#=[@%<º3Æ<µÕ=€íÔ¼îB½6¤Ö=53«½!Ç;‹×=xŸ=/§ô½”½½¾‡û¼È8½J©=&7À=ÑS®<èƒ°=“t=
-4`¼ ÏÇ¼3^¾ƒbñ<ÄçG<Ô»=-1«=Ciõ½=û±ºå‹¼=ËA½«˜Â½B¹½)–=ôëy½]Ô{½…â`=ÖíK=_W=¼£¨½¿«d½ á<±ŸŞ<¶¹º=ĞNİ:Á'=sº=¬^Ú½øj”=,zQ¼wÚE<Rì½şÌé=ˆ=ªš×=OÍ•=õ)è½Œ=±tÉ¼~æ¦=4¹=0i4½ª¼H=GFÒ½Yâğ=ì½G:$=™R®=çR®½£Ë½n=ä½Øç…=Ï½ÈœÏ=CÓñ½_úL½Ç¡ ¼9à©<lV¹½Eï½ñÆ=A l½yy{½qæ•¼ù²§½¸½I‚½½{_§½/†½|ù=ÊF<_v´½¨¶¥=M@>²ÓI½{·õ½?bG=ã†z=±B¦½hÏS¼¥y»È­—ºøWö½×)/='#=•fî=»’¶½@wğ»¾Š|½ıŞÜ=Ø×›=õùä½S>ç½Ibœ=”´=Å[;Ñj†=çúy=<ê©=¾„Ú½NÓ >Øn=
-ãT½²Aù=\l<ú¶½&}?=ô¼Øs®½ü£½¨Ÿ’<üĞ¾=v6¿½`§=Øı=ÖÕ1=úm”½¥‡Ò½—r×<(±˜½qÚ½‰1™=÷c¾kç/½8á½Ñİ=”ä½ğò½ßÍc<Ñ|=Œƒ=NB=pgŒ=’Û0¼ıA*½Ø›½Îh=½ù}<¡à=@VI<  È=¡CĞ=oÕã=è³=¯¡¼äÃ<l·Í=Èd ½·Q¾=k¹<©/=0’¡=]wK½îj ¾šÈ½Gÿ—=kz“½àwá=¹«<* ì=aßâ=Ù}Û;wŞì¼é½ä¢Ä;Õ¬´=«ƒ½ şå=ëU‘½›r@=±½ C¥¼Ğá=|¢î¼³àû½hÓ=‘æ0½'t1½ª>½W+=ÎÀ½"£é½Î4=ÜÚŠ½
-H ½/›=ì‰=!BÂ¼3hä=š)<bÕ–½ë_(<<*j½—c}½jÛ<dœı½©â=Uh©¼”d$=8²)½1”ò=R=ï£½AŸ=ßs‡=ºÕ—½İ;½ËDã½Z=fö¸={æ¹=ÚOŒ½I†Û==éœ=Ì\F½õÄ¥½z3¼tÔí¼2åÆº™z=ù‰¤<âˆ=9®¾=å“Î½Û-ˆ=Z=¯œı=Ğ+=:”½ax¼¼Å7¥½Ô¡“=‘ûN½ßo½¼¬±=GšJ=ÇïZ=µA}º 'ä½ú'Ê½D—=öƒî=÷ãí=ÊiÌ=r6­=Â»¿ÏÌ=jN%½Î­¼`&Í<Zõ}½/Ór½và»Õ2‹¼ÿĞE½É@a==Nà±=ê‡¢ºÿ\t=P r½6Mª»ØÌ½B»ÿ½éU½}ú½äéu¼. ½fÔÃ=÷‘¹½0!Ş½Lñš½auM=ƒ5:=Îİ=ª¾o=¡¼* ¼IŠ9½wtŸ=ZÛÆ½¥
-Ë=Ú>4=ó /=ké¦=Ô4½ -ºA¼Š¼-©½Ş}¾:Ô¼ï5Ó;şì;¨=¾•å<|µ½¦·¿<Xñ­;â·T=¾°¼=hÄ½Õ4•=r ¾¸É(½&44=Sn‘=Q3"½ÜÓû½îµÏ½C[‘½Ÿ¾<JqY=	à<í$¥==µ3=h‡½RË­½8ß»½ıÆ&=‰³½›ş=b“¼x½ª¦x¼ˆ_=}ô½Üa€=‡w°=û@½ÒÕÂ=~šø½Áà§½Ğ…´<&ú2»Æã½¬Lî<bá½“ûç=%“á=Õy=bT>t›å½×F;,½o¬„½@$ë<œm¼$y¢½äÁ	=ônÛ=€‚İ½?2X½¯Æ]½ªg*=´¡Ô½ xh½çÄ§½>ä¥½®Ò9=o‘Û¼åú¼Ïq<#©½/ß)½)EJ½ÖuÊ<LÜ¼<5íª½Û¼ËAÓ<ÛQ½èâ½³Š°½İ·½=ØV½°½½,„Ş»è¿Ò¼Ïó/½c—)=wc½ßrp=>º½a_Í½˜Q´½AÑ3=¨³L¼ğ;h=–ƒ`=ˆÃQ½`Äß=º¾ç¼~Ê<ŠV0¼1+Ù=?q{<ëŞz=Ì¸½Ûí„½O³¯·'§µ=æ¼%»«½©Üù=¿ôÄ=ª8Í<°Ñ»'ËØ=Çü¼áà^=¾’=P;<Öú[½Æ¾Ä>õ½¦çä½©ø§½µŠ½vŸ-½şãi½£i2<±°ø=w½‘Å½:€½AÛ ¼së=ş`½}	ã¼Æ¬=…æ=+\ú<KaØ=Äl ½Õ„‡¼€–Ì=c^=:-<ÑhŞ½K >QÊ=3eä½ğ.<¦cÃ=¡§¢½*Ó°½§==ñ½‘ËÔ½V¾ÊÍ°¼‘h×=ùa;§"ğ½0ß ½~ã‘¼ˆiB=ÏÒµ½5X‚¼Dê½°D=CÖİ½Ráî¼MÉ=”VB½h}ï=¤ok½÷C.½M=kX—=Oqä=.Ê«½ Ó ½|Óo¼¢æT½İ»¼r°=Ò3ä=¡ĞW½eí=-v'½®İÛ½ƒº¬=¨‡À=7C)=ZÁğ¼ò„Š=gÒ½Ü^§½î=4(r½A3=]á¼óŠ°=¿9½qe¼Ã½ô…½Âu©=a^˜=ƒKù=›`M=œÏ<Š
-N»Ã¤‘==»Æ½Ş=ÂÀ;«W½\»=«ø=§ı/½Ó¿Œ½µ'1:¦öı<Hç®=GD­½äHk=h£½Ğ™‹=[x=¾´à=f‹Á½Ì­=œ,Û½gÙH=ïâV==íğ=¼h¼ÉÀL½o›=<¬ª¦½TE="îT¼cº=O¸i=F ¾v ì<Q Y=YŞİ<â"=ì97»BÛ‰½½ö%½‚Äß=\«>»Æ@„=gÚ½ëÔ•½0§3¼Ï¬‰½[,ù=b„º½-ºI½ÓAÿ½Ô ¼Ëü=÷˜Ñ=8_]¼"6=Èğy¼èŒ‹¼Êó&=ëÑÜ½âpÆ<­: ½É‰=	ì½Nîf½C‹Ø=KD¢=îqê½ƒÿ§=æ½ddÅ=‹5¸½OÚ½Èiô=,ß=-+«=/xÏ½òó˜½Ãeı=Ï“==">»{|ó½G·ã½hÚw½,ã=7»Š½¯òĞ»‡$;ïÆ=Á£½0oä½Æ~>Ÿd¼l`»¼v¡M=¾t‡½ÿzğ½Äb<"ç]=¡U >_Lr½ˆ<eÓO=ÃÍá½L—Í=©Ã=£0¹H3½.–ï½<CJ½UQ½eï=˜9à=k¥¾9„…½—r{¼ApÎ<Š1Ö½@=”¼­½É
-L:ø‘Q=%Š½èy4½ p¤=Õ½šØˆ<YSü½wÂ<öo:=DäN½-Æ½p{x=VŞ=à•à½¨½›)õ¼yªÏ½=ğ©½äÌ¼Ùş˜<Côn¼ÅE•½3ìœ=ûGÂ½aã¼÷.¼$\˜½¿ı‚½ÉÆî<"Æ=Çé=­j=£#³< {½ÁÖ„½K©½:*ı=$Ù½ò˜;p¬=Áß›=UQ˜½©Ë==•½:ë=J9–½Àp@=è=ÙÇ9=:[½ö×<³C=sá=áS^½àñ>½r«ª=è…==is¼§V½I*»z	—½ÎÏ ¼…ëË½âM»<-ÉÑ=ŒŒf=y„=çgÅ: Æa=$êj»_Ä
-¼»Z¾=h½¸c–½yÎR½Ä]ò½Ggx=8èœ½„½…ç½¢ß½6´Ì=pbÜ=íó,½PX5=§]T=OË‘½5òU= Š=-éÖ½´Dñ<³„å½Êë7;gq¼5uˆ½Å?•=Á©ß½‹E=`¸–½Î3½Qñ‹<½dİ»!_='hY<Ó$î:•Ph½Æãé½«
-˜½8» =ó³â=á½~›µ½Y&ß=øÈS½®5˜¼}¯È½ù&?='=ß=»¸½äÒ±½¨¾U=™ï=¥a®¼dş	="‘â=¾q>T=Ä´e=¢Æ½^Ú½¤Gö<²–=¶Ş¢=ˆÑ½àO4½Ø7•¼T¦Š=$š¼è?= #Ê<VOÌ=­[‚½ğe=ãé=pû…½Ê½Cƒ=µî‡½]7†=S3p½úA—½X$˜;mTL»8 ·½½¨í=zK±½ì¿‰;q=0½ØKË=@PÑ<ï:uy²½Óp»nD<+¨Ú=Ãù#=Ç‹=Şwî¼m]º½|bÛ=Ã¡½€}“=ğ¡Í¼™è=¦ó½­=w‘=K¦[=ôAƒ½9é;,+Å¼1}¨=ÂÌü½¿VÕ½È²<¬©ì=XŸp=“&½1jr½+Îø½‡«¢¸~a“=aî½È…“=0|—=5J¼=ËtÀ½µ¤¯½¶=jÿ[¼nÊs½¦‡½K!„=vÿ=Î2È½A';;J¸Ç<š6A=Š=­=¬¦?½¥‹ì=R6¼¼i>ø=ecf=©Yı<3'o½HĞ;ïî½")Ù=®Ó<)Iâ¼yÓÓ=ôõÖ½6g½®óÔ=9Q½Ïä¤=0`£¼vÄæ=ÑNd=«J=>-ª=ÕË/½)œ¹=Ş§½N‚½=bq–¼Jf{=ÄEÄ¼¹7;Á¶–»W'½j>í=hJ‡<=ğ½óX§½qH¼[¦=¾n'=À¦À=jæÃ½¿€¼ÅÍS½v¸ò¼fü½”ÇK=q<Où€=`¼×=·Äô;Ù'=£]ß½_…T½`~Î»ï½†â–½p¤,<hTİ½Ñ“½xÎA<ŞÉ=eU(=£¾=Nú=1øf¼ÆÒ½ÿ`ë½Èoß½l½vâ=#’ ¾ˆT%=«ß½4Xõ=™ü½î”½Qús=·÷=#Û»oá+½ç¢v»%«º=÷Ã
-=Ğİ?¼¡h½/»w;3àè½êJã½%½o,=‰J/=p»¢½tí½Hô‘=ñ%ˆ=v
-y<Ë”½ ‚½y½‚ß=<Yn=É)ß=Â&>=U#î½Äì=&±/¼EÍ½¼G=‚ÿŒ=óÏ]½°ª<¬Î³½¶ =‹½Á¤ª=N†¼İ(½'ö=Qjú¼X%×½Çé=l”±=[»²š=I½B4å=õÖB=1ç¡<1ÃK½‘’Ê¼áÏ½4¨½½˜æ‰½ ¿;ºğÎ½KÒõ<l_=›!õ½|½SÕÃ»•dº~Ğ<.ü¼d´û<ÏÎ¿½c3¦¼qb<Go›=6ÎÍ½c¦ª½r¼×Æ=kê½ı%õ=#>œ½aŒŒ½çÅñ½Z¢ì½eÚ×=$Hğ=³¸‚=Km½ñP½©˜½½<¼k¼í=ÿeÓ=>Í«<›Y3<÷Äï½!¼½Áxº½¡s>Å)½¨ =G½ 3Å<KØß½=È
-½¼{ê½špw¼G5ù»x<(*>ñŠW½zz=Nqœ=Õz»Êpİ¼B¨N<Í‰õ½oŸ½â=Ì=êXº½÷ŒC»#jË=<µU½¾R½	¡È==½M'Æ;8ŞŸ»o¤=H‡W=0ñª<#%¦='®Ü=@ç®½’'¹=xZ¸=Â£=%3ö½jÿÜ=Ş	V¼+&Æ<¹’Í¼*§½t»/½kÂ½_9Ö½‘ËÔ½üsÙ½9Zø=_¶š¼v­ºGç¢½Œ¸Ê=ñè¦½'Ì»ã‹½œ}Ä½ÊÏ=(ÁŒ=Ov³½¬¢Ä½NÈ«½n9=ş›½Ïj¿=…½`şã=rõ|½ŠH'=b;ä²½ÍÏ¿¼´½½Õğ=r™=œg =÷²¸»v.^½7î}¼ßáê½¿…ê½ª›½S =óû¼Õy»w!Æ½Ğœ½l´í=T‚ó½p‡W=5ô¾=Xùv<®ß,½š¶L=Zé=X™Ç<Lß½=šÒ½sc~=(”¹;fg#<R€=r¡¹=KD=U_½ü~"<@l½¡ë=h‡¼;,j¶=›(ú½Á=:Z=£ËÛ=¡£ü<ˆTÏ½§d½½5 ¾EV—¼;=™
-û<mE=ŞïØ<s_=§\Ç=)Ÿ‰½®ì@½Á|~½ØL<%qj<!ü%<ºì†<;ä¹½²R¼dä½=7Ã•¼‡ƒ¼©úg»HÂ=l(L<" o½O§İ½Gå<Æ…+¼‡9Ê½€½=½?ˆ½Ùí‘<Ç4Ì½*‚ë¼pr¼üc©=®á½ºÓi<ïÁ=‰é9=BºW=	¡ =” ”=;Ï</èM½½R´¸b¡<{½:eş½ãÜ½Á½äÏÂ=i1Ù=ï“Å½6àÎ½së½"şC½Gsg;3Ù=,+=ìH;·á=ƒ¯=VäèºgŞ‡½jıß=0=6 =pŒH=;ç½Ú­½ä»òÂÕ¼ÊL©½Õı½¸™»‰1D½‘½B¼B]=$ú½º²=è =ğÊ=İ/¿=`›Œ=«âs¼Û.»½,ä½°
-¤½Üãr<n=¦òp¼$Ì9İŞá»‡x×½Gîx=PØË=(|<Jw|=ébÔ½	¼=:ˆİ=Ô-7¼Ô¼O»y¼‘÷=ê¿I½ ×¥½sš+½×o=,›±=¦ÏÓ<o=½­~ß½N¯<>÷»½²ıÑ½ëU=¬Óo½7„½ÏÍG=Dë¿½cIŒ=°ÄÕ=“#,½ç­=Ş·»=h4½¤0Í<Œ)Ü¼şÔ½…4¢½<~=½ÒÖ%9Çí˜=Û7ê=HĞ=%î½Xƒ=ï&½rºë=×û?=ùq•¼x£H<h=z†¦=‰ß=Àk‡=¯,ô½ôø"½f=Q =Ï„¼úÑj½[sh=<fx¼P‰ ¼Iè½vÆ·=kRb½&«j½·P‹<½Få½M|{=İ!Á½+Ò¼9ç<ıU=±,à=hËÕ;ìö½p¦‡¼±Fº=å±½â¾îÆÒ=zĞó=»ùE½V×½Z >¼ÒÖ =@7<=4á½å ¼	òE=”9=¬ßê=s—ø=t Ï¼ÓXÈ½WM<W–=³J<ÂÆ‚½]gï<BØÄ¼Å’½ş'·½—Òü=v>6g=ÑŒ=Ï{C=í
-Ò½%ü¼)…½­–½2Úì<6º)½Ô6æ½šp‡½‘CÀ=·Ó,=$:=ÙEA»z¸†<Ñ†;ä>d…Œ=§Q=t.g=á>º¶óD=[‚=C×½ˆi½Í[–<S=PĞ«=Ë»½7uÏ<Œ2ö¼Úµ½ºô=/ÿ=€ÚÂ½&xb=#Dk=O=C*3½wï¨¼ï€=z{¡½‚kZ½ã¼Ü¼A:=Ÿ#†½bóx½óø»ŠQ¼W‡=÷„>Ì_’½¢ÿœ½^3ñ½y-ë½Ö½Ô‚=îê<æí€=Ó	v=šæ¼ç„<¼Mğ=—´¾¼¨a¥½ò‡½BÛà½J^æ=ı”Â½÷±§½Ê…2=UŸ½ş¨½
-¾U“:½k&½3±½p;™R=Uau=Ü¶ä=_4¥=sR½ûÃ’½ëá%<õa =}Ü	½İ¾!¼»v™½ãæ=DN'¼hÆ=Åğ\½	=Í’<äa–=ç™†<¥’=ôø½•˜=ŒÌ=qï½f°h=¤«½4e™¼°Lå½HÜñ»Ø§<Ñ“R=Áå5¼!®Õ=aËÓ½à1=Úˆg½,¡=$>Jö¬=2:%<ä§½/~]½[D½"W½4×ä½yƒã¼µƒÉ=¥y°½GD©¼F%½2º¥<H›…½]¤=(İƒ¼^‘U½ï"ß=Çi½S“¼),¯:jrƒ<es=ôKÜ»t•¼%¡=Ñ¢ß¼®‰V=¯Åq½‡ŠÄ½øúı½«J®<¼X\=º<Î¨Î¼èrÜ½şo„½íû©½ñC½I>ıëğ=H‹—½—ë«¼ÂrA=±Ù½D”È=‚ó¸=»«g<¯›=í(»=¤¿½9õ=ë\Ó½ˆgÿ;åd<~¡O=ç·±½©É¢½-èİ=¯
-=úh[½Bá4=àªö=Uaá;ºj=™SÑ¼‘­Ù½»ÙA8QìÍ<É!½õâ½VÜ=z‹½,³õ¼«-=§$½¦}Ş<PRĞ½Rd°½"ºH=˜ƒí=6şÿ½Êõj=5Rƒ=Ç)©=?Ìù»Ä»}=Œ­•=sè€¼I{;ğZû½µt;=¬¼ş6š½1)½ ÄÕ½ÚF=ØÑç=é±|¼İ¬{½hpø=õZR½3Ñ!½ÎX=ÆÆ= ÒK=ZÄv<Şwa½0Q½D<8İÔ=ÅÑ½&¼h€ê½©~F¼Œ±=b>kYš=otÉ=ÕÇ=™­ˆ½z Ó=	œ½l	D½t½{Úã½Âó½½<tĞ=F¿j=š	 ½iN=eıµ½‹NĞ½şjÚ½YŞ"=Gq½ªÙ»AÀw<VCğ<v\ã=¨Û½’Z¡½Qå«½üÕ½­xØ=éh£;•!ã<ï=~|¼ÍÀ¥<ëÓ=LàØ=Á_o=.¬–<¶x½àDs;ğH½œàC½Ş§=·Ú‹¼|ß=ã&)½Úç‘<ENô½¿MÔ½áú=9ÈB½×Â†½ó„#¼ªl¼nì½¹´=35µ½j»¾?z ¼ƒ}Ø=ùb•=Ó1=öó=9É¥=jÍ©;’Ø½şUÓ=SÊ=şlm=œr=}\ä½­HÒ=©Â½cª½'U¬=é=ì½¸Õ=Åñ)<ÖãÑ½nç'½ã&"½—‚•=ã²½Á¿;=t{½Î	Ä¼ _ü=ò5«=ÊØY½ùÿ
-=ş™(½§Rá=­Ë».t"=ª(8<Î3·½ò$<Û~R=ƒ½“½µÓ¾,/$=br[½SİØ½å'Ÿ<¹`Û<Bò,=Š·¡½Ü©¢½¦6¨=Š}P<yÚğ¼G»ù=§½XD±=ê¤g½™ú‚½ô°†¼]Y°<†Ö½™ßy<È¡­¼y¼¬¡=5¼m=~#Ø½#Ä{½ßNx=^aó=çµØ=¦kkº%ˆº=ÉK´½;Å=ˆşİ¼×,ï½éµ½¾Çk<#JH<Ë ¿=$l×<äT5=a<•‘=°P<ó	î½Çİ’½‡*ñ½ôÏL½Ò÷ =O.å=e¢á=Üd¨½r–=˜½x^¾=’%=¯=’½b†¼‚%Æ=Ækä=ıL‡=¶G=Nëğ<Î¸Ú½`Æ<J.¡={ÀÆ½Sğ¼úÇ>fî=Ãã;~'ÿ<õ&=Ûú=÷@F=Y™_½1¸<üKÜ<™°½»óº]¨½¹½‡=³ı±½Ñ«ã¼“÷i½„»”½Ç6=M¶£=îªÓ=êK½[¡½ï#½0v½‰§Í=e“¨½-É¾=—ÉÈ¼¼¡Ò¼o"†=ñ+a½'}¼<é	ó=¡­=Öƒ½AÄÉ=ßUô½<£¸»M•™=5?«=¤éW½¦F¯½õ„‡½Fô<ıñz½[;½†öñ½|7½õf¼çá~=2w½_Ï =ô›é=*&Ñ¼ümƒ½ ¾<ß½=*yØ¼%£E;÷Ó½Dª4=×5=õh=–Şê<yÔ½|…õ<9‡D¼²*•½¸¼
-Aã½'®”½º¨ì½ÂM¼&˜Œ½ı,a=îF¼½i©L=[“
-=«r>®F×½ÏW+=R<ü<ğ3M½<S0½ˆÒ×½$Ò= ”È½åR½¤¦¹;J<=|¿h½ :n½Lm=ğÛË=ohõ¼”§T½”Ïˆ=ùõ½7Ÿï=‰(Ô=›ğ½=zÂ½e÷=Ó’	ºµ±<DÒL=“‹ë¼¿—ƒ¼¬)é¼ºÑ=Z\ï=Æj »î^I½sªf=¥±à=sˆt=w} =ä{Î½ò‡Ú=B‰½9?½ZÚ#½:’Ö½ì»ğ½ıÊ¼m-d=|Y»IÍx=‡È—=}Ãb=í­C=˜=(`=½³ì»v5‡= Œ½”½ªN–½~Úî=Äó˜=åt«8Ÿ>Í=²n=Uğÿ½¼YÏ½`Æ¼öP>=voæ=9ÒÎ<¤x½bÁ½WOß½‹æm=Šk·<NŞÄ½¿y=D"¢½Â<Êê©=>„º½Y‘¾DYÆ=wmP½Õù˜=AR=³2ï=xÃ*=[ôõ=,ío¼%Oë=¸Ã±½aN<–T«=Ø‡„=oû=lDg¼’mÚ=@‘½ƒÿ¬=#÷=WlÃ½“¸‡½h:¾½sİX=ÿc½Ci©½¹U=ø=æ8Á½™‡¾½€5½üœ¸½ì¼CÕ=JË‘<Öc\=xæF¼…Î½ì£û½¸›£¼Ç®Æ=­‹½ó*ù½áÌ§;~ú=ö£F¼Y«½Zg£;n?¹½šÒ;–Q)½sj˜½Õğ¿<Hìî½À[ ½_í½‹ôÎ½Ğµ=óÚ½R@<Øk€<b	ë¼c«%½@Ôj½¬õ<®øZ==ûâ½Ù'Ï=¦ÿ‹½x=QM<€T¼qvÉ=·¾%Ù¹½[£‡=úÔA½çğØ=®«<ıé°=ÉÄí=±Şr¼ıìè=›±=ÒÊ½kX&½ìy=¬ ½^Ñ=Fõ½ù_!= ÃË;ûÍñ=šJ=VZË½Ğˆ½^-Å½Åß½u›½
->ß=Úl‘½[¿=oM€½	wê=¿†5=–‚½P¡½ãvÑ¼­i¿½"_¼U"…½çé¨½Z§¼ƒÇ=35ß½Ÿ&€=È·Â½Yš=³É=É:k=~²^=´¼ö=±Õ
-=9ßt=.UK< }è½•ÄA½•X¹½Ruø=£Ğê=Ñ?å=e¼‹=>å‡¼*–+¹|¹=l< .=%}Í¼Eàö=Şq½FZ‰=ë9={®Û¼j.°½ÌÈó=½Á=œ¢û<“’Ü½†ä9§¼“Ü=eÜ=!K’<Šhñ=bòj=˜Ö“½Ş/<ºçÁ»b¶<Ûş<€:Ó<“üà=¹2…½$Š¨½ÇÊ/=køş½åkä½a¬ƒ=„°=YªÚ½qÉ=1='cP=Â~Å½û2÷=t¼ZA>ºêú½¢½ÔHF=19=—â1½!‹=Â4ˆ½Àêú<Gr»jJ×<+ƒ=“ºÁ;:Ú»çæ«=Hpƒ=
-¬½’ğ¹ÿ"=¯ÜI=‘®»Š­ã½¤Ñé=ÚíÄ¼Å!ç<îÚ<ƒâM<«µ¼×«Â½)wı=Á’¦½Ã$Á=vu„=ä=óĞ<gßÕ<C ñ»y'=ÑÌ=óu0=yw=øÄ=Ã½McÛ=…=Ö½Ú•Û=w±ƒ=!¼=Í…Š½NÜ'½³d—=Õè= ¥=ş¼ãä<ç_A½ùêÿ=¥r=
-¾‹=•½ºz‘<:4L½Í	e=Áëm=,÷=JRp½î£
-½ †½lù>qÏ½0©½Í=Œr˜=h‘ê=™½Y›E½Ô«Á<3 ç½"Vl½µˆ=-YQ½…cF=[BÊ½¶ÎÁ»GS¯½x-P<tôM=ªÅ½¥ğ<eu>Q¯½^É½>g ¾ã^f½ÿï_=…ü—½-vÏ½ÇªÑ=Fj¸=wÓ=×„ú=v[á½4Ï=GOí½±Â=édÿ=(‰¯=×¢<G¼$=TR½ğ¿å;d½ƒƒ<ü–œº”>¼v}½²`&½	sª=¾«´=c~½$‘Õ½¶=o&­=³”½ÙÍ­½á(>¥Ê‡=”sl<Ù¯š½®µ< =§ã˜=ékÖ=!°$=T>±½æ·=ë§~<»ï=¦O=İrs½ê£º=Ù<@Ÿƒ½®f«½é,½‰çÕ½ôV·=D9ò½Oa1¼På=£4Ä½a
-½c =¿h½ñ]-=Î9Á¼û‡ =İx—=™Mó=.º^<î¸ú=k§ >Ä“½”-;“Ö¼w[…=-ä¼¢%½Ö&½X¿?=Ç0“<Ã
-È=·N]º·´<õ8½Úp½+F¼?+?=úÑî<Ùœ<^Gb½¢Æ(½3Ş=|Ü¼Ù=0)¡=î4ç½òf<¼‚J=qY½‰_š;ÖSí=€½=<Í½XÆ«½åÊ¥=Æï½7º=À>W‡È=êÂn½0Â<X™¾%«½át•<ª¦ó;™_½¥<=Ö¼M;;:˜›=ê´¯½üBş»rI¥=Àú<tÀ=•(ª¼$°=ú˜=â½Ø=….€½m_î½@WX<k˜¦=ğ "½ë¤È½[‡=áÌĞ=}áÔ»î˜Ø½‰÷½rÏÕ=òƒ=ø»¡½ä$±½NÍÕ¼0×Ç½aÂ<£¢ı»‘)¼¯¡½®¿³¼º1•=xêĞ»u{'½G‰T=_«Ã½hÌÑ½6ùÙ½³ıù½<2@½ğˆ=O½;»ÿ”ó½P2Û½¸Ğæ<âDá<sÈ=T½:=ÁRã½sO–¼Âí»œñ½<Ëw=„î=¥+±½O=ULİ=—ß½!wê=Ág½Dô½~ô<Ïs;~YT¼áİ™=Âà= E;=<:½xí:Í‚¼Ÿ÷±<àæ=ÏÛ<ÿW‚½L¥ı=ä,ÿ=]Tj½ÏZ§½è¼jBş<Gg½=>3½ “ê½Ë5=–’À½–ÃO½V½r½Gl<'g=Í÷½©Æ½=İ½=P<fş;,W)=!RŞ=”§>Iûµ=å¥Ï¼XÜ=¯	·¼HVö=çªÕ½OÚ=Á©³½•ln= F%½Ú=3=«ÔF=k$=¾KÅ;Bù=´í½ö Ë=Á×1<*±á½èíà<-É<å™¦=Fò1;?ï0=½÷<ú‘ò¼õì|¼1}6=OX³½±Öu¼«Ü½ŒËC=Cœ¨¼,ÂR=õ*Ê=†\=»®Ì=À«0½“×1»õµÔ=V¬½¡p½°è‹<Æ«Ï½ÂŒı¼ÇhŞ=v2Ù=O¾‚=œRG=ËKê=Ê¡s=,®š½®½(ƒ=¦+÷=İé½ä­<Dò¼i¡š=‚RÚ=Pi×½ày=ìJ½ ª½°ì=ö²¼ç
-½N¼Ä=ôó¼ä˜š=eäe½¬"¼ë~Â=5µ¼ß–ã=w8Ô½&¨S½3Á=€sÎ=şÙ½”9 >È‘=Û×F=eaH<FÖ¶=eë½½ó“r=æL'¼hºô<ˆö½nó=²±½1<Wñd=]3=áç=~\C½ˆO\=‰ë%=r¹=a0î<š›½=Ü=¼Uû¼¨ı½&fï½ëbW=ê=¯`„½Œ	ú½u¾;¼¹gâ=§'ù¼†>1Qd=á¾‹;Ğêº½
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2451
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2452
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-È
-bÁ
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter2448
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-ğá
-value×jĞ
-ğ"Ã
-ÀÉ/ºûS9V9>"ï9¼p³8(LŠ9»÷p:*!n¹&‡9]E¬9ş8d[ 9¦m8Å³!ºE9	‹¹V$¢9£êœ¹dV97 ‹·‘Ó9€Â%:{íø¹Æ”\8nÈ9I{º[0=8uŸ6¸#8:”âq¹Ä(ˆ¹f˜2ºàş¸~dA¹Ğv¹Ã¼8T.j¹4™–9i‰“9Ón9XWÇ9WÏ7ËÉ¹Z>09FıÚ¹—9JÆ.:+Zs¹¼İ›94zÉ9ıèz9ğÔ¸Ïm9#²Ó9‚ì9:·‡8Yç’9JÍ¹tËa¹Îİ¹$ã›¹§ê8±/{8 Óºf’ 9$Ğ¶`—?:w¹–/8ê¹F9¾¹8ÅKŸ6Ú¯¿9µh:6™º½b‚¶?Ÿ?8¤Ï(:“½q94¡I:¨¹A9ğÈ¡9Ò‹8´-Q¹—@86}E8à ¹‚pî8âCÎ9*e¹`œ…¹±ıÈ8Ã;ºGí¹ø×(º¯>M9€q•9ê¬ß¹İ&#9¾±¹ƒ¸&¹“æº$ÌÏ¹Ú6¹Äx¬8×Pã¹…8¥9şQ:#Q:-%S¹u¹g (7$
-l:Ş®°¹¿œÓ·ÓKI5ÄGA¸eÀ9doºúâ¸X\49Ñiš¸è^ç¹Z¼R8<¯9]H9Iä‹¹(oˆ:xg:  a9}ä¹à¹é-¸ÉºBĞ)9f›šºÀ™I:uåœ¹¤ÔÉ9£ó¹î5U¹E“291ÆO9t¥»ºĞ¿9=P¹@Ï9\ú\6·©¸èÇ°9V)À¹ióe9-“H¹İ‹(9Ÿº·¥:°¸Yó“9HŠ9K¦Ü¹$ÓºîàÖ¹Â·299ÿ9æ 8mè”ºqùÎ94:û'n6á?#º=åÃ7é"º»U 99ï9…t9±µÑ9v7VlY9âYQ9á§ª¹tİ£¹ìšÔ6ë(È9şQ¹™ÑÖ9B^¹{™º{¢š9Ö^9 <–9¹:øØ9Ú-á¹az!:çà$9©¸9Úş9kÉÃ9a«>ºUvºHÑ¹éa¹,kâ9ë:u‘‚7°9%—‚9ù9Ô¹Æ(º3[²9äo¸9’#ºÍ³å8n»:”ØŒ9âT58ëkL:ED€7=B€5î¶¹hCf¹¼Û9µûö¸¼+ 8@Cƒ¸[	º¶ä¦·Ğ=i¹nÇ¯94ºh¹ìæ€¹®ö[9˜›Í·†Ó¹`÷9p
-9İõ¤8Ø<6)ş"8Vˆ¹YI2¹±dºP”9‚zV¹:ê½¹jH„ººá>8ï€ó8WĞ¹†*&:ı­8¹ÁMé9HÊ¸í'¹8Œ9IIp¹WÃµ¹÷+—¸;]Ù¹¢éºÅ6±¹í}š7ªw¸k +¹ò;9ô!¸\R„8;]¯¹3†9\Š¹\Ü¹ªš_¹Œê9pb¹Qtˆ:¯Å¸$ ğ6UPˆ¹‡õØ¹…_:çñÔ8XÄ0¹.×•9ğ\9pÎ¹9g^q¹ÙSŒ9Ùvé8)³0¸.úĞ¹PZ¡9ó	“¸Âºq”`¹Iüˆ¹‡§@:<|À¹sáj9$
-¹½g¹¸CºOƒl8¹f¹Eâ¹e“95ã97.Y:ZŸ˜¹hn¹õt9C½•¹´:"wÆ¹œB8mÕ9u÷¸pšºT Ş9³o8‹[š9a'N9Ù“7v5¯¶½0¹Çé¡¹—™ú¹G_â¸å9³#¹Úüº”W_:ÄP6º±´8•êH7ñ5‡¹ì‘8òzÑ¹ÁØ¼¹Æ$œ·ƒÅY9“³97`:i.|¹U­¹¯¡77‹á¤¸¶…9åO‘¹ºÍâ¹S™	:â—I¹•ĞË9ı¨¸hİ¹³«¹¡'9’ä¢¹ªRa:±â¶9Z¸=Õ¸¤¹´£Æ9ovJ¸ó”¸€éºâ¤Ì8}†¹
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind(
-uidBPlaceholder126388
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-è,
-bá,
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter2095
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-+
-value÷*jğ*
-"ã*
-à*KÕö<KÓ>´Ÿ½[2=oş¾\£š=Ë
-'¼µ>#¶r½F1½ÿGì½×£
->zx:½yÿ½½±>%`=éYÿ=2¤H»ïø·½W,ş=£Ç²<yM‚=)Ñ=i ¾»’½ÿLß¼Œõ«½17I½Ú½O‘=›[P½£×r½¸§½2}=­C¾Èú=ü´À;*Ï´½¹,	>ˆ*é¼UæÑ½À=¦I>æ¼ù¼Y<SË½Üx½1Ó½]İM½”N˜½àZ½Æ@¤<Œ'=§(‡<`Ê&=Ä®½½%õB=F´P½§:5¼3N‘¼´çó½ŸÎ;â>ßû=.¡½ÕD<Ùg>ÙBú½xÏ¨=ã\='½ş‘> k>
-u½,ß=/$= >BN
-¾‹ò>T¡¬¼¾à†<÷á=ı=Ø°î;Mâ»/¾ì¼ñ½K÷=*´>h±<8›=š‹Y=@¦­½{à=
-R>ş!Ä;hs£¼!)Ú½ŒÒş½É@ <WÍ>ÕlÎ<±¾N=Äğö½Õ.×½Š˜¼\Õ>¢>¤Š¾¶’³=zRø=šı=<Ão½»½•l¯=éjh½¡YÉ¼‚=É=ô–½hÁ=š¯>öÉ§½€´Æ=;R=ƒn†=ov„½£±;=I_">:R>¤›À»Ú>_{î=áT=û%K½µÆ¼•Öá¼¶â=Útò='lì¼üòÅ=²Œ½Àú“=xÌ>©¬Ù½ò‚x½Â¡¿=¡Cş½&Ò>&—=ÔÈ_<§ˆ£=ß‡+=7áÕ=
-¦=`¼½pğ=‘ÿS½ç>Š)=X7{=r[o=B¡k=
->’h>úV¼½ïê½ĞÓ½â)¢½íJ»;K<O=-Ë*=÷¢ ¾ó‘¾„<o°¼k¾r½Âfí¼;ìE½ïù½=wè½ÉŒ­½d>u	>˜¾8>9([½!ZÊ;„¾"*N½COœ½ü“>&1H<b‘¹½ß$>8ü½hn=—¼"›=˜ƒ¼5*4½^d>úv½°¢¾C¹¾7§¾(½GD	=`Ôæ½B©ç½î¨1<X×Ğ=t¶=Ãì½{QS=&‘s½§Ê<^L½ğî¹=Ë.¾u{¢=•JÔ= •‚<aN¾?¡½G>¾¾¾Uvó=»1¾¡®(¼›Ä{½oW;®¥Ê¼Áü8<µò>×¾ƒ½¨û>·š>d"§:[TŞ¼Š½~½(Xá=“Û½B)Ú=g½¼íë®=;°!=7¾èˆ™½‹<¶'®=‹(½#EÓ=’^Ê=uûû½0·Û=»V>P–Ï<Û¼¤Â¼mÄŒ=P‚<…Ô†½Eñ½åb_½‡õœ<ù˜½=ê=Ú…Ê=ù¶½oÌ†½D^»äÚş¼wŞ¢=ˆºéå	=¬[Õ=Îx:=7æú=Æ‡º=é‚a<ÇF=¨Ş=i9=µÆç=, ¾<X=bAC=g°“=ø,k½?ô¨¼xì=E§¾ı{=Ù.=55Ö½¶<z@>²D`=Òz¼{÷ê=@=czu= zØ=²@Õ½Sù¥½iê²½¹,Ü½cäÈ½ı >ÖÅ¯=L¾5œ>£‡ò=[–=¯}ó=ş^Ä=w<¬¯=soó=kJ»z~Á½Ë¸½0€ÿ=4q=Š¾·C¾©ô½w~'¼nÚ¾ªç=×¥œ=È¾yş=	5>£yp½[×£=t<=öğ¾àú=‘™0½‘=†=KT>Ä>X=Ğ½´Y¼ö^Õ½ó ;=@“‡½ñ¼½´´*½ğ>€Ú0¼ìœ=<ÜÁ<6ı9;+n>ü>õn=¡
-­=®0»à>ÿá6»Šö²<¬¾Ç\ˆ=·<=“J½Ã$¾ÇHºÖc*=Â¾[ö=”ĞM½©òW»…ÙW=åp>ü½.B	>m!y½ü=%õª¼"áé¼_1=_„?½ëş=#0G½‚‡
-½—Ğ>ı…S½Ò›Ô½*±’½{¾åS¾Şò¦½dnŸ=ƒ­¾²³>L×<½€Š½‹µ½û^	¾zÍŒ½†›>œ½Í~l½)¬„½ç
-¶=0g>Çê?½×S^<áµ=Á<>=Ò55½„Ò=‚¾—ş¾¼*,=È9×»Lq‰;7Uv½Ç‹½9'Ì;ùÑ >“C7<ó“û½<=êé½1î>¶Ë½~®ª<ƒá†=o€>IYŠ;Ş>Å¼Ş^Ã½@a=òRvº}yg»™°=i¨>È¿ö= Ş>Ö5A<C>£X‹=¤Ùƒ;ÃWö½v=fá=RÕ >sé=åî>´
-Ê=Á"#¼Şæ‚<¦ˆ…½Ç"…=3[·?‘¾’=uÄ½aóã½)ä÷=Ââa=Ğ£ü½2Ü¾¼ã¾wHaº4ÿı=†n&=% ó;Å¬w=¶˜½DÄ=np*½Pô—½tè¾e7’½­=¾!Øú<æ2
->{¼!¾‡A´½Peî=Èü¾øa~=[@“½npµ=d„i½éQ>¾Œ=ë/™=AEÑ=ÚÒ¯½å`Á»¹àŒ¼J!¾Ç³i½e0È¼¼÷‚=y>^Âo=ó
-é½£q=`Nb=Sò¼‚½L¡z=é=’%Ã½ør¾¼íı½ş	¾®{°<ªg½Úˆ¾ngCº¸ß;şéô=[@è=È:~:Ÿ›Æ=Ûúƒ½´ìö=-;½e#¦=šœ½¿h¨½z ½Ù‡º=ëC>Dõâ=ˆ¼¼D^½W*ã½J|…=ó9½w<Z¼Ìt"¾Óèy=½õ7½=T§;AV>À â=Ëğ½,G…;Mv¾âÄİ=uÀû¼Êhı<G½=<>ì€¥=&‡=8ØÆ»ª=€ë“½¿>½éä=;–¼¾m
-°½	#ô½¤a½4¹³½L'‰½£°“=7<†ô=ÈÂ=<Rà»m[.<É5Ù<¯Ø¾:I,=-’½f=sşÁ=f>Mm›½Ä®³½˜¯=‡ú½m » µ ¾^ÕÀ½úœ=®>Šç“½ƒ*=z‘½ò¹´½Åäí½ƒÌ½‹øÇ=~¯Y=8+R<-J¾Kè<ZÕ>åÎ#½Éj&=
-Y>VH¾ºæ¥=™”˜<:p²½p¡Á=‘“â¼/’€½¬÷½¡‚á½ @—½Æ>Z=W@I¼­>çUí¼Í·¼ñQô;s½
-=ºÇŠ=¿/Ï=ÏË=¿Œ½9¾®óm=‘•¹½.çw=1R®<Mõç= Ã©½×>Õ­c<ÍÃ‰¼Ğñ<ü‡Í<\,&½àD=ªR½àq	>‹Å~=`¬½'’=·­Ù½Â?ÿ½ê/<ñ`’=¸ç€=mÚ<<¨œÕ½‚»=à*±½oM¼
-c™½¡>íã½J™‘½óÑ—=¬wï=åc$½‘A½d8Ç½Ùğh½ó&Ò<™Ö¾²§ú<Á¼¼™¾“|¼ƒ.>©›=o -½Ÿ´
-¾'û»;ø¾Ÿš±=ı>Ş½Ïò½·É£½µ~=qí<\û=2µ¼ Ã=‹HL=–ƒü½Ôd=Òš7<Ôö¾]1å=:ÿš=®=©*½ÒŒ¢½q€;=- Ê¼ôT=€»=Ûı½re=¶ï³½=&‹=çÒ ½•N¹½aá½wh¾ ®½ƒø>'‹<…T„½ˆ‹»½æå¼ÅU½÷µ>Ø ¾N¦½D”»¼Ce½X5’½èæC½œ†å¼°1o<et·¼¹—Ğ=ÊC«="à«;&lı½x	>›>Ÿ+™=ğüŠ½âÔú=ºÔ¾— ¾)¡=çHğ½¾>²£F<ş¹°=Ø‡=¾Õ>Éº½¯µt½ŸÑ¾„l=Øš>U™Õ=?/¢=.0½}¡¼õ¾Aß™½~¡½%ÔÔ½™·ë=NÒc=‡Ö·¼O¨½°Ô¶½Ç€2=y¬½ğ£=Col½@å>$ŒŠ½,’½2Z©<¤!=ß*>ÙÛ{<Ÿ>.lÓ½ÅÏä;dûÑ½­¨>/W„:Æ·¾M‘=so8½!şƒ=>ï=îqÅ<ˆˆà=×n=¬óô=R­½eÿv»¿Ì ½Èùÿ;øÂ¡;[:>½	Ñ»½ŒH?½bU¾I6z=D^Ğ=–å>=a ê½ƒ^]½Çäú½‰{?<©‹¨=›¾Òç¼©íŞ½í1E=«»=ÁÌ>ŒL¤=½Cˆ½æĞ@=¨8U=a½û³>¼&>@u©½ıCÜ=-¤İ<ÆÊ¾b?;Õ¶<ŒÎ½VÇè½å/#>U&¾,ô÷½“P¶(³Ñ=ÓßÅ¼U¹k=¸œ >O>Ë‘ï<=Ì±½éx»9CÒ»=á•>ÊËH=Ó3w¼ÇÄ½½\3=	¦¡=!T>É¿è½^N½b
-Á½‡«R»ò¾=½µ¾DÙ=•>Ş Ä<¢½µø
->æhÙ=àC¾Õ>T>$;À=¤¼~t¼Q>õI#=km¾¾I“>ıà»tàË½ÖÌa=N$Ñ<}—Î=FtÇ=*œñ»‡•»Bì¾>‘T—=ƒ]¾`›=Uó„=»8†½8>ÿ½÷ ¾À©>Ù‡°½¾Oµ=%¸½¾Òx¾(®½V"F½3Šå=€S˜;š†=4Å¿½%>Qş³=p¹>‘b¾¡°¾<‘š¼½-’$=t¦1=3	
-½PĞ>ÕË¼ìÆ»€g¼°Ë_=p5A=JŸ=`K>	Dª½­ØU½ƒz¼Ø¥>Ìwç¼ İ»L§Ó¼RåÎ;;ÈÔ<¼·é=Š%Ö½Ú/‡½–JI½XÒ”=<zH½+ö½ïj=·®¾n=ƒå=¿Œ¾ZT½Ï<Ÿ‚¼:=­ë	¾ØÃ½O«*=£„=s¾aüì;Ì<‰…Ò=‡Ã£<kŸ¾fÙ¾Ø} =Æ¾¾Ñå;†;h9	¾`Yì½}F¾
-é½áã>O¾s=u†="á=¸¤¸½.Û!¾²¼õé°<ïz¢½&û"¾ïš÷=1Ø¼‘/È;¿¼š¿¼½d¼½nş©¼–õ>ÔÉ¢=®ß>Â[¬<ªO·½B4¾™‚™½-œ§½¡æ=I‰=ÚUù½€”>äYû½è“‚=ë\Õ=FNÁ=¸ ¾&JB=-“$=ÊÂ$=ùIk¼Êw¾XQ”=€ÃŠ»ïü„½ ¾©ØÉ<–c=˜µŸ½]FÚ»3wø½Ìr;¾wó9½‰Ù=¼6á½,m=)<•»
-ó½¶Æ®¼°İF=›L=®¾ß½ìŠ>ßÿ
->¾Ò=FÉÉ½ iÈ½À>‹(¼GéØ½´p‰=+çµ=ü^à=õÜ‡=Ñqi=«¤=b6¼ø$Ñ=~¿>#Lª½<>jØ²¼ÕÑ>ËÕw¼e	<ŞŒ>L^½Ğ»N¼7">»¸½şÌ¾ŸÖá½<¡1="Á½7C>ûsg¼Í{è=ø]ú=LÉã<b"©»†)ã=ño=_¯;E<Õ8>Ñ0>Uõ=
-äØ½wÊ›=À+µ½f3Á=—†¼éô>Øäz=Xp×=»Äş½.Ñö¼ DŠ½¸Š¾ª—½„$V=Äö>û·c=u‹V½)©½Ü8-<„V¶½¸"½"+8½ò6¾&»>,Íb¼½o™½ÛÆ=v>*¡µ<¯Q½¬³ù½$=ÊôH»Ùè»=ú¾Êq#=Má¾å¤®½¦½Lfô=è(¾)>¤¤ó=.cÔ½ÊÂˆ½×¤É=.²=•Ü°< ÿG»[Ox¼n#H=fÍ“9^U=Fê2=äm¥½ç¥>†$6½‹ó<èh!¾¯Û¸»QÄÊ½–F¼=ií½„‘ù=<­½Ùai<ìÃ>š/Ş½»iØ¼Î7Á=ôw#=>Ú–½B‹Å½W
-¾ÀÉ´½Î»Î½µs¾*Q¼ Ü=ŞÊ½s]ü=0=	¾Jº8½H‹ÿ=ÆĞM½Úœ¾>Ô»½…=:Ò=´¬½ä)­=ôgO½¶b¾RöÜ=ÿˆÔ=¨ÆÙ<ed¾J=¬“D½|8î<Rÿe<ãÄ:<3Æû½¶Š€=bj±½Ê±=™šÑ=Ï:í=İ¨"½‹ä·½E!>c$1½BÈ¾²‰º<Z	ú½Ö´=‚Ö½Ã©»şıt»~´±<r£2;g^À½6/»9™¾Æ±>Ê=¾÷M=ü]½½Uo>¬¡;=1–û=´j%¼0·»ªÒ¸=Í$Î½¾Ä¾Bi½Tiê=ã¬>·yË½ûñ<‡É¾¹ØÁ½¿?Ã½h†à<¯d“=Ë;r=pO=×8æ½šæ—½#ò=Õ¹Ñ½‚†§½ÆÇƒ<!3½½4½BvÓ½º}>y/1=‘k¼*í›½a=jyó=×¢<H¯‡<Dqí½32D=c$=ˆ7>¾r¼yYí½'½££<`5@½×Ùú=;’š=E
->Ào‹=æ+é=)â½ xF½‹Êä½Ğ°=Ï>¥=½<LÎ½µ)“9’Lt=ÔŞ)9VL¾T>è‡>E¾Ä½;Òı¼6z½•1]½AÖõ½2t¾ô·²½ìi"=Xã½?æ½fïØ<Gp|=™>²H=ùW¾m~T½5ß”=ØÃœ½˜Ã=¶ ½jİ¼<Ä>\N<ı?õ=ˆk·<&1>I+Ê½ğM=SûY={~ˆ<4±[;ğë=,ÅĞ½?}£½=&š<%¾Š=”O/¼\Ï=v¾=àV½¬‹™=`%=$Œ¼ÄÍ¼çRm½¨ËÕº¥H¿¼©ÙI½MJC½Œ®Ä=À°ë=(Â=Úª·;VÍ¾½$¾°å½
-“¾ã÷½b…½/\>²“½Ú=Qš ¼fA>Â,½°>Q¼J½Õî¸½§ûÛ»Cª½:Ş<pÙ½"!¾1‰¼Z²½ Œ¾øØÒ¼û´¤½qû>,)®½M.=rşû=‘Q‚½Ÿ¯½‹B¾½#¾okÒ=“V=~·=k@=éï‘½Ã!='ş£½Ê•=]R¹=t§ˆ=
-ô¼U¸=FB»úDØ½¶ ¾jÑ=ªíˆ¼çN¾&âÇ½İk=0x×¼ÒãÌ½E¾Ò=
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2099
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2100
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-¡
-bš
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter2096
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-<
-value3j-
-""
- «uºg¹õ(I¹äâ¹'oB¹vº¹¤i:Ÿõı9
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBPlaceholder126382
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2089
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2090
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2070
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2074
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBPlaceholder126374
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-×
-bĞ
-needs_gradient
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBParameter2062
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-value÷jğ
-˜"ã
-à¨Ò6ºLa;p!J»ú«:æ7¦;«£‚:Sp4ºóÍººÂ»™ºx ;Qø»³,‡»ö…Ç:€P«;s;C±º$\;£ğ¤º„Æù:=mê9¬G";ÍÅ;Æ€ºÑ;Ó,:x%›9ËáÉ:áBã:·»¼(ïº:
-8![	»À’:]n »ñëXº¦ |ºñŞÊº«Æ˜º‰Ê…ºÜòº*/š95ì;ñ¹o:—¢;?î÷¹±
-§:$-;À3_9š,».Ğº…»çàšºn º>÷ãº?İ…:©C;ójÕº6*;Í:çæWºÏõ„:˜R†º¢d]; [„ºçş7s¸€;øæm:ŠÆ»¸°äÖ:Ú»ƒÜ™º€2¢9£Ë²ºıŞ)º îïºJŸÏ:hİº/;”õ;Îº~¸}ÿ:”÷	»B<tºÉb;(,»1…ë¹XD»Ú)»9ÉN:ö½;àAP;óĞ»ø±;õm»¼’<:€ »Àt:OõĞ:Åñ„:>õ ;7Ä»8åêºòd¹|Pæ»íº|»m(Ò;D;*¬ƒ:d]»ª¤ ;`Ã[:&@wº>sà9(
-ºHk˜:O¹r;hŸŸ»\:´ºw0µ:Ã½;ëı-»:Ó¼9¥Œ;kÈ¥ºùşN»5Ğ;õô—;±//;âÓT»S÷;Ûãm·¨ö'»V(»_Hÿ9ïtº:•;±Ù²»½çßº"~0¹ş·«·öÆ_ºs‹–ºÏv]:ŠÎ;ìµÄ;²´T: <»{¼ºôì»ÕÄ£;²8»
-×
-bĞ
-needs_gradient
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBParameter2061
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-value÷jğ
-˜"ã
-àô®?\{€?`è?ßî?ğw€?e€?ç•?”7?ÌV?³A€?K$?CÙ~?‘P€?ƒ€?Zú?yu?v=€?íX?‘„€?ƒª?Ãˆ€?`€?ù±?çó?¨ô?ÿı?u5€?	€?¶{?ıƒ?7*€?‚†?w€?Õq?u¯?È?/Ï?Í€?óX?Ä? Ş?ÁX€?,€?W‹€?z€?‰.€?A€?©€?¾Ø~?L?]­?°€?ß€?Ä?ÆK€?§F€?É€?U€?5€?ÔI€?Ó€?/î?£2€?*4€?ÙŠ?S€?9€?¢?e€?ê†?
-Ì?5€?>„?¹•?? €?7"?ß|€?‰³€?
-€?³Î?£y€?Ÿ³?«ò?DD€?ü?¸?ä~?l«?Ê?Iã€?8P€?'?=¯€?,?!€?2w?ñ"€?›Ç?åC€?ıc?«|?TÀ~?F€?ã´~?C°?ˆ€?sÜ€?iÿ?û?h™€?cä?­`?à€?ò#€?X:€?ä/€?g~?iv?à·?€???Ër?ëL€?Oï?¿Û~?”ó?U™€?„m€?…Ë~?†€?{?ís?©?œµ?)€?s^€?Á?9€?æ×?1ç?J €?.€?¿å?"y€?Z€? 6€?ö~?AX?½}?ÈG€?—„?
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBPlaceholder126367
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBPlaceholder126368
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-Š(
-bƒ(
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter1694
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-˜¢&
-value˜&j‘&
-˜"ƒ&
-€&8óÌ;oÂŠ:/5>õ>TĞ½«ß>¾j¨>Dç¾m‡>@Ê9¾‘ÿŸ½5<Ëj½?Vá½†og½•‹½È&%=«l!>›KZ¼"½™¼Jà½^Ó<ÏmQ<N
-ı½kÌ¾âç¹›4¾;¾âÂs½^*ü<ê³¼7å	½W1¾Ûİ=¿Õñ<„4¾oƒ½ãaú½ÑÀ¾à¢¢;{Ùü=‹01>Ã4¼½›¬<œì>¨ ¾l<‚½"LÓ<=Ÿ™=o Ã½îa#¾õ:ı;ğjí½º1	>æü=ZäH¾ªHó½'˜Î=$?ç=õ*B>«m;#(ø»©÷R=‰`$¾’o=R¾mø¾‚Q¾Ã	>/à5¾fŸ-¾=%æ=şGm½+àÏ=(’½<Fğ¸½{Né=^C¾÷/¾
-y¾‘¾‰³½@SÁ½c°º)®¾½¿->3¿9=6@>|¦U=nÖ¼P=¼dÈ=>¾†Q•<Ô´<…>T <²G¾q‘¾Í×æ¼™UÁ=j¯¾À­¢=‹->ô¾i’5>¹=½³®=¨³-¼™û÷<'“¼–—•¼Ÿ‘Ä<35·½zy½Mğ¾ş•C½‰[Ÿ<—‡Ÿ½4¾P;>Ÿ2È½Õé¾®˜(=Ê¾`p<<¨X½D2Ú<šy>E½øœ¼ÿÚc<àı>Û[½–¶<,å½»åC>ıOH>°i->è¾ûê0<æ’=Cµ­=»!9¾zá>Wñ¼:£½ªÂ¼¬P7>Jjï¼Ó‚N½„è¾q	½[ø<jíË=ÀÈ¯½“n¯=ò!¦½Ri=6j<|ÿ=Ê³â½íµ=Ã>¢½Ó@	¼škI½ˆ€Î=s¾·R<¾í¼÷=®!9¾˜$İ½pM»¨g>ÍÊİ½H8¾÷&>ª<[½ë<is°={j»=ËŠ8¾ÈÖÁ=Ù?P½”¹#>TY‘½/c¾J·)=ƒ%>>O€(¾ÄÙ=­u!>”Çï=#(í½*QÈ=†ü=ª Ğ»~Õk½»Ô	>²fÎ=ôF=¬y4>U)*>YO>Å ™=cÕ®½™2)¾#ì½~ñè¼ü¡½@Û!=Ã>7!¾èÒ¾=0|_½.,õ½Õ>ê‡½Ûš>t±f9·òe:Á™=KÔ2¾n;<ÿüÔ½şö	>7©ñ=è„*¾9à<>wÀ7>|X8>’N©½¿É¾	ñç½jùØ=+b½¼^G>šûÔ=Øô ¾~ïœ½½ë=ò,h½Ï§Ü<Z¨=O½BÃÙ½ˆ
-"¾A=pŞQ=Ïâ•½LH½®Œo=Œ, ¼ìÔ=7Í½Ì£³=Ñõ >O¼È=ş)U¼ùi¼psÉ=bWƒ=fc­½> Pû½Ù= >7ƒ9>ºæø¼b6”½÷®€=ù#Ì=Ã–#¾¥?É=’eR<Œ;>eê¯<L5½ò¼à<‘¶Å½¼Í=^Õ<0ô=!“Ô=ÊŞ=(,¾7ĞB<ƒ£/¾]†b½Ä>˜² ¾O’k=Å!ƒ<Ğ	Ü=*jÅ½\%¾êK½pÀ
-½²ğ½f?>ñV¾‹“=sD&½oì"¾f(¾>ÎŒè½ı¾Ş¸x½QR‹¼ÈK1¾ì=Ü>R'³½õju=¼Òß»Ú½ÎZ>Gl,=úí½jÚ½I(>Nâ<÷³½>•=±­_½J
-=½îb7¾­N¼½ÂÒë=h%b=ı›H¾ÇzÛ½L‰»¼s'ğ½ÇÁ0¾	Y¾Ç²=>xÊ3¾˜;¾1-4>ëô½£A>"r›<¥&Á=‚°¾%±İ<QW/¼ ·l;²s=«7¹<ptt½[7J½"¾lñª=x#¾½¯ü<·8ä½˜x/=¸)>*Û‚½Y½aÉ=¤	ù½Ä¸=;4½°b1¾L¥„½>¸>Ø=à–W;D£4>pŠ-¾ş“r=ö×<½^Éc½ƒ')½¥¾ñT÷½4ÁÌ½"é¾(&½_ô†¼–Ã½T9¼qÃ$>ïìä= N³=£ğ£½ì½+7¾&ÿ.¾¡'>p*>À?İ=ĞæÜ½uß½1î½Œœ;¾6¬ ¾şN½½r'’:¬gm=,+‹=,}>÷öo<–²/>ù´‹;ÙÔ=+øf½§2¾Ç>^õs½Èó½Å½<¹Ï½ºE>œf>.;º³‚Ê= G:¾âD>V	¾g}4¾Ò.¾ï‡œ¼pƒ)=;F>Òì½2¹½?^ =^1½U’J¼W`=7>$=œı0¾Ù=	Ö<*g?¾-@>œ³C>ôC¾³t»}ğ=@C¾îW>Ú¡½UJ7>`û=ˆÏ=CÙ›=aíp½†f¥=Òn ¾`‡<Ê½W9¼@YÉ½{#>Q¾à8Ë=w“-¾8…Ò<K†">Bz(=lc=¿ø•=ÈGA¾DÅ==m½”=¾åÜA¾ŞÙ!¾©ı>%Æ™½mÉ½-Ä->FÔ<:“½hX‚½ó’3>bªĞ=Ù&<.½× ½B¯8¾²¾ÿ=	­>µ6½œ%½!Œ='S;D(F¾Ğ¬=0å½!Â­=Xh¾Jê!>Üå@>ê¡¤=ïU8¾—¾B#”½ø¾F¾‰âÚ=‘’‹»şz@¾¤½³<o¨/¾ ³»^ñC¼»}6>‡%³½R™/¾Ì²}=ÀH½•ä,¾•“¾$2>•+¾À\½¨ï<¾5ç=Öà>>ãèÎ=†ş¾µ;H½ôµß½®)>¼?=ÄŠD½?ß*>‰g	¾P|<J´h=£™¸½
-dG>çE>—|Ö½R?=F¤8¾BÀ4¾§İ8>§£“=íß&>âH=¹s±=p±a= Ş?¾ĞŞÿ=Û0=‹t¯=›=4(¾v.Ê½2?¾Û®ö=
-Ô½ã!¾rÆæ¼ö¾Â<|şR½jµª¼ìg<e‚¾£ >	ß ½Vv,>¯Ğî=Ñ;>ı¢>2	¾«ÿC¾€†&95:ï½Õqó=ĞA¼Õáí<¡¥í=0A¾…x>©ó¼£>> 8¹¼zŸ6>kR'¾)aã¼N„¢=¤X‘½ì)>Ì!g=Kµƒ=­Æk=ô*>>eo(¾6ä >è4A< ¾ö?½ x<ƒâú½…œ;WÜ'¾ƒ¾:¾˜ˆ(>èôï=Es¶½÷ûÜ½5¾ò—R½Âİ=r°¼´E4<ƒÌ½Ğ(¿=×ş½O²=TEÑ½à-4>©»<¾€B¾B'¾z·=­=>¬ í=Œ,í=ÑŞ%¾4†¼³áü½b»ÿ{·½…2·½Çkd¼ÃéË½£¬J½7Š#¾²c„½MÙ¸<W½i½:2¾³á¾8x>È÷¢½ğÔ>;Š=ùV§<%ç=Ø±á=ä´=P59>ÅK¾â“k½íß=Î¾^½¡·B¾dq7¾6{½"MÎ=eë>X–$>š—;L(,¼Ğ`Ã=}R)¼$œ*>øŸ¡=w]ù<&€½Û¸‹=r@#¾¹­=/j¼ÃÑé=&›¼ş•-¾AÆü½/8¾«	<1+¾hB¾…S¹<Î\„½F–½V´Ñ=
-[Ö=œ¾½–şg=ı·¾hD¾UÄ	>¬‡É<¯6Ğ½_šŸ½×L˜¼¶
-Š½İ†¼9Ïá=ôäº;Õ½¥—A>L¥½]{Â<»¶½Œ¹¼3Ø¾|iª½à·=»½ş0¾2S¾:#¾â5¾;n¾¢‹!>ı} ¾ˆ,†=ĞŸŞ=ªf=n*Ù=­hí½©|½k="-=<]û©½İ"y:ÕŸ$¾î x<³¥ñ=Ø_ù½´Ö<æRÇ½¡;¶À¶½Ï È<1|.>@Ï>ıkÿ½š‘)½¸MR¼õ¯¼ºİ->ùH¾º’Ò=óÆ$¾N%¾ß%¯=§\>,ÑO½×ë"½':Ö<’=I§É=a§µ½>c¤=	œû½*1>¸~û¼7Ğ<¾ÚæR=–t±½³vù½XQš¼zE,¾¢¾ÃÁ=÷›‡½šÒ¾mš½x½zñ3¾ŸÃJ½Égs½÷ä">ËäÑ½§€+>ÌH¼}5ƒ½	9‘=õÆ1½˜¬<%z>vnœ:mD<>++)¾<×À½uß=qA>rÜ@>i¾Gk½E0=!ìA¾¨ö½¢’”=ŸQ=—Å½ù—‹=Ô;¾,<ş=o¸=eB=ä*Å=æ >>®=ø¹½éÅ½œá¼Ms¾úúÊ<SÔ6¾Á¯>É¬8>½›%>m#7>A i¼e^Š=]ú¬=uùÖ;6U#>¢×>ˆ¼z½,=ñ¼vèr=©šË=gšÜ½&Îe<¬§l=‚U>¿ä>Ve>S%œ½ôÄ< Uï½¹^¼®½ÿİ8>z=G_İ½Êñ¼jœ=YX>ˆ'>Ën6=¤ií=ñ…Õ=Pb¼NF•½a¿Q=¨vB½>YÎ=…c=9ûÂ=–¹A=§Òµ=Şb>µm5>³š¾‡ø½ E¨==™½¸~¥½f‚<Ò’´=1­>ee,=7R—=UÃ!=Ã>`¤½}’¾[É@=š!õ¼¦ >¸½>ïo‘½³á½§P	>0ê">”äÄ½ğİğ=ó9¯½R¥8<w…±½}±…½t:¾Rò ½!5Ñ<ãÎ¼ê¡=§>“úXºıLß<Áå<d¯=µğ¼Ì<>Ù‚ =(û29+R½¦Õ<Î¸©½øÚ¾¼Uµ½ê¢7>½{¾èL>>”á¾< Š=jÍ>é=ê/<>8½ûõä=’7>–ß½³ÿÁ=&"¼;®[	=Šs8½—“@=ıeñ<kî;GQÉ=ıD/½tœ=E«>¾¥
-=’q)>’KÈ½ëô?¾ÊTŒ½î'¢½¡×Ç=š1;WXE¾1j>¾‰•=Gúá½mø½iZ9¾ÔpM=Çƒx»ĞG¾=%4r½VÛ=Ú™“½tã½à¾LeŠ½9ú=Ğê«=~{
->¤ê¼<œL=G	M½èf¾*º=º?¾˜¾<=a¸*¾p‚6¾¡ƒ,¾ğ¼¼v¾èó½ş>‡4>$K_;
-¬C>§g<&$¾?M`½1-‚=#ìé½È2=ßÀ=Ö*’»Ë%¾Ê*>A›>ºq=½>½a÷=vÔ˜=P?ì½ÕX•<4½=6Á=½³)¾„ìô½qÅ>¾x(¾q	ğ½5¢„;ğz=í*¦=÷*í¼¾ 	¾¿&ì¼è7•=±Ñ‡½%O©¼':>&Ïè¼ª~i=,ë8>çÎ½ä‹=Nj>lT“½T’?¾ææd=æt;1* ½î0Y½œ)¼>p=º›½/–?>F‡?>,½¾ıß<êÄ¬½AºÇ½|:>¾:¾"?¾¾(¢¼µ©¼k¤>5W¾ ©¾ø™C>¬	½ÙsŸ½H‰Ó<“Ó¾Ì˜Ÿ½ûı§½rö½½ziêºU»ª<Ï¼ƒ *<Œ®î½êœ0¾nş ½x<µ»~cÚ=g-#=iÁ<½•O²¼z ¬9Â¾/¸=Êœ>.6¾•â&¾ãä¾§`¾x«/> Ğ>=‡a(¾Ó‘,=!A†<ó >E’½úDA=Õ9=4+>Ÿ½Rœ2¾Dq½’=’p¾Ô=ê¾â¾=\>¼mª½kè >W/å=!€»bü½¾Å.>í9¾(:&>;>€Ÿ-=åÙå=/ßq¼è>ç½ò‚'>¥>>©À=TNÄ½^¾ÏG<¢üY½\Ê»¿Íí½ëF=JJ%½¥<¾Í†§=<>ò5Y½=]ö½Ñv6¾õó;-?$¾ñ—	>À½J¨=`‹=-+Ä½à¾èiÀ=â†½»±B¾ïÙ-<FE=UÏ½ö:H=¯z½K7»=–!S½×èÍ;£¼¾=·v"¾Îò ½ÇØ¼p¾¦½%}Ô=yŠÆ=$N!;ùAü½Õˆ=+˜>ôu‰½Ğ™j=& 6>ëİ>Üq÷½-ö=q
-=^Á½yª½âÁ;>£Ãq½mOl½#ª¾îI½›‘=ˆ(,>’ß=·ªç<œù¼Ç0ø=Ê*½n~9¾%>nXz=Ú+>[d™½Íı”=ù
-7=L[1>™±½Ø/=×RÁ¼WD¾c=Ë7>À±§¼P¯½´*>à²ş½æä
-¾ÅP>æÓà=pe=Ráf½@Ã>>6{#¾ö<Ï~£=é;=eA<>ºÁ<¾JFÔ=ô"å=ú>â]8>f…>.-Ï»RYŸ½\âã½'¾	®½yø>ë=â¼”F<½’Ø=Qd¡=µ5>> Í½Ù¹>à¦»Ğ‘)>{Åë½
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1698
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1699
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-è
-bá
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter1695
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-˜
-value÷jğ
-˜"ã
-àM§q¸¸\¸¸oÅ8ÍĞH¸zØŸ7Óé«¸Æ@V¸Îçâ¸Ì7­=°¶(.«¸µ8¹–ªK8C,88n§8ıo×8RJm8,™8–C·¶]€ƒ9/Œ98¼n7yÍ9YÍg8^J¼5‘A·P˜‹8là†·bg8 ’7<,9ò%¹Øâƒ¸êƒ
-9á;I¸xÔY9[àZ¸×v8˜×ˆ8š¾d¸‹ë8©ÔP8Ädh¶ÌF:‡tX7`}8­~"¸î‘»8ÆãÅ·“ÛÂ7{è•¸×c¸`O·Ï£¸eñ¹8ú¡¿·#Y8¾5‡·)YÀ7¡D9Gr¸'ë8—’8÷RŞ·ÃfÑ6Ê–‚7ü£i9ã×=8=hY92Ø4·/aé8²M|· k¸Ó·bÀ09‚Y¤8h;$¹ßu7Â—À7Ğ7‡8®¶KÛô6İì·Puö8¥½7¯Ê6Ş¥¸s8ÊiÊ·óxT7Ãâ*9ã5#9 )9•¦µğh#9:¢¸>46¹’)c9¹s¸èí£¸æ1È8¿h/8¹¡8!Ã‚¸ù÷F¹â{n7xñ7È¸î_À6ò¤$8s´··øÿ ¹ö8ˆZ—¸¦µ692Â]6"1–8~îg¸‹6™·“uc7V„Ú63U¥¸ó¨Œ¶Qøéµ×Xö¸€ ¹‰f¸pŒµf/e¸=‹·~Áë8ë8×k8dÖ¸Óô+7Í™¶&+38K=æ8F·âø·77×«9|
-H6 Tü·²¹Ì 8¥;9iˆ 8¸ª6¸7Š˜8†Ç 8–¿¸W ¹
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind(
-uidBPlaceholder126344
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-¨
-b¡
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter1408
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-Á
-value·j°
-"£
- ›…à»r>û>4à>8CÛ½¸ÛF=3ˆ½ÿ=y¼,ç=Ò<Õ³Ã<ä>>š]>2äÖ¼;”Ø¼ƒù(¾¦ù„½v!C¼Ÿü»ÿY>ÓÕ‹½RÅ‚½"½>ğ)W;æ >¦¾ßŞ½Ö¯ ¾bï˜½•°½½¼p€=yƒñ<alq¼`XÆ½ÏU¢½2qŞ½”	,<Üê—=¹‹¾Åb¾‡˜Ç;]L¨½ÑJ=¥aÍ½Ï$=!=Œ=ÿçü=ÉÊø=ŒT&>*óºóàÓ<é¥+¾Ğá=ÙÜ¼¬gÎ½£ç…=å®D<×½	¾>3µ;=4>Ü÷Ü=Ñ²½+İ)¾ûÄ ¾(t$¾CòU=_ê=Zúb=¬6'=ş{S<İ½¼ä·½ö"œ<{(º½l4¾%¡=Hù<Ù* ;+¥´=åÊ%>4N>¬£<mÔ¦=&è¾½ïìî=«L»¬G>Ğ8%¼.Î=H:=„Ç¢½­»Au
->DLÇ½hº:!]=Å•—=0Ç­=µz+¾hê=@ü=Óì>À™æ¼]>¼µ‹½£Ş=½‡ç=šÀ¦½3¾ªN¾°<*>¢Qæ=›a<éqâ¼pĞ½kä2>jÌ.>oÇ=Vh=2ä=`·É½q	¾«4¾LÙ>ÇÑÂ½ë=‚ 
-=œÛ>
-±.>fÁ=·*½Ş<{½vÁ|½/¶½ïÒ>×Ñõ½à(¾·% ¾Tú=+š½>K&¾ÅÍì=ï‚<«@Q½¥P½võÇ=¹ ¾jb*>yYœ½ÏR>Eå1=€Ò™=+Å)>ZÜ">À¯@<³Z¾	‡$=~æL=âb4=e0¾3äß<ñ²m½ a½è?‹º"`(=JDé½ùõ=¨Éb½³{'>ªRÈ=µ½/>çë×<_î¾gW]»x+>¶¼¶À>xŸ¥½4:½Ïã½Ûâ¥½ÃÈ=Æõœ=ÒhÌ=Ù“½¾!>$Ä5¾[>òÜÜ½ĞxŠ=`Û"¾EÉ>Ä Ô=ÙY7<’‹é½:‹Ğ½ûğk= ?>4ñ½ñ]ƒ<».>‹*>õq­<ÉÏ¾-õ¾-P¾g´Ì½S¸c=Ú->Ûî >&½¡±Ú½n‰½oÉŸ½mı=A,Ã½ÂŸ;ÄE*¾Á).¾ê4B½ Cª½°›'¾§[
-¾¾ğÃ=ë3=I?½ÿ‘“=í>}‹½B>Jí’=P)™=GeÕ=›ˆ¸;»Ï˜½ÃÁ!>àÇÂ<A>¾¤zø½ÕJ½sÀ$>'X˜»¬ë=ŒÎ½Œñ	½ù‹½«‰g=3zr½íÄ½²Hã¼u?>”<>E‹ä<Ïtºª†Ü=`¾À_½‚µ½åB=ï«r=¨(>_ö½D)¾U5¿=“m:½úL¼°ãæ½«½)ğ=¬3˜=f·:2È½ÿ¨= ó<R.Ä¼±L²½'Z´» Hö½½¸2>ã[½îô‘=øŒ3¾õÀ½ÓÖ­=uwã½çf<ÿ¬-¾\´½,ÿ…½kÎ¾R3=bƒ•=N9“=µïë½ªÑş<SÃš<gŠ½	>=Œ">¾>Ä½Ûy;©³¾®©=.Ÿ<kø¤½+Š<ñ+=Ws/¾:ˆ½|Î¼ÇÓ>7j <3³ê¼*A3> N@=uC½úàB=Š—Ó=°Û;½hÏÛ=Iv>ÚÊï½œ‚.¾A·!=äS=Jæï½m_»=‘°½İØŸ½Ñ‘Ó½”„2>Œ°à=^†½‹½£»ä½™È’½–.Ç¼›ò½!ë+>¾ü=X><=WS½Ş-Û=\‹.¾¾İÊ=„>;÷¦½–ÁÕ=</>¾80¾½òNv=Nœş½B‡å=‹>É¶½ ·Ü<ú›>»d«=&s>x>Eæ!=ß)#¾mx,>aº½_¡½Šºœ<¸,>Qõ¾}¢P=Ò&¬=äƒª=š¬½S#>ıÙ>Õv'>4É	¾•#>Rtû½­Æ<N	3½Ë3à½\*+¾üÅ>Z{Ó¼ü´˜½{T½_M¾'TU½MùÔ½³N3>ÙIí=®ã»íUú»²>†zÃ=XV5¾½(–½øM>¯æ=²¾¶?ï»F¼½x‡ê=¡N½ñ¼‹=¨u¢¼Î;¾Îl¾êî±=t¸=tß=Ğğê½Ã9+½•…<¼Mº¾=Æû=6³ğ½J5>kR=Ê’=4K)¾SÁ½	ˆ=ëÜë½2å0¾=)>ï,3¾'¾¹RÇ;¨G
-¾tO$>ì2*>*²“½¯ÿ¨=…ã½}b…=Œê =úı˜½©ùı=ÿR„<M®È=’Ğ*¾Ö‚¾¥Ä=jË½Úó¾BÚ'¾¬`¸=Æ·ù½»<­=R«¹½/I1="`½kæ¾@¢½r€¾\Î=­Uî½}¸ª=“š'>ÎÕN½DMÎ¼³$¾\Ù<)­*¾²Áâ<\Å„½ %Ú½uï‡=¬)¾‚é>a¾<	2½@Ã¾¨Sú=<%Ü=³<¾Ó|c= 
-½èÍ½sr>é¹¬½P6ì½Ó+™»z»ZËã<Qï†= ¾—r<™Š«=ÁQF½M5¾àFÌ¼÷“©=\ø¾Ua½ıv¼–Ìé¼]3> &V¼Å©¾uÆ¬½ı==(î>,v+½KÆ:>0_œ¼ãLÛ=h =°¼½œÀE½òõ=O-
->Û-­½Eû¾ú`û½µg>?÷½ø‚½ñÚ;Æò_½&¾×~7¾åsÈ»¥Ú0¾şÑÑ¼@=Õé ¾ç>‡>ºm¼˜]H½Î{
->¢u•=OlŒ=ÿ–¾Œ}£½Ö ¾¼(¼ıR8»‰;¾K¶½£|'½ªX== 1Ã¼®Ã¿<â¯ø=if>êzó½},¾Æ_0¾ƒË7>‰:ê=8Œ;=£4¾Ñ;F<³E>=h”¢½{Ã„=Wc½%†Ş=I ½ñ6ò¼®ª>N°;]ğ'½i.>’G<(k‹<ì+T½2°=àÄU»÷~İ½–¾ä²ô½Î¾rç½ĞVt=µ§ı½h@]½Øóİ<ÿiÙ=¢>V|+½j¾—ë¬<lµ‹=UÅ
-¾¼b=x7€<×l=1RF=ƒ>Ê¾ğtâ¼¨f–½“¼½Aç¾Ğë½#¾Û_—<{iï½Y÷
->.§¢=cD=¯—=£T=Ûb¾(ÿu½õî=½@&ª¼Ñğ½™ët½;§õ½\	¼tì!¾JÍd¼¨2(>×e%½I<f¾˜µ=€ú´½¾œô;1L0¾üJ=¼Ù%>&$>?ˆ~=°	¾G¤¼m1¼@)=Û&¾s\¾n3²=#½k¿ª¼:¯<T=3ä,¾÷X¾†çºTóU= Î>â¯À=:À4½ı9½º¬“½õv#¾ÂÂ½àÃ,>üQê½Ã¥â½&Bü½/>øJ½<1š¼d+>7J->9]>`©=°H®½Î¾>øEs½[uê½;Ñ
-¼^=9Î½ÙE¾8§Ñ»¢±&¾ù„¸½ä´½èà%¾üÎ=/d½‹u%¾î½’*î<Q@¾›¯€½#Ä·= %>–
-Á¼^c¾eÖ½Qi=È€É½5Ã =G=¾éWÙ½©2˜¼ú^·=Òy">ğ*ì½X‘É½©C=+/º\Å=â¦€½Èúû½¸MÑ=Š¾”ø>1Ê½ÂA#>	ñÙ½’ó>Ó‡ê»§˜=¢Å'¾=#>öåó½ÂÏ>0àÑ½P˜m½çÇ2¾®¾¡6>Êg=ù{-¾ñ½V²¼ƒ‡½L’Ú=AŞ<.¾s£8>Çâ¦=Ï	‡<Ù–2¾ù 0½j§ >&}~=´í´;= ºÊš>eaı½Æ>/–l¼$¼=*³ >Mu=xş½Ã’”=„ı(¾Àˆï=9Y>*å½æ@Î¼];P»ÁÇñ½óÇA=„=ğ£¾ƒk½,>¬›q=L4¾uğ=–@¼˜ôà=š²½[.U½t#¾!ïçºàè>I†İ=¶ô¾»*>—–´½Íç¾0ğJ½‹J¼=q3½ïQ@=*i[½	(=½9Âë½{ß.>õ·¾™ş'½—½<›¼¾£½÷µ¾yìÆ;XÈ½ßˆ==†;Ü=å">ó5:½$î=!AÕ<•¶½¯Å¼©{d¼qÚÌ¼âöÆ<Xã:ƒ5¾ÍF¾¹gó½,¾Õ²=P.#>Æ)À¼YB>Ò•¾ZìÎ½+à<J<7¾şÍ¡=XØ¦¼cšØ=bú½†"½9Wf=@
-c½çÛ>¬H¾Ë Ü=P{->”¶=P©_=cO>ºJø½Ÿı=s¹³½J+=ıY<À¦á½Dë¾©Ø€=tßÂ=Ÿëµ»¡y¾e;¿½¶*¾?Æ#¾ùSl½_s˜½GÈ±½a$>téÕ<hZ&¾!@ç=Tz½/q½äş+>bc¾³M
-=‰=¦v>"z¾RŒĞ¼l˜,¾=˜2<±‘=ÿ—	¾	!×½¿ò¾j­½áûY=]D=.ğ<.¬>XĞ¼ø:=k]>¼¤½™e=î1×½·n=Îıô¼ØÂ)>c"	>³;ã<¼í½A/Ù=¬Š½+k¾ ¶Ü½FƒÖ<‹8Ì½nA>Eh->æ¢¾Çi9<H=è¿¾@İ(¾ıÆ«½¥ë=H8˜º’:ö=n*>7ü˜½»)ÿ=ºä„=Œoí=Å`@=é×Ğ=«í½ •½R $¾fFI½”(Ù½“ôh½÷½¾.Lı=ÄÈ£<ô¡¾FŠ#¾‹Õ<Û§é;ø¢4¾6¶¾=\ğ1=Ã•/½û>·¹=ôÏ½Û,»½…=É÷¼¶€æ=‘Å½Îù&>q$³=É±”½3ä¾QÏ|=
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1412
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1413
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-¡
-bš
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter1409
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-<
-value3j-
-""
- ›0¿9éè¸¬v¸"fI¹I:¹ª¹ÀäR9À–®¹
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBPlaceholder126338
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1399
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1400
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1380
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1384
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBPlaceholder126329
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-•
-b
-needs_gradient
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBParameter1372
-typeBVariable
-dynamic_axis	Z 
-	is_sparse À
-value¶j¯
-h"£
- Móª¹ñØ9>»9îµ:’ºü'°:Û:±†:â·|:= ‰ºd^:;¼¹d¡p:w9ˆ;fGB;ü}7‡5:­="ºìÿºlˆ–:€óúºlº˜ƒXºw9':F:nº’Y»%ƒø:ÁºâÙ»Àù
-»¿;†:‹÷º9ÈÍ¹eaèºB—9;L'º¾¹9¯®A:‡îöº8İ:`1r:[w=:PY:-'G»üÎ:É¾»Ì¸¹väºÈ;Œ·ºFuã¹-~;¡#j»îCº@t„º>†üº6	á¹ï#» Åº¼—‡9¢'»_Ld»Lz9Â!º9èË™º)"ûºàí(;©¤i»¥Z};µWDº…­6;…ˆ;ºà¨‹9ZX»Á¡9€í8U]:Oh“ºÑ{D:/^ß9•<m»í¯¨:6í°;Ûíd:4k’8«I
-»ä{Ç»#&9
-9:X€9’­§ºR±½:Î¹ÁºP;Mà^:ús8al‡ºV
-5:İÍœ;Á÷ß:®;c»{³#;JŸã:BGº
-•
-b
-needs_gradient
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBParameter1371
-typeBVariable
-dynamic_axis	Z 
-	is_sparse À
-value¶j¯
-h"£
- hÊ?ƒ‰?=€?õ7€?ñA?Û1€?<€?-¦?>P€?'¨?-€?7æ?E'€?Õ€?› €?İ3€?Ñ‡€?æ?€B?ç€?Ë?s
-€?_Í?O€??.?h€?á?ëÄ?ğ—?=¶?‡ë?£€?w€?g?Èö?·T€?í€?W€?Ëß?€?İ€?ëR€?¶À?”?ú?”^?¶Š?œ*€? €?Ëa?v
-€?†"€? 0€?Ø?Ù?	¶?æ!€?4Ú?=2€?{€?WC€?­s?¡¡?Æ9€?²)?p
-€?€?b[?¥ñ?š?Åã?Ûê~?
-É?|÷?y!€?õ3€?Ø?`B€?k
-€?•b€?‡ç?¸€?¸–€?)€?ÃI€?dƒ?²”?8ø?ÿ€?%€?rY€?^}€?TU? €?¢Â?Xã?5Í?Q€?º€?’L?t?³€?v€?Ğ€?
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBPlaceholder126322
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBPlaceholder126323
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-¨
-b¡
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter1071
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-hÁ
-value·j°
-h"£
- Éı>û7ú<f—>¥>¡C›½/´Ù½®ÚT< Ã­<lQ¾–=bèi¾”‘6>,Ü¼šßı½ñ¯Œ=.ëÈ=£›¡<ÊŒ<›>~\½À¼p¾Ì,¾¼¼Š=*Õ<8DÉ<üÌ¼: .>·EŒ=G¾,*½(j;>ªié½ÿ–»GHg¾F¥K½É-	>é…=İ0=<é=,3¾…È=Rï->vAl>`0ì=5$¼M‚W>½/a¾öû‡;^ ê½ÿU!>ß<¾e	-¾3î½ú`½;á¾ı
-=öåI>=T==0¾Û‚=˜Š ¾›Ç—=“^*>æí²=Y,5>Æ\½¼tw,=ÇW#¾ç/>ğ½Ó¼Ñn>g•\>I€	¾Åâs>H>°÷J¾RØ¼@¾Äoæ=<O¾Õ·=	>$}=g4¾»³½„=óç©==d1¾ˆä&¾ŠV8¾PV½cß”=áj³=
-t‘½!â_¾Ø½úÆ#¾L>Ïl½¬…¾=Ùlc>A>PœF>áìp>
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1075
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1076
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-¦
-bŸ
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter1072
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-hÀ
-value¶j¯
-h"£
- zU‡¸|ºİ³Ì9á»Ñ9šºöôÙ8Ïa29ås:ôâ$:)"ù¹¿'­¹ºMIõ8Nu:>rÇ:;-ºSƒ:’Á9:ÜºÈ^è¹ftß9~ÕÈ·„H—¸ŠŞ9§±B:°,âº._ö¹Ğšº}ºÙT:,#W:_¬¹L½h:¯[6¹·­:*;v:mò9ª.¹"KeºBşE:‚µË¹=“¸ïDˆ¸ÒAP:‰¶	:¤¹0èº»"#9Ø…#7‡+:°+kº‹š:*ºçb‡: Èà¸»º¦!9cZ¯¹U…©¹¡‹9g‚:Éeºj“ºHÄ:fşÏ9£Âj¸ñQ±¹°	:äB9Ú-ºÉœ*º,h9Ñ;AºíÈ9!ÀiºP¨vº3“¹09,[ª¹–I>:k“Uºğ³÷9’¹U:4‹9÷ ::–Mºp€Ö¹Ÿ8¹‚Ú˜9¨ÈA¹£-2ºÜ :±J…º	Œ¹‰¹œ6{•½9„Ğº9æõ¦:–z„¹í`9±q¦9Ü9hfš9
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind(
-uidBPlaceholder126299
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-Û
-bÔ
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter852
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-Mõ
-valueëjä
-M"×
-ÔD&=–¡¯½‘lP½ºq =tš½œ˜½§½?=òb=§W½³©½2E<"#½Iâ¢=t˜!½@½-„½æ<¼ôT´=ßğ=e.€¼E¹Y=F ½÷)ÁºT1½«½,=ac½¸;»ò®½zN=º‚…=ò¡½,-¬½ü^½32–½ÜÁ,½Èni=XÙ ½à[<==ş{=[,½SU½ØŸ=´¯<s:T=ñ¿’=È©‰½\ö„½±÷¯=´ïœ=Xèó¼y$*½
-v—<2ˆ:½ğˆ=åÓ=¬–\½+Ã<W¬=!¼Ï‘½ú²½Y ¶<®ä$¼…ë"½>=k÷!=Äb=¤¦n¼|b`½-˜’¼Ã=2=Hª¤½NŸ£½†ğÅ;°B'½Ğ›„½à³¥<œ½ß=¼âæN½ÀÜE<æÊ½¾=…½çı|¼©É”½5z<Q½4µ¼1l=A!·¼w|›<…Ãm=k £=Úq²<Ú…=“Ü¦½~K­»aHA¼Ëó§½ÿ¸`½2q=à»½äªf=sú"¼<7Î¼²XJ=ï«´=
-ø%¼ú¹.=Ã«'¼âçY=[=’Õ\½ná=®`½Éª;$õ<5½gÌO;Ce5¼®‡½ÖX»ÿ½çi=ï;¯¼ı,…½«¬½öĞ'<.^=4Â½ğ®=NLj½7œ½\è¼´è»½æš=êOƒ=¢M‘=Të½†
- ½yp½å³¼óˆ¼©D¼ãj×<ğ›=Ò‘§½HW<ñß§½:¡¼Û`n½ºdx½¨I½o{ë¼}H]½¬¬=e ü9ùŠ=6‹´½üŠ½—Ú\¼¬1½~îL=c=w³Ë¼µG=Âü›½2Et¼¤Â<½(e½<<Ö¹³=<¿®½´°(¼¯½ &¼$Ä—½Š†¸½Ó—>¼”²=U½F:Y½šÁ<6 ¼³5½ƒÔ³=9­½<±B­=r 8:A²;SŠn¼0Wy½ŞGæ< a½pM=í–=³ –½üú<Í‘¼¨â<0Ÿ½¢1•=î-=Û½)S½@=İ¢?=(¥>½ÿe=Agš¼Bq"=äë½<ŒèÎ»º^½]*(½q³]=k™½ÁÕ
-=3É<í’=¡¼°=éæ³=_ë*¼Õõ£=§M»º#¦“<©ÿœ½Êí¦½(È)=ÀŠ‚½Wã†=*z½o3¨½===C°«½p<ı¹ƒ½‡½MíÚ<²¸¶=Åa=7œ¾¼ò\“»ÀZº=¥Â–=äS_½¤tµ½6·Ğ¼ïˆ½GX=2Ã½J!´<E°f½*o=*„]½ôÄ<É==<ñ<›¥ô¼Ä¼ôê®½QÚ®=¡=E²“½!©¸½åŸ>=æç¹=V½Ù"¨½İ“½1öP½’³‘¼1–+½‰…½Û<T=×Ü<É”¢»ìé›»ÌG£=İ…ù<k&¼ş>‰=r^=§[‹=¯f==äf½eı‚½åOÎ¼¡çq<Sœ½×5<(ó¡¼ô6R½Ô5‘=N7Ù¼¨gµ=Pk½íß¬<‡½½i¼C=j<µY½ÂA‡½ô.<®(¼¼ğ
-¤½ÈSº½ïCä¼Í­¼ñaÿ¼Ü–W=ğt7=?l,=›½²3=Ñ·»=Š™½$‚“=ËØ~<„šê<¼z½©¼‹®H½ª7 =­İ`<†7½ù‰<àúª<QŸ£=Xz=¼ãº½m|½Ä–U=„Å·=ìM9<3°½¼==Şü¦=ùéq=|>„¼«ôU½1Ï®½Vğš¼Xƒ¡¼G¡7=<°=C_7¼"ÌŸ¼uæ¼àiU½’í0=)O»½uJ™»†»º=ê@¦¼sJ­½¯²==¯=CŞ[½€[š=hÃ2º_zÆºö’\½¶zd;Wş<Ëj–=ª­•=òÚ’½ú¥¤=_=)Bx=ö£=gHà¼şç½©ÖhºÇv­<¦t+=#†=•æ¤<q'A½«À™=mm<9&=îˆŸ;©Æ½/[=ĞFR½¾z¡=e´Ÿ=µ¯ò¼IĞX=_½öˆ4<_û<QN[=´>O¼RÒˆ< ì1=·s²;“W{½«i§¼™°=ËP
-=ıy¶¹A]#½2‹ƒ=¤ö™½Ùø0=Ak¼Ğ,ú»?v=Ûò<Ö‚=4R½Dá§=•Ÿ0<µİ¼:[«½|	’=Ê*&=Åè»½ËÕ¼F‚»Ê"=:cl½.“E<¸­½­x=\Ò°¼]}¥½uš½A¯½Ee=Ì„‡=¼ê‡=Ìî]½¢ãs:(†<_r/½˜Nî<RßÊºîÙ<ô~ ½ğ“£¼,O=‡Â‘=$&?¼]ª½€Ú¬½(Ÿ½:Ë=½´—;d‹¾<PÊ½İÊ¨=Z’’=¿?–½m#¼èÇh=½V½|I™=íª,<«Y;½YÍ<©”‹¼’:«½Zb=Ş¦¡<`!½«‘Ã¼è;;½Õf'¼`a½=D<ö­½û¹=Pé<Êl=³§==X½½Áµ=ì9=¾=Üå›<·ø<;Í<¨ó¼·¥<õÖ½n=ZÖ[½Uİ<.Ër¼!±½ğX½>E=×º½"ñU¼²Ö_;©_…½C¼•½zJW½ÿ½½@Mw¼â’=Ö=W=õğ= (s½‡Å/<>Í	<½v2=%³=‘´,½‘^F½š¡¤½‚sJ¼âïœ½Æ¿<·›œ=<×;½Œğ¼ÜÒA=Ê­½‡&‰½?+=2İ´=ù²½ş+R½¹Y”<³@<½E­<k><İ•=f¶¼jNŸ½Õ#W½îz½¦O"=˜s=üi»Ê]¼ó† =ß¹½X=iª2=$×=Ù¬¶½!_b½Ë˜½hb·<ù:À»Úú½ö2ñ<Š±·½¾‚°=ĞP¯½qÕ¥=şu¨½”Ç»¬íO=àN=3H=9ª¼ÅtZ½Z‹=Çq·»÷Ó7<üˆM½Şİz=ŒR˜=),=ÁÎ¶½\ù¯=íO»nèº¼%Si;yb”<Ó4¡¼N´h¼˜µ=V<·MX=Ù­¢="Êx=±\§=áü¶½¸i=<¡ğ¼ŞN¾=À“<´a½b)¢=¸›7½¹ef½ÙÄ<9Î»No¼ÊìQ;]>±<&N=]Ÿ§¼ƒc7=g¶:ŒY¡½Xk½„°k½ms=à½lA=cäJ;Îˆ½ò“=1/=¨|½0Ñª½Ìºæ:×=³ßW=ƒ¼’=t)Æ<±)v¼ü½¾=y? =°½î=¼¿·=
-Àò¼U¯=÷†B<Å(2=,y½‚½ºÈ=ëW <Ê#ô<»(¼ÌĞ;Íÿª<‚M³=• ¯½Ó¨õ¼—»¼¸PR<€Ûy==0}=Í_=zh¼½GöG¼´v=*j½Xß–<xH½j¦%<"=)=øÕ=Õíº½’Î<;‹¦0=_D¼½%‰4=¥\½²R=3ú=Ìˆ…½)8ª½²q=ú”¸=¢ó+=,ß{=d=Ãcœ½t'„»–="§=ê©¶½ª«½‰ğœ½røT½wK’½E»U;¯¡=¸.´=Ø
-j½ı|=…Äˆ¼
-<ê¼
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant856
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant857
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-„
-bı
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter853
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
- 
-valuej
-"
-VUŸ:
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBPlaceholder126293
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant846
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant847
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant827
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant831
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBPlaceholder126285
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-¨
-b¡
-needs_gradient
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBParameter819
-typeBVariable
-dynamic_axis	Z 
-	is_sparse Ô
-valueÊjÃ
-M"·
-´R«V9¿˜:`¢:#Wm:õL:ØFv:WMaº«u\:ùÏ:Í2Õ:Å“:V··º¨ú»
-Ù:?uV¸Ê(¸Ñƒ°ºµ:u¤Ë:Mı8”59:½×¦º¾¾òº€Q^¹0 ºìN':ÙÇÎ9™ôèºîòB9#ø9½—:¾V&¸ÉW-:Nƒºø©ÿ:ÂD5¸Íˆ ºú«†ºâ~ã¸qúı9åÌRº×õr:=Ö‡9Œ†	¹Ì„e¸UÉ¹¶=3ºFîÓ9)#·ºàÍ0»#Ñí:mä•ºÌ/»•Æ³9¼'sº‘ğ8!ï÷:Eï¹€ş9º0,S9V’:¸êºaµ¹c=:“çı¸fß·º±ÉºWmÀºB Z:¡pã¹ªº}™Ä9P»#Òº9d~: I¨:
-¨
-b¡
-needs_gradient
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBParameter818
-typeBVariable
-dynamic_axis	Z 
-	is_sparse Ô
-valueÊjÃ
-M"·
-´	€?€?·U€?­.€?—ü?˜0€?6µ?H9€?·€?¤€?€?$í?:?X €?”€?&'€?¶»?}ù?ÿş?¥€?O€?Ø¹?øP?»¡?ä‰?á+€?Ë€?Û?&€?œ	€?	€?*€?+-€?@€?€??€?ª€?Û®?İ?ó?’Ê?f&€?‘ç?ß?O€?|Ø?J›?48€?û€?+p?B0€??€?Ò?†ö?¾É?÷€?‰í?¦€?°#€?R¢?Èú?&ä?@º?ßğ?áÊ?}æ?£–?Ëî? Ç?O€?<Î?i?Ì€?Ş¦?: €?ø?ŸÔ?
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBPlaceholder126278
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBPlaceholder126279
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ó
-bì
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter584
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-M
-valueƒjü
-M"ï
-ìÈh><¢Ï¼†ªL=up¾¢Ó<'öq¾İá:>»{¾B?>1¾>L»=£ß¼se¼D½Ò¾_>í”Ë=dÜ”½¬7"¾.q_>Jb><> ©º½Ú1j>çüò¼œû½Ää¾Ú2X>ıôf>á\¾ƒUâ½§E¾´¾Òh\¾+*>N:>{¾"Z¿=&Bä½9£Z>ûP¾»4L¾“¸<~¤>)/¾¾rt>Óğa>N|w=v\½aä>ìŒX½6Ìë=¼=¼·mÌU=—|J¾/p¾EA¶;Vâ½ÂG¾!™…>Oz>TS€>Ïy@¾ÄX>qE?>Å;‡½Ü[(>BU¾$úš½›‡¾Èä,=»5=®û±=V>ò…½F±¼ƒ°<¾ë»>àŠÚ½¿ÔÀ½×C„½¾áÏ»ø=*¿—<ÓÊ†>µ–B½ÄØè=wÒ±¼ƒ½Ÿv¾—pX>™ V>`±ı¼
-¼*=ÇŠ>I%¾(¨Ç=Rfp¾¬¢İ½™š«½Òv1¾Húh¼’8!½QÑ„¾0ã¶½·Ö3¾ö­¾¹	>×mğ½ægô¼Ñ·½÷G=â‚¾«¸½á».¾ @%>*ƒ.>˜)…½è.z¾*¾³Ú[<%ñd>îĞ >.õş»Y_¾ÅR1¼íL>â·Ã¼cğ9>]æ¼ /	>,İ†>üú‡>YÙ#½Ì¶½Nc4¾"x¾^wñ½íœ}<Ÿ‚<5¨½D>?¾R™Ì<Û½f¾¾~»7¾êy¼|œx¾®½‡n•¼W•u¼Üç½v6*>²¯ƒ>érç=+iâ½°v>«¾W6>ŸÉµ=èŸk¾sË=7ò$=pÉÄ=£u~¾Û&¾°òb>]:Ã;ñÄÁ=Aç¾Ş×ñ¼†µõ=ó™>ÙòÇ=Øí½¢Àñ=´İî½Ñ|¾ C5¾ ’ºI+=‰èË½åÇG>Y€¼<Lj¾—Ë“½E„Ü½9­3>0ò5¼CpC¾Îù|½„¹½¸—…=uÑ¾!>¬Ij>Q	„¾f¿O>€É>/ú*¾Ó>ÓÅÜ½µ-Š<'ıı=™#>İ:ù½)Øƒ¾íÂj>¾>ˆ¾b9À½®Ø!>¾ÅÎ=H\k>‰n>A>~öv¾ææÙ=ÒU&¾a}ï½óÔ>çÔ£½ì<>½Å;>ég>Ç½töZ¾kÎu>dAx¾–\¾i|ä=†>ïÊ ;¬pj>]>`Ç=wi>•S¾bÀ3½”^>ˆ¿‚>÷mô=qÄÒ½R¼›œ?¾}:è½ô¢¾ğe¾®U½r5¼S³V>‚Ê=Ì6{>ñm>÷¾·=Ú¸6>œâá=Œd=1u=ZÛ½ •5>LÒƒ¾]s\>} ¬=dƒ>À>BEˆ>#ÇÌ=ÍÍ½iU>¦8;>Æó—¼ê¾ÓA>Gä»ËÈÕ=Cå½b
-A>¯À&>	ƒ¾A×p>ºî¾4¿ù=½Æ$¾¶é¾'z>j>cÜƒ¾ÙE‚¾oüH=õa¾éÂ½ê(å½˜‰>‘Œ=À(½8Ë>Ğaä½$Á„=F-@¾†iK½ã=•„¾î+@>¤¹>ê›=?ˆ¾ÅQ„>¼ò=#½½Áà€¾ÒqV¾WhØ<}$>²Şm>©M½’$n¾ÍhÆ<Rrq>îfd¾œµÎ=ßô¢=3¤=7¶‚>Xa_¼0D>šÔ¡=’&„¾J^”½´õ
-> Úf>Íc`>’sJ½Ø¶ƒ¾ºMã=¬¸Í=s¦Ÿ½Ãœ½¡×K>ji¨½˜¾™‰>‰F#¾ú"¾6‘Ã¼>F¾Ÿ]†½(<Æ<V}”¼s)¾ªh=PÕÇ=ò:j¾šo>ºk¾c@ı½ ‚!=ëò¾@É˜:Jæb>n;¾Sç=·i¾Mƒ†=”ü„½yO¾Á§¾“Ñk>gÏ¿=g¾ñ_>ÿ{¾T:ø½ƒò‡>€’¼W—9=mpC> ø!>¾à³=¢Îò½,Æ„¾Ü•…> vû=Arï½:ê¾úX8½Ü<|=×'>kq¾@Æã<!ùÉ½ƒ'>²•—½_±Q>’5½†5=³õ„¾’w={·@=ûJ´= &¾>)¬="S>­1¾æ=L‰E¾´¶¥=x
-n=XŠâ½8p)¾R =¢ş¾$Q>˜G„¾ô%"¼ÂÍR>&~¾¹¾ò>jÌp¾à¡(¾üx>ÓğV:åÕÀ=s¹½µú>ÚI>Ù{>–·u¾Øˆ¾*Kz>—Ñ¾§nÅ=B,9>;Ó·¼ N¾ëY„>ì• =Ká>+Ã=£9ƒ>I>Á8„½Ù4e¾®º¾CM¾_X*= {½¼`>İf¾í9Ë=é`=Ïû]>œz¾)ƒw>»Io¾›`Ù=Ï~¾nM#=¼¬Z¾w6™=ÿ«¤½lGƒ>şà{½¬×B>×ëB¾SLi>Dæ ¾?¹
->…çs»+‹=Æ|¾QÄ>rè½7f°¼k‰>‘%S¾ál¾õØå¼¹ö·½İrv¾Ğ3>ÂØL¾[ƒ¾†>ŒĞ]¼ä¾(é†½hî.>×¾Öd>î’.>{@=Nšñ½Š<‡×¼mÅ“<4+p½—‡Ü½˜0³½İ"½Ínº¼z5Ù½Èt‡¾‚à¾ˆä„¾_g¾fş¾ğtn>V¾WVƒ½×uÈ½(Ù6= •Â=Ê‰ƒ=Ì¶&>§ƒ¾6ª¤<{ËÌ=	ü<Ş<¾İeå=rQ”=ñ>f1¸½õR1½n”t>öE>>m­y=ÛrZ>j>%„½g»è½8¹¯=¢Fl¼¯S>Rƒ>ò€r>
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant588
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant589
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-¹
-b²
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter585
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-MÔ
-valueÊjÃ
-M"·
-´ûî¹ÖÂh:GÏ¹Û5º¹éáí·æà–¹Køu¸v÷†9uö‰:V/¹ëŞc¹X—¡9ù9ÿ¸wd9pÜ:ÓEB¶€$£8ÂÉ'ºÜ|º)Êæ8!NŸ8Õû®9à;9‰3¸‘Éı¹,ÆS¸ìİ¹Tİ×¹[j§¶Òˆ¹ §Ó8ÌÕ9Yl+9>‹9äJ¸âø7£mÜ¸,ß†8[à9v)ú¸`(Ş9jZ=¸c¦F¸Wé¹>‰X9Å¸ê8œí¸·#M¹8
-‚¹ŸX9Ày¹¯€9§®9ÜjC8ôã·¼eø9n‚¶@˜%¸æ ºVì¸"(9™â:\û.:!=Ó¸oî‰9ä~¹¹Wš±7¾¥Ş¸l/m9-ºôŸâ·'n):Ï~8'ò7"Ì¹#Mº‚<8
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind(
-uidBPlaceholder126255
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ç
-bà
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter431
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-
-value÷jğ
-"ã
-àƒ¡Ë<GÙ¾<=z9†½ãÄÆ<aDs½¦Ê=$½’ë®=>k¾%Ò'¾°(=kšã<Óœ0>Ï#Ñ½ËŠP¾¾½½NÕù=ªŒO>8®(»ˆXK½=±õ½¹IJ¾jû5¾™Ö>ù|Ñ½¤l€½ˆˆf½CÜƒ=S+<©J¾âb=½<×½Ù!•¼Çßt=‘Î)>«mÓ=Â9/¾ÑÖ,>!•à¼ØL>Ù7u=Ñ¸„=ñF€=MÁ/½Ä¹=“ê;>;==øôò=j”Q>D“½gÁ>Ğ[/¾ê0>Ôs•¼ş«+¾Ï½Üçâ:r½„¼ÇPå¼T"G>R±->Œ`ê=z_¾UTÚ»…ğ='ô,½øç=Œøü¼]<T>%])>“’½3'¾PlĞ½We¾â¹Q=Æ=ÆÒ¾AsÀ»€%(;Ë&¾DQ<°9 »]P>[PV=-ú•;^s<×ÁN<Lõ¥½İÍ=§”!>)AS>
-ÙL>˜³È=×y½ÚCP=PK½³ùL=q©>BF>¾N™O¾="¾½<0¾»Œ>—¢E¾³NØ;
-U¡½P¢ºß<¾6–E¼}ôz½”
-=]Â½íÁä¼z˜S¾GÆ=•úK¾i3S>Õ†O¾ƒ~(>ëbÆ=-[U>oãµ:ÀÚS>Ø1„;³èŞ½ŞŠÕ½âˆì=’Qa=}l>­şC¾Cö¾	½†Û¾ñ/~»+Qì½,á>õì)¾'Èø½©¶>¾D¹=hK¾¸†½,K¾/·‹¼z-•½Ö%0>Sy
-¾fÃ2>v-Y½[Ç\¼ga>¾€ä>‹\¾¡=[f½?y> ™[½Ï¨˜=JçÜ=ş¡½—½y<¥=Ÿ(Q¾7¾É4¾…Óé½u[r=@ğ<¿j<O‚‡½	*¸½:¢¾°™¼ºïe==>¬;Ö/><ğED½ÇvJ=6P‰¼ù6¾O¾BÊİ=xE¾<ŒÏ½v˜¾¸¾…ãÖ=FXS¾é=İŒ?>õ½¸¬Î¼ï>ÄğV¾@^9>ÚÎı½ùÛ½¤4K¾6W¾¥/2¾ÿ ¯=U¥ù=ù2Ä=¦x =}£r=’W1¾û>K¥©½àİá=gJW¼¹ì+¾ßº=|Ô>¥Mo½¸£¾«‘˜<¨Ä<$ª>>0;b¨U=ôÁ=\0ã<C.=‰D¾Áe>™ùM=ûXH½ëöÚ¼FH,>„u‰=]D¾Nâ½AÏ»‡k4>ù†ú=…Æ½¯7<¾š+¾hïÖ¼”g>¶°ä½ÍR¯½7×U¾J¯ì½·ë<øó=ñ½¾ÍÆ%>çÊ
->³Ey½~¦œ½“İ=eL˜=ó >Í‹¾]·½^#¾·ê:¾9“ö=á~÷½r,9="v§½ËÑŸ¼ù“J¼¼š;=S>Ø=½×;=c',=İ‚'¾»ÕT¾j´–<¹a)>º«Œ=òzD>×àÌ½¨ã¼A’=	šo=!ó‘½$õ¼!¾Q¢¾#O>ø¸4¾OM6=øì=Á/¾ÏT¾ßâN>S¬ƒ¼ıåË=Á;¨½"ñD>I
-õ½CÒö½¾ j">-Áç<vL¢;s¬½V‚½ÿœd=yâ¼oU—½èk+¾¨ø=y¥½Êvô<NP=¾Ü;=íïê¼»Ö#>¬Î"=>¢O¾BĞ=6›>1D¾×’¾>ûòR»$ô‰½5±L½ 'ª½Ïhø<:>0Ù=Î‰¾9Fõ½ã¾ã£ã= ½Ô=ƒ÷š=.
- ¾8“>u­=WI>m>]D>…9&¾z½Ê :>ÉDĞ½‡gR>ÕX+;)óÓ½¾h½† ½ãïQ>(>ÀK=38<>‡¤¸=Â*ı=–ÆN=ß¢¾fWœ<‰f?>îOE<å³<´ÂM¾å&¾=•¾jàš½Œ¾½¤Ê.>ıx=ßÉ-¾Q N½ÍÉÖ½a¥>€Êñ<1
-=Öwö<5İ¾Öwõ½ƒjH½ìº=ºÓR¾DÀ»½©¾=¬80½bgÀ¼U‹¼tÇ"½«$Á½œ¹¿=¨˜>n±R>È4K¾rÍV¾²÷.¾ój'½Ù&¾±úºä3>Şù|<E>A%>+}H½²	>÷N+>Sİ¨½1T>Yş;àqM>/
->Úİ‹¼Ff=ğ>›6;>¬Hû»,Î@¾²dâ½$‰¹¼{+>`m<æÌŞ=PJJ¾Úˆ&=Rç>¦/3>9d½2t=ì4N¾”‹Ö½d¬<Ç¾Ğ\=>	¶=íÉM¾mí:>7w½Gb¾l>kK®½bÈ½Nù1= V%¾£·=ß)¬=oWA>¦Ö¼ŠÌ=¾Ä½j¿¼B¼=Oª€½j½?Î?>E“Ê<çj¹½³¦“<ªòõ½íYT½c’A>oÂ=XaH>É6>)š½iî½	5> >W‡[=ãA<Î{d½‡óä»‡ÄÜ½ŠÌ^½Ï6=ÖĞ@>ÇSn<õ^¤½÷é¾ÃÁ%>£y¶½2.´=è^â½EÏ>±a!¾ã³#>ÖµĞ½6GØ¼Ä½¯=^
-ğ½€·;ø{=-A¾à(•½Y£©½ñ¼$(¾*Îô<¤5Ã=ÖÃ‹½êV1>Ñ¶<S6™½-%Ÿ=˜ñ¿=‘ ¾¨Ë>
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant435
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant436
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-œ
-b•
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter432
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-8
-value/j)
-"
-ßgÂ8×Ä¹w
-fºÊG›9ç×7Ì•)9Ï±&º
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBPlaceholder126249
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant425
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant426
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant406
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant410
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBPlaceholder126241
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-Ô
-bÍ
-needs_gradient
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBParameter398
-typeBVariable
-dynamic_axis	Z 
-	is_sparse €
-valueöjï
-8"ã
-àR‹¹
-ƒº­è(9v
-¿:#¢Ú:u'ó9¤}»j9Ûº7»í®:ÕºØšù:»ûšº ;Õ:®‚»ºÅB`¹-Å:2Âº»¤º´úç¹©!»±Ú’¹åV;ÆÌ :ÏÙº´Ô´¹®ß:.¶·¿:a„µ:¢Sº–œÇ¹ó¿‚:Ê€:|–¦ºÅQ¹Îëº/ºî½Ú96?J9uAE;ãà¿º‹™9Õ;6äG9’Œ:öİ­ºr¿9+™ºIACºJ‘!;âUÁºJI»T†¯¹’º
-Ô
-bÍ
-needs_gradient
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBParameter397
-typeBVariable
-dynamic_axis	Z 
-	is_sparse €
-valueöjï
-8"ã
-àÌ€?€?âõ?iU€?´B€?Ï?€?¹ã?åİ?Aæ?ï€?Ä€?õë?²ß?ê€?¥	€?Ï€?W€?f¬?Ñ‹?Vñ?ã`?€?µ6€?€?ˆ?ÜÊ?×(€?Í1€?öw?,÷?Xî?´€?†õ?‡Ù?ö€?Õ?ê
-€?üÎ?ç?i€?½'€?1…?Œ€?€?Fü?¨F€?7—?ï?1€?c~€?Š8€?¬î?$?3Ù?Û€?
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBPlaceholder126234
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBPlaceholder126235
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-‡
-b€
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter229
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-8¡
-value—j
-8"ƒ
-€3m|>îm[>´©1>ü`…>´ñ¾1e¾XÂ,¾—èz¾q¦•¾hÂé=ŞÅÀ=S“>÷=>|te¾A=¾%v‡¾íœ>Ó¼&=õ³½5ô’½îãŠ¾üí†¾cé°¼Ì(½š,>çÕ½ÊËš¼xúi¾£K©½/ÁJ¾22B½¡µ½F–>BÛÆ½Lõ½·•W=.|Ş=m”<n 1>!ù™>³ön¾#H>Âó_>ª–>;F‡½ƒ!~½¹„5>Á‚P¾ğ2C>ì••¾·Z¾õ±
->¡Î‚¾ĞB‰½ôíİ½.s¾¶j<>MP¾oy;4×E>j[Å=>	Ä¦½¤zI¾^¥¿½©:¾³¼>^Rp¾êf“¾`>•ç½¯Y3>øä<gŒb¾	›> ØQ¾û°½ ‰>ş>¾ÛŸ>Øy¾ê€x=kL=>ôÛ=‘no½“£É½L$‘>„|î½3›>$Bı=¦/¿½M»‡»i¹°=?Éø½8ËŒ¾_mF¾uÍ+>Æƒ¼ÿ˜½ñJ<Ó,,¾Qq!=g¾[ =nËš½äŸ’=†ü>º\½'è£=-¿=Ìl_<iË=Ó|¾«™–>Şë&¾&wŠ>±©C>)‘c¾ T?¼€½š¾ó¼½åp¾(~€<†uç¼MØI¾H¢<Àı¾•Şé½"´L>’w×=pY>ï’‡>é¾*>]¾D	:>ä­½pŸ½€7>j‰¾íí¯=mƒ¾eæJ=ª¤>qÏ> e6>¶Y>Ù­=÷wƒ=Yt˜=(7½8ıx¾”j–=zä×=‡£>ö\1¾@f6½ôéF=i£B½k#K¾H¾wk¾øÂ>XÛ=Ó×u>Çã%½l^!¾0š;=}½«>”¾ßôe>*®š¾<9„>X7¾Bƒf½*ñ)¾Äª€<•E¾}×>™.H½O«½#¾‘ê“½+†œ>+Wl>÷8å=‡€¾£3†>Íù/½pË>¿5¾ ó<;ZŠ>WIß=)„=¾'„>éÏR>šuâ=$S½³”€¾Zœ•>×ª>{ D¾¦R¾Â'@¾"£j>$/¾×½)¾à9A>U÷”=‘ˆ—¾ä	÷=M·–<U<E>>~>†yÇ½T‘‡>U]Z¾-.>=Rˆ¾iÁy>şnS>Ìs¾´$‰¾Ç­S¾jbê=] >}n=©‘¾2¶-½ªœ¾ŒÙ>P¾ßŠ¾ÜLÖ=œ7¾ì*œ¼|y>†¤¡½OdK>|ªk=ï’ê½JJ¾ôM[>1‹>²ûE¾-”™<#ç>?3#>>s>do=ºìŞ¼éğ™>ù“>K5¾¼Ø=<Lz>x)?¾:#P=å¦¼æla½4»;½?ÁÖ½L)t¾u½¿½¯¹<‚OÔ¼Å°<bÓ¾Bş‡¾±¶ò=¥sØ=³cJ>x9\>³<>£‹¾‚·L:&F…>ŒØ±¼V-Ï=.8k>Ÿ™w¾†TÏ=ÑSb<-Ë¼ùáb>cÃV>ë'=…ç]>-Ìº½Q|M>ŒD¾Øií»òvˆ¾İá½½pÜ¸="[:>†#Î=à&w½¿µ¾Ô}Á½!°ÿ»ûIp>ˆ¢(>Ú¾½‚¾6wh¾Ù°x>ëÇ½¶at¾nrˆ¾a˜½LŠ¯¼_>
-¥–¾Õê·½×÷=Ş&Æ½E_>7µ>gLŠ>êî<“3¾]if¾ÏD·=‹İ	¾±ì?¾™0v>®ƒ^¾³*½lö¾ n½ ¾n0=¾oı>tlV>Vc”¾-„=‹Ã».§‚>í¸C>Lv>mÑ¨=GÁ>_)	>´ØU¾œMT¾A®>ù5ú½Çó> 
-n>uÁj>› Ñ<Sü›¾ ½†øh¾bDº=ıA¾_Í½½§±½ïë=ˆ{>JİN¾Ù4ä½kĞ<ú½BØ=0Ê!>¥t‰>x<„>qTf>L…ˆ>[m=*ø’¾Œ‰&½:S½À’ ½zF=O4#>aˆ`>R"È½Xô•>Ñµ‚¾lòH> ¾TB¾mb1¾I+•>õ­‡½¶M">M¼3/»80f¾	7=´B>j™Õ½äI“>%î\>@¥¾U]¾`˜L>Õº>ªx=xz½M!>?$[¾­>~()¼Æ{„>du™>6K¾½~›¾ôĞ;Nê½eÕ:¼X<*¼œ3A>Å›¾òY}=)¸=%Åt½näk½•a¾>Z>7ºj>€/>fÇ¶=/p=ˆø=ÀÕ@>N`Ş½«­	¾–_>FÊ=tèŠ¾Ì¾ê=Í	;¥2•½n±>b|?<³ÇS>÷Õ™>œU¾]-Ä=SJà=±âÒ=8”¡=(™>ŒGL>
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant233
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant234
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
-å
-bŞ
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter230
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-8€
-valueöjï
-8"ã
-à¶ºÃèS:v;¹#Â9:¼/!ºRŒ|ºcO:(‹'ºH
-¿ºÜ³cºy@¹¤há¹ÄH¹A„tºáñ<:Ìmg9	9A»^:9ç8¬:¯ö¡ºËÕºn::ßº.ºÜõ¹çù¶9	Ü¹dns¹“å$:ÆÛ›¹Æ[„¶ÿ;:vUV7AxŸ9Ÿå€¹ßÏ(7Ÿÿ9à‚ºJ}8ñóºU':€:¢9mdº]à’º…:	:e\:Öà:¾¦º:_rº|Y%9ÊL¢º|#z:ï#9kc:eË99ûÙ¹
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind(
-uidBPlaceholder126211
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-‡
-b€
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter142
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
-¡	
-value—	j	
-"ƒ	
-€	NJ/¾&L0¾/Ÿ¾¼dÍf¾Ål½_F> [¼íŞL¾j”=ˆ„=¥UF¾AoÏ<fH>èÚ¾ ‡½tWñ½jÈ½×8>MÎ:¼²Ş½£BÏ½_aò=¢¼,%¼½ª½âÌ:¾Èm8¾^<Q¾¼=î=•1>3ğI½P.<¥4@½'ì¾û@=™C;>İÖv½«N]¾>¯Ğ½067>½è½"<Ú×f¾Mê:àq>½KQ=øO>+~4>Õ"¾Å>$OÒºÏÖÅ<L!Ş=Xaj¾pnÊ¼r¦¾ùúV¾cV¾Øk¾Z…I¾è£q¾+‹0¾:Ş¾ú™F>EÅ=— M>©“e¾W >©3ò=ø4ş=wj>mÚõ<Èœá»‰ö½à]>ÍIœ=¢•<RÑ5=º=o[³={#Ó==- ¼{:ƒ=·í>pú=>t3¦=Ú†½×^l¾êâ+¾…Î9»Õ8Ş=¦š>:	İ½Vo,¾İ>ÀœG¼z<b>¢9>>Ñu¯=åŒ‡=Î¬7>Ââş=Nw\¾ş1>Y³ß½$S[>G N¾ÕÉ½`È*½ÙÓÏ=Lø‘=ªÖ1=§ƒD¾¢>¾Éë¾N~¿=}½Š½ˆº¢£=”ƒŸ=¹½˜¾:8>‡Sæ=×û(¾Ë|
->h‹º°cæ½‹c;é3»<|½ƒêı;`¾sÓ½©’'½Ëñ4¾"B> .>|)3>õW¾I3¼}•Ë=.h¾«8>]áš=)Ö=SRz½¦»Z¾….Ù;ù_=À@€½QXI½ä »=Má¾ì¾†¼“ï.=é¼wÙe¾nA¼Ú: ½Ø˜Á½ÃFD¾ßr¨½Šû1¾,†½EÚ>{hQ<kcb¾³±T>û@¾«½ÖŸo<BtL>4Ê=’Qø;ßÅo½Z+Ü½—â¼¸w=K¼‡F>îb„=Ï=¦b»*¾~¾¢»Ö·4>BïF>öiÛ½"À¶¼šò<<ö	¾}@Y¾˜ˆË=~=xšø»šsX=Ë2V¾˜½)½Šò=én>¾IæÈ=¬×G¾iòQ¾½ ¾tg">ò,+=œ=>"DZ>Ü‡g¾øQ=kEŸ9Ü½8ê=÷û½2øÛ;~æÕ:Äo¼ jÈ¼P-¾(Ñ =Q#›=‚k½² G¼¢˜m<ğ5ç½áùB> ç½îZ²=U~=ËG>Œ=[>v>‹À=áÓn½ûæE¼W½j½y=ğw•= «l>ó,s½ {ı=×°+¾$Ï=”Á¾NÁÏ½15¿=Ä€>¶×Ú=?½wÉ¾i,¾/é½YÏ¾€»u¼¸ú˜½JÆ=÷Âi¾­ƒ¼àÜù¼’Ù.>2rR=>¡½éô˜=T¾7b=t>ø\H>¸vX>+Äî=>JK¾¤ -½4í>>l„½e°½N…=‘‚=0šÆ=
-m>õñ¼¼GÛ¼¾¦=>™e>÷B½œ'	¾wÆ>
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant146
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃÇ
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant147
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
- PÃG
- 
-b™
-needs_gradient
-version(
-	data_type(
-kind(
-uidBParameter143
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-<
-value3j-
-""
- ÚÖˆ9ë¨¸°êºB÷ºãİ§¹šwòºKô9ºú:
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
- 
-kind(
-uidBPlaceholder126205
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ç
-bà
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidB
-Constant16
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-    
-ç
-bà
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidB
-Constant20
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-ÍÌL>
-…
-bş
-
-needs_gradient
-version(
-	data_type(
-kind(
-uidB
-Parameter5
-typeBVariable
-dynamic_axis	Z 
-nameBW
-	is_sparse 
-shapeJ
- ¡	
-value—	j	
- "ƒ	
-€	¦_Å½5>ÄI¾¤ë<êC<ƒ¹ ¾¶¸=áP¯¼eáÇ=yøë=@`ª¼½%3=çú=Æ…/½ÆÇ½’£k¼Îšª=5|e=Ï…<«¬w½šNÎ½íÙº<™Ë•<!Ï½w@Ì½Õn¾“o<ı=X=öMú¼Uaü=;Á¸½>"²½5§»6{½·õ
->_ı>¤/Ã½‡G=T¼œ=ogÆ=ş½¼½qçÕ½)oT½›¶Ş=K%ã¼{VÂ¼Öô©;€Jäº#ùß½—=à>Ğ½×á§½XZ±½éÍß<ÀÈ=çìÓ=,ƒ<¢m:<à`<Zÿß½èï>ñY®=_‚½‡ğj<8áf½HZ¾':ü½@<±½Ïò¾·.Õ¼(0ã=I?Û¼Ëzœ=˜]=ö½L*¾t(„½õ±M=ƒ¯ê=zF½×½—R­=zçå<²^=É>=@Ê½¿zó<˜$G»&¾s?[=r}=}„=·œ<(í;½Àd>[fÇ=ø«Î=••>=Ùô¦=óô°=ç7×¼ö|®=ËQ=àåé½3oÂ=«P®<Ÿ¨ø< ^7¼•£Š=óØ½Œôç½`¢È<>Ú¶æ½š¤½Ëå%=/†¼ŞÖ²<¡Ó]=x¤=üe>ƒÒ=Ñš×:ê>K9å½çg¼=\ws»&Wƒ½º"	=xy7½]§=h?ş½©H¹	[¾}é¼ÒƒC="}ß<‡sª»5Üc½TËT=çü¾.µ‰<öÏ=-2ê½ÂW½ô4´¼
-»	>Ã…N¼¤~ö¼[¶C¼Æ°=ú¿À=¥ÁŒ½û¾ş›V¼X­ß<ÀA>ÖíØ½ÊA½OSã½êD¹º`PC½'¦¹½†É,=@dG½&öh=–°®½£>)í½½±?½sç>À2Ù½3ã»ã~=Ö¯œ<¿=ˆ¼ó„¾Á-=ıIˆ=Ò>ÀKÔ<÷">ç G<r^I½Öãî=ñ¬€½­Ù)=ÆĞŒ=@º½’jS=S¶=×ÍË½g
-=(C£½ÙÊõ½Éÿ_=ÉCU=­e:=x =ÖÂe<k¼-¼k¨¸=s¯½]+‡¼™3<{«ï<F­c¼	™î=±‡ì¼ìŠ=úş=mˆ½‘à½V‰½XÇ=/{¶=ø"ğ=­^>ÉÕ]=«*½Ö<=gö=İ¾w ¾ãˆö=<1j=Ÿˆá<±û¼[†<[{æ=¡c>˜Y¼ºš¡= )ö=U„¦=*Ró=TÛ;=Z<­òĞ½l`=Z¦=Ù	î»÷XU½ÏßÁ»z—z½İ÷ë=hí<<Ÿ8½
-Hò¼È+§=6{ñ=æçP¼ÈŸ´:Q¥Ô=}°½Ñ¡j½²ô«½§»º] ¼W;éÿ¾£">Ç =%šg=-Wä<	:=Ìí,¼_W\½:Ï9=Œ]å½Š2¼=ËdÙ½=öo=ÊkË<à2¾2?V½|ùİ½*X½JR½÷m½ôåú<Ì">n_ç=‡o=¡{¼úüç=ÓM;¹Ó«½
-ƒ
-bü
-needs_gradient
-version(
-	data_type(
-kind(
-uidB
-Parameter6
-typeBVariable
-dynamic_axis	Z 
-nameBb
-	is_sparse 
-shapeJ
-  
-value–j
- "ƒ
-€×G¯¸Pm	9wuŸ9sS9©û¹D¡)º©Zã8)Ìä7n£»º4<º>@:;©7:°
-:	:xdù8ò¶:²r¢ºëÆ: ÄÇ:{œºD •9“jRº"ˆ$¹ĞûX8EeÒ:˜Œ»¹´°dº¹_¹|• ºAi:æesº
-ü‡·
-ç
-bà
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidB
-Constant34
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  ÀÀ
-ç
-bà
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidB
-Constant35
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-  À@
-ë
-bä
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind( 
-uidBInput3
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
- 
-kind(
-uidBPlaceholder126196
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-
-kind(
-uidBPlaceholder126189
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBBlock268_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-8
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126217
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-8
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126219
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-8
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant378
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-¬Å'7
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBPlaceholder126227
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBPlaceholder126229
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-8
-kind(
-uidBBlock338_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBBlock623_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-M
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126261
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-M
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126263
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-M
-è
-bá
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant799
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-¬Å'7
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBPlaceholder126271
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBPlaceholder126273
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-M
-kind(
-uidBBlock759_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-—
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBBlock1110_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-h
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126305
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-h
-–
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126307
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-h
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant1352
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-¬Å'7
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBPlaceholder126315
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ö
-bï
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBPlaceholder126317
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-h
-kind(
-uidBBlock1312_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-˜
-b‘
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBBlock1733_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-˜
-—
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126350
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-˜
-—
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126352
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-˜
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2042
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-¬Å'7
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBPlaceholder126360
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBPlaceholder126362
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ø
-bñ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-˜
-kind(
-uidBBlock2002_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-˜
-b‘
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBBlock2486_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-ğ
-—
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126394
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-ğ
-—
-b
-needs_gradient 
-version(
-	data_type(
-kind(
-uidBPlaceholder126396
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-nameBpointwise_kernel
-	is_sparse 
-shapeJ
-ğ
-é
-bâ
-needs_gradient 
-version(
-	data_type(
-shapeJ 
-kind(
-uidBConstant2861
-typeBVariable
-dynamic_axis	Z 
-	is_sparse 
-valuej "
-¬Å'7
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBPlaceholder126404
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-÷
-bğ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBPlaceholder126406
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 
-ø
-bñ
-needs_gradient 
-version(
-	data_type(
-shapeJ
-ğ
-kind(
-uidBBlock2821_Output_0
-typeBVariable6
-dynamic_axis&	Z 
-RÿÿÿÿdefaultBatchAxis
-	is_sparse 

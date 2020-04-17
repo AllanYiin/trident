@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: tridentx
-Version: 0.4.0
+Version: 0.5.1
 Summary: Multiverse for Deep Learning Developers without Pitfall
 Home-page: UNKNOWN
 Author: Allan Yiin
@@ -19,8 +19,6 @@ Description: ### Trident
         * [Tensorflow Examples](./exsamples_pytorch)
         * [Pretrained models](./PretrainedModels)
         * [License](./LICENSE.md)
-        
-        
         
 Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta

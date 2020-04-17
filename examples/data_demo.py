@@ -1,7 +1,12 @@
 import os
-os.environ['TRIDENT_BACKEND'] = 'cntk'
+os.environ['TRIDENT_BACKEND'] = 'pytorch'
 
-from  trident import data
+from  trident.data import *
+import torch.nn as nn
+raw_imgs,raw_labels=load_stanford_cars('cars','train')
 
-raw_imgs,raw_labels=data.load_stanford_cars('cars','train')
+dataset=load_mnist('mnist','train',is_flatten=False)
+
+
+nn.Sequential
 

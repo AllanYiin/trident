@@ -43,3 +43,9 @@ def element_cosine_distance(a, b,axis=0,keepdims=False):
     normalize_b = l2_normalize(b, axis=axis,keepdims=keepdims)
     distance = 1 - tf.matmul(normalize_a, normalize_b, transpose_b=True)
     return distance
+
+
+
+def gram(x):
+    features = C.minus(C.reshape(x,(x.shape[0],-1)), C.reduce_mean(x))
+    return C.times_transpose(features, features)

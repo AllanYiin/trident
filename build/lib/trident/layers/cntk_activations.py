@@ -2,19 +2,20 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from backend.common import  epsilon,get_function,camel2snake
-import numpy as np
 import cntk as C
-from cntk.ops.functions import ModelFormat, CloneMethod, Function, BlockFunction, load_model, register_native_user_function, native_user_function
-from cntk.internal import sanitize_input, sanitize_shape, sanitize_axis, sanitize_dynamic_axes, sanitize_axis_list, sanitize_multi_axis_reduction_list, typemap, sanitize_pooling_args, sanitize_convolution_args, sanitize_permutation, sanitize_dtype_cntk
-
-
-from cntk.ops.functions import Function, BlockFunction
-
+import numpy as np
 import six
+from cntk.internal import sanitize_input, sanitize_shape, sanitize_axis, sanitize_dynamic_axes, sanitize_axis_list, \
+    sanitize_multi_axis_reduction_list, typemap, sanitize_pooling_args, sanitize_convolution_args, \
+    sanitize_permutation, \
+    sanitize_dtype_cntk
+from cntk.ops.functions import Function, BlockFunction
+from cntk.ops.functions import ModelFormat, CloneMethod, Function, BlockFunction, load_model, \
+    register_native_user_function, native_user_function
 
+from ..backend.common import epsilon, get_function, camel2snake
 
-__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','Softmax','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','prelu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','softsign','softplus','hard_tanh','logit','loglog','mish','softmax','get_activation']
+__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','Softmax','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','get_activation']
 
 @C.typemap
 def Identity(name=''):
@@ -35,6 +36,7 @@ def Sigmoid(name=''):
         return  C.sigmoid(x)
     return inner
 
+@typemap
 def sigmoid(x, name=''):
     return C.sigmoid(x)
 
@@ -45,7 +47,10 @@ def Tanh(name=''):
     def inner(x):
         return tanh(x)
     return inner
-tanh=C.tanh
+
+@typemap
+def tanh(x, name=''):
+    return C.tanh(x)
 
 
 
@@ -57,6 +62,7 @@ def Relu(upper_limit=np.inf,name=''):
         return relu(x,upper_limit)
     return inner
 
+@typemap
 def relu(x,upper_limit=np.inf,name=''):
     if upper_limit<=0:
         raise ValueError('Upper limit should greater than 0!')
@@ -71,6 +77,7 @@ def Relu6(upper_limit=np.inf,name=''):
         return relu6(x)
     return inner
 
+@typemap
 def relu6(x,name=''):
     return relu(x,6)
 
@@ -111,17 +118,17 @@ def SmoothRelu(name=''):
 def smooth_relu(x,name=''):
      return C.log(1 + C.exp(x))
 
-
-def PRelu(input_shape,name=''):
-    alpha = C.Parameter(input_shape[0], init=C.he_normal())
+@typemap
+def PRelu(input_shape=(1),name=''):
+    alpha = C.Parameter(input_shape, init=C.he_normal())
     @C.BlockFunction('PRelu', name=name)
     def inner(x):
-        return prelu(x,alpha)
+        return C.param_relu(x,alpha)
     return inner
 
-
-def prelu(x,alpha,name=''):
-    return C.param_relu(alpha,x)
+@typemap
+def p_relu(x,alpha,name=''):
+    return PRelu(name=name)(x)
 
 
 @typemap
@@ -163,6 +170,7 @@ def HardSwish(name=''):
         return hard_swish(x)
     return inner
 
+@typemap
 def hard_swish(x, name=''):
     return  x * hard_sigmoid(x)
 
@@ -174,7 +182,11 @@ def Selu(name=''):
         return selu(x)
     return inner
 
-selu=C.selu
+@typemap
+def selu(x, name=''):
+    return  selu(x)
+
+
 
 @typemap
 def LecunTanh(name=''):
@@ -183,29 +195,31 @@ def LecunTanh(name=''):
         return lecun_tanh(x)
     return inner
 
+@typemap
 def lecun_tanh(x, name=''):
-    return 1.7159 * C.tanh(2 / 3 * x)
+    return 1.7159 * C.tanh(2 / 3 * x,name=name)
 
 
 @typemap
 def SoftSign(name=''):
     @C.BlockFunction('SoftSign', name=name)
     def inner(x):
-        return softsign(x)
+        return soft_sign(x)
     return inner
-
-def softsign(x, name=''):
-    return C.log(1 + C.exp(x))
+@typemap
+def soft_sign(x, name=''):
+    return C.log(1 + C.exp(x),name=name)
 
 
 @typemap
 def SoftPlus(name=''):
     @C.BlockFunction('SoftPlus', name=name)
     def inner(x):
-        return softplus(x)
+        return soft_plus(x)
     return inner
 
-def softplus(x, name=''):
+@typemap
+def soft_plus(x, name=''):
     return C.log(C.exp(x) + 1)
 
 
@@ -218,6 +232,7 @@ def HardTanh(name=''):
         return hard_tanh(x)
     return inner
 
+@typemap
 def hard_tanh(x,name=''):
     return C.clip(x,-1,1)
 
@@ -229,6 +244,7 @@ def Logit(name=''):
         return logit(x)
     return inner
 
+@typemap
 def logit(x,name=''):
     return C.log(x / (1 - x))
 
@@ -236,10 +252,10 @@ def logit(x,name=''):
 def LogLog(name=''):
     @C.BlockFunction('LogLog', name=name)
     def inner(x):
-        return loglog(x)
+        return log_log(x)
     return inner
-
-def loglog(x,name=''):
+@typemap
+def log_log(x,name=''):
     return 1-C.exp(-C.exp(x))
 
 
@@ -255,8 +271,9 @@ def Mish(name=''):
         return mish(x)
     return inner
 
+@typemap
 def mish(x,name=''):
-    return x *( C.tanh(softplus(x)))
+    return x *( C.tanh(soft_plus(x)))
 
 
 @typemap
@@ -266,6 +283,7 @@ def Softmax(name=''):
         return softmax(x)
     return inner
 
+@Function
 def softmax(x,name=''):
     return C.softmax(x,0)
 
@@ -298,7 +316,7 @@ def softmax(x,name=''):
 def get_activation(fn_name):
     if fn_name is None:
         return None
-    fn_modules = ['trident.layers.pytorch_activations','torch', 'torch.nn']
+    fn_modules = ['trident.layers.cntk_activations']
     activation_fn = get_function(camel2snake(fn_name), fn_modules)
     return activation_fn
 

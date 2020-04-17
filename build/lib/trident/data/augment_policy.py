@@ -1,6 +1,7 @@
-from PIL import Image, ImageEnhance, ImageOps
-import numpy as np
 import random
+
+import numpy as np
+from PIL import Image, ImageEnhance, ImageOps
 
 __all__ = ['AugmentPolicy','SubPolicy']
 

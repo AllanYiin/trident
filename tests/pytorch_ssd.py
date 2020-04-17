@@ -21,17 +21,17 @@ from torch._six import container_abcs
 from itertools import repeat
 
 
-from ..backend.common import *
-from ..backend.pytorch_backend import to_numpy,to_tensor,Layer,Sequential
-from ..layers.pytorch_layers import *
-from ..layers.pytorch_activations import  get_activation,Identity
-from ..layers.pytorch_normalizations import get_normalization
-from ..layers.pytorch_blocks import *
-from ..layers.pytorch_pooling import *
-from ..optims.pytorch_trainer import *
-from ..data.image_common import *
+from backend.common import *
+from backend.pytorch_backend import to_numpy,to_tensor,Layer,Sequential
+from layers.pytorch_layers import *
+from layers.pytorch_activations import  get_activation,Identity
+from layers.pytorch_normalizations import get_normalization
+from layers.pytorch_blocks import *
+from layers.pytorch_pooling import *
+from optims.pytorch_trainer import *
+from data.image_common import *
 
-from ..data.utils import download_model_from_google_drive
+from data.utils import download_model_from_google_drive
 
 __all__ = []
 

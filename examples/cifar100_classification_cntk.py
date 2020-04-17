@@ -14,7 +14,7 @@ from cntk.learners import *
 import numpy as np
 import linecache
 
-from trident import backend as T
+from trident import get_backend as T
 from trident.layers.cntk_activations import *
 from trident.layers.cntk_layers import *
 from trident.layers.cntk_blocks import *
@@ -22,6 +22,7 @@ from trident.layers.cntk_blocks import *
 C.debugging.set_checked_mode(False)
 
 
+result=get_activation
 
 def PrintException():
     exc_type, exc_obj, tb = sys.exc_info()
@@ -42,7 +43,7 @@ def calculate_flops(x):
 
 
 data = T.load_cifar('cifar100', 'train', is_flatten=False)
-dataset = T.Dataset('cifar100')
+dataset = T.DataProvider('cifar100')
 dataset.mapping(data=data[0], labels=data[1], scenario='train')
 
 input_var = C.input_variable((3,32, 32))
@@ -74,6 +75,120 @@ def mb_block(x, size_out, expand=1, kernel=1, strides=1, se_ratio=0.25, dc_ratio
         x1 += x
     print(x.shape)
     return x1
+
+
+
+
+def gcd_mb_block1(x, size_out, expand=1, kernel=1, strides=1, se_ratio=0.25, dc_ratio=0.2, **kw):
+    """ MobileNet Bottleneck Block. """
+    input_shape = x.shape[0]
+    expand_shape =int( expand)
+
+    activation_fn='leaky_relu6' if size_out==24 else None
+    padding='valid' if strides==2 else 'same'
+
+    if strides==2:
+        x = T.GcdConv2d(kernel_size=(3,3), num_filters=expand_shape, strides=strides,padding=padding,activation=activation_fn)(x)
+        x1 = T.GcdConv2d(kernel_size=(1, 1),num_filters=expand_shape*input_shape//64,strides=1,padding='same',activation='leaky_relu6')(x)
+        x1 = T.GcdConv2d(kernel_size=(3, 3), num_filters=expand_shape, strides=1, padding='same', activation='leaky_relu6')(x1)
+        if dc_ratio > 0:
+            x1 = C.layers.Dropout(dc_ratio)(x1)
+        x = x1 + x
+    elif strides == 1:
+        x1 = T.GcdConv2d(kernel_size=(3, 3), num_filters=expand_shape, strides=strides, padding=padding, activation=activation_fn)(x)
+        x1 = T.GcdConv2d(kernel_size=(1, 1), num_filters=input_shape, strides=1, padding='same',activation='leaky_relu6')(x1)
+        if dc_ratio > 0:
+            x1 = C.layers.Dropout(dc_ratio)(x1)
+        x = x1 + x
+
+    x = T.GcdConv2d(kernel_size=(3, 3), num_filters=size_out, strides=1, padding='same', activation=activation_fn)(x)
+
+    # if input_shape == size_out and strides==1:
+    #     x1 =C.plus(x, x1)
+        # x2 = T.GcdConv2d(kernel_size=(1, 1), num_filters=expand_shape, strides=1, padding='same', activation=T.Relu6)(x1)
+        # x2 = T.GcdConv2d(kernel_size=(3, 3), num_filters=expand_shape, strides=1, padding='same',activation=None)(x2)
+        # # se = GlobalAveragePooling()(x2)
+        # # se = T.GcdConv2d(kernel_size=(1, 1), num_filters=se_shape, strides=1, activation=T.Relu6, padding='same')(se)
+        # # se = T.GcdConv2d(kernel_size=(1, 1), num_filters=x2.shape[0], activation=T.Sigmoid, padding='same')(se)
+        # # x2=x2+ x2 * se
+        # x2 = T.GcdConv2d(kernel_size=(1, 1), num_filters=size_out, strides=1,activation=T.Relu6,padding='same')(x2)
+        #
+        # x1 =C.plus(x1, x2)
+
+    return x
+ #(80, 184, 3, 2, 1, 0.25, 0.2)
+gcd_spec_b1 =((24, 56, 3, 2, 1, 0.25, 0.1/7.), (40, 88, 3, 2, 1, 0.25, 0.2/7.),(56, 104, 3, 1, 1, 0.25, 0.3/7.), (88, 136, 3, 2, 1, 0.25, 0.3/7.), (104, 152, 3, 1, 1, 0.25, 0.3/7.))
+
+def get_gdc_efficientnet_b1(x):
+    global  gcd_spec_b1
+    x = T.Conv2d(kernel_size=(3, 3),num_filters=16, strides=1, activation='h_swish')(x)
+    for out_size, expand, kernel, strides, repeat, se_ratio, dc_ratio in gcd_spec_b1:
+        for i in range(repeat):
+            x = gcd_mb_block1(x, out_size, expand, kernel, strides , se_ratio, dc_ratio)
+    x = T.GcdConv2d((3, 3), num_filters=112, activation='leaky_relu6')(x)
+    x = T.GcdConv2d((3, 3), num_filters=232, activation=None)(x)
+    x = T.GcdConv2d((3, 3), num_filters=290, activation='leaky_relu6')(x)
+    #x = T.GcdConv2d((1, 1), num_filters=150, strides=1, padding='same', activation=None)(x)
+    x = T.Classifier(num_classes=100,is_multiselect=False,classifier_type='dense')(x)
+    return x
+
+
+
+
+
+def gcd_mb_block2(x, size_out, expand=1, kernel=1, strides=1, se_ratio=0.25, dc_ratio=0.2, **kw):
+    """ MobileNet Bottleneck Block. """
+    input_shape = x.shape[0]
+    expand_shape =int( expand)
+
+    activation_fn='leaky_relu6' if size_out==24 else None
+    padding='valid' if strides==2 else 'same'
+
+    if strides==2:
+        x = T.GcdConv2d_1(kernel_size=(3,3), num_filters=expand_shape, strides=strides,padding=padding,activation=activation_fn)(x)
+        x1 = T.GcdConv2d_1(kernel_size=(1, 1),num_filters=expand_shape*input_shape//64,strides=1,padding='same',activation='leaky_relu6')(x)
+        x1 = T.GcdConv2d_1(kernel_size=(3, 3), num_filters=expand_shape, strides=1, padding='same', activation='leaky_relu6')(x1)
+        if dc_ratio > 0:
+            x1 = C.layers.Dropout(dc_ratio)(x1)
+        x = x1 + x
+    elif strides == 1:
+        x1 = T.GcdConv2d_1(kernel_size=(3, 3), num_filters=expand_shape, strides=strides, padding=padding, activation=activation_fn)(x)
+        x1 = T.GcdConv2d_1(kernel_size=(1, 1), num_filters=input_shape, strides=1, padding='same',activation='leaky_relu6')(x1)
+        if dc_ratio > 0:
+            x1 = C.layers.Dropout(dc_ratio)(x1)
+        x = x1 + x
+
+    x = T.GcdConv2d_1(kernel_size=(3, 3), num_filters=size_out, strides=1, padding='same', activation=activation_fn)(x)
+
+    # if input_shape == size_out and strides==1:
+    #     x1 =C.plus(x, x1)
+        # x2 = T.GcdConv2d(kernel_size=(1, 1), num_filters=expand_shape, strides=1, padding='same', activation=T.Relu6)(x1)
+        # x2 = T.GcdConv2d(kernel_size=(3, 3), num_filters=expand_shape, strides=1, padding='same',activation=None)(x2)
+        # # se = GlobalAveragePooling()(x2)
+        # # se = T.GcdConv2d(kernel_size=(1, 1), num_filters=se_shape, strides=1, activation=T.Relu6, padding='same')(se)
+        # # se = T.GcdConv2d(kernel_size=(1, 1), num_filters=x2.shape[0], activation=T.Sigmoid, padding='same')(se)
+        # # x2=x2+ x2 * se
+        # x2 = T.GcdConv2d(kernel_size=(1, 1), num_filters=size_out, strides=1,activation=T.Relu6,padding='same')(x2)
+        #
+        # x1 =C.plus(x1, x2)
+
+    return x
+ #(80, 184, 3, 2, 1, 0.25, 0.2)
+gcd_spec_b2 =((24, 56, 3, 2, 1, 0.25, 0.1/7.), (40, 88, 3, 2, 1, 0.25, 0.2/7.),(56, 104, 3, 1, 1, 0.25, 0.3/7.), (88, 136, 3, 2, 1, 0.25, 0.3/7.), (104, 152, 3, 1, 1, 0.25, 0.3/7.))
+
+def get_gdc_efficientnet_b2(x):
+    global  gcd_spec_b2
+    x = T.Conv2d(kernel_size=(3, 3),num_filters=16, strides=1, activation='h_swish')(x)
+    for out_size, expand, kernel, strides, repeat, se_ratio, dc_ratio in gcd_spec_b2:
+        for i in range(repeat):
+            x = gcd_mb_block2(x, out_size, expand, kernel, strides , se_ratio, dc_ratio)
+    x = T.GcdConv2d_1((3, 3), num_filters=112, activation='leaky_relu6')(x)
+    x = T.GcdConv2d_1((3, 3), num_filters=232, activation=None)(x)
+    x = T.GcdConv2d_1((3, 3), num_filters=290, activation='leaky_relu6')(x)
+    #x = T.GcdConv2d((1, 1), num_filters=150, strides=1, padding='same', activation=None)(x)
+    x = T.Classifier(num_classes=100,is_multiselect=False,classifier_type='dense')(x)
+    return x
+
 
 
 def _gcd(x, y):
@@ -421,20 +536,19 @@ for cls in ['dense']:
     classifiertype=cls
     for learning_rate in [1e-3]:
 
-        k2 = ' gcd_challenger'
-        z2 = get_gdc_efficientnet_b0(input_var)
 
         k1='baseline'
         z1=get_efficientnet_b0(input_var)
 
-        k3 = 'depthwise_challenger'
-        z3 =gcd_challengerNet(input_var)
+        k2 = 'gcd_b1'
+        z2 =get_gdc_efficientnet_b1(input_var)
 
+        k3 = ' gcd_b2'
+        z3 = get_gdc_efficientnet_b2(input_var)
 
-
-        prefix1='fmnist_model_{0}_{1}_{2}'.format(k1,cls,5e-2).replace('.','_')
-        prefix2 = 'fmnist_model_{0}_{1}_{2}'.format(k2, cls, 5e-2).replace('.', '_')
-        prefix3 = 'fmnist_model_{0}_{1}_{2}'.format(k3, cls, 5e-2).replace('.', '_')
+        prefix1='cifar100_model_{0}_{1}_{2}'.format(k1,cls,1e-3).replace('.','_')
+        prefix2 = 'cifar100_model_{0}_{1}_{2}'.format(k2, cls, 1e-3).replace('.', '_')
+        prefix3 = 'cifar100_model_{0}_{1}_{2}'.format(k3, cls, 1e-3).replace('.', '_')
 
 
 
@@ -475,7 +589,7 @@ for cls in ['dense']:
 
         trainer2 = C.Trainer(z2, (loss2, err2), learner2, progress_printer2)
         learner3 = C.adam(z3.parameters, lr=C.learning_rate_schedule([lr], C.UnitType.minibatch),
-                         momentum=C.momentum_schedule(0.75))
+                         momentum=C.momentum_schedule(0.75),l2_regularization_weight=1e-3)
         # learner =cntkx.learners.RAdam(z_class.parameters, learning_rate, 0.912, beta2=0.999,l1_regularization_weight=1e-3,
         # l2_regularization_weight=5e-4, epoch_size=300)
         trainer3 = C.Trainer(z3, (loss3, err3), learner3, progress_printer3)

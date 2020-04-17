@@ -3,12 +3,12 @@ from __future__ import division
 from __future__ import print_function
 
 import string
+
 import cntk as C
 import six
 from cntk.layers.blocks import _inject_name
 
-from backend.common import epsilon
-
+from ..backend.common import epsilon, get_function, get_session
 
 
 def _moments(x, axes=None,  keep_dims=True):
@@ -19,25 +19,27 @@ def _moments(x, axes=None,  keep_dims=True):
     return norm_mean, norm_variance
 
 @C.typemap
-def BatchNormalization(
+def BatchNorm(
         axis=0,
+        affine=True,
         epsilon=1e-5,
         name=''):
     return C.layers.BatchNormalization(map_rank=1,use_cntk_engine=False,disable_regularization=False,epsilon=epsilon, name=name)
 
-def LayerNormalization(
+BatchNorm2d=BatchNorm
+BatchNorm3d=BatchNorm
+
+def _LayerNormalization(
         axis=0,
-        center=True,
-        scale=True,
+        affine=True,
         epsilon=1e-5,
         name=''):
     return C.layers.LayerNormalization(initial_scale=1, initial_bias=0, epsilon=epsilon, name=name)
 
 @C.typemap
-def InstanceNormalization(
+def _InstanceNormalization(
         axis=0,
-        center=False,
-        scale=False,
+        affine=True,
         epsilon=1e-5,
         name=''):
     """Instance normalization layer (Lei Ba et al, 2016, Ulyanov et al., 2016).
@@ -47,6 +49,8 @@ def InstanceNormalization(
       """
     
     def instance_normalization(x):
+        center=affine,
+        scale=affine,
         reduction_axes = list(range(0, len(x.shape)))
         if (axis is not None):
             del reduction_axes[axis]
@@ -63,17 +67,18 @@ def InstanceNormalization(
     return instance_normalization
 
 
-InstanceNorm2d=InstanceNormalization
+InstanceNorm2d=_InstanceNormalization
 
 @C.typemap
-def GroupNormalization(
+def GroupNorm2d(
                  groups=32,
                  axis=0,
+                 affine=True,
                  epsilon=1e-5,
-                 center=False,
-                 scale=False,
                  name=''):
     def group_normalization(x):
+        center = affine,
+        scale = affine,
         reduction_axes = list(range(0, len(x.shape)))
         if (axis is not None):
             del reduction_axes[axis]
@@ -121,17 +126,20 @@ def L2Normalization(axis=None,epsilon=epsilon, name=''):
         return _inject_name(x,name=name)
     return apply_x
 
-def get_normalization(identifier):
-    if identifier is None:
+def get_normalization(fn_name):
+    if fn_name is None:
         return None
-    if isinstance(identifier,str):
-        if identifier.lower().strip() in ['instance','in','i']:
-            return InstanceNormalization
-        elif  identifier.lower().strip() in ['batch','b']:
-            return InstanceNormalization
-        elif  identifier.lower().strip() in ['group','g']:
-            return GroupNormalization
-    else:
-        raise ValueError('Not valid normalization functions name : ' + str(identifier))
+    if isinstance(fn_name, str):
+        if fn_name.lower().strip() in ['instance','in','i']:
+            return InstanceNorm2d()
+        elif  fn_name.lower().strip() in ['batch','b']:
+            return BatchNorm()
+        elif  fn_name.lower().strip() in ['group','g']:
+            return GroupNorm2d(num_groups=16)
+    fn_modules = ['trident.layers.cntk_normalizations']
+    normalization_fn_ = get_function(fn_name, fn_modules)
+    normalization_fn = normalization_fn_
+    return normalization_fn
+
 
 

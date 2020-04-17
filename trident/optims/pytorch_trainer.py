@@ -1,28 +1,33 @@
+import copy
+import inspect
 import os
+import random
+import shutil
+import string
 import sys
-import matplotlib
-import platform
-if platform.system() not in ['Linux', 'Darwin'] and not platform.system().startswith('CYGWIN'):
-    matplotlib.use('TKAgg')
-from IPython import display
-
 import time
 import uuid
+from functools import partial
+
+import numpy as np
 import torch
 import torch.nn as nn
-from collections import OrderedDict
-from functools import partial
-import numpy as np
-from ..backend.common import addindent, get_time_suffix, format_time, get_terminal_size, \
-    snake2camel
-from ..backend.pytorch_backend import *
-from ..optimizers.pytorch_optimizers import *
-from ..optimizers.pytorch_regularizers import *
-from ..layers.pytorch_constraints import *
-from ..misc.visualization_utils import tile_rgb_images,loss_metric_curve
-from ..misc.callbacks import *
 
-__all__ = ['progress_bar', 'TrainingItem', 'TrainingPlan']
+from .pytorch_constraints import get_constraint
+from .pytorch_losses import get_loss
+from .pytorch_metrics import get_metric
+from .pytorch_optimizers import get_optimizer
+from .pytorch_regularizers import get_reg
+from .trainers import ModelBase, OptimizerBase, progress_bar
+from ..backend.common import *
+from ..backend.pytorch_backend import *
+from ..backend.pytorch_ops import *
+from ..callbacks.lr_schedulers import get_lr_scheduler
+from ..data.image_common import *
+from ..misc.visualization_utils import tile_rgb_images, loss_metric_curve
+
+__all__ = ['TrainingItem', 'Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
+           'ImageSegmentationModel','FaceRecognitionModel']
 
 _, term_width = get_terminal_size()
 term_width = int(term_width)
@@ -31,268 +36,733 @@ last_time = time.time()
 begin_time = last_time
 
 
-def progress_bar(current, total, msg=None):
-    global last_time, begin_time
-    if current == 0:
-        begin_time = time.time()  # Reset for new bar.
-    cur_len = max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
-    rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
-    # sys.stdout.write(' [')
-    # for i in range(cur_len):
-    #     sys.stdout.write('=')
-    # sys.stdout.write('>')
-    # for i in range(rest_len):
-    #     sys.stdout.write('.')
-    # sys.stdout.write(']')
-    cur_time = time.time()
-    step_time = cur_time - last_time
-    last_time = cur_time
-    tot_time = cur_time - begin_time
-    L = []
-    L.append('  Step: {0:<8s}'.format(format_time(step_time)))
-    L.append(' | Tot: {0:<8s}'.format(format_time(tot_time)))
-    if msg:
-        L.append(' | ' + msg)
-    msg = ''.join(L)
-    sys.stdout.write(msg)
-    for i in range(term_width - int(TOTAL_BAR_LENGTH) - len(msg) - 3):
-        sys.stdout.write(' ')
-    sys.stdout.write(' ( %d/%d )' % (current, total))
-    sys.stdout.write('\n')
-    sys.stdout.flush()  # # Go back to the center of the bar.  # for i in range(term_width-int(TOTAL_BAR_LENGTH/2)+2):  #     sys.stdout.write('\b')  # sys.stdout.write(' %d/%d ' % (current+1, total))  # if current < total-1:  #     sys.stdout.write('\r')  # else:  #     sys.stdout.write('\n')  # sys.stdout.flush()
+def _to_tuple(x):
+    if isinstance(x, tuple):
+        return x
+    elif isinstance(x, list):
+        return tuple(x)
+    else:
+        return x,
 
 
-class TrainingItem(object):
-    def __init__(self, model: nn.Module, optimizer, **kwargs):
+def make_deterministic(seed: int = 19260817, cudnn_deterministic: bool = False):
+    r"""Make experiment deterministic by using specific random seeds across
+    all frameworks and (optionally) use deterministic algorithms.
+    Args:
+        seed (int): The random seed to set.
+        cudnn_deterministic (bool): If `True`, set CuDNN to use
+            deterministic algorithms. Setting this to `True` can negatively
+            impact performance, and might not be necessary for most cases.
+            Defaults to `False`.
+    """
 
-        self.model = model
-        self.optimizer = optimizer
-        self.optimizer_settings = kwargs
-        self.reg = None
-        self.constraint = None
-        self._losses = OrderedDict()
-        self._metrics = OrderedDict()
-        self.base_lr = None
-        self._is_optimizer_initialized = False
-        self._is_optimizer_warmup = False
-        self.batch_loss_history = {}
-        self.batch_metric_history = {}
-        self.epoch_loss_history = {}
-        self.epoch_metric_history = {}
-        self.weights_history = OrderedDict()
-        self.gradients_history = OrderedDict()
-        self.input_history = []
-        self.target_history =[]
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
-        if isinstance(self.optimizer, str):
-            optimizer_class = get_optimizer(self.optimizer)
-            self.optimizer = optimizer_class(self.model.parameters(), **self.optimizer_settings)
-            self._is_optimizer_initialized = True
-        else:
-            self.optimizer = self.optimizer(self.model.parameters(), **self.optimizer_settings)
-            self._is_optimizer_initialized = True
+    if cudnn_deterministic:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
-        self.base_lr = kwargs.get('lr', 1e-3)
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+class Model(ModelBase):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(Model, self).__init__(inputs, output, input_shape)
 
-    def extra_repr(self):
-        return ''
+    def _initial_graph(self, inputs=None, output=None, input_shape=None):
+        if output is None:
+            raise ValueError('There is at least one output')
+        if isinstance(output,(np.ndarray,torch.Tensor)) and input_shape is None:
+            input_shape=output.shape
 
-    def __str__(self):
-        self.__repr__()
+        if inputs is None:
 
-    def _get_name(self):
-        return self.__class__.__name__
-
-    def __repr__(self):
-        # We treat the extra repr like the sub-module, one item per line
-        extra_lines = []
-        extra_repr = self.extra_repr()
-        # empty string will be split into list ['']
-        if extra_repr:
-            extra_lines = extra_repr.split('\n')
-        child_lines = []
-        for key, value in self.__dict__.items():
-            if isinstance(value, OrderedDict):
-                for subkey, subvalue in value.items():
-                    mod_str = repr(subvalue)
-                    mod_str = addindent(mod_str, 2)
-                    child_lines.append('(' + key + '): ' + mod_str)
+            if input_shape is None:
+                raise ValueError('You should assign inputs or input shape')
             else:
-                mod_str = repr(value)
-                mod_str = addindent(mod_str, 2)
-                child_lines.append('(' + key + '): ' + mod_str)
-        lines = extra_lines + child_lines
+                input_shape = to_list(input_shape)
+                input_name = 'input_{0}'.format(len(self.inputs))
+                self.inputs[input_name] = input_shape
+        elif isinstance(inputs, Input):
+            input_name = inputs.name if inputs.name != '' else 'input_{0}'.format(len(self.inputs))
+            input_shape = to_numpy(inputs.input_shape).tolist()
+            self.inputs[input_name] = input_shape
+        elif isinstance(inputs, (tuple, list)):
+            for inp in inputs:
+                if isinstance(inp, Input):
+                    input_name = inp.name if inp.name != '' else 'input_{0}'.format(len(self.inputs))
+                    self.inputs[input_name] = to_numpy(inp.input_shape).tolist()
+        elif isinstance(inputs, dict):
+            for k, v in inputs.items():
+                if isinstance(v, Input):
+                    self.inputs[k] = to_numpy(v.input_shape).tolist()
 
-        main_str = self._get_name() + '('
-        if lines:
-            # simple one-liner info, which most builtin Modules will use
-            if len(extra_lines) == 1 and not child_lines:
-                main_str += extra_lines[0]
+        if isinstance(output, (Layer, nn.Module)):
+            output.input_shape = input_shape
+            # output.cpu()
+            output.to(output.device)
+            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(output.device)
+            out = output(dummay_input)
+            self._model = output
+
+            if isinstance(out, torch.Tensor):
+                self._outputs['output'] = to_list(out.size())[1:]
+                self._targets['target'] = to_list(out.size())[1:]
             else:
-                main_str += '\n  ' + '\n  '.join(lines) + '\n'
+                for i in range(len(out)):
+                    self._outputs['output_{0}'.format(i)] = to_list(out[i].size())[1:]
+                    self._targets['target_{0}'.format(i)] = to_list(out[i].size())[1:]
 
-        main_str += ')'
-        return main_str
+            self.signature = get_signature(self._model.forward)
+        elif isinstance(output, (list, tuple)):
+            output_list = []
+            for op in output:
+                if isinstance(op, (Layer, nn.Module)):
+                    output_list.append(op)
+            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(output.device)
+            model = Combine(output_list)
+            outs = model(dummay_input)
+            self._model = model
+            self.name = model.name
+            for i in range(len(outs)):
+                self._outputs['output_{0}'.format(i)] = to_list(outs[i].size())[1:]
+                self._targets['target_{0}'.format(i)] = to_list(outs[i].size())[1:]
+            self.signature = get_signature(self._model.forward)
+        elif isinstance(output,(np.ndarray,torch.Tensor)):
+            self._model =to_tensor(output,requires_grad=True)
 
-    def __dir__(self):
-        module_attrs = dir(self.__class__)
-        attrs = list(self.__dict__.keys())
-
-        losses = list(self._losses.keys())
-        metrics = list(self._metrics.keys())
-        keys = module_attrs + attrs + losses + metrics
-
-        # Eliminate attrs that are not legal Python variable names
-        keys = [key for key in keys if not key[0].isdigit()]
-
-        return sorted(keys)
-
-    def is_optimizer_initialized(self):
-        return self._is_optimizer_initialized
-
-    def update_optimizer(self):
-        if isinstance(self.optimizer, str):
-            optimizer_class = get_optimizer(self.optimizer)
-            self.optimizer = optimizer_class(self.model.parameters(), **self.optimizer_settings)
-            self._is_optimizer_initialized = True
+            self._outputs['output'] = to_list(self._model.size())[1:]
+            self._targets['target'] = to_list(self._model.size())[1:]
+            self.signature = OrderedDict()
+            self.signature['x']=to_list(self._model.size())[1:]
         else:
-            self.optimizer = self.optimizer(self.model.parameters(), **self.optimizer_settings)
-            self._is_optimizer_initialized = True
-        if self._is_optimizer_warmup == True:
-            self.optimizer.param_groups[0]['lr'] = 1e-5
-
-    def with_loss(self, loss, **kwargs):
-        if hasattr(loss, 'forward'):
-            self._losses[loss.__name__] = loss(**kwargs)
-            if hasattr(self._losses[loss.__name__], 'reduction'):
-                setattr(self._losses[loss.__name__], 'reduction', 'mean')
-        elif callable(loss):
-            self._losses[loss.__name__] = partial(loss, **kwargs)
-        return self
-
-    def with_metrics(self, metrics, **kwargs):
-        if hasattr(metrics, 'forward'):
-            self._metrics[metrics.__name__] = metrics(**kwargs)
-            if hasattr(self._metrics[metrics.__name__], 'reduction'):
-                setattr(self._metrics[metrics.__name__], 'reduction', 'mean')
-        elif callable(metrics):
-            self._metrics[metrics.__name__] = partial(metrics, **kwargs)
-        return self
-
-    def with_regularizers(self, reg, **kwargs):
-        if reg is None:
-            self.reg = None
-        elif isinstance(reg, str):
-            reg_fn = get_reg(reg)
-            self.reg = partial(reg_fn, **kwargs)
-        else:
-            reg_fn = reg
-            self.reg = partial(reg_fn, **kwargs)
-        return self
-
-    def with_constraints(self, constraint, **kwargs):
-        if constraint is None:
-            self.constraint = partial(min_max_norm, max_value=3, min_value=-3)
-        elif isinstance(constraint, str):
-            constraint_fn = get_constraints(constraint)
-            self.constraint = partial(constraint_fn, **kwargs)
-        else:
-            constraint_fn = constraint
-            self.constraint = partial(constraint_fn, **kwargs)
-        return self
+            raise ValueError('Invalid output')
 
 
-class TrainingPlan(object):
-    def __init__(self, callbacks=None,gradient_accumulation_steps=1,):
-        self.training_context = {
-            '_results_history': [],
-            # loss_wrapper
-            'losses': None,
-            # optimizer
-            'optimizer': None,
-            # stop training
-            'stop_training': False,
-            # current_epoch
-            '_current_epoch': -1,
-            # current_batch
-            'current_batch': None,
-            # current output
-            'current_output': None,
-            # current loss
-            'current_loss': None
 
-        }
-        self.training_items = OrderedDict()
-
-        self._dataloaders = OrderedDict()
-        self.lr_scheduler = None
-        self.num_epochs = 1
-        self._minibatch_size = 1
-
-
-        self.warmup = 0
-        self.print_progress_frequency = 10
-        self.print_progress_unit = 'batch'
-        self.save_model_frequency = 50
-        self.save_model_unit = 'batch'
-        self._is_optimizer_warmup = False
-
-        self.need_tile_image = False
-        self.tile_image_save_path = None
-        self.tile_image_name_prefix = None
-        self.tile_image_save_model_frequency = None
-        self.tile_image_save_model_unit = 'batch'
-        self.tile_image_include_input = False
-        self.tile_image_include_output = False
-        self.tile_image_include_target = False
-        self.tile_image_include_mask = False
-        self.tile_image_imshow = False
-        self.callbacks = callbacks
-        if self.callbacks is None:
-            self.callbacks = [NumberOfEpochsStoppingCriterionCallback(1)]
-
-        elif not any([issubclass(type(cb), StoppingCriterionCallback) for cb in self.callbacks]):
-
-            self.callbacks.append(NumberOfEpochsStoppingCriterionCallback(1))
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.training_context['current_model'] = self._model
+        self.device = self._model.device
+        save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.name))
+        self.save_path =sanitize_path(make_dir_if_need(save_path))
+        self.training_context['save_path'] = self.save_path
 
     @property
-    def minibatch_size(self):
-        return self._minibatch_size
+    def outputs(self):
+        if self._model is not None and  isinstance(self._model, torch.Tensor):
+            return self._outputs
+        elif self._model is None or not self._model.built:
+            return None
+        elif len(self._outputs) == 1:
+            self._outputs[self._outputs.key_list[0]] = self._model.output_shape.item() if self._model.output_shape.ndim == 0 else to_list(self._model.output_shape)
+            self._targets[self._targets.key_list[0]] = self._model.output_shape.item() if self._model.output_shape.ndim == 0 else to_list(self._model.output_shape)
 
-    @minibatch_size.setter
-    def minibatch_size(self, value):
-        self._minibatch_size = value
-        for i, (k, v) in enumerate(self._dataloaders.items()):
-            v.minibatch_size = value
-            self._dataloaders[k] = v
+            return self._outputs
+        elif len(self._outputs) > 1:
+            dummay_input = to_tensor(np.random.standard_normal((2,) + tuple(self.inputs.value_list[0])).astype(np.float32)).to(self._model.device)
+            outs = self._model(dummay_input)
+            if len(self._outputs) == len(outs):
+                for i in range(len(outs)):
+                    self._outputs[self._outputs.key_list[i]] = to_list(outs[i].size())[1:]
+                    self._targets[self._targets.key_list[i]] = to_list(outs[i].size())[1:]
+            else:
+                for i in range(len(outs)):
+                    self._outputs['output_{0}'.format(i)] = to_list(outs[i].size())[1:]
+                    self._targets['target_{0}'.format(i)] = to_list(outs[i].size())[1:]
+            return self._outputs
+        else:
+            return self._outputs
 
+    def train(self):
+        if self._model is not None and  isinstance(self._model, torch.Tensor):
+            pass
+        elif self._model is not None and isinstance(self._model,Layer) and self._model.built:
+            self._model.train()
+        else:
+            raise ValueError('There is no built model ,nothing to learn')
 
+    def eval(self):
+        if self._model is not None and  isinstance(self._model, torch.Tensor):
+            pass
+        elif self._model is not None and isinstance(self._model,Layer)and self._model.built:
+            self._model.eval()
+        else:
+            raise ValueError('There is no built model ,nothing to evaluate')
 
-    def __getattr__(self, name):
-        if name == 'self':
+    @property
+    def layers(self):
+        if self._model is not None and  isinstance(self._model, torch.Tensor):
+            return None
+        else:
+            return self._model._nodes
+
+    def complie(self, optimizer, losses=None, metrics=None, loss_weights=None, sample_weight_mode=None,
+                weighted_metrics=None, target_tensors=None):
+        self.with_optimizer(optimizer)
+        if losses is not None and isinstance(losses, (list, tuple)):
+            for loss in losses:
+                self.with_loss(loss)
+        if metrics is not None and isinstance(metrics, (list, tuple)):
+            for metric in metrics:
+                self.with_metric(metric)
+
+        return self
+
+    def with_optimizer(self, optimizer, **kwargs):
+        if isinstance(optimizer, str):
+            optimizer_class = get_optimizer(optimizer)
+            self.optimizer = optimizer_class(self._model.parameters() if  isinstance(self._model, nn.Module) else [self._model], **kwargs)
+
+        else:
+            self.optimizer = optimizer(self._model.parameters() if  isinstance(self._model, nn.Module) else [self._model], **kwargs)
+        # self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, verbose=True, mode='min',
+        #                                                                factor=0.5, patience=5, threshold=1e-4,
+        #                                                                cooldown=0, min_lr=1e-10, eps=1e-8)
+        self.base_lr = kwargs.get('lr', kwargs.get('learning_rate', 1e-3))
+        self.training_context['optimizer'] = self.optimizer
+        self.training_context['base_lr'] = self.base_lr
+        self.training_context['current_lr'] = self.base_lr
+        return self
+
+    def with_loss(self, loss, loss_weight=1, output_idx=0, start_epoch=0, name='', **kwargs):
+        alias = name
+        argnames = OrderedDict()
+        if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
+            alias = loss.__name__
+
+        if isinstance(loss, str):
+
+            loss_class = get_loss(loss)
+            alias = loss if loss_class is not None else alias
+            if  alias in self._losses:
+                dup_keys=[key for  key in self._losses.key_list if alias+'_' in key]
+                alias = alias + '_' + str(len(dup_keys)+1)
+            self._losses[alias] = loss_class(**kwargs)
+            if hasattr(loss, 'forward'):
+                argnames = get_signature(self._losses[alias].forward)
+            else:
+                argnames = get_signature(self._losses[alias].__call__)
+        elif inspect.isclass(loss) and inspect._is_type(loss):
+            alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
+            if alias in self._losses:
+                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys)+1)
+
+            self._losses[alias] = loss(**kwargs)
+            if hasattr(loss, 'forward'):
+                argnames = get_signature(self._losses[alias].forward)
+            else:
+                argnames = get_signature(self._losses[alias].__call__)
+        elif not inspect.isfunction(loss) and callable(loss):
+            alias = loss.__class__.__name__ if len(alias) == 0 else alias
+            if alias in self._losses:
+                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys) + 1)
+            self._losses[alias] = loss
+            if hasattr(loss, 'forward'):
+                argnames = get_signature(self._losses[alias].forward)
+            else:
+                argnames = get_signature(self._losses[alias].__call__)
+        elif inspect.isfunction(loss):
+            if alias in self._losses:
+                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys) + 1)
+            spec = inspect.getfullargspec(loss)
+            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 and (
+                    spec.args[0] in ['output', 'y_pred', 'pred'] or 'target_' + spec.args[0] == spec.args[1]):
+                self._losses[alias] = loss
+            else:
+                self._losses[alias] = partial(loss, **kwargs)
+            argnames = get_signature(self._losses[alias], skip_default=True)
+
+        self.loss_weights[alias] = loss_weight
+
+        outputs = self.outputs
+        targets = self.targets
+        if outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input','output','y_pred'] and  argnames.key_list[1] in ['target','label','y_true']:
+            argnames = OrderedDict()
+            argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
+            argnames[targets.key_list[0]] = targets[targets.key_list[0]]
+        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 :
+            argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
+            argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
+        elif outputs is not None and len(outputs) > 1:
+            output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
+            if len(output_idx) == 1 and len(argnames) == 2:
+                argnames = OrderedDict()
+                out = outputs.key_list[output_idx[0]]
+                target = targets.key_list[output_idx[0]]
+                argnames[argnames.key_list[0]] = outputs[out]
+                argnames[argnames.key_list[1]] = targets[target]
+            elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
+                for idx in output_idx:
+                    out = outputs.key_list[idx]
+                    target = targets.key_list[idx]
+                    if out in argnames:
+                        argnames[out] = outputs[out]
+                    if target in argnames:
+                        argnames[target] = targets[target]
+        self._losses[alias].__name__ = alias
+        self._losses[alias].signature = argnames
+        self._losses[alias].start_epoch = start_epoch
+        print('{0} signature:{1}'.format(alias, self._losses[alias].signature.item_list))
+        return self
+
+    def with_metric(self, metric, output_idx=0,collect_history=None ,name='', **kwargs):
+        if collect_history is None:
+            collect_history=True
+        alias = name
+        argnames = OrderedDict()
+        if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
+            alias = metric.__name__
+
+        if isinstance(metric, str):
+            alias = metric if len(alias) == 0 else alias
+            metric_class = get_metric(metric)
+            if alias in self._metrics:
+                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys) + 1)
+            self._metrics[alias] = metric_class(**kwargs)
+            if hasattr(metric, 'forward'):
+                argnames = get_signature(self._metrics[alias].forward)
+            else:
+                argnames = get_signature(self._metrics[alias].__call__)
+        elif inspect.isclass(metric) and inspect._is_type(metric):
+            alias = metric.__class__.__name__ if len(alias) == 0 else alias
+            if alias in self._metrics:
+                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys) + 1)
+            self._metrics[alias] = metric(**kwargs)
+            if hasattr(metric, 'forward'):
+                argnames = get_signature(self._metrics[alias].forward)
+            else:
+                argnames = get_signature(self._metrics[alias].__call__)
+        elif not inspect.isfunction(metric)and callable(metric):
+            alias = metric.__class__.__name__ if len(alias) == 0 else alias
+            if alias in self._metrics:
+                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys) + 1)
+            self._metrics[alias] = metric
+            if hasattr(metric, 'forward'):
+                argnames = get_signature(self._metrics[alias].forward)
+            else:
+                argnames = get_signature(self._metrics[alias].__call__)
+        elif inspect.isfunction(metric):
+            if alias in self._metrics:
+                dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
+                alias = alias + '_' + str(len(dup_keys) + 1)
+            spec = inspect.getfullargspec(metric)
+            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 and (
+                    spec.args[0] in ['output', 'y_pred', 'pred'] or 'target_' + spec.args[0] == spec.args[1]):
+                self._metrics[alias] = metric
+            else:
+                self._metrics[alias] = partial(metric, **kwargs)
+            argnames = get_signature(self._metrics[alias], skip_default=True)
+
+        outputs = self.outputs
+        targets = self.targets
+        if outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input', 'output', 'y_pred'] and argnames.key_list[1] in ['target', 'label', 'y_true']:
+            argnames = OrderedDict()
+            argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
+            argnames[targets.key_list[0]] = targets[targets.key_list[0]]
+        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
+            argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
+            argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
+        elif outputs is not None and len(outputs) > 1:
+            output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
+            if len(output_idx) == 1 and len(argnames) == 2:
+                argnames = OrderedDict()
+                out = outputs.key_list[output_idx[0]]
+                target = targets.key_list[output_idx[0]]
+                argnames[argnames.key_list[0]] = outputs[out]
+                argnames[argnames.key_list[1]] = targets[target]
+            elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
+                for idx in output_idx:
+                    out = outputs.key_list[idx]
+                    target = targets.key_list[idx]
+                    if out in argnames:
+                        argnames[out] = outputs[out]
+                    if target in argnames:
+                        argnames[target] = targets[target]
+        self._metrics[alias].__name__ = alias
+        self._metrics[alias].signature = argnames
+        self._metrics[alias].collect_history=collect_history
+        print('{0} signature:{1}'.format(alias, self._metrics[alias].signature.item_list))
+        return self
+
+    def with_regularizer(self, reg, **kwargs):
+        if reg is None:
             return self
-        if '_training_items' in self.__dict__:
-            _training_items = self.__dict__['_training_items']
-            if name in _training_items:
-                return _training_items[name]
+        reg_fn = None
+        if isinstance(reg, str):
+            reg_fn = get_reg(reg)
+        elif reg is callable:
+            reg_fn = reg
+        args = get_signature(reg_fn)
+        if 'reg_weight' in args:
+            args.pop('reg_weight')
 
-        if '_dataloaders' in self.__dict__:
-            _dataloaders = self.__dict__['_dataloaders']
-            if name in _dataloaders:
-                return _dataloaders[name]
+        if 'model' in args:
+            self._model_regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
+            self._model_regs[reg_fn.__name__].signature = args
+        elif 'output' in args:
+            self._output_regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
+            self._output_regs[reg_fn.__name__].signature = args
+        return self
 
-        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
+    def with_constraint(self, constraint, **kwargs):
+        if constraint is None:
+            return self
+        constraint_fn = None
+        if isinstance(constraint, str):
+            constraint_fn = get_constraint(constraint)
+
+        if hasattr(constraint_fn, 'forward') and constraint_fn.__name__[-4:] == 'norm':
+            self._constraints[constraint_fn.__name__] = constraint_fn(**kwargs)
+
+        elif callable(constraint_fn) and constraint_fn.__name__[-4:] == 'norm':
+            self._constraints[constraint_fn.__name__] = partial(constraint_fn, **kwargs)
+
+        return self
+
+    def with_model_save_path(self, save_path, **kwargs):
+        if save_path is None or len(save_path)==0:
+            save_path=os.path.join('Models','{0}.pth.tar_'.format(self.name))
+        self.save_path = make_dir_if_need(save_path)
+        self.training_context['save_path'] = self.save_path
+        return self
+
+    def with_learning_rate_scheduler(self, lr_schedule, warmup=0, **kwargs):
+        if lr_schedule is None:
+            return self
+        if isinstance(lr_schedule, str):
+            lr_schedule = get_lr_scheduler(lr_schedule)
+        if callable(lr_schedule):
+            lr_scheduler = lr_schedule(**kwargs)
+            self.callbacks.append(lr_scheduler)
+        self.warmup = warmup
+        if self.warmup > 0:
+            self.optimizer.adjust_learning_rate(1e-6, False)
+            self.training_context['current_lr'] = 1e-6
+        return self
+
+    def adjust_learning_rate(self, lr):
+        self.optimizer.param_groups[0]['lr'] = lr
+        self.training_context['current_lr'] = lr
+
+    def rebinding_input_output(self, input_shape):
+        if self._model is not None and  isinstance(self._model, torch.Tensor):
+            pass
+        elif input_shape == self._model._input_shape:
+            pass
+        else:
+            if len(self.inputs) == 1:
+                input_shape_list = to_numpy(input_shape).tolist()
+                self._model.input_shape = input_shape_list
+                self.inputs[self.inputs.key_list[0]] = input_shape_list
+
+            dummay_input = to_tensor(np.random.standard_normal((2, *input_shape_list))).to(
+                torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu"))
+            out = self._model(dummay_input)
+            if isinstance(out, torch.Tensor) == len(self.targets) == 1:
+                self.targets[self.targets.key_list[0]] = list(out.size())[1:] if len(out.size()) > 1 else []
+                self._model.output_shape = out.size()[1:]
+            elif isinstance(out, tuple):
+                for k in range(len(out)):
+                    self.targets[self.targets.key_list[k]] = list(out[k].size())[1:] if len(out[k].size()) > 1 else []
+
+    def do_on_training_start(self):
+        self.train()
+
+    def do_on_training_end(self):
+        self.eval()
+
+    def do_on_epoch_start(self):
+        # if self.training_context['current_epoch'] < self.warmup:
+        #     lr = 1e-5 * (self.training_context['current_epoch'] + 1)
+        #     self.optimizer.param_groups[0]['lr'] = lr
+        #     self.training_context['current_lr'] = lr
+        # elif self.training_context['current_epoch'] == self.warmup:
+        #     self.optimizer.param_groups[0]['lr'] = self.base_lr
+        #     self.training_context['current_lr'] =self.base_lr
+        if self.model.device == 'cuda':
+            torch.cuda.empty_cache()
+
+    def do_on_epoch_end(self):
+        pass  # if self.training_context['current_epoch'] > self.warmup:  #     if self.lr_scheduler is not None:  #         self.lr_scheduler.step(np.array(self.training_context['metrics'][list(self._metrics.keys())[0]]).mean())  #         self.training_context['current_lr'] = self.optimizer.lr  #     if self.optimizer.param_groups[0]['lr'] < 1e-8:  #         self.optimizer.param_groups[0]['lr'] = 0.05 * self.base_lr  #         self.training_context['current_lr'] =  0.05 * self.base_lr  # elif  self.warmup>0 and self.training_context['current_epoch'] == self.warmup:  #     self.optimizer.adjust_learning_rate(self.base_lr, True)  #     self.training_context['current_lr'] =self.base_lr  # elif   self.warmup>0 and self.training_context['current_epoch'] < self.warmup:  #     self.optimizer.adjust_learning_rate(1e-5*(self.training_context['current_epoch']+1), True)  #     self.training_context['current_lr'] = 1e-5*(self.training_context['current_epoch']+1)
+
+    def do_on_batch_start(self):
+        pass
+
+    def do_on_batch_end(self):
+        if self.training_context['current_batch'] == 0:
+            temp = OrderedDict()
+            for k in self.training_context['losses'].key_list:
+                temp[k] = self.training_context['losses'][k][-1]
+            print(temp)
+
+    def do_on_data_received(self, train_data, test_data):
+
+        # fields=train_data._fields
+        # for i in range(len(fields)):
+
+        if 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0:
+            try:
+                data_feed = OrderedDict()
+                inshapes = self.inputs.value_list
+                outshapes = self.targets.value_list
+                available_fields = copy.deepcopy(train_data.key_list)
+                if train_data is not None:
+                    # check input
+                    for arg in self.signature.key_list:
+                        data_feed[arg] = ''
+                    for arg in self.signature.key_list:
+                        if len(train_data) == 1:
+                            data_feed[arg] = train_data.key_list[0]
+                            available_fields.remove(train_data.key_list[0])
+                        elif arg in available_fields:
+                            data_feed[arg] = arg
+                            available_fields.remove(arg)
+                        elif arg in ['x', 'input'] and 'data' in available_fields:
+                            data_feed[arg] = 'data'
+                            available_fields.remove('data')
+                        elif arg in ['x', 'input'] and 'image' in available_fields:
+                            data_feed[arg] = 'image'
+                            available_fields.remove('image')
+                        elif arg == 'x' and 'input' in available_fields:
+                            data_feed[arg] = 'input'
+                            available_fields.remove('input')
+                        elif len(self.signature.key_list) == 1:
+                            for item in available_fields:
+                                data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
+                                if 'target' not in item and 'output' != item and data_shape == inshapes[0]:
+                                    data_feed[arg] = item
+                                    available_fields.remove(item)
+                                    break
+                        else:
+                            Warning(
+                                'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                    arg))
+
+                    if len(self.signature.key_list) == 1 and data_feed[self.signature.key_list[0]] != None:
+                        self.training_context['data_feed'] = data_feed
+
+                    # check for target
+                    for i in range(len(self.targets)):
+                        arg = self.targets.key_list[i]
+                        data_feed[arg] = ''
+                        if len(train_data) == 1:
+                            data_feed[self.targets.key_list[0]] = train_data.key_list[0]
+                        elif arg in available_fields:
+                            data_feed[arg] = arg
+                            available_fields.remove(arg)
+                        elif arg == 'target' and 'label' in available_fields:
+                            data_feed[arg] = 'label'
+                            available_fields.remove('label')
+                        elif arg == 'target' and len(available_fields) == 1:
+                            data_feed[arg] = available_fields[0]
+                            available_fields.remove(available_fields[0])
+                        elif len(available_fields) > 0:
+                            target_shape = outshapes[i]
+                            for item in available_fields:
+                                data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
+                                if target_shape == data_shape:
+                                    data_feed[arg] = item
+                                    available_fields.remove(item)
+                                elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
+                                        train_data[item].dtype)) and target_shape[:-1] == data_shape:
+                                    data_feed[arg] = item
+                                    available_fields.remove(item)
+                                else:
+                                    Warning(
+                                        'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                            arg))
+                    if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
+                        self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
+
+                    self.training_context['data_feed'] = data_feed
+                    print('data_feed', data_feed)
+            except:
+                PrintException()
+
+        # convert to tensor
+        try:
+            data_feed = self.training_context['data_feed']
+            input_list = [data_feed[arg] for arg in self.signature.key_list]
+            for item in train_data.key_list:
+                if item in input_list:
+                    # only model 's input argments
+                    train_data[item] = to_tensor(train_data[item].copy(), requires_grad=True)
+                elif item in self.targets.key_list or data_feed:
+                    train_data[item] = to_tensor(train_data[item].copy())
+                else:
+                    train_data[item] = to_tensor(train_data[item].copy())
+
+                if test_data is not None and  item in test_data:
+                    test_data[item] = to_tensor(test_data[item].copy())
+
+                    # check target
+
+            self.training_context['train_data'] = train_data
+            self.training_context['test_data'] = test_data
+
+        except:
+            PrintException()
+        return train_data, test_data
+
+    def do_preparation_for_loss(self):
+        # self._model.zero_grad()
+        self.optimizer.zero_grad()
+
+    def get_current_loss(self):
+        return self.training_context['current_loss']
+
+    def do_gradient_update(self, log_gradients=False):
+        if self.training_context['stop_update'] <1:
+            self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
+            #only check once every epoch start.
+            if self.training_context['current_batch']==0:
+                if isinstance(self._model,nn.Module):
+                    for name,para in self._model.named_parameters():
+                        try:
+                            if para is not None  and para.grad is not None:
+                                grad_norm=para.grad.norm()
+                                if not 0<grad_norm<1e5:
+                                    sys.stderr.write('warning...Gradient norm exceed 1e5 nor less-or-equal zero')
+                        except:
+                            PrintException()
+                elif isinstance(self._model,torch.Tensor):
+                    grad_norm = self._model.grad.norm()
+                    if not 0 < grad_norm < 1e5:
+                        sys.stderr.write('Gradient norm exceed 1e5 nor less-or-equal zero')
+
+            for callback in self.training_context['callbacks']:
+                callback.on_optimization_step_start(self.training_context)
+
+            if log_gradients:
+                self.log_gradient()
+
+        if self.training_context['stop_update'] == 0:
+            self.optimizer.step(self.get_current_loss)
+        elif 0 < self.training_context['stop_update'] < 1:
+            if random.random() <= self.training_context['stop_update']:
+                self.optimizer.step(self.get_current_loss)
+        else:
+            self.training_context['stop_update'] = self.training_context['stop_update'] - 1
+
+        for callback in self.training_context['callbacks']:
+            callback.on_optimization_step_end(self.training_context)
+
+    def do_on_progress_end(self):
+        if self.training_context['current_epoch'] > self.warmup:
+            if self.lr_scheduler is not None:
+                self.lr_scheduler.step(np.array(self.training_context['metrics'][list(self._metrics.keys())[0]]).mean())
+                self.training_context['current_lr'] = self.optimizer.lr
+
+    def log_gradient(self, grads=None):
+        grad_dict =OrderedDict()
+        if isinstance(self._model, nn.Module):
+            for i, (k, v) in enumerate(self._model.named_parameters()):
+                grad_dict[k] = to_numpy(v.grad)
+            self.gradients_history.append(grad_dict)
+
+    def log_weight(self, weghts=None):
+        weight_dict =OrderedDict()
+        if isinstance(self._model, nn.Module):
+            for k, v in self._model.named_parameters():
+                weight_dict[k] = to_numpy(v.data)
+
+            self.weights_history.append(weight_dict)
+
+    def save_model(self, save_path=None):
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_start(self.training_context)
+
+        if is_nan(self._model):
+            raise ValueError(self._get_name() + '  nan detected!!')
+
+        if isinstance(self._model,nn.Module):
+            save_path=self.get_save_path(save_path,default_folder='Models',default_file_name= '{0}_epoch{1}.pth.tar_'.format(self._model.name,self.training_context['current_epoch']))
+            self._model.eval()
+
+            torch.save({'state_dict': self._model.state_dict()}, save_path)
+            self._model.train()
+            shutil.copy(save_path, save_path.replace('.pth.tar_','.pth.tar'))
+
+        elif isinstance(self._model,torch.Tensor):
+            save_path = self.get_save_path(save_path, default_folder='Models',default_file_name='{0}_epoch{1}.npy_'.format(self._model.name, self.training_context[ 'current_epoch']))
+
+            numpy_model=to_numpy(self._model)
+            np.save( sanitize_path(save_path),numpy_model)
+            shutil.copy(save_path, save_path.replace('.npy_', '.npy'))
+            os.strerror('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
+        else:
+            raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
+
+
+    def save_onnx(self, file_path, dynamic_axes=None):
+        if isinstance(self._model,nn.Module):
+            save_path = self.get_save_path(file_path, default_folder='Models',default_file_name='{0}_epoch{1}.onnx_'.format(self._model.name, self.training_context[ 'current_epoch']))
+
+            import torch.onnx
+            self._model.eval()
+            dummy_input = torch.randn(1, *self._model.input_shape.tolist(),
+                                      device="cuda" if self._model.weights[0].data.is_cuda else "cpu")
+            file, ext = os.path.splitext(file_path)
+            if ext is None or ext != '.onnx':
+                file_path = os.path.join(file, '.onnx')
+
+            outputs = self._model(dummy_input)
+            if isinstance(outputs, torch.Tensor):
+                outputs = (outputs,)
+            output_names = ['output_{0}'.format(i) for i in range(len(outputs))]
+            if dynamic_axes is None:
+                dynamic_axes = {}
+                for inp in self.inputs.key_list:
+                    dynamic_axes[inp] = {0: 'batch_size'}
+                for out in output_names:
+                    dynamic_axes[out] = {0: 'batch_size'}
+            torch.onnx.export(self._model,  # model being run
+                              dummy_input,  # model input (or a tuple for multiple inputs)
+                              save_path,  # where to save the model (can be a file or file-like object)
+                              export_params=True,  # store the trained parameter weights inside the model file
+                              opset_version=11,  # the ONNX version to export the model to
+                              do_constant_folding=True,  # whether to execute constant folding for optimization
+                              input_names=self.inputs.key_list,  # the model's input names
+                              output_names=output_names,  # the model's output names
+                              dynamic_axes=dynamic_axes)
+            self._model.train()
+            shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
+        else:
+            raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
+
+    def load_model(self, file_path):
+        print('Loading pretrained model from {}'.format(file_path))
+        pretrained_dict = torch.load(file_path, map_location=lambda storage, loc: storage)
+
+        if "state_dict" in pretrained_dict.keys():
+            pretrained_dict = pretrained_dict['state_dict']
+        # else:
+        #     pretrained_dict = remove_prefix(pretrained_dict, 'module.')
+        if check_keys(self._model, pretrained_dict):
+            self._model.load_state_dict(pretrained_dict, strict=False)
+            print('Model loaded!')
+
+        if self.signature is None:
+            self.signature = get_signature(self._model.forward)
+        self._model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+    def summary(self):
+        # self.rebinding_input_output(self._model.input_shape)
+        summary(self._model, self.inputs.value_list)
+
+    def predict(self,input):
+        raise NotImplementedError
+
+    def test(self, input,target):
+        raise NotImplementedError
 
     def extra_repr(self):
-        r"""Set the extra representation of the module
-
-        To print customized extra information, you should reimplement
-        this method in your own modules. Both single-line and multi-line
-        strings are acceptable.
-        """
         return ''
 
     def __str__(self):
@@ -333,433 +803,245 @@ class TrainingPlan(object):
         return main_str
 
     def __dir__(self):
-        module_attrs = dir(self.__class__)
+        module_attrs = dir(self._model.__class__)
+        optimizer_attrs = dir(self.optimizer.__class__)
         attrs = list(self.__dict__.keys())
-        training_items = list(self.training_items.keys())
-        keys = module_attrs + attrs + training_items
-
+        losses = list(self._losses.keys())
+        metrics = list(self._metrics.keys())
+        output_regs = list(self._output_regs.keys())
+        model_regs = list(self._model_regs.keys())
+        constraints = list(self._constraints.keys())
+        keys = module_attrs + optimizer_attrs + attrs + losses + metrics + output_regs + model_regs + constraints
         # Eliminate attrs that are not legal Python variable names
         keys = [key for key in keys if not key[0].isdigit()]
 
         return sorted(keys)
 
-    @classmethod
-    def create(cls):
-        plan = cls()
-        return plan
 
-    def add_training_item(self, training_item: TrainingItem):
-        training_item.model.to(self.device)
-        self.training_items[len(self.training_items)] = training_item
-        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(training_item.optimizer, mode='min', factor=0.75,
-                                                                       patience=5, verbose=False, threshold=0.001,
-                                                                       threshold_mode='rel', cooldown=2, min_lr=1e-9,
-                                                                       eps=1e-8)
-        return self
+class ImageClassificationModel(Model):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(ImageClassificationModel, self).__init__(inputs, output, input_shape)
 
-    def with_data_loader(self, data_loader, **kwargs):
-        self._dataloaders[data_loader.__class__.__name__] = data_loader
-        return self
+        self._class_names = []
+        self._idx2lab = {}
+        self._lab2idx = {}
 
-    def with_learning_rate_schedule(self, lr_schedule, warmup=0, **kwargs):
-        # self.lr_schedule=partial(lr_schedule,**kwargs)
-        self.warmup = warmup
-        self._is_optimizer_warmup = False if self.warmup == 0 else True
-        if self.warmup > 0:
-            self._is_optimizer_warmup = True
-            for key, item in self.training_items.items():
-                item.optimizer.param_groups[0]['lr'] = 1e-5
+    @property
+    def class_names(self):
+        return self._class_names
 
-        return self
+    @class_names.setter
+    def class_names(self, value):
+        if self._class_names != value:
+            self._class_names = value
+            self._lab2idx = {v: k for k, v in enumerate(self._class_names)}
+            self._idx2lab = {k: v for k, v in enumerate(self._class_names)}
 
-    def repeat_epochs(self, num_epochs: int):
-        self.num_epochs = num_epochs
-        return self
 
-    def within_minibatch_size(self, minibatch_size: int):
-        self.minibatch_size = minibatch_size
-        return self
 
-    def print_progress_scheduling(self, frequency: int, unit='batch',on_epoch_end=True):
-        self.print_progress_frequency = frequency
-        if unit not in ['batch', 'epoch']:
-            raise ValueError('unit should be batch or epoch')
+    def index2label(self, idx: int):
+        if self._idx2lab is None or len(self._idx2lab.items()) == 0:
+            raise ValueError('You dont have proper mapping class names')
+        elif idx not in self._idx2lab:
+            raise ValueError('Index :{0} is not exist in class names'.format(idx))
         else:
-            self.print_progress_unit = unit
-        return self
+            return self._idx2lab[idx]
 
-
-    def save_model_scheduling(self, frequency: int, save_path: str, unit='batch'):
-        if not os.path.exists(save_path):
-            try:
-                os.mkdir(save_path)
-            except Exception as e:
-                sys.stderr.write(e.__str__())
-        self.save_path = save_path
-        self.save_model_frequency = frequency
-        if unit not in ['batch', 'epoch']:
-            raise ValueError('unit should be batch or epoch')
+    def label2index(self, label):
+        if self._lab2idx is None or len(self._lab2idx.items()) == 0:
+            raise ValueError('You dont have proper mapping class names')
+        elif label not in self._lab2idx:
+            raise ValueError('label :{0} is not exist in class names'.format(label))
         else:
-            self.save_model_unit = unit
-        return self
+            return self._lab2idx[label]
 
-    def display_tile_image_scheduling(self, frequency: int, unit='batch', save_path: str = None,
-                              name_prefix: str = 'tile_image_{0}.png', include_input=True, include_output=True,
-                              include_target=True, include_mask=None, imshow=False):
-        if not os.path.exists(save_path):
-            try:
-                os.mkdir(save_path)
-            except Exception as e:
-                sys.stderr.write(e.__str__())
-        self.need_tile_image = True
-        self.tile_image_save_path = save_path
-        self.tile_image_name_prefix = name_prefix
-        self.tile_image_save_model_frequency = frequency
-        self.tile_image_include_input = include_input
-        self.tile_image_include_output = include_output
-        self.tile_image_include_target = include_target
-        self.tile_image_include_mask = include_mask
-        self.tile_image_imshow = imshow
+    def infer_single_image(self, img, topk=1):
+        if self._model.built:
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
 
-        if unit not in ['batch', 'epoch']:
-            raise ValueError('unit should be batch or epoch')
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                    img = func(img)
+            img = image_backend_adaptive(img)
+            inp = to_tensor(np.expand_dims(img, 0)).to(
+                torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
+                self._model.weights[0].data.dtype)
+            result = self._model(inp)
+            result = to_numpy(result)[0]
+            if self.class_names is None or len(self.class_names)==0:
+                return result
+            else:
+                # argresult = np.argsort(result)
+                # argresult1 =argresult[::-1]
+                answer = OrderedDict()
+                idxs = list(np.argsort(result)[::-1][:topk])
+                for idx in idxs:
+                    prob = result[idx]
+                    answer[self.index2label(idx)] = (idx, prob)
+                # idx=int(np.argmax(result,-1)[0])
+
+                return answer
         else:
-            self.tile_image_save_model_unit = unit
-        return self
+            raise ValueError('the model is not built yet.')
 
 
-    def plot_loss_metric_curve(self,unit='batch'):
-        if unit=='batch':
-            loss_metric_curve(self.training_items[0].batch_loss_history, self.training_items[0].batch_metric_history,
-                              max_iteration=None, calculate_base=unit,
-                              save_path=None,
-                              imshow=True)
-        elif unit=='epoch':
-            loss_metric_curve(self.training_items[0].epoch_loss_history, self.training_items[0].epoch_metric_history,
-                              max_iteration=self.num_epochs,calculate_base=unit,
-                              save_path=None,
-                              imshow=True)
+class ImageDetectionModel(Model):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(ImageDetectionModel, self).__init__(inputs, output, input_shape)
+        self.preprocess_flow = []
+        self.detection_threshould = 0.5
+
+    @property
+    def reverse_preprocess_flow(self):
+        return_list = []
+        for i in range(len(self.preprocess_flow)):
+            fn = self.preprocess_flow[-1 - i]
+            if fn.__qualname__ == 'normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean, fn.std))
+        return return_list
+
+    def infer_single_image(self, img, scale=1):
+        if self._model.built:
+            self._model.to(self.device)
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func):
+                    img = func(img)
+            img = image_backend_adaptive(img)
+            inp = to_tensor(np.expand_dims(img, 0)).to(
+                torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
+                self._model.weights[0].data.dtype)
+            result = self._model(inp)
+
+            bboxes = self.generate_bboxes(*result, threshould=self.detection_threshould, scale=scale)
+            bboxes = self.nms(bboxes)
+            # idx=int(np.argmax(result,-1)[0])
+            return bboxes
         else:
-            raise  ValueError('unit should be batch or epoch.')
-
-    def start_now(self, ):
-        self.execution_id = str(uuid.uuid4())[:8].__str__().replace('-', '')
-        trainingitem =self.training_items[0]
-
-        trainingitem.batch_loss_history = {}
-        trainingitem.batch_metric_history = {}
-        trainingitem.epoch_loss_history = {}
-        trainingitem.epoch_metric_history = {}
-
-        data_loader = list(self._dataloaders.items())[0][1]
-        data_loader.minibatch_size = self.minibatch_size
-
-        loss_fn = trainingitem._losses
-
-        metrics_fn = trainingitem._metrics
-        model_in_train = trainingitem.model
-
-        optimizer = trainingitem.optimizer
-        regularizer = trainingitem.reg
-        constraint = trainingitem.constraint
-
-        losses = {}
-        losses['total_losses']=[]
-        metrics = {}
-        tile_images_list = []
-        print(self.__repr__)
-        self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, verbose=False, mode='min',  factor=0.75, patience=10, threshold=1e-4,   cooldown=5,min_lr=1e-10,eps=1e-8)
-
-        for callback in self.callbacks:
-            callback.on_training_start(self.training_context)
-
-        for epoch in range(self.num_epochs):
-            if self.device=='cuda':
-                torch.cuda.empty_cache()
-            for callback in self.callbacks:
-                callback.on_epoch_start(self.training_context)
-
-
-            try:
-                # if self.lr_schedule is not None and trainingitem.is_optimizer_initialized()==True:
-                # don't print learning rate if print_progress_every unit is epoch
-                for mbs, iter_data in enumerate(data_loader):
-                    if len(iter_data) == 1:
-                        input, target = torch.from_numpy(iter_data[0]), torch.from_numpy(iter_data[0])
-                    if len(iter_data) == 2:
-                        input, target = torch.from_numpy(iter_data[0]), torch.from_numpy(iter_data[1])
-                    # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
-                    input, target = input.to(self.device), target.to(self.device)
-                    model_in_train.train()
-                    model_in_train.zero_grad()
-                    optimizer.zero_grad()
-
-                    output = model_in_train(input)
-                    # if epoch==0 and mbs==0:
-                    #     trainingitem.update_optimizer()
-                    #     optimizer = trainingitem.optimizer
-                    #     if self._is_optimizer_warmup==True:
-                    #         self.lr_schedule(optimizer=optimizer, current_epoch=epoch, num_epochs=self.num_epochs, verbose=False if self.print_progress_unit == 'epoch' else False)
-
-                    current_loss = 0
-                    for k, v in loss_fn.items():
-                        if k not in losses:
-                            losses[k] = []
-                        this_loss=v.forward(output, target) if hasattr(v, 'forward') else v(output, target)
-                        current_loss+=this_loss
-                        losses[k].append(float(to_numpy(this_loss)))
-
-                    ##regularizer(l1,l2.....)
-                    if regularizer is not None:
-                        regularizer(model_in_train, current_loss)
-                    losses['total_losses'].append(float(to_numpy(current_loss)))
-
-                    for callback in self.callbacks:
-                        callback.post_loss_calculation(self.training_context)
-
-                    for k, v in metrics_fn.items():
-                        if k not in metrics:
-                            metrics[k] = []
-                        metrics[k].append(float(to_numpy(v.forward(output, target))) if hasattr(v, 'forward') else  float(to_numpy(v(output, target))))
-
-
-
-                    current_loss.backward()
-                    for callback in self.callbacks:
-                        callback.post_backward_calculation(self.training_context)
-                    optimizer.step()
-                    for callback in self.callbacks:
-                        callback.pre_optimization_step(self.training_context)
-
-                    # cconstraint
-                    if constraint is not None:
-                        constraint(model_in_train)
-
-
-                    if self.need_tile_image == True and self.tile_image_save_model_unit == 'batch' and (mbs + 1) % self.tile_image_save_model_frequency == 0:
-                        display.clear_output(wait=True)
-
-                    if self.need_tile_image == True and self.tile_image_save_model_unit == 'batch' and (mbs + 1) % self.tile_image_save_model_frequency == 0:
-                        #display.clear_output(wait=True)
-                        if self.tile_image_include_input:
-                            tile_images_list.append(to_numpy(input).transpose([0, 2, 3, 1]) * 127.5 + 127.5)
-                        if self.tile_image_include_target:
-                            tile_images_list.append(to_numpy(target).transpose([0, 2, 3, 1]) * 127.5 + 127.5)
-                        if self.tile_image_include_output:
-                            tile_images_list.append(to_numpy(output).transpose([0, 2, 3, 1]) * 127.5 + 127.5)
-                        # if self.tile_image_include_mask:
-                        #     tile_images_list.append(input*127.5+127.5)
-                        tile_rgb_images(*tile_images_list, save_path=os.path.join(self.tile_image_save_path,  self.self.tile_image_name_prefix),  imshow=self.tile_image_imshow)
-                        tile_images_list = []
-
-                    if self.print_progress_unit == 'batch' and (mbs + 1) % self.print_progress_frequency == 0:
-                        metric_key = list(metrics.keys())[0]
-                        if len(metrics[metric_key]) > self.print_progress_frequency  and (mbs + 1) % self.print_progress_frequency  == 0:
-                            if epoch < self.warmup:
-                                lr = 1e-5 * (epoch + 1)
-                                optimizer.param_groups[0]['lr'] = lr
-                            else:
-                                if epoch == self.warmup:
-                                    optimizer.param_groups[0]['lr'] = trainingitem.base_lr
-                                self.lr_scheduler.step(np.array(metrics[metric_key][-1*self.print_progress_frequency :]).mean())
-
-                        progress_bar(mbs+1, len(data_loader.batch_sampler), 'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.4e}| epoch: {3}'.format(np.array(losses['total_losses'][-1*self.print_progress_frequency:]).mean(), ','.join( ['{0}: {1:<8.3%}'.format(snake2camel(k), np.array(v[-1*self.print_progress_frequency:]).mean()) for k, v in  metrics.items()]), optimizer.param_groups[0]['lr'],epoch+1))
-
-                    if self.save_model_unit == 'batch' and (mbs + 1) % self.save_model_frequency == 0:
-                        save_full_path = os.path.join(self.self.save_path,
-                                                      'model_{0}_{1}_{2}.pth'.format(model_in_train.__class__.__name__,
-                                                                                     self.execution_id,
-                                                                                     get_time_suffix()))
-                        torch.save(model_in_train, save_full_path)
-
-                    for callback in self.callbacks:
-                        callback.on_batch_end(self.training_context)
-                    if (mbs + 1) % len(data_loader.batch_sampler) == 0:
-                        break
-
-
-                if self.need_tile_image == True and self.tile_image_save_model_unit == 'epoch' and ( epoch + 1) % self.tile_image_save_model_frequency == 0:
-                    display.clear_output(wait=True)
-
-
-                if epoch==0:
-                    trainingitem.batch_loss_history = losses
-                    trainingitem.batch_metric_history = metrics
-                    for k, v in losses.items():
-                        trainingitem.epoch_loss_history[k]=[]
-                        trainingitem.epoch_loss_history[k].append(np.array(v).mean())
-                    for k, v in metrics.items():
-                        trainingitem.epoch_metric_history[k] = []
-                        trainingitem.epoch_metric_history[k].append(np.array(v).mean())
-                else:
-                    [trainingitem.batch_loss_history[k].extend(v)    for k, v in losses.items()]
-                    [trainingitem.batch_metric_history[k].extend(v) for k, v in metrics.items()]
-                    for k, v in losses.items():
-                        trainingitem.epoch_loss_history[k].append(np.array(v).mean())
-                    for k, v in metrics.items():
-                        trainingitem.epoch_metric_history[k].append(np.array(v).mean())
-
-
-                if self.need_tile_image == True and self.tile_image_save_model_unit == 'epoch' and (epoch + 1) % self.tile_image_save_model_frequency == 0:
-                    display.clear_output(wait=True)
-                    if self.tile_image_include_input:
-                        tile_images_list.append(to_numpy(input).transpose([0, 2, 3, 1]) * 127.5 + 127.5)
-                    if self.tile_image_include_target:
-                        tile_images_list.append(to_numpy(target).transpose([0, 2, 3, 1]) * 127.5 + 127.5)
-                    if self.tile_image_include_output:
-                        tile_images_list.append(to_numpy(output).transpose([0, 2, 3, 1]) * 127.5 + 127.5)
-                    # if self.tile_image_include_mask:
-                    #     tile_images_list.append(input*127.5+127.5)
-                    tile_rgb_images(*tile_images_list,
-                                    save_path=os.path.join(self.tile_image_save_path, self.self.tile_image_name_prefix),
-                                    imshow=self.tile_image_imshow)
-                    loss_metric_curve(trainingitem.epoch_loss_history,trainingitem.epoch_metric_history,max_iteration=self.num_epochs,save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),
-                                    imshow=self.tile_image_imshow)
-                    tile_images_list = []
-
-
-                if self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0:
-                    progress_bar(epoch+1, self.num_epochs, 'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.4e}'.format( np.array(losses['total_losses']).mean(), ','.join(['{0}: {1:<8.3%}'.format(snake2camel(k), np.array(v).mean()) for k, v in metrics.items()]),  optimizer.param_groups[0]['lr']))
-
-
-                if self.save_model_unit == 'epoch' and (epoch + 1) % self.save_model_frequency == 0:
-                    save_full_path = os.path.join(self.self.save_path,  'model_{0}_ep_{1}.pth'.format(model_in_train.__class__.__name__, epoch))
-                    torch.save(model_in_train, save_full_path)  # copyfile(src, dst)
-
-                metric_key = list(metrics.keys())[0]
-
-                if epoch < self.warmup:
-                    lr = 1e-5 * (epoch + 1)
-                    optimizer.param_groups[0]['lr'] = lr
-                else:
-                    if epoch == self.warmup:
-                        optimizer.param_groups[0]['lr'] = trainingitem.base_lr
-                    self.lr_scheduler.step(np.array(metrics[metric_key]).mean())
-                    if optimizer.param_groups[0]['lr']<1e-8:
-                        optimizer.param_groups[0]['lr'] =0.05* trainingitem.base_lr
-
-
-                losses ={}
-                losses['total_losses'] = []
-                metrics = {}
-            except StopIteration:
-                model_in_train.eval()
-                pass
-            except ValueError as ve:
-                model_in_train.eval()
-                print(ve)
-            except Exception as e:
-                model_in_train.eval()
-                print(e)
-
-            for callback in self.callbacks:
-                callback.on_epoch_end(self.training_context)
-
-
-
-        for callback in self.callbacks:
-            callback.on_training_end(self.training_context)
-        model_in_train.eval()
-
-
-
-    def only_steps(self,num_steps,keep_weights_history=False,keep_gradient_history=False,keep_input_history=False,keep_target_history=False ):
-        self.execution_id = str(uuid.uuid4())[:8].__str__().replace('-', '')
-        trainingitem = list(self.training_items.items())[0][1]
-
-        trainingitem.batch_loss_history = {}
-        trainingitem.batch_metric_history = {}
-        trainingitem.epoch_loss_history = {}
-        trainingitem.epoch_metric_history = {}
-
-        data_loader = list(self._dataloaders.items())[0][1]
-
-        data_loader.minibatch_size=self.minibatch_size
-        loss_fn = trainingitem._losses
-
-        metrics_fn = trainingitem._metrics
-        model_in_train = trainingitem.model
-
-        optimizer = trainingitem.optimizer
-        regularizer = trainingitem.reg
-        constraint = trainingitem.constraint
-
-        losses = {}
-        losses['total_losses']=[]
-        metrics = {}
-        tile_images_list = []
-        try:
-            # if self.lr_schedule is not None and trainingitem.is_optimizer_initialized()==True:
-            # don't print learning rate if print_progress_every unit is epoch
-            for mbs, iter_data in enumerate(data_loader):
-                if mbs<num_steps:
-                    if len(iter_data) == 1:
-                        input, target = torch.from_numpy(iter_data[0]), torch.from_numpy(iter_data[0])
-
-                    if len(iter_data) == 2:
-                        input, target = torch.from_numpy(iter_data[0]), torch.from_numpy(iter_data[1])
-                    # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
-                    if keep_input_history == True:
-                        trainingitem.input_history.append(input)
-                    if keep_target_history == True:
-                        trainingitem.target_history.append(target)
-                    input, target = input.to(self.device), target.to(self.device)
-
-
-                    output = model_in_train(input)
-
-                    current_loss = 0
-                    for k, v in loss_fn.items():
-                        if k not in losses:
-                            losses[k] = []
-                        this_loss=v.forward(output, target) if hasattr(v, 'forward') else v(output, target)
-                        current_loss+=this_loss
-                        losses[k].append(float(to_numpy(this_loss)))
-
-                    ##regularizer(l1,l2.....)
-                    if regularizer is not None:
-                        regularizer(model_in_train, current_loss)
-                    losses['total_losses'].append(float(to_numpy(current_loss)))
-
-                    for k, v in metrics_fn.items():
-                        if k not in metrics:
-                            metrics[k] = []
-                        metrics[k].append(float(to_numpy(v.forward(output, target))) if hasattr(v, 'forward') else  float(to_numpy(v(output, target))))
-
-
-                    optimizer.zero_grad()
-                    current_loss.backward()
-
-                    grad_dict={}
-                    if keep_gradient_history==True:
-                        for k,v in model_in_train.named_parameters():
-                            grad_dict[k]=to_numpy(v.grad)
-                    trainingitem.gradients_history[mbs]=grad_dict
-                    optimizer.step()
-
-                    weight_dict = {}
-                    if keep_weights_history == True:
-                        for k, v in model_in_train.named_parameters():
-                            weight_dict[k] =to_numpy(v.data)
-                    trainingitem.weights_history[mbs] = weight_dict
-
-                    # cconstraint
-                    if constraint is not None:
-                        constraint(model_in_train)
-
-                    progress_bar(mbs+1, len(data_loader.batch_sampler), 'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.4e}| epoch: {3}'.format(losses['total_losses'][-1], ','.join( ['{0}: {1:<8.3%}'.format(snake2camel(k), v[-1]) for k, v in  metrics.items()]), optimizer.param_groups[0]['lr'],1))
-
-
-                    if (mbs + 1) % len(data_loader.batch_sampler) == 0:
-                        break
-                else:
-                    break
-            trainingitem.batch_loss_history = losses
-            trainingitem.batch_metric_history = metrics
-
-        except StopIteration:
-            pass
-        except ValueError as ve:
-            print(ve)
-        except Exception as e:
-            print(e)
+            raise ValueError('the model is not built yet.')
+
+    def generate_bboxes(self, *outputs, threshould=0.5, scale=1):
+        raise NotImplementedError
+
+    def nms(self, bboxes):
+        raise NotImplementedError
+
+
+class ImageSegmentationModel(Model):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(ImageSegmentationModel, self).__init__(inputs, output, input_shape)
+        self.preprocess_flow = []
+
+
+class ImageGenerationModel(Model):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(ImageGenerationModel, self).__init__(inputs, output, input_shape)
+        self.preprocess_flow = []
+
+    @property
+    def reverse_preprocess_flow(self):
+        return_list = []
+        for i in range(len(self.preprocess_flow)):
+            fn = self.preprocess_flow[-1 - i]
+            if fn.__qualname__ == 'normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean, fn.std))
+        return return_list
+
+    def infer_single_image(self, img):
+        if self._model.built:
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                    img = func(img)
+            img = image_backend_adaptive(img)
+            inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
+            result = self._model(inp)
+            result = to_numpy(result)[0]
+
+            for func in self.reverse_preprocess_flow:
+                if inspect.isfunction(func):
+                    result = func(result)
+            result = array2image(result)
+            return result
+
+
+class FaceRecognitionModel(Model):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(FaceRecognitionModel, self).__init__(inputs, output, input_shape)
+
+        self._class_names = []
+        self.preprocess_flow = []
+
+        self._idx2lab = {}
+        self._lab2idx = {}
+
+
+
+    @property
+    def reverse_preprocess_flow(self):
+        return_list = []
+        return_list.append(reverse_image_backend_adaptive)
+        for i in range(len(self.preprocess_flow)):
+            fn = self.preprocess_flow[-1 - i]
+            if fn.__qualname__ == 'normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean, fn.std))
+        return_list.append(array2image)
+        return return_list
+
+    def get_embedded(self,img_path):
+        def norm(x):
+            b = np.sqrt(np.sum(np.square(x)))
+            return x / (b if b != 0 else 1)
+
+        img = image2array(img_path)
+        img = resize((224, 224), keep_aspect=True)(img)
+        img = normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
+        img = to_tensor(np.expand_dims(img.transpose([2, 0, 1]), 0))
+        embedding = self.model(img)[0]
+        return norm(embedding)
+
+    def infer_single_image(self, img):
+        def norm(x):
+            b = np.sqrt(np.sum(np.square(x)))
+            return x / (b if b != 0 else 1)
+        if isinstance(self._model,Layer) and self._model.built:
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                    img = func(img)
+            img = image_backend_adaptive(img)
+            inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
+            result = self._model(inp)[0]
+            embedding = to_numpy(result)
+            return norm(embedding)
+
+        else:
+            raise ValueError('the model is not built yet.')
+
+
+
+class LanguageModel(Model):
+    def __init__(self, inputs=None, output=None, input_shape=None):
+        super(LanguageModel, self).__init__(inputs, output, input_shape)
+        self.preprocess_flow = []
+
+
+TrainingItem = Model
+
+
+

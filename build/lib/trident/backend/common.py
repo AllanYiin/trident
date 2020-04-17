@@ -1,47 +1,177 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import threading
-import os
+
+import collections
+import datetime
+import inspect
+import json
+import linecache
 import math
+import os
+import platform
+import re
 import shlex
 import struct
-import platform
 import subprocess
-import numpy as np
-import re
-from pydoc import locate
-import datetime
+import sys
+import threading
 import time
+import traceback
+import types
+from enum import Enum, unique
+from inspect import signature
+from pydoc import locate
+from typing import List, Set, Tuple, Dict
 
-__all__ = ['get_session','get_trident_dir','epsilon','set_epsilon','floatx','set_floatx','camel2snake','snake2camel','addindent','format_time','get_time_prefix','get_function','get_class','get_terminal_size','gcd','get_divisors','isprime','next_prime','prev_prime','nearest_prime']
+import numpy as np
 
+__all__ = ['get_session','get_trident_dir','get_signature','epsilon','set_epsilon','floatx','set_floatx','if_else','camel2snake','snake2camel','to_onehot','to_list','addindent','format_time', 'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime', 'next_prime', 'prev_prime', 'nearest_prime','PrintException','unpack_singleton','enforce_singleton','OrderedDict','get_python_function_arguments','map_function_arguments','ClassfierType','PaddingMode', 'DataRole',
+
+           'ExpectDataType', 'GetImageMode','split_path', 'make_dir_if_need','sanitize_path', 'ShortcutMode', 'DataSpec','get_argument_maps','get_args_spec','get_gpu_memory_map']
+
+def sanitize_path(path):
+    if isinstance(path,str) :
+        return os.path.normpath(path.strip()).replace('\\','/')
+    else:
+        return path
+
+
+
+_trident_dir=''
 if 'TRIDENT_HOME' in os.environ:
     _trident_dir = os.environ.get('TRIDENT_HOME')
 else:
     _trident_base_dir = os.path.expanduser('~')
     if not os.access(_trident_base_dir, os.W_OK):
-        _trident_base_dir = '/tmp'
-    _trident_dir = os.path.join(_trident_base_dir, '.trident')
+        _trident_dir = '/tmp/.trident'
+    else:
+        _trident_dir = os.path.expanduser('~/.trident')
+
+_trident_dir=sanitize_path(_trident_dir)
+if not os.path.exists(_trident_dir):
+    try:
+        os.makedirs(_trident_dir)
+    except OSError:
+        # Except permission denied and potential race conditions
+        # in multi-threaded environments.
+        pass
+
+
+# Attempt to read Trident config file.
+
+
 
 
 _SESSION = threading.local()
 
 _SESSION.trident_dir=_trident_dir
+_SESSION.backend='pytorch'
+_SESSION.image_backend ='pillow'
+_SESSION.epoch_equivalent=200
+_SESSION.floatx='float32'
+_SESSION.epsilon= 1e-8
+_SESSION.numpy_print_format='{0:.4e}'
+
+
+_SESSION.user_defined_device=None
+
+
+
+
+_config_path = os.path.expanduser('~/.trident/trident.json')
+if os.path.exists(_config_path):
+    _config = {}
+    try:
+        with open(_config_path) as f:
+            _config = json.load(f)
+    except ValueError:
+        pass
+    for k,v in _config.items():
+        try:
+            if k=='floatx':
+                assert v in {'float16', 'float32', 'float64'}
+            if k!='trident_dir':
+                _SESSION.__setattr__(k,v)
+        except :
+            exc_type, exc_obj, tb = sys.exc_info()
+            traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
+
+
+
+
+
+
+
+
+
+
+
+
+
+from enum import Enum, unique
+
+@unique
+class Backend(Enum):
+    cntk = 'cntk'
+    pytorch = 'pytorch'
+    tensorflow = 'tensorflow'
+
+@unique
+class IntevalUnit(Enum):
+    batch = 'batch'
+    epoch = 'epoch'
+    once = 'once'
+
+
+np.set_printoptions(formatter={'float_kind':lambda x: _SESSION.numpy_print_format.format(x)})
+
+
+def get_plateform():
+    return platform.system()
+
+def _is_c_contiguous(data):
+    while isinstance(data, list):
+        data = data[0]
+    return data.flags.c_contiguous
+
 
 def get_session():
     return _SESSION
 
+
+def set_session(key,value):
+    setattr(_SESSION,key,value)
+    return _SESSION
+
 def get_trident_dir():
-    return _trident_dir
+    return _SESSION.trident_dir
 
-_SESSION.floatx='float32'
-_SESSION.epsilon= 1e-8
-# the type of float to use throughout the session.
 
-_SESSION.backend='pytorch'
-_SESSION.image_data_format='channels_first'
-_SESSION.image_channel_order='bgr'
+
+def PrintException():
+    exc_type, exc_obj, tb = sys.exc_info()
+
+    f = tb.tb_frame
+    lineno = tb.tb_lineno
+    filename = f.f_code.co_filename
+    linecache.checkcache(filename)
+    line = linecache.getline(filename, lineno, f.f_globals)
+    print('EXCEPTION IN ({}, LINE {} "{}"): {}'.format(filename, lineno, line.strip(), exc_obj))
+    traceback.print_tb(tb, limit=1, file=sys.stdout)
+    traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
+
+
+
+def get_signature(fn,skip_default=False):
+    signature = OrderedDict()
+    parameters = list(inspect.signature(fn).parameters.values())
+    for k in parameters:
+        if skip_default==False or (skip_default==True and k.default ==inspect._empty):
+            if k.name not in ['args','kwargs']:
+                signature[k.name]= k.default if k.default !=inspect._empty else None
+    return signature
+
 
 
 def epsilon():
@@ -56,13 +186,12 @@ def epsilon():
         1e-07
     ```
     """
-    return _EPSILON
+    return _SESSION.epsilon
 
 
 def set_epsilon(e):
 
-    global _EPSILON
-    _EPSILON = float(e)
+    _SESSION.epsilon = float(e)
 
 
 def floatx():
@@ -89,12 +218,105 @@ def set_floatx(floatx):
 
 
 def camel2snake(name):
-    s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
-    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+    if name is None:
+        return None
+    else:
+        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+        return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
 
 def snake2camel(name):
-    return ''.join(x.capitalize() or '_' for x in name.split('_'))
+    if name is None:
+        return None
+    else:
+        return ''.join(x.capitalize() or '_' for x in name.split('_'))
 
+
+def to_onehot(label,classes):
+    onehot=np.zeros(classes)
+    onehot[label]=1
+    return onehot
+
+def to_list(x):
+    """Normalizes a list/tensor into a list.
+    If a tensor is passed, we return
+    a list of size 1 containing the tensor.
+    # Arguments
+        x: target object to be normalized.
+        allow_tuple: If False and x is a tuple,
+            it will be converted into a list
+            with a single element (the tuple).
+            Else converts the tuple to a list.
+    # Returns
+        A list.
+    """
+    if isinstance(x, list):
+        return x
+    elif isinstance(x, tuple):
+        return [x[i] for i in range(len(x))]
+    elif isinstance(x,np.ndarray):
+        return x.tolist()
+    elif hasattr(x, 'tolist')and callable(x.tolist):
+        return x.tolist()
+    elif isinstance(x,(int,float)):
+        return [x]
+    elif isinstance(x,type({}.keys())):
+        return list(x)
+    elif isinstance(x,type({}.values())):
+        return list(x)
+    elif isinstance(x,types.GeneratorType):
+        return list(x)
+    elif inspect.isgenerator(x):
+        return list(x)
+    elif isinstance(x, collections.Iterable):
+        return list(x)
+    else:
+        try:
+            return list(x)
+        except:
+            return x.tolist()
+
+
+
+def if_else(a,b):
+    if a is None:
+        return b
+    else:
+        return a
+
+
+def unpack_singleton(x):
+    """Gets the first element if the iterable has only one value.
+    Otherwise return the iterable.
+    # Argument
+        x: A list or tuple.
+    # Returns
+        The same iterable or the first element.
+    """
+    if 'tensor' in x.__class__.__name__.lower()or isinstance(x,np.ndarray):
+        return x
+    elif isinstance(x,(tuple,list)) and len(x) == 1:
+        return x[0]
+    return x
+
+def enforce_singleton(x):
+    """Gets the first element if the iterable has only one value.
+    Otherwise return the iterable.
+    # Argument
+        x: A list or tuple.
+    # Returns
+        The same iterable or the first element.
+    """
+    if 'tensor' in x.__class__.__name__.lower() or isinstance(x,np.ndarray):
+        return x
+    elif hasattr(x,'__len__'):
+        return x[0]
+    return x
+
+
+def check_for_unexpected_keys(name, input_dict, expected_values):
+    unknown = set(input_dict.keys()).difference(expected_values)
+    if unknown:
+        raise ValueError('Unknown entries in {} dictionary: {}. Only expected following keys: {}'.format(name, list(unknown),expected_values))
 
 def addindent(s_, numSpaces):
     s = s_.split('\n')
@@ -106,6 +328,7 @@ def addindent(s_, numSpaces):
     s = '\n'.join(s)
     s = first + '\n' + s
     return s
+
 
 def format_time(seconds):
     days = int(seconds / 3600/24)
@@ -140,7 +363,7 @@ def format_time(seconds):
     return f
 
 
-def get_time_prefix():
+def get_time_suffix():
     prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-','').replace( '.', '')
     return prefix
 
@@ -201,8 +424,6 @@ def get_terminal_size():
     if current_os in ['Linux', 'Darwin'] or current_os.startswith('CYGWIN'):
         tuple_xy = _get_terminal_size_linux()
     if tuple_xy is None:
-        print
-        "default"
         tuple_xy = (80, 25)  # default value
     return tuple_xy
 
@@ -216,13 +437,20 @@ def _get_terminal_size_windows():
         h = windll.kernel32.GetStdHandle(-12)
         csbi = create_string_buffer(22)
         res = windll.kernel32.GetConsoleScreenBufferInfo(h, csbi)
-        if res:
+        if res and res!=0:
             (bufx, bufy, curx, cury, wattr, left, top, right, bottom, maxx, maxy) = struct.unpack("hhhhHhhhhhh",
                                                                                                   csbi.raw)
             sizex = right - left + 1
             sizey = bottom - top + 1
             return sizex, sizey
-    except:
+        else:
+            import tkinter as tk
+            root = tk.Tk()
+            sizex,sizey=root.winfo_screenwidth() // 8, root.winfo_screenheight() // 8
+            root.destroy()
+            return sizex,sizey
+    except Exception as e:
+        print(e)
         pass
 
 
@@ -268,7 +496,7 @@ def gcd(x, y):
     gcd = 1
     if x % y == 0:
         gcds.append(int(y))
-    for k in range(int(y // 2), 0, -1):
+    for k in range(int(y // 2)+1, 0, -1):
         if x % k == 0 and y % k == 0:
             gcd = k
             gcds.append(int(k))
@@ -276,29 +504,38 @@ def gcd(x, y):
 
 
 def get_divisors(n):
-    return [d for d in range(2, n // 2) if n % d == 0]
+    return [d for d in range(2, n // 2+1) if n % d == 0]
 
 
 def isprime(n):
-    divisors = [d for d in range(2, int(math.sqrt(n))) if n % d == 0]
-    return all(n % od != 0 for od in divisors if od != n)
+    if n>=9:
+        divisors = [d for d in range(2, int(math.sqrt(n))) if n % d == 0]
+        return all(n % od != 0 for od in divisors if od != n)
+    elif n in [1,2,3,5,7]:
+        return True
+    else:
+        return False
 
 def next_prime(n):
     pos=n+1
-    while not isprime(pos):
+    while True:
+        if isprime(pos):
+            return pos
         pos+=1
-    return pos
+
 
 def prev_prime(n):
     pos=n-1
-    while not isprime(pos):
+    while True:
+        if  isprime(pos):
+            return pos
         pos-=1
-    return pos
+
 
 def nearest_prime(n):
     nextp=next_prime(n)
     prevp=prev_prime(n)
-    if math.abs(nextp-n)<math.abs(prevp-n):
+    if abs(nextp-n)<abs(prevp-n):
         return nextp
     else:
         return nextp
@@ -306,10 +543,304 @@ def nearest_prime(n):
 
 
 
+def get_python_function_arguments(f):
+    '''
+    Helper to get the parameter names and annotations of a Python function.
+    '''
+    # Note that we only return non-optional arguments (we assume that any optional args are not specified).
+    # This allows to, e.g., accept max(a, b, *more, name='') as a binary function
+    import sys
+    param_specs = inspect.getfullargspec(f)
+    annotations = param_specs.annotations
+    arg_names = param_specs.args
+    defaults = param_specs.defaults # "if this tuple has n elements, they correspond to the last n elements listed in args"
+    if defaults:
+        arg_names = arg_names[:-len(defaults)] # we allow Function(functions with default arguments), but those args will always have default values since CNTK Functions do not support this
+    return (arg_names, annotations)
 
 
 
+def map_function_arguments(params, params_dict, *args, **kwargs):
+    '''
+    Helper to determine the argument map for use with various call operations.
+    Returns a dictionary from parameters to whatever arguments are passed.
+    Accepted are both positional and keyword arguments.
+    This mimics Python's argument interpretation, except that keyword arguments are not optional.
+    This does not require the arguments to be Variables or Functions. It is also called by train_minibatch() and @Signature.
+    '''
+    # start with positional arguments
+    arg_map = dict(zip(params, args))
+
+    # now look up keyword arguments
+    if len(kwargs) != 0:
+        for name, arg in kwargs.items():  # keyword args are matched by name
+            if name not in params_dict:
+                raise TypeError("got an unexpected keyword argument '%s'" % name)
+            param = params_dict[name]
+            if param in arg_map:
+                raise SyntaxError("got multiple values for argument '%s'" % name)
+            arg_map[param] = arg # add kw argument to dict
+    assert len(arg_map) == len(params)
+
+    return arg_map
 
 
 
+# def map_if_possible(obj_to_map, *args, **kwargs):
+#     if inspect.isfunction(obj_to_map):
 
+
+
+def split_path(path):
+    if path is None or len(path)==0:
+        return '','',''
+    path=sanitize_path(path)
+    folder,filename=os.path.split(path)
+    ext=''
+    if '.' in filename:
+        filename, ext = os.path.splitext(filename)
+        filename, ext2 = os.path.splitext(filename)
+        ext = ext2 + ext
+    else:
+        folder = os.path.join(folder, filename)
+        filename = ''
+    return folder,filename,ext
+
+
+def make_dir_if_need(path):
+    folder,filename,ext=split_path(path)
+    if len(folder)>0 and not os.path.exists(folder):
+        try:
+            os.makedirs(folder)
+        except Exception as e:
+            PrintException()
+            sys.stderr.write('folder:{0} is not valid path'.format(folder))
+    return sanitize_path(path)
+
+class OrderedDict(collections.OrderedDict):
+    def __init__(self):
+        super(OrderedDict,self).__init__()
+
+    @property
+    def key_list(self):
+        return list(super().keys())
+
+    def keys(self):
+        return super().keys()
+
+    @property
+    def value_list(self):
+        return list(super().values())
+    def values(self):
+        return super().values()
+
+    @property
+    def item_list(self):
+        return list(super().items())
+    def items(self):
+        return super().items()
+
+
+class ClassfierType(Enum):
+    dense = 'dense'
+    global_avgpool = 'global_avgpool'
+    centroid='centroid'
+
+
+class PaddingMode(Enum):
+    zero = 'constant'
+    reflection = 'reflect'
+    replicate='replicate'
+    circular='circular'
+
+
+
+class Color(Enum):
+    rgb = 'rgb'
+    bgr = 'bgr'
+    gray='gray'
+    rgba='rgba'
+
+
+
+class ShortcutMode(Enum):
+    add = 'add'
+    dot = 'dot'
+    concate='concate'
+
+
+class DataRole(Enum):
+    input = 'input'
+    target = 'target'
+    mask = 'mask'
+
+
+class ExpectDataType(Enum):
+    array_data='array_data'
+    gray = 'gray'
+    rgb = 'rgb'
+    rgba = 'rgba'
+    label_mask = 'label_mask'
+    color_mask = 'color_mask'
+    binary_mask = 'binary_mask'
+    alpha_mask = 'alpha_mask'
+    multi_channel = 'multi_channel'
+    absolute_bbox='absolute_bbox'
+    relative_bbox='relative_bbox'
+    random_noise='random_noise'
+    classification_label='classification_label'
+
+
+class GetImageMode(Enum):
+    path = 'path'
+    raw = 'raw'
+    expect = 'expect'
+    processed = 'processed'
+
+
+
+def get_argument_maps(self, default_map, func):
+    r"""Extracts the signature of the `func`. Then it returns the list of arguments that
+    are present in the object and need to be mapped and passed to the `func` when calling it.
+    Args:
+        default_map (dict): The keys of this dictionary override the function signature.
+        func (function): Function whose argument map is to be generated.
+    Returns:
+        List of arguments that need to be fed into the function. It contains all the positional
+        arguments and keyword arguments that are stored in the object. If any of the required
+        arguments are not present an error is thrown.
+    """
+    sig = signature(func)
+    arg_map = {}
+    for sig_param in sig.parameters.values():
+        arg = sig_param.name
+        arg_name = arg
+        if arg in default_map:
+            arg_name = default_map[arg]
+        if sig_param.default is not _empty:
+            if arg_name in self.__dict__:
+                arg_map.update({arg: arg_name})
+        else:
+            if arg_name not in self.__dict__ and arg != "kwargs" and arg != "args":
+                raise Exception("Argument : {} not present.".format(arg_name))
+            else:
+                arg_map.update({arg: arg_name})
+    return arg_map
+
+
+class _empty:
+    """Marker object for Signature.empty and Parameter.empty."""
+
+class DataSpec:
+    def __init__(self, name, symbol=None,kind='array', shape=None, annotation=_empty):
+        self._name=name
+        self._kind=kind
+        self._shape=shape
+        self._symbol=symbol
+        self._annotation=annotation
+
+    @property
+    def name(self):
+        return self._name
+
+    @property
+    def kind(self):
+        return self._kind
+
+    @kind.setter
+    def kind(self, value):
+        self._kind = value
+
+    @property
+    def symbol(self):
+        return self._symbol
+
+    @symbol.setter
+    def symbol(self, value):
+        self._symbol = value
+
+    @property
+    def shape(self):
+        return self._shape
+
+    @shape.setter
+    def shape(self, value):
+        if value is None:
+            self._shape = None
+        elif isinstance(value,tuple):
+            self._shape =value
+        elif isinstance(value,[int,float]):
+            self.shape=(int(value),)
+        else:
+            try:
+                self.shape=tuple(to_list(value))
+            except:
+                PrintException()
+
+    @property
+    def annotation(self):
+        return self._annotation
+
+    @annotation.setter
+    def annotation(self, value):
+        self._annotation = value
+
+    # x:Image[(3,128,128)]
+    def __str__(self):
+        strs=[]
+        if self.symbol is not None:
+            strs.append('{0}: '.format(self.symbol))
+        else:
+            strs.append('{0}: '.format(self.name))
+        strs.append('{0}[{1}]'.format(snake2camel(self.kind),self._shape))
+
+
+        return ' '.join(strs)
+
+    def __repr__(self):
+        return self.__str__()
+
+
+def get_args_spec(fn):
+    full_arg_spec = inspect.getfullargspec(fn)
+    arg_spec = inspect.ArgSpec(
+        args=full_arg_spec.args,
+        varargs=full_arg_spec.varargs,
+        keywords=full_arg_spec.varkw,
+        defaults=full_arg_spec.defaults)
+    return arg_spec
+
+
+def update_signature(fn:callable,args:list):
+    sig = signature(fn)
+    sig = sig.replace(tuple(sig.parameters.values())[1:])
+
+
+
+def get_gpu_memory_map():
+    """Get the current gpu usage.
+
+    Returns
+    -------
+    usage: dict
+        Keys are device ids as integers.
+        Values are memory usage as integers in MB.
+    """
+    pathes = [p for p in os.environ['path'].split(';') if 'NVIDIA' in p and 'Corporation' in p]
+    nv_path='C:/Program Files/NVIDIA Corporation/'
+    sp = subprocess.Popen(['{0}/NVSMI/nvidia-smi'.format(nv_path), '-q'],encoding='utf-8-sig', stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    out_str = sp.communicate()
+    out_list = out_str[0].split('\n')
+
+    # Convert lines into a dictionary
+
+    gpu_memory_map = {}
+    for item in out_list:
+        try:
+            key, val = item.split(':')
+            key, val = key.strip(), val.strip()
+            gpu_memory_map[key] = val
+        except:
+            pass
+    return gpu_memory_map

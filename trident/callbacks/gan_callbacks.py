@@ -1,16 +1,17 @@
+import itertools
+import math
 import os
 import random
-import warnings
-import math
-import itertools
 import sys
+import warnings
+
 import numpy as np
-from ..callbacks import CallbackBase
+
 from ..backend.common import *
 from ..backend.load_backend import get_backend
+from ..callbacks import CallbackBase
 from ..data.image_common import *
 from ..misc.visualization_utils import *
-
 
 if get_backend() == 'pytorch':
     import torch
@@ -67,13 +68,15 @@ class GanCallback(GanCallbacksBase):
             self.discriminator = discriminator.model
         self.training_items = None
         self.data_provider = None
-        self.z_noise = None
-        self.D_real = None
-        self.D_fake = None
-        self.D_metric = None
-        self.G_metric = None
-        self.img_real = None
-        self.img_fake = None
+        self.data_feed=OrderedDict()
+        self.train_data=OrderedDict()
+        # self.z_noise = None
+        # self.D_real = None
+        # self.D_fake = None
+        # self.D_metric = None
+        # self.G_metric = None
+        # self.img_real = None
+        # self.img_fake = None
         self.gan_type = gan_type if gan_type in _available_gan_type else None
         self.label_smoothing = label_smoothing
         self.noisy_labels = noisy_labels
@@ -111,18 +114,45 @@ class GanCallback(GanCallbacksBase):
         self.training_items = training_context['training_items']
         self.data_provider = training_context['_dataloaders'].value_list[0]
         for k, training_item in self.training_items.items():
-            if self.generator is not None and training_item.model.name == self.generator.name:
+            if self.generator is not None and training_item.model.uuid.item() == self.generator.uuid.item() :
                 training_item.training_context['gan_role'] = 'generator'
-            elif isinstance(training_item, ImageGenerationModel) or training_item.model.name == 'generator':
-                if self.generator is None:
-                    self.generator = training_item.model
-                    training_item.training_context['gan_role'] = 'generator'
-            elif self.discriminator is not None and training_item.model.name == self.discriminator.name:
+            elif self.discriminator is not None and training_item.model.uuid.item()  == self.discriminator.uuid.item() :
                 training_item.training_context['gan_role'] = 'discriminator'
-            elif isinstance(training_item, ImageClassificationModel) or training_item.model.name == 'discriminator':
-                if self.discriminator is None:
-                    self.discriminator = training_item.model
-                    training_item.training_context['gan_role'] = 'discriminator'
+            elif self.generator is None:
+                raise ValueError('You need generator in gan model')
+            elif self.discriminator is None:
+                raise ValueError('You need discriminator in gan model')
+
+            self.data_feed['z_noise']=None
+            self.data_feed['img_real'] = None
+            self.data_feed['img_fake'] = None
+            self.data_feed['d_real'] = None
+            self.data_feed['d_fake'] = None
+            model = training_item.model
+            if  training_item.training_context['gan_role'] == 'generator':
+                model.update_signature(['z_noise','img_fake'])
+
+                data_keys = self.data_provider.signature.key_list
+                inp_shape = model.input_shape.tolist()
+                out_shape = model.output_shape.tolist()
+
+                new_data_signature=OrderedDict()
+                for n in len(self.data_provider.signature):
+                    k=data_keys[n]
+                    if 'noise' in k.lower() or self.data_provider.signature[k].tolist()==inp_shape or len(self.data_provider.signature[k].tolist())==1:
+                        self.data_feed['z_noise']=k
+                        new_data_signature['z_noise']=self.data_provider.signature[k]
+
+                    elif 'real'  in k.lower()  or self.data_provider.signature[k].tolist()==out_shape or len(self.data_provider.signature[k].tolist())==3:
+                        self.data_feed['img_real'] = k
+                        new_data_signature['img_real'] = self.data_provider.signature[k]
+                    else:
+                        new_data_signature[k] = self.data_provider.signature[k]
+                if self.data_provider.signature!=new_data_signature:
+                    self.data_provider.signature=new_data_signature
+            training_item.training_context['data_feed'] = self.data_feed
+            training_item.training_context['train_data'] =self.train_data
+
         if self.training_items.value_list[0].training_context['gan_role'] == 'generator':
             self.generator_first = True
             print('generator first')

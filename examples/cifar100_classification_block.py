@@ -14,7 +14,7 @@ import math
 import numpy as np
 import linecache
 
-from trident import backend as T
+from trident import get_backend as T
 
 
 # C.debugging.set_computation_network_trace_level(1000)
@@ -37,7 +37,7 @@ def calculate_flops(x):
 
 
 data = T.load_cifar('cifar100', 'train', is_flatten=False)
-dataset = T.Dataset('cifar100')
+dataset = T.DataProvider('cifar100')
 dataset.mapping(data=data[0], labels=data[1], scenario='train')
 
 input_var = C.input_variable((3, 32, 32), dtype=np.float32)

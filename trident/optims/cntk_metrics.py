@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+rom __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import math
@@ -8,8 +8,21 @@ import cntk as C
 import cntk.ops
 from ..backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
 
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
-__all__ = ['accuracy','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metrics']
+import collections
+import itertools
+import math
+
+import cntk as C
+import cntk.ops
+
+from ..backend.common import get_session, addindent, get_time_suffix, get_function, get_class, format_time, \
+    get_terminal_size, snake2camel, camel2snake
+
+__all__ = ['accuracy','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 
 def accuracy(output, target, topk=1,axis=-1):
@@ -64,13 +77,17 @@ msle=mean_squared_logarithmic_error
 
 
 
-def get_metrics(metrics_name):
-    if metrics_name is None:
-        return None
-    metrics_modules = ['trident.optimizers.cntk_metrics']
-    try:
-        metrics_fn = get_function(camel2snake(metrics_name), metrics_modules)
-    except Exception :
-        metrics_fn = get_function(metrics_name, metrics_modules)
-    return metrics_fn
 
+def get_metric(metric_name):
+    if metric_name is None:
+        return None
+
+    metric_modules = ['trident.optims.cntk_metrics']
+    if metric_name in __all__:
+        metric_fn = get_function(metric_name, metric_modules)
+    else:
+        try:
+            metric_fn = get_function(camel2snake(metric_name), metric_modules)
+        except Exception :
+            metric_fn = get_function(metric_name, metric_modules)
+    return metric_fn

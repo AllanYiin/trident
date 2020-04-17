@@ -2,11 +2,13 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import string
+
 import cntk as C
 import six
 from cntk.layers.blocks import _inject_name
 
-from trident.backend.common import epsilon
+from ..backend.common import epsilon, get_function, get_session
 
 
 def _moments(x, axes=None,  keep_dims=True):
@@ -16,48 +18,28 @@ def _moments(x, axes=None,  keep_dims=True):
     norm_variance=C.reduce_mean(C.square(x-C.stop_gradient(norm_mean)),axis=_axes)
     return norm_mean, norm_variance
 
-# def moments2(x, axes=None, shift=None, keep_dims=False):
-#     _axes = tuple(axes)
-#     if shift is None:
-#         shift = x
-#         # Compute true mean while keeping the dims for proper broadcasting.
-#         for axis in _axes:
-#             shift = C.reduce_mean(shift, axis=axis)
-#     shift = C.stop_gradient(shift)
-#     shifted_mean = C.minus(x, shift)
-#     for axis in _axes:
-#         shifted_mean = C.reduce_mean(shifted_mean, axis=axis)
-#     variance_mean = C.square(C.minus(x, shift))
-#     for axis in _axes:
-#         variance_mean = C.reduce_mean(variance_mean, axis=axis)
-#     variance = C.minus(variance_mean, C.square(shifted_mean))
-#     mean = C.plus(shifted_mean, shift)
-#     if not keep_dims:
-#         mean = C.squeeze(mean, _axes)
-#         variance = C.squeeze(variance, _axes)
-#     return mean, variance
-
-def BatchNormalization(
+@C.typemap
+def BatchNorm(
         axis=0,
-        center=True,
-        scale=True,
+        affine=True,
         epsilon=1e-5,
         name=''):
     return C.layers.BatchNormalization(map_rank=1,use_cntk_engine=False,disable_regularization=False,epsilon=epsilon, name=name)
 
-def LayerNormalization(
+BatchNorm2d=BatchNorm
+BatchNorm3d=BatchNorm
+
+def _LayerNormalization(
         axis=0,
-        center=True,
-        scale=True,
+        affine=True,
         epsilon=1e-5,
         name=''):
     return C.layers.LayerNormalization(initial_scale=1, initial_bias=0, epsilon=epsilon, name=name)
 
-
-def InstanceNormalization(
+@C.typemap
+def _InstanceNormalization(
         axis=0,
-        center=True,
-        scale=True,
+        affine=True,
         epsilon=1e-5,
         name=''):
     """Instance normalization layer (Lei Ba et al, 2016, Ulyanov et al., 2016).
@@ -65,33 +47,38 @@ def InstanceNormalization(
        i.e. applies a transformation that maintains the mean activation
        close to 0 and the activation standard deviation close to 1.
       """
-    def apply_x(x):
+    
+    def instance_normalization(x):
+        center=affine,
+        scale=affine,
         reduction_axes = list(range(0, len(x.shape)))
         if (axis is not None):
             del reduction_axes[axis]
-
         mean = C.reduce_mean(x, axis=reduction_axes, keepdims=True)
         stddev =C.reduce_mean(C.square(x-C.stop_gradient(mean)),axis=reduction_axes, keepdims=True)
         normed = (x - mean) / (stddev+epsilon)
-
-        gamma =C.parameter(normed.shape,init=1)
-        beta =C.parameter(normed.shape,init=0)
         if scale:
-            normed=normed*gamma
+            gamma =C.parameter(mean.shape,init=1)
+            normed = normed * gamma
         if center:
+            beta = C.parameter(mean.shape, init=0)
             normed=normed+beta
         return _inject_name(normed,name=name)
-    return apply_x
+    return instance_normalization
 
 
-def GroupNormalization(
+InstanceNorm2d=_InstanceNormalization
+
+@C.typemap
+def GroupNorm2d(
                  groups=32,
                  axis=0,
+                 affine=True,
                  epsilon=1e-5,
-                 center=True,
-                 scale=True,
                  name=''):
-    def apply_x(x):
+    def group_normalization(x):
+        center = affine,
+        scale = affine,
         reduction_axes = list(range(0, len(x.shape)))
         if (axis is not None):
             del reduction_axes[axis]
@@ -106,11 +93,12 @@ def GroupNormalization(
             group_std = C.sqrt(group_variance )+ epsilon
             normed = (x - group_mean) /group_std
             normed = C.reshape(normed, (c, h, w))
-            gamma = C.parameter(normed.shape, init=1)
-            beta = C.parameter(normed.shape, init=0)
+
             if scale:
+                gamma = C.parameter(normed.shape, init=1)
                 normed = normed * gamma
             if center:
+                beta = C.parameter(normed.shape, init=0)
                 normed = normed + beta
             return  _inject_name(normed,name=name)
         elif len(x.shape) == 1:
@@ -120,14 +108,14 @@ def GroupNormalization(
             group_std = C.sqrt(group_variance) + epsilon
             normed = (x - group_mean) / group_std
             normed = C.reshape(normed, c)
-            gamma = C.parameter(normed.shape, init=1)
-            beta = C.parameter(normed.shape, init=0)
             if scale:
+                gamma = C.parameter(group_mean.shape, init=1)
                 normed = normed * gamma
             if center:
+                beta = C.parameter(group_mean.shape, init=0)
                 normed = normed + beta
             return  _inject_name(normed,name=name)
-    return apply_x
+    return group_normalization
 
 
 
@@ -138,18 +126,20 @@ def L2Normalization(axis=None,epsilon=epsilon, name=''):
         return _inject_name(x,name=name)
     return apply_x
 
-def get_normalization(identifier):
-    if identifier is None:
+def get_normalization(fn_name):
+    if fn_name is None:
         return None
-    if isinstance(identifier, six.string_types):
-        identifier = str(identifier)
-        fn=BatchNormalization
-        mod=fn.__module__
-        obj_dict = fn.__globals__
-        for k, v in obj_dict.items():
-            if (k == identifier or k.replace('Normalization','').lower()==identifier.lower() or (k!='L2Normalization' and str(k[0]).lower()==str(identifier[0]).lower() and len(identifier)<=2)) and mod=='trident.backend.cntk_normalizations':
-                fn = v
-                return fn
-        raise ValueError('Not valid normalization functions name : ' + str(identifier))
+    if isinstance(fn_name, str):
+        if fn_name.lower().strip() in ['instance','in','i']:
+            return InstanceNorm2d()
+        elif  fn_name.lower().strip() in ['batch','b']:
+            return BatchNorm()
+        elif  fn_name.lower().strip() in ['group','g']:
+            return GroupNorm2d(num_groups=16)
+    fn_modules = ['trident.layers.cntk_normalizations']
+    normalization_fn_ = get_function(fn_name, fn_modules)
+    normalization_fn = normalization_fn_
+    return normalization_fn
+
 
 

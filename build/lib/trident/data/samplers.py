@@ -1,15 +1,18 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import itertools
 import locale
 import os
 import random
-import numpy as np
 import warnings
-import itertools
 
+import numpy as np
+
+from .image_common import check_same_size
 from ..backend.common import OrderedDict
-
+from ..backend.load_backend import get_backend
 
 __all__ = ['Sampler','SequentialSampler','RandomSampler','BatchSampler']
 
@@ -104,7 +107,8 @@ class BatchSampler(Sampler):
         [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
     """
 
-    def __init__(self, data_source, batch_size=1, is_shuffle=True,drop_last=False):
+    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=False):
+        super().__init__(data_source)
         if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size <= 0:
             raise ValueError("batch_size should be a positive integeral value, "
                              "but got batch_size={}".format(batch_size))
@@ -115,13 +119,12 @@ class BatchSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.is_shuffle=is_shuffle
-        self.image_transforms=[]
-        self.label_transforms = []
+
 
         idxes = np.arange(len(self.data_source))
-        if len(self.data_source) % self.batch_size>0:
-            idxes=idxes[:-(len(self.data_source) % self.batch_size)]
-        if self.is_shuffle==True:
+        if len(self.data_source) % self.batch_size > 0:
+            idxes = idxes[:-(len(self.data_source) % self.batch_size)]
+        if self.is_shuffle == True:
             np.random.shuffle(idxes)
         idxes = list(idxes)
 
@@ -129,24 +132,36 @@ class BatchSampler(Sampler):
 
     def __iter__(self):
         batch =OrderedDict()
+        batch_shape = OrderedDict()
         _data_cnt=0
         for idx in self.sampler:
             try:
                 _return_data=self.data_source[idx]
-                if _return_data[0] is not None:
+                if isinstance(_return_data,tuple):
                     for i in range(len(_return_data)):
                         if i not in batch:
                             batch[i]=[]
+                            batch_shape[i]=[]
                         batch[i].append(_return_data[i])
+                        batch_shape[i].append(_return_data[i].shape if isinstance(_return_data[i],np.ndarray) else (-1))
+                else:
+                    if  0not in batch:
+                        batch[0] = []
+                        batch_shape[0] = []
+                    batch[0].append(_return_data)
+                    batch_shape[0].append(_return_data.shape)
                 _data_cnt+=1
             except Exception as e:
                 print(e)
 
             if _data_cnt== self.batch_size:
-                yield tuple([np.array(v) for k,v in batch.items()])
-                batch = {}
+                returnData=[ np.asarray(batch.value_list[i]) if len(list(set(batch_shape.value_list[i])))==1 else batch.value_list[i]  for i in range(len(batch.value_list)) ]
+                yield tuple(returnData)
+                batch = OrderedDict()
+                batch_shape = OrderedDict()
                 _data_cnt = 0
-        if len(batch)==0:
+        if len(batch) == 0:
+            self.reset()
             raise StopIteration
 
     def __len__(self):
@@ -163,4 +178,5 @@ class BatchSampler(Sampler):
             np.random.shuffle(idxes)
         idxes = list(idxes)
         self.sampler = iter(idxes)
+
 

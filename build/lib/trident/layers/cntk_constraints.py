@@ -1,34 +1,37 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
-from backend.common import  epsilon,floatx
+import functools
+from ..backend.common import  get_session
 import numpy as np
 import cntk as C
 
-def  default_constrains(w):
-    w=C.clip(w,-1e5,1e5)
-    return w
+__all__ = ['max_norm','non_neg','unit_norm','min_max_norm','maxnorm','nonneg','unitnorm','minmaxnorm','get_constraints']
 
-def  max_norm(w,max_value=2, axis=0):
-    w=default_constrains(w)
-    norms = C.sqrt(C.reduce_sum(C.square(w), axis, keepdims=True))
-    desired = C.clip(norms, epsilon() , max_value)
-    return w * (desired / (epsilon() + norms))
+_session=get_session()
+_epsilon=_session.epsilon
 
-def  non_neg(w:C.Parameter):
-    w = default_constrains(w)
-    return w * C.greater_equal(w, 0.)
 
-def  unit_norm(w:C.Parameter,axis):
-    w = default_constrains(w)
-    return w / (epsilon() + C.sqrt(C.sum(C.square(w), axis,keepdims=True)))
+def  max_norm(model,max_value=3, axis=0):
+    for p in model.para:
+        norms = C.sqrt(C.reduce_sum(C.square(p.value), axis, keepdims=True))
+        desired = C.clip(norms, 0 , max_value)
+        C.assign(p,p * (desired / (_epsilon + norms)))
 
-def  min_max_norm(w:C.Parameter,min_value=0.0, max_value=1.0, rate=3.0, axis=0):
-    w = default_constrains(w)
-    norms = C.sqrt(C.reduce_sum(C.square(w), axis, keepdims=True))
-    desired = (rate * C.clip(norms, min_value, max_value) + (1 - rate) * norms)
-    return w * (desired / (epsilon() + norms))
+
+def  non_neg(model):
+    for p in model.para:
+        C.assign(p,p * C.greater_equal(p, 0.))
+
+def  unit_norm(model,axis):
+    for p in model.para:
+        C.assign(p, p / (_epsilon+ C.sqrt(C.sum(C.square(p.value), axis,keepdims=True))))
+
+def  min_max_norm(model,min_value=0.0, max_value=1.0, rate=3.0, axis=0):
+    for p in model.para:
+        norms = C.sqrt(C.reduce_sum(C.square(p.value), axis, keepdims=True))
+        desired = (rate * C.clip(norms, min_value, max_value) + (1 - rate) * norms)
+        C.assign(p,p * (desired / (_epsilon + norms)))
 
 
 
@@ -38,7 +41,7 @@ maxnorm = max_norm
 nonneg = non_neg
 unitnorm = unit_norm
 minmaxnorm=min_max_norm
-
+default_constrains=functools.partial(min_max_norm,functools.partial)
 
 def get_constraints(constraint):
     if constraint in ['maxnorm','max_norm']:

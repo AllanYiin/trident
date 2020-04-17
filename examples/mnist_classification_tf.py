@@ -2,26 +2,15 @@ import os
 import sys
 import codecs
 
-os.environ['TRIDENT_BACKEND'] = 'pytorch'
-from trident import backend as T
+os.environ['TRIDENT_BACKEND'] = 'tensorflow'
+import trident as T
 import math
 import numpy as np
 import linecache
 
-import torch
-import torch.nn as nn
-import torch.utils.model_zoo as model_zoo
-from torch.utils.data import *
-from torch.autograd import Variable
-import torch.nn.functional as F
-import torch.optim as optim
-import torchvision
+import tensorflow as tf
 
-from trident.backend.pytorch_backend import *
-from trident.layers.pytorch_blocks import  *
 
-# 是否使用GPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 # C.debugging.set_computation_network_trace_level(1000)
@@ -85,8 +74,8 @@ class LeNet(nn.Module):
         out = F.relu(self.fc2(out), inplace=True)
         out = self.fc3(out)
         return out
-lenet_model = torch.load('lenet_model_only_pytorch_mnist.pth')
-#lenet_model=LeNet()
+#lenet_model = torch.load('lenet_model_only_pytorch_mnist.pth')
+lenet_model=LeNet()
 lenet_model.to(device)
 #lenet_model.load_state_dict(torch.load('lenet_model_pytorch_mnist.pth'))
 

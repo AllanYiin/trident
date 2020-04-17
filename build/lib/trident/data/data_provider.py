@@ -1,12 +1,15 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import itertools
 import locale
 import os
 import random
-import numpy as np
+import string
 import warnings
-import itertools
+
+import numpy as np
 
 try:
     from urllib.request import urlretrieve
@@ -214,6 +217,8 @@ class DataProvider(object):
             return img_data
         else:
             return img_data
+
+
     def label_transform(self, label_data):
         label_data=label_backend_adaptive(label_data,self.class_names)
         if isinstance(label_data, list) and all(isinstance(elem, np.ndarray) for elem in label_data):
@@ -225,6 +230,7 @@ class DataProvider(object):
             return label_data
         else:
             return label_data
+
 
     def mapping(self,data,labels=None,masks=None,scenario=None):
         if scenario is None:
@@ -312,7 +318,7 @@ class DataProviderV2(object):
 
         self.scenario='train'
         self._class_names={}
-        self.palettes=None
+
         self._minibatch_size = minibatch_size
         self.is_flatten=bool(kwargs['is_flatten']) if 'is_flatten' in kwargs else False
         self.__default_language__='en-us'
@@ -334,8 +340,32 @@ class DataProviderV2(object):
         self.tot_epochs=0
         self._image_transform_funcs=[]
         self._label_transform_funcs = []
-        self.paired_transform_funcs = []
+        self._paired_transform_funcs = []
         self.spatial_transform_funcs = []
+
+
+
+
+    @property
+    def signature(self):
+        if self.scenario == 'test' and self.testdata is not None:
+            return self.testdata.signature
+        elif self.traindata is not None:
+            return self.traindata.signature
+        else:
+            return None
+
+    def update_signature(self,arg_names):
+        if self.scenario == 'test' and self.testdata is not None:
+           self.testdata.update_signature(arg_names)
+           print(self.testdata.signature)
+        elif self.traindata is not None:
+            self.traindata.update_signature(arg_names)
+            print(self.traindata.signature)
+        else:
+            return None
+
+
 
     @property
     def batch_sampler(self):
@@ -345,6 +375,7 @@ class DataProviderV2(object):
             return self.traindata.batch_sampler
         else:
             return []
+
 
     @property
     def minibatch_size(self):
@@ -359,6 +390,15 @@ class DataProviderV2(object):
             self.testdata.minibatch_size= self._minibatch_size
 
     @property
+    def palette(self):
+        if self.scenario=='test' and self.testdata is not None:
+            return self.testdata.palette
+        elif self.traindata is not None:
+            return self.traindata.palette
+        else:
+            return None
+
+    @property
     def image_transform_funcs(self):
         return self._image_transform_funcs
 
@@ -366,9 +406,52 @@ class DataProviderV2(object):
     def image_transform_funcs(self, value):
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'image_transform_funcs'):
-            self.traindata.data.image_transform_funcs=self._image_transform_funcs
-        if self.testdata is not None and hasattr(self.testdata.data, 'image_transform_funcs'):
-            self.testdata.data.image_transform_funcs=self._image_transform_funcs
+            self.traindata.data.image_transform_funcs = self._image_transform_funcs
+            if len(self.traindata.unpair) > 0:
+                self.traindata.unpair.image_transform_funcs = self._image_transform_funcs
+        if self.testdata is not None and len(self.testdata.data)>0 and hasattr(self.testdata.data, 'image_transform_funcs'):
+            self.testdata.data.image_transform_funcs = self._image_transform_funcs
+        if self.testdata is not None and len(self.testdata.data)>0 and len(self.testdata.unpair) > 0:
+            self.testdata.unpair.image_transform_funcs = self._image_transform_funcs
+
+    def image_transform(self, img_data):
+        if img_data.ndim==4:
+            return [self.image_transform(im) for im in img_data]
+        if len(self.image_transform_funcs) == 0:
+            return image_backend_adaptive(img_data)
+        if isinstance(img_data, np.ndarray):
+            for fc in self.image_transform_funcs:
+                if not fc.__qualname__.startswith('random_') or  'crop' in fc.__qualname__  or  'rescale' in fc.__qualname__  or  (fc.__qualname__.startswith('random_') and random.randint(0,10)%2==0):
+                    img_data = fc(img_data)
+
+            img_data = image_backend_adaptive(img_data)
+
+            return img_data
+        else:
+            return img_data
+
+
+    @property
+    def reverse_image_transform_funcs(self):
+        return_list=[]
+        return_list.append(reverse_image_backend_adaptive)
+        for i in range(len(self.image_transform_funcs)):
+            fn=self.image_transform_funcs[-1-i]
+            if fn.__qualname__=='normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean,fn.std))
+        #return_list.append(array2image)
+        return return_list
+
+    def reverse_image_transform(self, img_data:np.ndarray):
+        if len(self.reverse_image_transform_funcs) == 0:
+            return reverse_image_backend_adaptive(img_data)
+        if isinstance(img_data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.reverse_image_transform_funcs:
+                img_data = fc(img_data)
+            img_data = reverse_image_backend_adaptive(img_data)
+
+        return img_data
 
 
     @property
@@ -382,6 +465,38 @@ class DataProviderV2(object):
             self.traindata.label.label_transform_funcs=self._label_transform_funcs
         if self.testdata is not None and hasattr(self.testdata.label, 'label_transform_funcs'):
             self.testdata.label.label_transform_funcs=self._label_transform_funcs
+
+    @property
+    def paired_transform_funcs(self):
+        return self._paired_transform_funcs
+
+    @paired_transform_funcs.setter
+    def paired_transform_funcs(self, value):
+        self._paired_transform_funcs = value
+
+        if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
+            self.traindata.paired_transform_funcs = self._paired_transform_funcs
+
+        if self.testdata is not None  and hasattr(self.testdata, 'paired_transform_funcs'):
+            self.testdata.paired_transform_funcs = self._paired_transform_funcs
+
+
+    def image_transform(self, img_data):
+        if img_data.ndim==4:
+            return [self.image_transform(im) for im in img_data]
+        if len(self.image_transform_funcs) == 0:
+            return image_backend_adaptive(img_data)
+        if isinstance(img_data, np.ndarray):
+            for fc in self.image_transform_funcs:
+                if fc.__qualname__.startswith('random_') and random.randint(10)%2==0:
+                    img_data = fc(img_data)
+            img_data = image_backend_adaptive(img_data)
+
+            return img_data
+        else:
+            return img_data
+
+
 
     @property
     def class_names(self):
@@ -413,7 +528,12 @@ class DataProviderV2(object):
             return 0
 
     def next(self):
-        return self.__next__()
+        if self.scenario == 'test' and self.testdata is not None:
+            result = self.testdata.next()
+            return result
+        else:
+            result= self.traindata.next()
+            return result
 
     def __next__(self):
         if self.scenario == 'test' and self.testdata is not None:
@@ -422,28 +542,31 @@ class DataProviderV2(object):
             return next(self.traindata)
 
     def next_train(self):
-        return next(self.traindata)
+        return self.traindata.next()
 
     def next_test(self):
         if self.testdata is not None:
-            return next(self.testdata)
+            return self.testdata.next()
         else:
             return None
 
-    def get_all_data(self, is_shuffle=False, topk=100):
-        get_image_mode = None
+
+    def get_all_data(self,is_shuffle=False,get_image_mode = GetImageMode.expect, topk=-1):
+        orig_get_image_mode = None
         if hasattr(self.traindata.data, 'get_image_mode'):
-            get_image_mode = self.traindata.data.get_image_mode
-            self.traindata.data.get_image_mode = GetImageMode.expect
+            orig_get_image_mode = self.traindata.data.get_image_mode
+            self.traindata.data.get_image_mode =get_image_mode
 
         idxes = np.arange(len(self.traindata.data))
         if is_shuffle == True:
-            idxes = np.random.shuffle(idxes)
+            np.random.shuffle(idxes)
         data = []
+        if topk==-1:
+            topk=len(self.traindata.data)
         for i in range(topk):
             data.append(self.traindata.data[idxes[i]])
         if hasattr(self.traindata.data, 'get_image_mode'):
-            self.traindata.data.get_image_mode = get_image_mode
+            self.traindata.data.get_image_mode = orig_get_image_mode
         return data
 
 
@@ -491,13 +614,6 @@ class DataProviderV2(object):
 
     def get_language(self):
         return self.__default_language__
-
-
-
-
-
-
-
 
 
 

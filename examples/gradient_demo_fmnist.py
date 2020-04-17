@@ -16,7 +16,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 
-dataset=T.load_mnist('mnist','train',is_flatten=True)
+dataset=T.load_mnist('fashion-mnist','train',is_flatten=True)
 
 
 input_var =Input(shape=(28*28,),dtype=T.floatx())
@@ -68,7 +68,7 @@ plt.figure()
 plt.plot(np.arange(9),np.array(loss_list))
 plt.plot(np.arange(9),np.array(metrics_list),ls=':')
 plt.show(block=False)
-plt.savefig('loss_metrics.png', dpi=300, format='png')
+plt.savefig('fmnist_loss_metrics.png', dpi=300, format='png')
 plt.clf()
 
 fig,ax1=plt.subplots(nrows=3,ncols=3,sharex='all',sharey='all')
@@ -77,7 +77,7 @@ for i in range(3):
         ax1[i, j].hist(np.reshape(grads_list[i+j],-1), 8, density=True, histtype='bar', facecolor='b', alpha=0.5)
         ax1[i, j].set_title('step {0}'.format(i*3+j))
 plt.show(block=False)
-fig.savefig('gradients_histogram.png', dpi=300, format='png')
+fig.savefig('fmnist_gradients_histogram.png', dpi=300, format='png')
 plt.clf()
 
 fig,ax1=plt.subplots(nrows=3,ncols=3,sharex='all',sharey='all')
@@ -86,7 +86,7 @@ for i in range(3):
         ax1[i, j].pcolor(grads_list[i + j].mean(-1).reshape(28, 28))
         ax1[i, j].set_title('step {0}'.format(i * 3 + j))
 plt.show(block=False)
-fig.savefig('gradients.png', dpi=300, format='png')
+fig.savefig('fmnist_gradients.png', dpi=300, format='png')
 plt.clf()
 
 fig,ax1=plt.subplots(nrows=3,ncols=3,sharex='all',sharey='all')
@@ -96,7 +96,7 @@ for i in range(3):
         ax1[i, j].pcolor(weights_list[i+j].mean(-1).reshape(28,28) -weights_list[i+j-1].mean(-1).reshape(28,28) if i+j>0 else base)
         ax1[i, j].set_title('step {0}'.format(i*3+j))
 plt.show(block=False)
-fig.savefig('weights.png', dpi=300, format='png')
+fig.savefig('fmnist_weights.png', dpi=300, format='png')
 plt.clf()
 
 #cbar_ax = fig1.add_axes([0.85, 0.15, 0.05, 0.7])

@@ -1,15 +1,22 @@
+import uuid
 from abc import ABC
+
 from tqdm.auto import tqdm
-
-
-__all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','NumberOfEpochsStoppingCriterionCallback']
-
 
 
 class CallbackBase(ABC):
     """
     Objects of derived classes inject functionality in several points of the training process.
     """
+
+    def __init__(self,is_shared=False):
+        self.is_shared=is_shared
+        self.uuid=str(uuid.uuid4())[:8].__str__().replace('-', '')
+
+    def __eq__(self, other):
+        return self.uuid==other.uuid
+
+
     def on_training_start(self, training_context):
         """
         Called at the beginning of the training process.
@@ -52,6 +59,18 @@ class CallbackBase(ABC):
 
         pass
 
+    def on_overall_epoch_end(self, training_context):
+        """
+        Called after a batch has been processed.
+
+
+
+        :param training_context: Dict containing information regarding the training process.
+
+        """
+
+        pass
+
     def on_batch_start(self, training_context):
         """
         Called just before processing a new batch.
@@ -65,6 +84,18 @@ class CallbackBase(ABC):
         pass
 
     def on_batch_end(self, training_context):
+        """
+        Called after a batch has been processed.
+
+
+
+        :param training_context: Dict containing information regarding the training process.
+
+        """
+
+        pass
+
+    def on_overall_batch_end(self, training_context):
         """
         Called after a batch has been processed.
 
@@ -116,8 +147,19 @@ class CallbackBase(ABC):
 
         pass
 
-    def post_loss_calculation(self, training_context):
+    def on_loss_calculation_start(self, training_context):
 
+        """
+        Called just after loss calculation.
+        :param training_context: Dict containing information regarding the training process.
+
+        """
+
+        pass
+
+
+
+    def on_loss_calculation_end(self, training_context):
         """
 
         Called just after loss calculation.
@@ -130,7 +172,8 @@ class CallbackBase(ABC):
 
         pass
 
-    def on_optimization_step_starting(self, training_context):
+
+    def on_optimization_step_start(self, training_context):
         """
         Called just before the optimization step.
 
@@ -201,7 +244,18 @@ class CallbackBase(ABC):
         pass
 
 
-    def on_start_save_model(self, training_context):
+    def on_model_saving_start(self, training_context):
+        """
+        Called just before the optimization step.
+
+
+
+        :param training_context: Dict containing information regarding the training process.
+
+        """
+
+        pass
+    def on_model_saving_end(self, training_context):
         """
         Called just before the optimization step.
 
@@ -215,7 +269,8 @@ class CallbackBase(ABC):
 
 
 class StoppingCriterionCallback(CallbackBase):
-
+    def __init__():
+        super().__init__()
     pass
 
 
@@ -233,7 +288,7 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
             corresponds to the evaluator that the early stopping method considers.
         :param tmp_best_state_filepath: Path where the state of the best so far model will be saved.
         """
-
+        super().__init__()
         self._patience = patience
 
         self._evaluation_data_loader_key = evaluation_data_loader_key
@@ -280,9 +335,11 @@ class NumberOfEpochsStoppingCriterionCallback(StoppingCriterionCallback):
     Stops the training process after a number of epochs.
     """
     def __init__(self, nb_of_epochs):
+
         """
         :param nb_of_epochs: Number of epochs to train.
         """
+        super().__init__()
         self._nb_of_epochs = nb_of_epochs
 
 
@@ -292,8 +349,11 @@ class NumberOfEpochsStoppingCriterionCallback(StoppingCriterionCallback):
             training_context['stop_training'] = True
 
 
+from .lr_schedulers import AdjustLRCallbackBase,ReduceLROnPlateau,reduce_lr_on_plateau,lambda_lr,LambdaLR,RandomCosineLR,random_cosine_lr
+from .saving_strategies import *
+from .visualization_callbacks import *
+from .gan_callbacks import *
+from .regularization_callbacks import RegularizationCallbacksBase, MixupCallback, CutMixCallback
+from .data_flow_callbacks import DataProcessCallback
+__all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','NumberOfEpochsStoppingCriterionCallback','GanCallback','CycleGanCallback','GanCallbacksBase','RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback', 'AdjustLRCallbackBase', 'ReduceLROnPlateau', 'reduce_lr_on_plateau','lambda_lr','LambdaLR','RandomCosineLR','random_cosine_lr','TileImageCallback','SegTileImageCallback','PrintGradientsCallback','DataProcessCallback']
 
-
-from .AdjustLRCallbacks import *
-from .ModelSavingCallbacks import *
-from .TrainingTimeRegularizationCallbacks import *

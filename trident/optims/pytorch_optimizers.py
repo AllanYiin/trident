@@ -1,31 +1,52 @@
+import itertools as it
+import math
 import os
 import sys
 import time
-import itertools as it
-from shutil import copyfile
 import uuid
-import math
+from collections import OrderedDict, defaultdict
+from functools import partial
+from shutil import copyfile
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.optim.optimizer import  Optimizer
 import torch.nn.functional as F
-from torch.autograd import Variable
+import torch.optim as optim
 import torch.utils.hooks as hooks
-from collections import OrderedDict,defaultdict
-from functools import partial
-import numpy as np
-from ..backend.common import get_session,addindent,get_time_suffix,get_class,format_time,get_terminal_size,snake2camel,camel2snake
+from torch.autograd import Variable
+from torch.optim.optimizer import Optimizer
+
+from .trainers import OptimizerBase
+from ..backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
+    snake2camel, camel2snake
 from ..backend.pytorch_backend import *
 
+__all__ = ['Adam','SGD','LBFGS','Adadelta','Adagrad','RMSprop','RAdam','PlainRAdam','AdamW','Lookahead','Ranger','get_optimizer']
+
+class Adam(optim.Adam, OptimizerBase):
+    pass
 
 
-__all__ = ['Adam','RAdam','PlainRAdam','AdamW','Lookahead','Ranger','get_optimizer']
 
-Adam=optim.Adam
+class SGD(optim.SGD, OptimizerBase):
+    pass
+
+class LBFGS(get_class('LBFGS',['torch.optim']), OptimizerBase):
+    pass
+
+class Adadelta(get_class('Adadelta',['torch.optim']), OptimizerBase):
+    pass
+
+class Adagrad(get_class('Adagrad',['torch.optim']), OptimizerBase):
+    pass
+
+class RMSprop(get_class('RMSprop',['torch.optim']), OptimizerBase):
+    pass
 
 
-class RAdam(Optimizer):
+
+class RAdam(Optimizer, OptimizerBase):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -113,8 +134,7 @@ class RAdam(Optimizer):
 
         return loss
 
-class PlainRAdam(Optimizer):
-
+class PlainRAdam(Optimizer, OptimizerBase):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -191,7 +211,7 @@ class PlainRAdam(Optimizer):
         return loss
 
 
-class AdamW(Optimizer):
+class AdamW(Optimizer, OptimizerBase):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, warmup=0):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -263,7 +283,7 @@ class AdamW(Optimizer):
         return loss
 
 
-class Lookahead(Optimizer):
+class Lookahead(Optimizer, OptimizerBase):
     def __init__(self, optimizer, k=5, alpha=0.5):
         self.optimizer = optimizer
         self.k = k
@@ -316,7 +336,7 @@ class Lookahead(Optimizer):
         param_group["counter"] = 0
         self.optimizer.add_param_group(param_group)
 
-class Ranger(Optimizer):
+class Ranger(Optimizer, OptimizerBase):
     '''
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     '''
@@ -461,10 +481,15 @@ class Ranger(Optimizer):
 def get_optimizer(optimizer_name):
     if optimizer_name is None:
         return None
-    optimizer_modules = ['trident.optimizers.pytorch_optimizers','torch.optim']
-    try:
-        optimizer_class = get_class(snake2camel(optimizer_name), optimizer_modules)
-    except Exception :
+    optimizer_modules = ['trident.optims.pytorch_optimizers','torch.optim']
+    if optimizer_name in __all__:
         optimizer_class = get_class(optimizer_name, optimizer_modules)
-    return optimizer_class
+        return optimizer_class
+    else:
+        try:
+            optimizer_class = get_class(snake2camel(optimizer_name), optimizer_modules)
+            return optimizer_class
+        except Exception :
+            optimizer_class = get_class(optimizer_name, optimizer_modules)
+        return optimizer_class
 

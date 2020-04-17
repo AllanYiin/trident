@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+rom __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
@@ -8,6 +8,16 @@ import cntk as C
 
 
 from ..backend.common import get_session,addindent,get_time_suffix,get_class,format_time,get_terminal_size,snake2camel,camel2snake,get_function
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+import cntk as C
+import numpy as np
+
+from ..backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
+    snake2camel, camel2snake, get_function
 
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 

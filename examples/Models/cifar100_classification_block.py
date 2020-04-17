@@ -3,7 +3,8 @@ import sys
 import codecs
 
 os.environ['TRIDENT_BACKEND'] = 'cntk'
-from trident import backend as T
+import collections
+
 import math
 import cntk as C
 from cntk.layers import *
@@ -12,6 +13,8 @@ from cntk.ops import *
 from cntk.learners import *
 import numpy as np
 import linecache
+
+from trident import get_backend as T
 
 
 # C.debugging.set_computation_network_trace_level(1000)
@@ -34,7 +37,7 @@ def calculate_flops(x):
 
 
 data = T.load_cifar('cifar100', 'train', is_flatten=False)
-dataset = T.Dataset('cifar100')
+dataset = T.DataProvider('cifar100')
 dataset.mapping(data=data[0], labels=data[1], scenario='train')
 
 input_var = C.input_variable((3, 32, 32), dtype=np.float32)
@@ -89,7 +92,7 @@ def bottleneck_block(inp, out_filters, normalization='instance', before_shortcut
 
 
 def gcd_branch3_block(inp, base=16, factors=None, normalization='instance', before_shortcut_relu=False,
-                      after_shortcut_relu=False, shortcut_connect_rate=0.5, divisor_rank=0):
+                      after_shortcut_relu=False, shortcut_connect_rate=0.8, divisor_rank=0):
     if factors is None:
         factors = [3, 5, 7]
     normalization_fn = T.get_normalization(normalization)
@@ -240,130 +243,124 @@ def gcd_double_branch_block(inp, base=16, factors=None, normalization='instance'
 # x5 = C.squeeze(C.layers.GlobalAveragePooling()(x5))
 # z5 = T.sigmoid(x5)
 
-def baselineNet(input_var, normalization='instance', before_shortcut_relu=False, after_shortcut_relu=False):
-    x7 = T.conv2d(input_var, (5, 5), num_filters=32, activation=T.leaky_relu6, strides=1, padding='same')
-    x7 = bottleneck_block(x7, 64, normalization='instance', before_shortcut_relu=before_shortcut_relu,
-                          after_shortcut_relu=after_shortcut_relu)
-    x7 = bottleneck_block(x7, 64, normalization='instance', before_shortcut_relu=before_shortcut_relu,
-                          after_shortcut_relu=after_shortcut_relu)
-    x7 = bottleneck_block(x7, 128, normalization='instance', before_shortcut_relu=before_shortcut_relu,
-                          after_shortcut_relu=after_shortcut_relu)
-    x7 = T.conv2d(x7, (3, 3), num_filters=128, strides=2, padding='same', activation=None)
-    x7 = T.InstanceNormalization()(x7)
-    x7 = T.leaky_relu6(x7)
-
-    x7 = bottleneck_block(x7, 256, normalization='instance', before_shortcut_relu=before_shortcut_relu,
-                          after_shortcut_relu=after_shortcut_relu)
-    x7 = bottleneck_block(x7, 512, normalization='instance', before_shortcut_relu=before_shortcut_relu,
-                          after_shortcut_relu=after_shortcut_relu)
-    x7 = bottleneck_block(x7, 512, normalization='instance', before_shortcut_relu=before_shortcut_relu,
-                          after_shortcut_relu=after_shortcut_relu)
-    x7 = T.conv2d(x7, (3, 3), num_filters=512, strides=2, padding='same', activation=None)
-    x7 = T.InstanceNormalization()(x7)
-    x7 = T.leaky_relu6(x7)
-    x7 = T.conv2d(x7, (1, 1), num_filters=100, activation=None, strides=1, padding='same')
-    x7 = C.squeeze(C.layers.GlobalAveragePooling()(x7))
-    z7 = T.sigmoid(x7)
-    return z7
+# def baselineNet(input_var,normalization='instance', before_shortcut_relu=False, after_shortcut_relu=False):
+baselineNet=T.Sequential2(input_var,[
+        T.Conv2d((5, 5), num_filters=32, strides=1, activation='leaky_relu6', padding='same'),
+        T.Conv2d_Block((3, 3),num_filters= 64,strides= 1, auto_pad=True, activation='leaky_relu6', normalization='instance'),
+        T.Conv2d_Block((3, 3), num_filters=64, strides=2, auto_pad=True, activation='leaky_relu6', normalization='instance'),
+        T.Conv2d_Block((3, 3), num_filters=128,strides= 1, auto_pad=True, activation='leaky_relu6', normalization='instance', dropout_rate=0.2),
+        T.Conv2d_Block((3, 3), num_filters=128,strides= 2, auto_pad=True, activation='leaky_relu6', normalization='instance'),
+        T.Conv2d_Block((3, 3), num_filters=256, strides=1, auto_pad=True, activation='leaky_relu6', normalization='instance'),
+        T.ShortCut({
+                    'left': [
+                        T.Conv2d((1, 1), num_filters=64, strides=1, activation='leaky_relu6',  padding='same'),
+                        T.Conv2d((3, 3), num_filters=256, strides=1, activation='leaky_relu6', padding='same')],
+                    'right': [T.Conv2d((1, 1), num_filters=256, strides=1, activation='leaky_relu6',  padding='same') ]}),
+        T.Conv2d_Block((3, 3), num_filters=256, strides=2, auto_pad=True, activation='leaky_relu6', normalization='instance'),
+    T.Classifier(num_classes=100,is_multiselect=False,classifier_type='dense')
+    ],name='')
 
 
-def challengerNet(input_var, normalization='instance', before_shortcut_relu=False, after_shortcut_relu=False,
-                  divisor_rank=0):
-    x7 = T.conv2d(input_var, (5, 5), num_filters=32, activation=T.leaky_relu6, strides=1, padding='same')
-    x7 = gcd_branch3_block(x7, base=12, factors=[3, 5, 7], normalization='instance',
-                           before_shortcut_relu=before_shortcut_relu, after_shortcut_relu=after_shortcut_relu,
-                           divisor_rank=divisor_rank)
-    x7 = gcd_branch3_block(x7, base=12, factors=[7, 11, 13], normalization='instance',
-                           before_shortcut_relu=before_shortcut_relu, after_shortcut_relu=after_shortcut_relu,
-                           divisor_rank=divisor_rank)
-    x7 = gcd_branch3_block(x7, base=12, factors=[13, 17, 19], normalization='instance',
-                           before_shortcut_relu=before_shortcut_relu, after_shortcut_relu=after_shortcut_relu,
-                           divisor_rank=divisor_rank)
-    x7 = T.gcd_conv2d(x7, (3, 3), num_filters=221, strides=2, padding='same', activation=None, divisor_rank=1)
-    x7 = T.InstanceNormalization()(x7)
-    x7 = T.leaky_relu6(x7)
-
-    x7 = gcd_branch3_block(x7, 10, factors=[13, 17, 19], normalization='instance',
-                           before_shortcut_relu=before_shortcut_relu, after_shortcut_relu=after_shortcut_relu,
-                           divisor_rank=divisor_rank)
-    x7 = gcd_branch3_block(x7, 10, factors=[19, 23, 29], normalization='instance',
-                           before_shortcut_relu=before_shortcut_relu, after_shortcut_relu=after_shortcut_relu,
-                           divisor_rank=divisor_rank)
-    x7 = gcd_branch3_block(x7, 10, factors=[29, 31, 37], normalization='instance',
-                           before_shortcut_relu=before_shortcut_relu, after_shortcut_relu=after_shortcut_relu,
-                           divisor_rank=divisor_rank)
-    x7 = T.gcd_conv2d(x7, (3, 3), num_filters=155, strides=2, padding='same', activation=None, divisor_rank=1)
-    x7 = T.InstanceNormalization()(x7)
-    x7 = T.leaky_relu6(x7)
-    x7 = T.conv2d(x7, (1, 1), num_filters=100, activation=None, strides=1, padding='same')
-    x7 = C.squeeze(C.layers.GlobalAveragePooling()(x7))
-    z7 = T.sigmoid(x7)
-    return z7
 
 
-z_challenger1 = challengerNet(input_var, divisor_rank=0, before_shortcut_relu=False, after_shortcut_relu=False)
-z_challenger2 = challengerNet(input_var, divisor_rank=1, before_shortcut_relu=False, after_shortcut_relu=False)
-z_challenger3 = challengerNet(input_var, divisor_rank=0, before_shortcut_relu=True, after_shortcut_relu=False)
-z_challenger4 = challengerNet(input_var, divisor_rank=0, before_shortcut_relu=False, after_shortcut_relu=True)
 
-z_baseline = baselineNet(input_var)
 
-f = codecs.open('model_log_cifar_baseline.txt', 'a', encoding='utf-8-sig')
+
+
+challengerNet=T.Sequential2(input_var,[
+        T.Conv2d((5, 5), num_filters=32, strides=1, activation='leaky_relu6', padding='same'),
+        T.GcdConv2d_Block((3, 3),num_filters= 48,strides= 1, auto_pad=True, activation='leaky_relu6', normalization='instance',divisor_rank=0),
+        T.GcdConv2d_Block((3, 3), num_filters=80, strides=2, auto_pad=True, activation='leaky_relu6', normalization='instance',divisor_rank=0),
+        T.GcdConv2d_Block((3, 3), num_filters=112,strides= 1, auto_pad=True, activation='leaky_relu6', normalization='instance',divisor_rank=0, dropout_rate=0.2),
+        T.GcdConv2d_Block((3, 3), num_filters=176,strides= 2, auto_pad=True, activation='leaky_relu6', normalization='instance',divisor_rank=0),
+        T.GcdConv2d_Block((3, 3), num_filters=208, strides=1, auto_pad=True, activation='leaky_relu6', normalization='instance',divisor_rank=0),
+        T.ShortCut({
+                    'left': [
+                        T.GcdConv2d((1, 1), num_filters=96, strides=1, activation=None,  padding='same',divisor_rank=0),
+                        T.GcdConv2d((3, 3), num_filters=256, strides=1, activation=None, padding='same',divisor_rank=0)],
+                    'right': [T.GcdConv2d((1, 1), num_filters=256, strides=1, activation=None,  padding='same',divisor_rank=0) ]}),
+        T.GcdConv2d_Block((3, 3), num_filters=352, strides=2, auto_pad=True, activation='leaky_relu6', normalization='instance',divisor_rank=0),
+        T.GcdConv2d((3, 3), num_filters=500, strides=1, padding='same', activation=None,divisor_rank=0),#這個活化函數必須拿掉，讓梯度好順利傳遞
+    T.Classifier(num_classes=100,is_multiselect=False,classifier_type='gcd_conv')
+    ],name='')
+
+
+# z_challenger1 = challengerNet(input_var, divisor_rank=0, before_shortcut_relu=False, after_shortcut_relu=False)
+# z_challenger2 = challengerNet(input_var, divisor_rank=1, before_shortcut_relu=False, after_shortcut_relu=False)
+# z_challenger3 = challengerNet(input_var, divisor_rank=0, before_shortcut_relu=True, after_shortcut_relu=False)
+# z_challenger4 = challengerNet(input_var, divisor_rank=0, before_shortcut_relu=False, after_shortcut_relu=True)
+
+os.remove('model_log_cifar_baseline_lr.txt')
+f = codecs.open('model_log_cifar_baseline_lr.txt', 'a', encoding='utf-8-sig')
 # model = Function.load('Models/model5_cifar100.model')
+#, 'baseline': z_baseline
 
-dict = {'challenger1': z_challenger1, 'challenger2': z_challenger2, 'challenger3': z_challenger3,
-        'challenger4': z_challenger4, 'baseline': z_baseline}
-
-for k, z in dict.items():
-
+# dict=collections.OrderedDict(sorted( {'challenger1': z_challenger1, 'challenger2': z_challenger2, 'challenger3': z_challenger3, 'challenger4': z_challenger4}.items(), key=lambda t: t[0]))
+# #
+for learning_rate in [5e-2,1e-2,5e-3,1e-3,1e-4,1e-5]:
+    k='challenger'
+    z=challengerNet#(input_var)
     flops_baseline = calculate_flops(z)
     print('flops_{0}:{1}'.format(k, flops_baseline))
 
     loss = C.cross_entropy_with_softmax(z, label_var)
     err = 1 - C.classification_error(z, label_var)
 
-    learning_rate = 2e-3
+
     lr = learning_rate
     C.logging.log_number_of_parameters(z)
-    progress_printer = C.logging.ProgressPrinter(freq=5, first=5, tag='Training', num_epochs=3)
+    progress_printer = C.logging.ProgressPrinter(freq=50, first=5, tag='Training', num_epochs=10)
     learner = C.adam(z.parameters, lr=C.learning_rate_schedule([lr], C.UnitType.minibatch),
+                     l1_regularization_weight=1e-6,
                      momentum=C.momentum_schedule(0.75))
     # learner =cntkx.learners.RAdam(z_class.parameters, learning_rate, 0.912, beta2=0.999,l1_regularization_weight=1e-3,
     # l2_regularization_weight=5e-4, epoch_size=300)
     trainer = C.Trainer(z, (loss, err), learner, progress_printer)
     tot_loss = 0
     tot_metrics = 0
-    for epoch in range(3):
-        mbs = 0
+    mbs=0
 
+    for epoch in range(10):
         print('epoch {0}'.format(epoch))
-        while mbs < 1000:
+
+        raw_imgs, raw_labels = dataset.next_bach(64)
+        while  (mbs+1)%2000>0 :
             try:
                 # 定義數據如何對應變數
-                raw_imgs, raw_labels = dataset.next_bach(32)
-
-                # if mbs==100:
-                #
-                #     for p in z.parameters:
-                #
-                #         #print('{0}   {1}'.format(p.owner.root_function.name, node.owner.op_name))
-                #         print('{0}   {1}'.format(p.uid, p.value.shape))
-                #
-                #         print('max: {0} min: {1} mean:{2}'.format(p.value.max(), p.value.min(), p.value.mean()))
-
+                if epoch>0 or  mbs + 1 > 500:
+                    raw_imgs, raw_labels = dataset.next_bach(64)
                 trainer.train_minibatch({input_var: raw_imgs, label_var: raw_labels})
+
+                if mbs==500 or (mbs+1)%1000==0:
+                    for p in z.parameters:
+                        #print('{0}   {1}'.format(p.owner.root_function.name, node.owner.op_name))
+                        print('{0}   {1}'.format(p.uid, p.value.shape))
+                        print('max: {0:.4f} min: {1:.4f} mean:{2:.4f}'.format(p.value.max(), p.value.min(), p.value.mean()))
+
+
                 tot_loss += trainer.previous_minibatch_loss_average
                 tot_metrics += trainer.previous_minibatch_evaluation_average
+                if(mbs + 1) % 500 == 0 or mbs ==0 or mbs==1 or  (mbs + 1) == 10 or (mbs + 1) == 50  or (mbs + 1) == 100 or  (mbs + 1) == 200 or  (mbs + 1) == 300 or  (mbs + 1) == 400:
+                    tot_p=0
+                    tot_zero=0
+                    max_p=0
+                    min_p=0
+                    for p in z.parameters:
+                        tot_p+=p.value.size
+                        tot_zero+=np.equal(p.value,0).astype(np.float32).sum()
+                        max_p=max(max_p,p.value.max())
+                        min_p = min(min_p, p.value.min())
+                    print('zero ratio {0:.3%} max: {1:.4f}  min: {2:.4f}'.format(tot_zero/tot_p,max_p,min_p))
                 if (mbs + 1) % 10 == 0:
-                    f.writelines(['model_{0}_1  epoch {1}  {2}/1000 loss: {3} metrics:{4} \n'.format(k, epoch, mbs + 1,
+                    f.writelines(['model: challenger1  learningrate {0}  epoch {1}  {2}/ 1000 loss: {3} metrics: {4} \n'.format(learning_rate, epoch, mbs + 1,
                                                                                                      tot_loss / 10.,
                                                                                                      tot_metrics / 10.)])
                     tot_loss = 0
                     tot_metrics = 0
                 if (mbs + 1) % 250 == 0:
-                    lr = learning_rate / (1 + 0.01 * 4 * (epoch + (mbs / 250.)))
+                    lr = learning_rate / (1 + 0.05 * 4 * (epoch + (mbs / 250.)))
                     print('learning rate:{0}'.format(lr))
-                    z.save('Models/model_cifar100_{0}_1.model'.format(k))
+                    z.save('Models/model_cifar100_lr_{0}_.model'.format(learning_rate))
             except Exception as e:
                 PrintException()
                 print(e)

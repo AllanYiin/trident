@@ -4,387 +4,178 @@ import codecs
 
 os.environ['TRIDENT_BACKEND'] = 'pytorch'
 import  trident  as T
+from trident import *
 import math
 import numpy as np
 import linecache
-
-import torch
-import torch.nn as nn
-import torch.utils.model_zoo as model_zoo
-from torch.utils.data import *
-from torch.autograd import Variable
-import torch.nn.functional as F
-import torch.optim as optim
-import torchvision
-
-from trident.backend.pytorch_backend import *
-from trident.layers.pytorch_blocks import  *
-
-# 是否使用GPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-
-# C.debugging.set_computation_network_trace_level(1000)
-# C.debugging.set_checked_mode(True)
-def PrintException():
-    exc_type, exc_obj, tb = sys.exc_info()
-    f = tb.tb_frame
-    lineno = tb.tb_lineno
-    filename = f.f_code.co_filename
-    linecache.checkcache(filename)
-    line = linecache.getline(filename, lineno, f.f_globals)
-    print('EXCEPTION IN ({}, LINE {} "{}"): {}'.format(filename, lineno, line.strip(), exc_obj))
-
-
-
-def _get_shape(x):
-    "single object"
-    if isinstance(x, np.ndarray):
-        return tuple(x.shape)
-    else:
-        return tuple(x.size())
-
-
-# data = T.load_cifar('cifar100', 'train', is_flatten=False)
-# dataset = T.Dataset('cifar100')
-# dataset.mapping(data=data[0], labels=data[1], scenario='train')
-
-
-import torchvision.transforms as transforms
-transform = transforms.Compose(
- [#transforms.RandomVerticalFlip(0.2),
-# transforms.RandomHorizontalFlip(0.2),
-#  transforms.RandomRotation(0.2),
-    transforms.ToTensor()])
-
-
-minst=torchvision.datasets.mnist.MNIST(root='C:/Users/Allan/.trident/datasets/minist/', train=True, transform=transform, target_transform=None, download=True)
-
-
-train_loader = DataLoader(
-        minst,
-        batch_size=16,
-        num_workers=0,
-        shuffle=True
-    )
-
-
-num_epochs=10
-minibatch_size=16
-
-
-
-#raw_imgs, raw_labels = dataset.next_bach(minibatch_size)
-
-
-
-class LeNet(nn.Module):
-    def __init__(self):
-        super(LeNet, self).__init__()
-        self.conv1 = nn.Conv2d(1, 6, 5, padding=2)
-        self.conv2 = nn.Conv2d(6, 16, 5)
-        self.fc1 = nn.Linear(16 * 5 * 5, 120)
-        self.fc3 = nn.Linear(120, 10)
-
-    def forward(self, x):
-        out = F.relu(self.conv1(x), inplace=True)
-        out = F.max_pool2d(out, 2)
-        out = F.relu(self.conv2(out), inplace=True)
-        out = F.max_pool2d(out, 2)
-        out = out.view(out.size(0), -1)
-        out = F.relu(self.fc1(out), inplace=True)
-        out = self.fc3(out)
-        return out
-
-
-
-class ConvNet(nn.Module):
-    def __init__(self):
-        super(ConvNet, self).__init__()
-
-        self.feats = nn.Sequential(
-            nn.Conv2d(1, 32, 5, 1, 1),
-            nn.MaxPool2d(2, 2),
-            nn.ReLU(True),
-            nn.BatchNorm2d(32),
-            nn.Conv2d(32, 64, 3,  1, 1),
-            nn.ReLU(True),
-            nn.BatchNorm2d(64),
-            nn.Conv2d(64, 64, 3,  1, 1),
-            nn.MaxPool2d(2, 2),
-            nn.ReLU(True),
-            nn.BatchNorm2d(64),
-            nn.Conv2d(64, 128, 3, 1, 1),
-            nn.ReLU(True),
-            nn.BatchNorm2d(128)
-        )
-        self.classifier = nn.Conv2d(128, 10, 1)
-        self.avgpool = nn.AvgPool2d(6, 6)
-        self.dropout = nn.Dropout(0.5)
-    def forward(self, inputs):
-        out = self.feats(inputs)
-        out = self.dropout(out)
-        out = self.classifier(out)
-        out = self.avgpool(out)
-        out = out.view(-1, 10)
-        return out
-
-
-alex_model = torch.load('alexnet_model_only_pytorch_mnist.pth')
-#alex_model=ConvNet()
-alex_model.to(device)
-#lenet_model.load_state_dict(torch.load('lenet_model_pytorch_mnist.pth'))
-
-optimizer = optim.Adam(alex_model.parameters(), lr=0.01, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.005)
-criterion=nn.CrossEntropyLoss(reduction='sum')
-#
-# gcd_model2 = nn.Sequential(
-#     nn.Conv2d(in_channels=1,out_channels= 16, kernel_size=3, padding=1, bias=False),
-#     nn.ReLU(),
-#     nn.MaxPool2d(2,padding=1),
-#     nn.Conv2d(in_channels=16, out_channels=32, kernel_size=3, padding=1),
-#     nn.ReLU(),
-#     nn.MaxPool2d(2,padding=1),
-#     nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1),
-#     nn.Conv2d(in_channels=64, out_channels=120, kernel_size=3, padding=1),
-#     nn.AdaptiveAvgPool2d(output_size=120),
-#     Classifier1d(num_classes=10,is_multiselect=False, classifier_type='dense')
-# )
-
-
-
-#
-# class GcdNet(nn.Module):
-#     def __init__(self):
-#         super(GcdNet, self).__init__()
-#         self.conv1 = nn.Conv2d(1, 16, 3, padding=1)
-#         self.b1=T.GcdConv2d_Block((3, 3), 24, 1, auto_pad=True, activation='leaky_relu6', divisor_rank=0)
-#         self.b2=T.GcdConv2d_Block((3, 3), 40, 2, auto_pad=True, activation='leaky_relu6', divisor_rank=0)
-#         self.b2_1 = T.GcdConv2d_Block((1,1), 120, 1, auto_pad=True, activation=None, divisor_rank=0)
-#         self.b2_2 = T.GcdConv2d_Block((3, 3),120, 1, auto_pad=True, activation='leaky_relu6', divisor_rank=0)
-#         self.b2_3 = T.GcdConv2d_Block((1, 1), 40, 1, auto_pad=True, activation=None, divisor_rank=0)
-#
-#         self.b3=T.GcdConv2d_Block((3, 3), 56, 1, auto_pad=True, activation='leaky_relu6', divisor_rank=0)
-#         # self.b4=T.GcdConv2d_Block((3, 3), 88, 2, auto_pad=True, activation='leaky_relu6', divisor_rank=0)
-#         # self.b5=T.GcdConv2d_Block((3, 3), 104, 1, auto_pad=True, activation='leaky_relu6', divisor_rank=0)
-#         self.b6=T.GcdConv2d_Block((3, 3), 88, 2, auto_pad=True, activation=None)
-#         self.pool=nn.AdaptiveAvgPool2d(output_size=88)
-#         self.fc3 = nn.Linear(88, 10)
-#
-#     def forward(self, x):
-#         out = F.relu(self.conv1(x), inplace=True)
-#         out = self.b1(out)
-#         out = self.b2(out)
-#         out1 = self.b2_1(out)
-#         out1 = self.b2_2(out1)
-#         out1 = self.b2_3(out1)
-#         out=out+out1
-#         out = self.b3(out)
-#         # out = self.b4(out)
-#         # out = self.b5(out)
-#         out = self.b6(out)
-#         out = self.pool(out)
-#         out = out.view(out.size(0),out.size(1))
-#         out = self.fc2(out)
-#         out = torch.softmax(out,dim=1)
-#         return out
-#
-
-class GcdNet_1(nn.Module):
-    def __init__(self):
-        super(GcdNet_1, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1) #4*4
-        self.b1=T.GcdConv2d_Block_1((3, 3), 24, 1, auto_pad=True, activation='leaky_relu', divisor_rank=0)#4*(2*3)
-        self.b2=T.GcdConv2d_Block_1((3, 3), 54, 2, auto_pad=True, activation='leaky_relu', divisor_rank=0)#(2*3)*9
-        self.b3=T.GcdConv2d_Block_1((3, 3), 90, 1, auto_pad=True, activation='leaky_relu', divisor_rank=0)#9*(2*5)
-        self.b4=T.GcdConv2d_Block_1((3, 3), 160, 2, auto_pad=True, activation='leaky_relu', divisor_rank=0)#(2*5)*16
-        self.b5=T.GcdConv2d_Block_1((3, 3), 224, 1, auto_pad=True, activation='leaky_relu', divisor_rank=0)#16*(2*7)
-        self.b6=T.GcdConv2d_1((1, 1), 10, 1, auto_pad=True, activation=None,divisor_rank=0)
-        self.pool=nn.AdaptiveAvgPool2d(output_size=1)
-        #self.fc1 = nn.Linear(104, 10)
-
-    def forward(self, x):
-        out = F.relu(self.conv1(x), inplace=True)
-        out = self.b1(out)
-        out = self.b2(out)
-        out = self.b3(out)
-        out = self.b4(out)
-        out = self.b5(out)
-        out = self.b6(out)
-        out = self.pool(out)
-        out=out.view(out.size(0),out.size(1))
-        out=F.sigmoid(out)
-        return out
-
-
-class GcdNet_2(nn.Module):
-    def __init__(self):
-        super(GcdNet_2, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, 3, padding=1)#4*4
-        self.b1 = T.GcdConv2d_Block_1((3, 3), 24, 1, auto_pad=True, activation='leaky_relu', divisor_rank=0)  # 4*(2*3)
-        self.b2 = T.GcdConv2d_Block_1((3, 3), 40, 2, auto_pad=True, activation='leaky_relu', divisor_rank=0)  # (2*3)*9
-        self.b3 = T.GcdConv2d_Block_1((3, 3), 112, 1, auto_pad=True, activation='leaky_relu', divisor_rank=0)  # 9*(2*5)
-        self.b4 = T.GcdConv2d_Block_1((3, 3), 176, 2, auto_pad=True, activation='leaky_relu',divisor_rank=0)  # (2*5)*16
-        self.b5 = T.GcdConv2d_Block_1((3, 3),208 , 1, auto_pad=True, activation='leaky_relu',divisor_rank=0)  # 16*(2*7)
-        self.b6 = T.GcdConv2d_1((1, 1), 10, 1, auto_pad=True, activation=None, divisor_rank=0)
-        self.pool=nn.AdaptiveAvgPool2d(output_size=1)
-
-    def forward(self, x):
-        out = F.relu(self.conv1(x), inplace=True)
-        out = self.b1(out)
-        out = self.b2(out)
-        out = self.b3(out)
-        out = self.b4(out)
-        out = self.b5(out)
-        out = self.b6(out)
-        out = self.pool(out)
-        out=out.view(out.size(0),out.size(1))
-        out=F.sigmoid(out)
-        return out
-
-
-#gcd_model = torch.load('gcd_model_only_pytorch_mnist.pth')
-gcd_model=GcdNet_1()
-
-gcd_model.to(device)
-flops_gcd_model = calculate_flops(gcd_model)
-
-gcd_model2=GcdNet_2()
-
-gcd_model2.to(device)
-flops_gcd_model2 = calculate_flops(gcd_model2)
-
-
-
-#gcd_model.load_state_dict(torch.load('gcd_model_pytorch_mnist.pth'))
-for i, (input, target) in enumerate(train_loader):
-    input, target = Variable(input).to(device), Variable(target).to(device)
-    gcd_model(input)
-    gcd_model2(input)
-    break
-print(gcd_model)
-for i,para in enumerate(gcd_model.parameters()):
-    print('{0} {1} {2}'.format(i,para.name,_get_shape(para)))
-
-gcd_optimizer = optim.Adam(gcd_model.parameters(),lr=0.01, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.005)
-gcd_mse_criterion=nn.MSELoss(reduction='mean')
-gcd_ce_criterion=nn.CrossEntropyLoss(reduction='sum')
-#flops_model = calculate_flops(model)
-#print('flops_model:{0}'.format(flops_model))
-gcd2_optimizer = optim.Adam(gcd_model2.parameters(),lr=0.01, betas=(0.9, 0.999), eps=1e-08, weight_decay=0.005)
-gcd2_mse_criterion=nn.MSELoss(reduction='mean')
-gcd2_ce_criterion=nn.CrossEntropyLoss(reduction='sum')
-
-
-flops_alex_model = calculate_flops(alex_model)
-print('flops_{0}:{1}'.format('alex_model', flops_alex_model))
-
-
-flops_gcd_model = calculate_flops(gcd_model)
-print('flops_{0}:{1}'.format('gcd_model', flops_gcd_model))
-
-
-
-print('{0:.3%}'.format(flops_gcd_model/flops_alex_model))
-
-
-flops_gcd2_model = calculate_flops(gcd_model2)
-print('flops_{0}:{1}'.format('gcd_model2', flops_gcd2_model))
-print('{0:.3%}'.format(flops_gcd2_model/flops_alex_model))
-
-#f = codecs.open('model_log_cifar100.txt', 'a', encoding='utf-8-sig')
-#model = Function.load('Models/model5_cifar100.model')
-os.remove('model_log_mnist_test3d.txt')
-f = codecs.open('model_log_mnist_test3d.txt', 'a', encoding='utf-8-sig')
-losses=[]
-metrics=[]
-
-gcd_losses=[]
-gcd_metrics=[]
-gcd2_losses=[]
-gcd2_metrics=[]
-print('epoch start')
-for epoch in range(num_epochs):
-    mbs = 0
-    while mbs<=1000:
-        for  i ,(input, target) in enumerate(train_loader):
-            input, target = Variable(input).to(device), Variable(target).to(device)
-
-            lenet_output = alex_model(input)
-
-            lenet_loss=criterion(lenet_output,target)
-
-            accu = 1-np.mean(np.not_equal(np.argmax(lenet_output.cpu().detach().numpy(), -1).astype(np.int64), target.cpu().detach().numpy().astype(np.int64)))
-            losses.append(lenet_loss.item())
-            metrics.append(accu)
-
-
-            #optimizer.zero_grad()
-            #lenet_loss.backward( retain_graph=True)
-            #optimizer.step()
-
-
-            gcd_optimizer.zero_grad()
-            gcd_output = gcd_model(input)
-            #print(gcd_output.cpu().detach().numpy()[:2])
-            gcd_loss =gcd_ce_criterion(gcd_output,target)#+ gcd_mse_criterion(gcd_output, lenet_output)
-            # if epoch>0 and mbs>100:
-            #     result=gcd_output.cpu().detach().numpy()
-            #     print(result)
-            gcd_accu = 1 - np.mean(np.not_equal(np.argmax(gcd_output.cpu().detach().numpy(), -1).astype(np.int64),
-                                                target.cpu().detach().numpy().astype(np.int64)))
-            gcd_losses.append(gcd_loss.item())
-            gcd_metrics.append(gcd_accu)
-            gcd_loss.backward( )
-            gcd_optimizer.step()
-
-            gcd2_optimizer.zero_grad()
-            gcd2_output = gcd_model2(input)
-            # print(gcd_output.cpu().detach().numpy()[:2])
-            gcd2_loss = gcd2_ce_criterion(gcd2_output, target)  #+ 2*gcd2_mse_criterion(gcd2_output, lenet_output)
-            # if epoch>0 and mbs>100:
-            #     result=gcd_output.cpu().detach().numpy()
-            #     print(result)
-            gcd2_accu = 1 - np.mean(np.not_equal(np.argmax(gcd2_output.cpu().detach().numpy(), -1).astype(np.int64),target.cpu().detach().numpy().astype(np.int64)))
-            gcd2_losses.append(gcd2_loss.item())
-            gcd2_metrics.append(gcd2_accu)
-            gcd2_loss.backward()
-            gcd2_optimizer.step()
-
-
-            if mbs % 50 == 0:
-                print("Baseline:     Epoch: {}/{} ".format(epoch + 1, num_epochs),
-                      "Step: {} ".format(mbs),
-                      "Loss: {:.4f}...".format(np.array(losses).mean()),
-                      "Accuracy:{:.3%}...".format(np.array(metrics).mean()))
-                f.writelines(['model: {0}  learningrate {1}  epoch {2}  {3}/ 1000 loss: {4} metrics: {5} \n'.format('AlexNet', 0.01, epoch, mbs + 1, np.array(losses).mean(), np.array(metrics).mean())])
-
-
-                losses=[]
-                metrics=[]
-
-                print("Gcd_Conv    Epoch: {}/{} ".format(epoch + 1, num_epochs), "Step: {} ".format(mbs),
-                      "Loss: {:.4f}...".format(np.array(gcd_losses).mean()),
-                      "Accuracy:{:.3%}...".format(np.array(gcd_metrics).mean()))
-                f.writelines([
-                    'model: {0}  learningrate {1}  epoch {2}  {3}/ 1000 loss: {4} metrics: {5} \n'.format('gcd_model', 0.01, epoch, mbs + 1, np.array(gcd_losses).mean(), np.array(gcd_metrics).mean())])
-
-                gcd_losses = []
-                gcd_metrics = []
-
-                print("Gcd_Conv2    Epoch: {}/{} ".format(epoch + 1, num_epochs), "Step: {} ".format(mbs),
-                      "Loss: {:.4f}...".format(np.array(gcd2_losses).mean()),
-                      "Accuracy:{:.3%}...".format(np.array(gcd2_metrics).mean()))
-                f.writelines([
-                    'model: {0}  learningrate {1}  epoch {2}  {3}/ 1000 loss: {4} metrics: {5} \n'.format('gcd2_model',0.01, epoch,mbs + 1,np.array(gcd2_losses).mean(),np.array(gcd2_metrics).mean())])
-
-                gcd2_losses = []
-                gcd2_metrics = []
-            if (mbs+1)%100==0:
-                # torch.save(lenet_model.state_dict(),'lenet_model_pytorch_mnist_1.pth' )
-                # torch.save(gcd_model.state_dict(), 'gcd_model_pytorch_mnist_1.pth')
-                torch.save(alex_model, 'alexnet_model_only_pytorch_mnist.pth')
-                torch.save(gcd_model, 'gcd_model_only_pytorch_mnist.pth')
-                torch.save(gcd_model2, 'gcd_model2_only_pytorch_mnist.pth')
-
-            mbs += 1
+import PIL
+import PIL.Image as Image
+
+
+
+
+dataset=load_cifar('cifar100')
+dataset.image_transform_funcs=[
+                               random_center_crop(64,64,(0.9,1.1)),
+                               random_adjust_gamma((0.8,1.2)),
+                               random_adjust_contast((0.8,1.2)),
+                               add_noise(0.05),
+                               normalize(0,255),
+                               normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+
+
+
+
+
+
+#= torch.load('resnet50_model_pytorch_cifar100_224.pth')
+
+resnet50=ResNet50(pretrained=False,classes=100,input_shape=(3,64,64))
+resnet50.model.__delitem__(1)
+#resnet50.load_model('Models/resnet50.pth.tar')
+resnet50.summary()
+resnet50.with_optimizer(optimizer='Ranger',lr=1e-3,betas=(0.9, 0.999))\
+    .with_loss(CrossEntropyLoss)\
+    .with_metric(accuracy,name='accuracy')\
+    .with_metric(accuracy,topk=5,name='top5_accuracy')\
+    .with_regularizer('l2')\
+    .with_constraint('max_min_norm')\
+    .with_learning_rate_scheduler(reduce_lr_on_plateau,monitor='accuracy',mode='max',factor=0.75,patience=5,cooldown=2,threshold=5e-5,warmup=0)\
+    .with_model_save_path('Models/resnet50.pth')
+
+
+
+def gcd_bottleneck(base_num,growth,strides=1,conv_shortcut=True,use_bias=False,name=''):
+    #width = int(num_filters * (base_width / 64.)) * 1#groups'
+
+    num_filters=growth*base_num
+
+    shortcut =GcdConv2d((3,3),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',self_norm=True,divisor_rank=0,activation=None,use_bias=use_bias,name=name + '_downsample')
+    shortcut_name = 'downsample'
+    return ShortCut2d({'branch1':Sequential(GcdConv2d((3,3),num_filters=base_num*prev_prime(growth) ,strides=strides,auto_pad=True,padding_mode='zero',self_norm=True,divisor_rank=0,activation='selu',use_bias=use_bias,name=name + '_0_conv'),
+                                 GcdConv2d((3, 3), num_filters=base_num*next_prime(growth) , strides=1, auto_pad=True,padding_mode='zero', self_norm=True,divisor_rank=0,activation='selu',use_bias=use_bias,name=name + '_1_conv'),
+                                 GcdConv2d((3,3),num_filters=num_filters,strides=1,auto_pad=True,padding_mode='zero',activation=None,self_norm=True,divisor_rank=0,use_bias=use_bias,name=name + '_2_conv')),
+                      shortcut_name:shortcut},activation='selu')
+
+
+def GcdResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=False, zero_init_residual=False,
+           width_per_group=64, replace_stride_with_dilation=None, include_top=True, model_name='',
+           **kwargs):
+    """Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
+    Optionally loads weights pre-trained on ImageNet.
+    Note that the data format convention used by the model is
+    the one specified in your Keras config at `~/.keras/keras.json`.
+    # Arguments
+        stack_fn: a function that returns output tensor for the
+            stacked residual blocks.
+        preact: whether to use pre-activation or not
+            (True for ResNetV2, False for ResNet and ResNeXt).
+        use_bias: whether to use biases for convolutional layers or not
+            (True for ResNet and ResNetV2, False for ResNeXt).
+        model_name: string, model name.
+        include_top: whether to include the fully-connected
+            layer at the top of the network.
+        weights: one of `None` (random initialization),
+              'imagenet' (pre-training on ImageNet),
+              or the path to the weights file to be loaded.
+        input_tensor: optional Keras tensor
+            (i.e. output of `layers.Input()`)
+            to use as image input for the model.
+        input_shape: optional shape tuple, only to be specified
+            if `include_top` is False (otherwise the input shape
+            has to be `(224, 224, 3)` (with `channels_last` data format)
+            or `(3, 224, 224)` (with `channels_first` data format).
+            It should have exactly 3 inputs channels.
+        pooling: optional pooling mode for feature extraction
+            when `include_top` is `False`.
+            - `None` means that the output of the model will be
+                the 4D tensor output of the
+                last convolutional layer.
+            - `avg` means that global average pooling
+                will be applied to the output of the
+                last convolutional layer, and thus
+                the output of the model will be a 2D tensor.
+            - `max` means that global max pooling will
+                be applied.
+        classes: optional number of classes to classify images
+            into, only to be specified if `include_top` is True, and
+            if no `weights` argument is specified.
+    # Returns
+        A Keras model instance.
+    # Raises
+        ValueError: in case of invalid argument for `weights`,
+            or invalid input shape.
+    """
+
+
+    # if not (weights in {'imagenet', None} or os.path.exists(weights)):
+    #     raise ValueError('The `weights` argument should be either '
+    #                      '`None` (random initialization), `imagenet` '
+    #                      '(pre-training on ImageNet), '
+    #                      'or the path to the weights file to be loaded.')
+    #
+    # if weights == 'imagenet' and include_top and classes != 1000:
+    #     raise ValueError('If using `weights` as `"imagenet"` with `include_top`'
+    #                      ' as true, `classes` should be 1000')
+
+    def _make_layer(block, base_num, growths,blocklayers, strides=1, dilate=False,use_bias=use_bias,layer_name=''):
+        conv_shortcut=False
+        if strides!=1 or block is bottleneck:
+            conv_shortcut=True
+        #growths = [4, 6, 8, 10, 12, 14, 16, 18, 20]
+        #32,48,64
+        #40,60,80,100
+        #
+        layers = []
+        layers.append(block(base_num,growths[0], strides=strides, conv_shortcut=conv_shortcut,use_bias=use_bias, name=layer_name+'.0'))
+
+        for k in range(1, blocklayers):
+            layers.append(block(base_num,growths[k],  strides=1,  conv_shortcut=False, use_bias=use_bias,name=layer_name+'.{0}'.format(k)))
+
+        laters_block=Sequential(*layers)
+        laters_block.name=layer_name
+        return laters_block
+
+    flow_list=[]
+    resnet = Sequential()
+    resnet.add_module('first_block',Conv2d_Block((3,3),18,strides=1,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation='leaky_relu',name='first_block'))
+
+    resnet.add_module('layer1',(_make_layer(block, 8, [4, 6, 8, 10, 12, 14, 16, 18, 20], layers[0],strides=1, dilate=1,use_bias=use_bias,layer_name='layer1' )))
+    resnet.add_module('layer2',(_make_layer(block, 10, [6, 8, 10, 12, 14, 16, 18, 20], layers[1], strides=2, dilate=1,use_bias=use_bias,layer_name='layer2' )))
+    resnet.add_module('layer3',(_make_layer(block, 14, [ 8, 10, 12, 14, 16, 18, 20], layers[2], strides=2, dilate=1,use_bias=use_bias,layer_name='layer3' )))
+    resnet.add_module('layer4' ,(_make_layer(block, 18, [10, 12, 14, 16, 18, 20], layers[3], strides=2, dilate=1,use_bias=use_bias,layer_name='layer4' )))
+    resnet.add_module('last_block',Conv2d((1, 1), 100,strides=1, use_bias=use_bias, auto_pad=True, padding_mode='zero', activation='leaky_relu', name='last_block'))
+    resnet.add_module('avg_pool',GlobalAvgPool2d(name='avg_pool'))
+    if include_top:
+        resnet.add_module('fc',Dense(num_classes,activation='softmax',name='fc'))
+    resnet.name=model_name
+    model=ImageClassificationModel(input_shape=input_shape,output=resnet)
+    model.preprocess_flow=[resize((input_shape[2],input_shape[1]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+
+    return model
+
+
+
+gcdresnet50 =GcdResNet(gcd_bottleneck, [2,3,4,2], (3,64,64),num_classes=100,include_top=True, model_name='gcd_resnet50')
+#gcdresnet50.load_model('Models/gcdresnet50.pth.tar')
+gcdresnet50.summary()
+gcdresnet50.with_optimizer(optimizer='Ranger',lr=1e-3,betas=(0.9, 0.999))\
+    .with_loss(CrossEntropyLoss)\
+    .with_metric(accuracy,name='accuracy')\
+    .with_metric(accuracy,topk=5,name='top5_accuracy')\
+    .with_regularizer('l2')\
+    .with_constraint('max_min_norm')\
+    .with_learning_rate_scheduler(reduce_lr_on_plateau,monitor='accuracy',mode='max',factor=0.75,patience=5,cooldown=2,threshold=5e-5,warmup=0)\
+    .with_model_save_path('Models/gcdresnet50.pth')
+
+
+plan=TrainingPlan()\
+    .add_training_item(resnet50)\
+    .add_training_item(gcdresnet50)\
+    .with_data_loader(dataset)\
+    .repeat_epochs(300)\
+    .within_minibatch_size(16)\
+    .print_progress_scheduling(10,unit='batch')\
+    .save_model_scheduling(500,unit='batch')
+
+plan.start_now()

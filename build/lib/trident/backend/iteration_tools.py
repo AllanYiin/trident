@@ -6,6 +6,11 @@ from typing import Iterable, Sized, Union, Callable, Sequence, Any, Tuple
 
 import numpy as np
 
+
+#__all__ = ['join','recursive_conditional_map','pam','zip_equal','head_tail','peek','lmap','dmap','zdict']
+
+
+
 def join(values):
     return ", ".join(map(str, values))
 

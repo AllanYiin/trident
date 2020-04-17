@@ -1,9 +1,11 @@
-import os
 import functools
-import traceback
 import gc
+import os
 import sys
+import traceback
 import warnings
+
+
 def is_in_ipython():
     "Is the code running in the ipython environment (jupyter including)"
 

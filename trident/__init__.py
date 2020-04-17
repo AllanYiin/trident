@@ -1,26 +1,25 @@
 from __future__ import absolute_import
-#
-# from . import utils
-# from . import activations
-# from . import applications
-from . import backend
-# from . import datasets
-# from . import engine
-# from . import layers
-# from . import preprocessing
-# from . import wrappers
-# from . import callbacks
-# from . import constraints
-# from . import initializers
-# from . import metrics
-# from . import models
-# from . import losses
-# from . import optimizers
-# from . import regularizers
 
-# Also importable from root
-# from .layers import Input
-# from .models import Model
-# from .models import Sequential
+import sys
+from importlib import reload
+from sys import stderr
 
-__version__ = '0.0.1'
+defaultencoding = 'utf-8'
+if sys.getdefaultencoding() != defaultencoding:
+    reload(sys)
+    sys.setdefaultencoding(defaultencoding)
+
+
+
+__version__ = '0.5.1'
+stderr.write('trident {0}\n'.format(__version__))
+from .backend import *
+from trident import models
+from trident import misc
+from trident import callbacks
+from trident import data
+
+import threading
+
+
+

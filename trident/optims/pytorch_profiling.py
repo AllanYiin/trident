@@ -1,8 +1,8 @@
-import torch
-from torch.autograd import Variable
-from torch.autograd import Function
-
 import time
+
+import torch
+from torch.autograd import Function
+from torch.autograd import Variable
 
 '''
 https://raw.githubusercontent.com/zhuwenxi/pytorch-profiling-tool/master/profiling.py

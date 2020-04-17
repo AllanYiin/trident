@@ -1,6 +1,8 @@
 import math
-import numpy as np
 import random
+
+import numpy as np
+
 
 def conv_output_length1(input_length, filter_size,  stride,autopad=True, dilation=1):
     if autopad:

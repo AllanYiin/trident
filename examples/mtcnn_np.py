@@ -3,68 +3,63 @@ import scipy.signal as signal
 import scipy as sp
 import cv2
 import math
+import torch
+import collections
+import PIL
+import PIL.Image as Image
+from enum import Enum, unique
+
 det1=np.load('det1.npy',allow_pickle=True, encoding='latin1').item()
 det2=np.load('det2.npy',allow_pickle=True, encoding='latin1').item()
 det3=np.load('det3.npy',allow_pickle=True, encoding='latin1').item()
+#
+# det1_1=torch.load('pnet.pkl')
+# det1_2=collections.OrderedDict()
+# for k,v in det1_1.items():
+#     det1_2[k]=v.data.cpu().detach().numpy()
+# np.save('det1.npy',det1_2)
+#
+# det2_1=torch.load('rnet.pkl')
+# det2_2=collections.OrderedDict()
+# for k,v in det2_1.items():
+#     det2_2[k]=v.data.cpu().detach().numpy()
+# np.save('det2.npy',det2_2)
+# det3_1=torch.load('onet.pkl')
+# det3_2=collections.OrderedDict()
+# for k,v in det3_1.items():
+#     det3_2[k]=v.data.cpu().detach().numpy()
+# np.save('det3.npy',det3_2)
 
 
-def normalize_conv(func):
-    def wrapper(*args, **kwargs):
-        x = args[0]
-        w = args[1]
+def convolve(inp,kernal):
+    output=np.zeros((inp.shape[0]-kernal.shape[0]+1,inp.shape[1]-kernal.shape[1]+1))
+    for x in range(inp.shape[1]-kernal.shape[1]+1):  # Loop over every pixel of the image
+        for y in range(inp.shape[0]-kernal.shape[0]+1):
+            output[y, x] = (kernal * inp[y:y + kernal.shape[0], x:x + kernal.shape[1]]).sum()
+    return output
 
-        w = np.fliplr(np.flipud(w))
-        w = np.transpose(w, (2, 3, 0, 1))
-        dilation_rate = kwargs.pop('dilation_rate', 1)
-        if isinstance(dilation_rate, int):
-            dilation_rate = (dilation_rate,) * (x.ndim - 2)
-        if dilation_rate!=(1,1):
-            for (i, d) in enumerate(dilation_rate):
-                if d > 1:
-                    for j in range(w.shape[2 + i] - 1):
-                        w = np.insert(w, 2 * j + 1, 0, axis=2 + i)
+# inp=np.reshape(np.arange(25),(5,5))
+# kernal=np.reshape(np.arange(9),(3,3))
+# result=convolve(inp,kernal)
+# kernal=np.flipud(np.fliplr(kernal))
+# result1=signal.convolve(inp,kernal,mode='valid')
+# result2=signal.convolve2d(inp,kernal,mode='valid')
 
-        y = func(x, w, **kwargs)
-        # if kwargs['data_format'] == 'channels_last':
-        #     if y.ndim == 3:
-        #         y = np.transpose(y, (0, 2, 1))
-        #     elif y.ndim == 4:
-        #         y = np.transpose(y, (0, 2, 3, 1))
-        #     else:
-        #         y = np.transpose(y, (0, 2, 3, 4, 1))
-
-        return y
-
-    return wrapper
-
-
-@normalize_conv
-def conv(x, w, strides,padding):
+def conv(x, w,bias, strides,padding):
     y = []
     for i in range(x.shape[0]):
         _y = []
-        for j in range(w.shape[1]):
+        for j in range(w.shape[0]):
             __y = []
-            for k in range(w.shape[0]):
-                __y.append(signal.convolve(x[i, k], w[k, j], mode=padding)[::strides[0], ::strides[1]])
+            for k in range(w.shape[1]):
+                __y.append(signal.convolve(x[i, k], np.flipud(np.fliplr(w[j, k])),mode=padding)[::strides[0], ::strides[1]])
             _y.append(np.sum(np.stack(__y, axis=-1), axis=-1))
         y.append(_y)
     y = np.array(y)
+    if bias is not None:
+        y = y + np.reshape(bias, (1, -1, 1, 1))
     return y
 
-@normalize_conv
-def conv1(x, w, strides,padding):
-    y = []
-    for i in range(x.shape[0]):
-        _y = []
-        for j in range(w.shape[1]):
-            __y = []
-            for k in range(w.shape[0]):
-                __y.append(np.convolve(x[i, k], w[k, j], mode=padding)[::strides[0], ::strides[1]])
-            _y.append(np.sum(np.stack(__y, axis=-1), axis=-1))
-        y.append(_y)
-    y = np.array(y)
-    return y
 
 
 def prelu(x,w):
@@ -102,7 +97,7 @@ def maxpool(x,pool_size=(2,2),strides=(2,2),padding='same'):
 
 def fc(x,w,bias=None):
     x=np.reshape(x,(x.shape[0],-1))
-    out=np.matmul(x,w)
+    out=np.matmul(x,np.transpose(w))
     if bias is not None:
         bias = np.reshape(bias, (1,-1))
         return out+bias
@@ -220,9 +215,71 @@ def nms(boxes, overlap_threshold, mode='Union'):
             overlap = inter / (area[i] + area[idxs[:last]] - inter)
         # delete all indexes from the index list that have
         idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap > overlap_threshold )[0])))
-        idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap1 > overlap_threshold+0.2)[0])))
+        if len(idxs>0):
+            idxs = np.delete(idxs, np.concatenate(([last], np.where(overlap1 > overlap_threshold+0.2)[0])))
     return boxes[pick]
 
+def nms_numpy(bboxes, nms_thresh=0.5):
+    """
+    bboxes: num_insts x 5 [batch,anchor ,x1,y1,x2,y2,conf,class,class conf]
+    """
+    if len(bboxes)==0:
+        return bboxes
+
+    x1 = bboxes[:,0]
+    y1 = bboxes[:,1]
+    x2 = bboxes[:,2]
+    y2 = bboxes[:,3]
+    conf = bboxes[:,4]
+
+    area_all = (x2-x1)*(y2-y1)
+    sorted_index = np.argsort(conf)      # Ascending order
+    keep_index = []
+
+    while len(sorted_index)>0:
+        # get the last biggest values
+        curr_index = sorted_index[-1]
+        keep_index.append(curr_index)
+        if len(sorted_index)==1:
+            break
+        # pop the value
+        sorted_index = sorted_index[:-1]
+        # get the remaining boxes
+        yy1 = np.take(y1, indices=sorted_index)
+        xx1 = np.take(x1, indices=sorted_index)
+        yy2 = np.take(y2, indices=sorted_index)
+        xx2 = np.take(x2, indices=sorted_index)
+        xc=np.abs((xx1+xx2)/2-( x1[curr_index]+ x2[curr_index])/2)
+        yc=np.abs((yy1+yy2)/2-( y1[curr_index]+ y2[curr_index])/2)
+
+        # get the intersection box
+        yy1 = np.maximum(yy1, y1[curr_index])
+        xx1 = np.maximum(xx1, x1[curr_index])
+        yy2 = np.minimum(yy2, y2[curr_index])
+        xx2 = np.minimum(xx2, x2[curr_index])
+        # calculate IoU
+        w = xx2-xx1
+        h = yy2-yy1
+
+        w = np.maximum(0., w)
+        h = np.maximum(0., h)
+        xc_diff = np.less(xc - 0.4 * w,0).astype(np.float32)
+        yc_diff = np.less(yc - 0.4 * h,0).astype(np.float32)
+        close_idx=xc_diff+yc_diff
+        inter = w*h
+        rem_areas = np.take(area_all, indices=sorted_index)
+        union = (rem_areas-inter)+area_all[curr_index]
+        IoU = inter/union
+        IoU1 = inter / rem_areas
+        IoU2 = inter /area_all[curr_index]
+        IoU[IoU1>0.9]=0.9
+        IoU[IoU2 > 0.9] =0.9
+        IoU[close_idx==2]=0.9
+        sorted_index = sorted_index[IoU<=nms_thresh ]
+
+    out_bboxes = np.take(bboxes, keep_index, axis=0)
+
+    return out_bboxes
 
 def pad(total_boxes, w, h):
     """Compute the padding coordinates (pad the bounding boxes to square)"""
@@ -274,109 +331,86 @@ def pad(total_boxes, w, h):
 #輸入為12x12
 def P_net(inp):
     try:
-        out=conv(inp,det1['conv1']['weights'],strides=(1,1),padding='valid')
-
-        out=out+np.reshape(det1['conv1']['biases'],(1,-1,1,1))
-        out=prelu(out,det1['PReLU1']['alpha'])
-
+        out=conv(inp,det1['pre_layer.0.weight'],det1['pre_layer.0.bias'],strides=(1,1),padding='valid')
+        out=prelu(out,det1['pre_layer.1.weight'])
         out=maxpool(out,(2,2),(2,2),padding='valid')
-
-        out=conv(out,det1['conv2']['weights'],strides=(1,1),padding='valid')
-
-        out=out+np.reshape(det1['conv2']['biases'],(1,-1,1,1))
-        out=prelu(out,det1['PReLU2']['alpha'])
-
-        out=conv(out,det1['conv3']['weights'],strides=(1,1),padding='valid')
-
-        out=out+np.reshape(det1['conv3']['biases'],(1,-1,1,1))
-        out=prelu(out,det1['PReLU3']['alpha'])
-
-        out1=conv(out,det1['conv4-1']['weights'],strides=(1,1),padding='valid')
-
-        out1=out1+np.reshape(det1['conv4-1']['biases'],(1,-1,1,1))
-        out1=softmax(out1,1)
-
-        out2=conv(out,det1['conv4-2']['weights'],strides=(1,1),padding='valid')
-
-        out2=out2+np.reshape(det1['conv4-2']['biases'],(1,-1,1,1))
-        return out1, out2
+        out=conv(out,det1['pre_layer.3.weight'],det1['pre_layer.3.bias'],strides=(1,1),padding='valid')
+        out=prelu(out,det1['pre_layer.4.weight'])
+        out=conv(out,det1['pre_layer.5.weight'],det1['pre_layer.5.bias'],strides=(1,1),padding='valid')
+        out=prelu(out,det1['pre_layer.6.weight'])
+        out1=conv(out,det1['conv4_1.weight'],det1['conv4_1.bias'],strides=(1,1),padding='valid')
+        out1=sigmoid(out1)
+        out2=conv(out,det1['conv4_2.weight'],det1['conv4_2.bias'],strides=(1,1),padding='valid')
+        out3 = conv(out, det1['conv4_3.weight'], det1['conv4_3.bias'], strides=(1, 1), padding='valid')
+        return out1, out2,out3
     except Exception as e:
         print(inp.shape)
         print(e)
 
     return None,None
 #輸入為24x24
+
+
+
 def R_net(inp):
-    out=conv(inp,det2['conv1']['weights'],strides=(1,1),padding='valid')
-
-    out=out+np.reshape(det2['conv1']['biases'],(1,-1,1,1))
-    out=prelu(out,det2['prelu1']['alpha'])
-
-    out=maxpool(out,(3,3),(2,2))
-    out=conv(out,det2['conv2']['weights'],strides=(1,1),padding='valid')
-
-    out=out+np.reshape(det2['conv2']['biases'],(1,-1,1,1))
-    out=prelu(out,det2['prelu2']['alpha'])
-
+    out=conv(inp,det2['pre_layer.0.weight'],det2['pre_layer.0.bias'],strides=(1,1),padding='valid')
+    out=prelu(out,det2['pre_layer.1.weight'])
     out=maxpool(out,(3,3),(2,2),padding='valid')
-
-    out=conv(out,det2['conv3']['weights'],strides=(1,1),padding='valid')
-
-    out=out+np.reshape(det2['conv3']['biases'],(1,-1,1,1))
-    out=prelu(out,det2['prelu3']['alpha'])
-
-    out=fc(out,det2['conv4']['weights'],det2['conv4']['biases'])
-    out=prelu(out,det2['prelu4']['alpha'])
-
-    out1=fc(out,det2['conv5-1']['weights'],det2['conv5-1']['biases'])
-    out1 = softmax(out1,1)
-
-    out2=fc(out,det2['conv5-2']['weights'],det2['conv5-2']['biases'])
-    return out1,out2
+    out=conv(out,det2['pre_layer.3.weight'],det2['pre_layer.3.bias'],strides=(1,1),padding='valid')
+    out=prelu(out,det2['pre_layer.4.weight'])
+    out=maxpool(out,(3,3),(2,2),padding='valid')
+    out=conv(out,det2['pre_layer.6.weight'],det2['pre_layer.6.bias'],strides=(1,1),padding='valid')
+    out=prelu(out,det2['pre_layer.7.weight'])
+    out=fc(out,det2['conv4.weight'],det2['conv4.bias'])
+    out=prelu(out,det2['prelu4.weight'])
+    out1=fc(out,det2['conv5_1.weight'],det2['conv5_1.bias'])
+    out1 = sigmoid(out1)
+    out2=fc(out,det2['conv5_2.weight'],det2['conv5_2.bias'])
+    out3 = fc(out, det2['conv5_3.weight'], det2['conv5_3.bias'])
+    return out1,out2,out3
 
 #48x48
 def O_net(inp):
-    out = conv(inp, det3['conv1']['weights'], strides=(1, 1), padding='valid')
+    out = conv(inp, det3['pre_layer.0.weight'],det3['pre_layer.0.bias'], strides=(1, 1), padding='valid')
+    out = prelu(out, det3['pre_layer.1.weight'])
 
-    out = out + np.reshape(det3['conv1']['biases'], (1, -1, 1, 1))
-    out = prelu(out, det3['prelu1']['alpha'])
+    out = maxpool(out, (3, 3), (2, 2),padding='valid')
+    out = conv(out, det3['pre_layer.3.weight'],det3['pre_layer.3.bias'], strides=(1, 1), padding='valid')
 
-    out = maxpool(out, (3, 3), (2, 2))
-    out = conv(out, det3['conv2']['weights'], strides=(1, 1), padding='valid')
-
-    out = out + np.reshape(det3['conv2']['biases'], (1, -1, 1, 1))
-    out = prelu(out, det3['prelu2']['alpha'])
+    out = prelu(out, det3['pre_layer.4.weight'])
 
     out = maxpool(out, (3, 3), (2, 2),padding='valid')
 
-    out = conv(out, det3['conv3']['weights'], strides=(1, 1), padding='valid')
-
-    out = out + np.reshape(det3['conv3']['biases'], (1, -1, 1, 1))
-    out = prelu(out, det3['prelu3']['alpha'])
+    out = conv(out, det3['pre_layer.6.weight'],det3['pre_layer.6.bias'], strides=(1, 1), padding='valid')
+    out = prelu(out, det3['pre_layer.7.weight'])
     out = maxpool(out, (2, 2), (2, 2), padding='valid')
 
-    out = conv(out, det3['conv4']['weights'], strides=(1, 1), padding='valid')
-    out = out + np.reshape(det3['conv4']['biases'], (1, -1, 1, 1))
-    out = prelu(out, det3['prelu4']['alpha'])
+    out = conv(out, det3['pre_layer.9.weight'],det3['pre_layer.9.bias'], strides=(1, 1), padding='valid')
 
-    out = fc(out, det3['conv5']['weights'], det3['conv5']['biases'])
-    out = prelu(out, det3['prelu5']['alpha'])
+    out = prelu(out, det3['pre_layer.10.weight'])
 
-    out1 = fc(out, det3['conv6-1']['weights'], det3['conv6-1']['biases'])
-    out1 = softmax(out1,1)
+    out = fc(out, det3['conv5.weight'],det3['conv5.bias'])
+    out = prelu(out, det3['prelu5.weight'])
 
-    out2 = fc(out, det3['conv6-2']['weights'], det3['conv6-2']['biases'])
-    return out1, out2
+    out1 = fc(out, det3['conv6_1.weight'], det3['conv6_1.bias'])
+    out1 = sigmoid(out1)
+
+    out2 = fc(out, det3['conv6_2.weight'], det3['conv6_2.bias'])
+    out3 = fc(out, det3['conv6_3.weight'], det3['conv6_3.bias'])
+    return out1, out2,out3
 
 
-image_name='JutisfyMyLove'
+image_name='kim'
 #minsize=20, threshold=0.7, factor=0.709, use_auto_downscaling=True,min_face_area=25 * 25)
 factor_count=0
-minsize=20
-threshold= [0.7, 0.7, 0.9]
+minsize=5
+threshold= [0.6, 0.7, 0.7]
 factor=0.709
+#img=Image.open(image_name+'.jpg')
 img=cv2.imread(image_name+'.jpg')
-min_face_area=(25 ,25)
+#img=cv2.resize(img,(img.shape[1]//2,img.shape[0]//2))
+img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+min_face_area=(minsize ,minsize)
 h = img.shape[0]
 w = img.shape[1]
 minl = np.amin([h, w])
@@ -392,43 +426,43 @@ all_boxes=[]
 for scale in scales:
     hs = int(np.ceil(h * scale))
     ws = int(np.ceil(w * scale))
-    img_data= cv2.resize(img.copy(), (ws,hs),cv2.INTER_AREA)
-    img_data = (img_data - 127.5) * 0.0078125
-    img_data = np.transpose(img_data, (2, 0, 1))
+
+    #=img_data=np.array(img.resize((ws, hs), Image.BILINEAR)).transpose((2, 0, 1))
+    #img_data = img_data/255.
+    img_data=cv2.resize(img,(ws,hs)).transpose((2, 0, 1))/255.0
     img_data = np.expand_dims(img_data, 0)
-    p_out1,p_out2 = P_net(img_data)
+    p_out1,p_out2,p_out3 = P_net(img_data)
     if p_out1 is not None:
-        boxes, _ = generateBoundingBox(p_out1[0,1,:,:].copy(), p_out2[0,:,:,:].copy(), scale, threshold[0])
-        boxes=nms(boxes,0.5)
+        boxes, _ = generateBoundingBox(p_out1[0,0,:,:].copy(), p_out2[0,:,:,:].copy(), scale, threshold[0])
+        boxes=nms_numpy(boxes,0.5)
+
         if len(boxes) > 0:
             im1=img.copy()
-            boxes=rerec(boxes)
+            boxes = rerec(boxes)
             accept=0
             accept_score=0
             for box in boxes:
-                boxw=box[2]-box[0]
-                boxh=box[3] -box[1]
-                if boxw>=min_face_area[0] and boxh>=min_face_area[1]:
+                sub_img = img[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
+
+
+                if sub_img is not None and len(sub_img.shape)==3 and sub_img.shape[1]>=min_face_area[0] and sub_img.shape[0]>=min_face_area[1]:
                     #extend_len=int(round(min([int(box[1]),int(box[0]),img.shape[0]-int(box[3]),img.shape[1]-int(box[2]),0.5*boxw])))
-                    sub_img=img[int(box[1]):int(box[3]),int(box[0]):int(box[2]),:]
-                    cv2.imwrite('faces/sub_img_{0}_{1}_{2}_{3}.jpg'.format(int(box[0]),int(box[1]),int(box[2]),int(box[3])),sub_img)
-                    sub_img = cv2.resize(sub_img, (24, 24), cv2.INTER_AREA)
-                    sub_img = (sub_img - 127.5) * 0.0078125
-                    sub_img = np.transpose(sub_img, (2, 0, 1))
+                    cv2.imwrite('faces/sub_img_{0}_{1}_{2}_{3}.jpg'.format(int(box[0]),int(box[1]),int(box[2]),int(box[3])),cv2.cvtColor(sub_img.copy(), cv2.COLOR_RGB2BGR))
+                    sub_img =cv2.resize(sub_img, (24, 24)).transpose((2, 0, 1)) / 255.0
                     sub_img = np.expand_dims(sub_img, 0)
-                    r_out1, r_out2 = R_net(sub_img)
-                    avg_score=math.sqrt(r_out1[0,1]*box[4])
-                    if r_out1[0,1]>=threshold[1]:
+                    r_out1, r_out2,r_out3 = R_net(sub_img)
+                    avg_score=math.sqrt(r_out1[0,0]*box[4])
+                    if r_out1[0,0]>=threshold[1]:
                         accept +=1
                         accept_score +=avg_score
-                        x1 = np.round(box[0]+r_out2[0,0]*boxw)
-                        y1 = np.round(box[1]+r_out2[0,1]*boxh)
-                        x2 =  np.round(box[2]+r_out2[0,2]*boxw)
-                        y2 = np.round(box[3]+r_out2[0,3]*boxh)
-                        all_boxes.append(np.array([int(x1),int(y1),int(x2),int(y2),avg_score]))
-                        cv2.rectangle(im1,(int(x1),int(y1)),(int(x2),int(y2)), (255, 128, 255), 3)
+                        x1 = np.round(box[0]+r_out2[0,0]*sub_img.shape[1])
+                        y1 = np.round(box[1]+r_out2[0,1]*sub_img.shape[0])
+                        x2 =  np.round(box[2]+r_out2[0,2]*sub_img.shape[1])
+                        y2 = np.round(box[3]+r_out2[0,3]*sub_img.shape[0])
+                        all_boxes.append(np.array([int(x1),int(y1),int(x2),int(y2),avg_score,r_out3[0]]))
+                        cv2.rectangle(im1,(int(x1),int(y1)),(int(x2),int(y2)), (255, 128, 255), 2)
 
-            cv2.imwrite('box_{0}_{1}.jpg'.format(image_name,scale),im1)
+            cv2.imwrite('box_{0}_{1}.jpg'.format(image_name,scale),cv2.cvtColor(im1, cv2.COLOR_RGB2BGR))
             print('scale:{0} finished!   {1}  box founded  avg score:{2} '.format(scale,len(boxes),boxes[:,4].mean()))
             print( '          {0}  box accepted  avg score:{1} '.format(accept, accept_score/max(accept,1)))
             accept=0
@@ -436,12 +470,17 @@ for scale in scales:
         else:
             print('scale:{0} finished!   {1}  box founded   '.format(scale, len(boxes)))
 print('{0} boxes accepted'.format(len(all_boxes)))
-all_boxes=nms(np.asarray(all_boxes),0.5)
+all_boxes=nms_numpy(np.asarray(all_boxes),0.5)
 print('{0} boxes accepted after nms'.format(len(all_boxes)))
 im2=img.copy()
 for b in all_boxes:
-    cv2.rectangle(im2, (int(b[0]), int(b[1])), (int(b[2]), int(b[3])), (128, 128, 255), 3)
-cv2.imwrite('box_'+image_name+'_rnet.jpg',im2)
+    x1, y1, x2, y2, score, landmarks = b
+    landmarks_x = x1 + landmarks[0::2] * (x2 - x1)
+    landmarks_y = y1 + landmarks[1::2] * (y2 - y1)
+    for i in range(5):
+        cv2.circle(im2, (int(landmarks_x[i]), int(landmarks_y[i])), 2, (128, 255, 255), 1)
+    cv2.rectangle(im2, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 128), 2)
+cv2.imwrite('box_'+image_name+'_rnet.jpg',cv2.cvtColor(im2, cv2.COLOR_RGB2BGR))
 all_boxes=np.asarray(all_boxes)
 all_boxes=rerec(all_boxes)
 im3=img.copy()
@@ -451,22 +490,29 @@ for box in all_boxes:
     boxh = box[3] - box[1]
     sub_img = img[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
     if sub_img is not None and sub_img.shape[0]>0 and sub_img.shape[1]>0 :
-        cv2.imwrite('faces/final/sub_img_{0}_{1}_{2}_{3}.jpg'.format(int(box[0]), int(box[1]), int(box[2]), int(box[3])),sub_img)
-        sub_img = cv2.resize(sub_img, (48, 48), cv2.INTER_AREA)
-        sub_img = (sub_img - 127.5) * 0.0078125
-        sub_img = np.transpose(sub_img, (2, 0, 1))
+        cv2.imwrite('faces/final/sub_img_{0}_{1}_{2}_{3}.jpg'.format(int(box[0]), int(box[1]), int(box[2]), int(box[3])),cv2.cvtColor(sub_img.copy(), cv2.COLOR_RGB2BGR))
+        sub_img = cv2.resize(sub_img, (48, 48)).transpose((2, 0, 1)) / 255.0
         sub_img = np.expand_dims(sub_img, 0)
-        o_out1, o_out2 = O_net(sub_img)
-        avg_score = o_out1[0, 1]
+        o_out1, o_out2,o_out3 = O_net(sub_img)
+        avg_score = o_out1[0, 0]
         if avg_score>=threshold[2]:
             x1 = np.round(box[0] + o_out2[0, 0] * boxw)
             y1 = np.round(box[1] + o_out2[0, 1] * boxh)
             x2 = np.round(box[2] + o_out2[0, 2] * boxw)
             y2 = np.round(box[3] + o_out2[0, 3] * boxh)
-            final_boxes.append(np.array([int(x1),int(y1), int(x2), int(y2), avg_score]))
-            cv2.rectangle(im3, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 128), 3)
-cv2.imwrite('box_'+image_name+'_onet.jpg',im3)
-final_boxes=nms(np.asarray(final_boxes),0.5)
+            final_boxes.append(np.array([int(x1),int(y1), int(x2), int(y2), avg_score,o_out3[0]]))
+
+
+final_boxes=nms_numpy(np.asarray(final_boxes),0.5)
+for b in final_boxes:
+    x1,y1,x2,y2,score,landmarks=b
+
+    landmarks_x=x1+landmarks[0::2]*(x2-x1)
+    landmarks_y=y1+landmarks[1::2]*(y2-y1)
+    for i in range(5):
+        cv2.circle(im3, (int(landmarks_x[i]), int(landmarks_y[i])),2, (128, 255, 255),1)
+    cv2.rectangle(im3, (int(x1), int(y1)), (int(x2), int(y2)), (255, 255, 128), 2)
+cv2.imwrite('box_'+image_name+'_onet.jpg',cv2.cvtColor(im3, cv2.COLOR_RGB2BGR))
 print(final_boxes)
 
 

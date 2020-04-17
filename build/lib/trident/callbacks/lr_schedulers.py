@@ -1,9 +1,14 @@
-import warnings
 import math
+import random
+import warnings
+
 import numpy as np
-from  ..callbacks import CallbackBase
+
 from ..backend.common import *
 from ..backend.load_backend import get_backend
+from ..callbacks import CallbackBase
+
+_session = get_session()
 
 if get_backend()=='pytorch':
     from ..backend.pytorch_backend import to_numpy,to_tensor
@@ -13,7 +18,7 @@ elif get_backend()=='cntk':
     from ..backend.cntk_backend import  to_numpy,to_tensor
 
 
-__all__ = ['AdjustLRCallbackBase','ReduceLROnPlateau','reduce_lr_on_plateau']
+__all__ = ['AdjustLRCallbackBase','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr']
 
 class AdjustLRCallbackBase(CallbackBase):
     def __init__(self):
@@ -75,6 +80,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
             min_delta = kwargs.pop('epsilon')
             warnings.warn('`epsilon` argument is deprecated and '
                           'will be removed, use `min_delta` instead.')
+
         self.factor = factor
         self.min_lr = min_lr
         self.min_delta = min_delta
@@ -86,6 +92,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
         self.best = 0
         self.mode = mode
         self.monitor_op = None
+        self.unit_base=None
         self._reset()
 
     def _reset(self):
@@ -106,47 +113,14 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
         self.cooldown_counter = 0
         self.wait = 0
 
-    def on_train_begin(self, training_context):
-        self._reset()
-
     def on_epoch_end(self, training_context):
         training_context['current_lr']=training_context['optimizer'].lr
-        current =to_numpy(training_context['losses'].get(self.monitor,training_context['metrics'].get(self.monitor,training_context['losses']['total_losses']))).mean()
-        if current is None:
-            warnings.warn(
-                'Reduce LR on plateau conditioned on metric `%s` '
-                'which is not available. Available metrics are: %s' %
-                (self.monitor, ','.join(training_context['metrics'].keys_list)), RuntimeWarning
-            )
-
-        else:
-            if self.in_cooldown():
-                self.cooldown_counter -= 1
-                self.wait = 0
-
-            if self.monitor_op(current, self.best):
-                self.best = current
-                self.wait = 0
-            elif not self.in_cooldown():
-                self.wait += 1
-                print(self.wait )
-                if self.wait >= self.patience:
-                    old_lr = float(training_context['optimizer'].lr)
-                    if old_lr > self.min_lr:
-                        new_lr = old_lr * self.factor
-                        new_lr = max(new_lr, self.min_lr)
-                        training_context['optimizer'].adjust_learning_rate(new_lr,True)
-
-                        if self.verbose > 0:
-                            print('\nEpoch %05d: ReduceLROnPlateau reducing '
-                                  'learning rate to %s.' % (training_context['current_epoch'] + 1, new_lr))
-                        self.cooldown_counter = self.cooldown
-                        self.wait = 0
-
-    def on_batch_end(self, training_context):
-        if training_context['current_batch']>0 and training_context['current_batch']%100==0:
-            training_context['current_lr']=training_context['optimizer'].lr
-            current =to_numpy(training_context['losses'].get(self.monitor,training_context['metrics'].get(self.monitor,training_context['losses']['total_losses']))).mean()
+        if self.unit_base == 'epoch':
+            history = training_context['losses'].get(self.monitor, training_context['metrics'].get(self.monitor,
+                                                                                                   training_context[
+                                                                                                       'losses'][
+                                                                                                       'total_losses']))
+            current = to_numpy(history[-min(5, len(history)):]).mean()
             if current is None:
                 warnings.warn(
                     'Reduce LR on plateau conditioned on metric `%s` '
@@ -164,7 +138,6 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                     self.wait = 0
                 elif not self.in_cooldown():
                     self.wait += 1
-                    print(self.wait )
                     if self.wait >= self.patience:
                         old_lr = float(training_context['optimizer'].lr)
                         if old_lr > self.min_lr:
@@ -178,12 +151,100 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                             self.cooldown_counter = self.cooldown
                             self.wait = 0
 
+    def on_batch_end(self, training_context):
+        if self.unit_base is None:
+            if training_context['total_batch']>_session.epoch_equivalent:
+                self.unit_base='batch'
+                print('one epoch have {0} batches, use {1} as epoch equivalent in long epoch. '.format(training_context['total_batch'],_session.epoch_equivalent))
+            else:
+                self.unit_base = 'epoch'
+                print('ReduceLROnPlateau reseted.')
+
+        num_batches = training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']
+        if self.unit_base=='batch' and training_context['current_batch']>0 and training_context['current_batch']%_session.epoch_equivalent==0:
+            training_context['current_lr']=training_context['optimizer'].lr
+            history=training_context['losses'].get(self.monitor,training_context['metrics'].get(self.monitor,training_context['losses']['total_losses']))
+            current =to_numpy(history[-min(5,len(history)):]).mean()
+            if current is None:
+                warnings.warn(
+                    'Reduce LR on plateau conditioned on metric `%s` '
+                    'which is not available. Available metrics are: %s' %
+                    (self.monitor, ','.join(training_context['metrics'].keys_list)), RuntimeWarning
+                )
+
+            else:
+                if self.in_cooldown():
+                    self.cooldown_counter -= 1
+                    self.wait = 0
+
+                if self.monitor_op(current, self.best):
+                    self.best = current
+                    self.wait = 0
+                elif not self.in_cooldown():
+                    self.wait += 1
+                    if self.wait >= self.patience:
+                        old_lr = float(training_context['optimizer'].lr)
+                        if old_lr > self.min_lr:
+                            new_lr = old_lr * self.factor
+                            new_lr = max(new_lr, self.min_lr)
+                            training_context['optimizer'].adjust_learning_rate(new_lr,True)
+
+                            if self.verbose > 0:
+                                print('\nEpoch %05d: ReduceLROnPlateau reducing '
+                                      'learning rate to %s.' % (training_context['current_epoch'], new_lr))
+                            self.cooldown_counter = self.cooldown
+                            self.wait = 0
+
 
     def in_cooldown(self):
         return self.cooldown_counter > 0
 
 def reduce_lr_on_plateau(monitor='total_loss',base_lr=0.001 ,verbose=True, mode='min', factor=0.5, patience=5, threshold=1e-4, threshold_mode='rel', cooldown=0, min_lr=1e-8, eps=1e-9):
    return ReduceLROnPlateau(monitor=monitor,mode=mode,factor=factor,patience=patience,verbose=int(verbose),min_delta=threshold,threshold_mode=threshold_mode,cooldown=cooldown,min_lr=min_lr)
+
+
+class LambdaLR(AdjustLRCallbackBase):
+    def __init__(self, offset=0,decay_start_epoch=50, **kwargs):
+        super(LambdaLR, self).__init__()
+        self.offset=offset
+        self.decay_start_epoch=decay_start_epoch
+
+    def on_epoch_end(self, training_context):
+        n_epochs = training_context['total_epoch']
+        epoch = training_context['current_epoch']
+        if epoch>=10:
+            lr=1.0 - max(0, epoch + self.offset - self.decay_start_epoch) / (n_epochs - self.decay_start_epoch)
+            training_context['optimizer'].adjust_learning_rate(lr,True)
+
+def lambda_lr(offset=0,decay_start_epoch=50):
+   return LambdaLR(offset=offset,decay_start_epoch=decay_start_epoch)
+
+
+
+class RandomCosineLR(AdjustLRCallbackBase):
+    def __init__(self, period=100,cosine_weight=0.2,noise_weight=0.3, random_start_epoch=3,**kwargs):
+        super(RandomCosineLR, self).__init__()
+        self.period=period
+        self.cosine_weight=cosine_weight
+        self.noise_weight=noise_weight
+        self.random_start_epoch=random_start_epoch
+
+    def on_batch_end(self, training_context):
+        if training_context['current_epoch'] >= self.random_start_epoch:
+            factor = math.cos(math.pi * (training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch'] + 1) / self.period)
+            base_lr = training_context['base_lr']
+            training_context['optimizer'].adjust_learning_rate(base_lr * (1 + self.cosine_weight * factor + self.noise_weight * (random.random() - 0.5)),False)
+
+
+
+def random_cosine_lr(period=100,cosine_weight=0.2,noise_weight=0.3, random_start_epoch=3,**kwargs):
+   return RandomCosineLR(period=period,cosine_weight=cosine_weight,noise_weight=noise_weight, random_start_epoch=random_start_epoch,**kwargs)
+
+
+
+
+
+
 
 
 def get_lr_scheduler(lr_scheduler_name):

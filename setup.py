@@ -1,26 +1,43 @@
-from setuptools import setup
-from setuptools import find_packages
+from setuptools import setup, find_packages
+from setuptools.extension import Library
 
-with open("README.md", "r") as fh:
+from pkg_resources import get_distribution, DistributionNotFound
+import subprocess
+import distutils.command.clean
+import distutils.spawn
+import glob
+import shutil
+import os
+
+with open("README", "r") as fh:
     long_description = fh.read()
 
-setup(name='tridentx',
-      version='0.0.4',
-      description='Multiverse for Deep Learning Developers',
+
+
+NAME = "tridentx"
+DIR = '.'
+EXCLUDE_FROM_PACKAGES = ["tests", "examples","internal_tool","datav3"]
+PACKAGES = find_packages(exclude=EXCLUDE_FROM_PACKAGES)
+
+
+setup(name=NAME,
+      version='0.5.1',
+      description='Multiverse for Deep Learning Developers without Pitfall',
       long_description=long_description,
       long_description_content_type="text/markdown",
       author= 'Allan Yiin',
       author_email= 'allan@datadecision.ai',
-      url= '....',
-      download_url= '....',
+      download_url= 'https://test.pypi.org/project/tridentx',
       license='MIT',
-      install_requires=['numpy>=1.9.1',
-                        'scipy>=0.14',
+      install_requires=['numpy>=1.13.3',
+                        'scikit-image >= 0.14',
+                        'pillow >= 4.1.1'
+                        'scipy>=1.2',
                         'six>=1.9.0',
                         'tqdm',
                         'pyyaml',
                         'h5py',
-                        'requests', 'django-layers-hr'],
+                        'requests'],
       extras_require={
           'visualize': ['pydot>=1.2.4'],
           'tests': ['pytest',
@@ -33,7 +50,7 @@ setup(name='tridentx',
                     'markdown'],
       },
       classifiers=[
-          'Development Status :: 3 - Alpha',
+          'Development Status :: 4 - Beta',
           'Intended Audience :: Developers',
           'Intended Audience :: Education',
           'Intended Audience :: Science/Research',
@@ -44,5 +61,10 @@ setup(name='tridentx',
           'Topic :: Software Development :: Libraries :: Python Modules'
       ],
       python_requires='>=3',
-      packages=find_packages())
+
+      packages=PACKAGES,
+      include_package_data=True,
+      scripts=[],
+
+      )
 

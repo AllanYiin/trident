@@ -1,0 +1,6 @@
+include *.md
+
+include LICENSE.txt
+recursive-exclude * __pycache__
+recursive-exclude optimizers *.pth *.h5
+recursive-include models *.txt
