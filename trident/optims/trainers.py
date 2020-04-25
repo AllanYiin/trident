@@ -614,7 +614,7 @@ class ModelBase(object):
                 metric_value=np.array(self.batch_metric_history[k][-1 * slice_cnt:]).mean()
                 if metric_value.item()>5:
                     format_string = '.3f'
-                elif metric_value.item()<0.005:
+                elif metric_value.item()<1e-4:
                     format_string = '.3e'
                 metric_strings.append('{0}: {1:<8{2}}'.format(k,metric_value,format_string))
             elif collect_history==False and k in self.training_context['tmp_metrics']:
@@ -1146,7 +1146,7 @@ class TrainingPlan(object):
                                              name_prefix: str = 'loss_metric_curve_{0}.png',
                                              clean_ipython_output_frequency=5, imshow=False):
         if save_path is not None:
-            folder, file = os.path.split(save_path)
+            folder, _,_ =split_path(save_path)
             if not os.path.exists(folder):
                 try:
                     os.makedirs(folder)

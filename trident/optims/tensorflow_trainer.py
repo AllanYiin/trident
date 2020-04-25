@@ -66,7 +66,7 @@ class Model(ModelBase):
             if input_shape is None:
                 pass
             else:
-                input_shape = tuple(to_list(input_shape))
+                input_shape =tf.TensorShape(to_list(input_shape))
                 input_name = 'input_{0}'.format(len(self.inputs) + 1)
                 # input_var =tf.placeholder(dtype=tf.float32, shape=[None])
                 # input_var = Input(input_shape, name=input_name)
@@ -86,11 +86,11 @@ class Model(ModelBase):
                     self.inputs[k] = v.get_shape()[1:]
 
         if isinstance(out_var, Layer):
-
             dummay_input = to_tensor(np.random.standard_normal((2, *input_shape)).astype(np.float32))
             out = out_var(dummay_input)
+            #out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
             self._model = out_var
-
+            self.signature = get_signature(self._model.forward)
             if is_tensor(out):
                 self._outputs['output'] = out.get_shape()[1:]
                 self._targets['target'] = out.get_shape()[1:]
@@ -99,11 +99,15 @@ class Model(ModelBase):
                     self._outputs['output_{0}'.format(i)] = out[i].get_shape()[1:]
                     self._targets['target_{0}'.format(i)] = out[i].get_shape()[1:]
 
-            self.signature = get_signature(self._model.forward)
+
         elif is_tensor(out_var):
             self._model = out_var
             self._outputs['output'] = out_var.get_shape()[1:]
             self._targets['target'] = out_var.get_shape()[1:]
+        elif isinstance(out_var,tf.keras.layers.Layer):
+            self._model = out_var
+            self._outputs['output'] = out_var.output_shape
+            self._targets['target'] = out_var.output_shape
         else:
             raise ValueError('')
 
@@ -229,7 +233,9 @@ class Model(ModelBase):
 
         outputs = self.outputs
         targets = self.targets
-        if outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
+        if all([k  in targets.key_list or k  in outputs.key_list for k  in argnames.key_list]):
+            pass
+        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
                                                                                                          'output',
                                                                                                          'y_pred'] and \
                 argnames.key_list[1] in ['target', 'label', 'y_true']:
@@ -314,7 +320,9 @@ class Model(ModelBase):
 
         outputs = self.outputs
         targets = self.targets
-        if outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
+        if all([k in targets.key_list or k in outputs.key_list for k in argnames.key_list]):
+            pass
+        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
                                                                                                          'output',
                                                                                                          'y_pred'] and \
                 argnames.key_list[1] in ['target', 'label', 'y_true']:
@@ -591,13 +599,13 @@ class Model(ModelBase):
 
         if isinstance(self._model, Layer):
             save_path = self.get_save_path(save_path, default_folder='Models',
-                                           default_file_name='{0}_epoch{1}.pth.tar_'.format(self._model.name,
+                                           default_file_name='{0}_epoch{1}.pkl_'.format(self._model.name,
                                                                                             self.training_context[
                                                                                                 'current_epoch']))
             folder, _, _ = split_path(save_path)
             self._model.eval()
-
-            tf.saved_model.save(self._model, folder)
+            self._model.save(save_path)
+            shutil.copy(save_path, save_path.replace('.pkl_', '.pkl'))
             self._model.train()
 
 
@@ -638,6 +646,22 @@ class Model(ModelBase):
             self._model.save_weights(self.training_context['save_full_path'])
 
         self._model.train()
+
+    def load_model(self, file_path):
+        print('Loading pretrained model from {}'.format(file_path))
+        pretrained_dict = unpickle(file_path)
+
+        if "state_dict" in pretrained_dict.keys():
+            pretrained_dict = pretrained_dict['state_dict']
+
+            #pretrained_dict = remove_prefix(pretrained_dict, 'module.')
+        if check_keys(self._model, pretrained_dict):
+            self._model.load_state_dict(pretrained_dict, strict=False)
+            print('Model loaded!')
+
+        if self.signature is None:
+            self.signature = get_signature(self._model.forward)
+
 
     def merge_grads(self, old_grads, new_grades):
         if isinstance(old_grads, list) and isinstance(new_grades, list) and len(old_grads) == len(new_grades):
@@ -1036,28 +1060,33 @@ class ImageClassificationModel(Model):
 
     def infer_single_image(self, img, topk=1):
         if self._model.built:
+            if isinstance(self._model,Layer):
+                self._model.eval()
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
             for func in self.preprocess_flow:
                 if inspect.isfunction(func) and func is not image_backend_adaptive:
                     img = func(img)
             img = image_backend_adaptive(img)
-            result = self._model.predict(to_tensor(np.expand_dims(img, 0)))
-
+            inp = to_tensor(np.expand_dims(img, 0))
+            result = self._model(inp)
             result = to_numpy(result)[0]
+            if self.class_names is None or len(self.class_names) == 0:
+                return result
+            else:
+                # argresult = np.argsort(result)
+                # argresult1 =argresult[::-1]
+                answer = OrderedDict()
+                idxs = list(np.argsort(result)[::-1][:topk])
+                for idx in idxs:
+                    prob = result[idx]
+                    answer[self.index2label(idx)] = (idx, prob)
+                # idx=int(np.argmax(result,-1)[0])
 
-            argresult = np.argsort(result)
-            argresult = argresult[::-1]
-            answer = OrderedDict()
-            idxs = list(argresult[:topk])
-            for idx in idxs:
-                prob = result[idx]
-                answer[self.index2label(idx)] = (idx, prob)
-            # idx=int(np.argmax(result,-1)[0])
-
-            return answer
+                return answer
+        else:
+            raise ValueError('the model is not built yet.')
 
 
 class ImageDetectionModel(Model):

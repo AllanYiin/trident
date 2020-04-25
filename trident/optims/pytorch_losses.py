@@ -19,13 +19,86 @@ from ..backend.pytorch_ops import *
 from ..data.image_common import *
 from ..layers.pytorch_activations import sigmoid
 
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-_session = get_session()
 
+_session = get_session()
+_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 __all__ = ['MSELoss', 'CrossEntropyLoss', 'NllLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
            'ExponentialLoss','ItakuraSaitoLoss', 'make_onehot', 'MS_SSIMLoss', 'CrossEntropyLabelSmooth', 'mixup_criterion', 'DiceLoss',
            'IouLoss', 'focal_loss_with_logits', 'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss',
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
+
+
+class _ClassificationLoss(nn.Module):
+    def __init__(self,axis=1,weight=None,  ignore_index=-100,cutoff=None ,target_onhot=False,label_smooth=False, reduction='mean'):
+        super(_ClassificationLoss, self).__init__()
+        if label_smooth==True and target_onhot==False:
+            raise ValueError('label_smooth need to set target_onhot==True')
+
+        self.reduction = reduction
+        self.axis=1
+        self.weight=weight
+        self.ignore_index=ignore_index
+        if cutoff is None and not 0<cutoff<1:
+            raise ValueError('cutoff should between 0 and 1')
+        self.cutoff=cutoff
+        self.num_classes=None
+        self.target_onhot=target_onhot
+        self.label_smooth=label_smooth
+        self.is_logit=False
+
+    def preprocess(self, output:torch.Tensor, target:torch.Tensor):
+        #check num_clases
+        if self.num_classes is None:
+            self.num_classes=output.shape[self.axis]
+
+        #initilize weight
+        if self.weight is not None and len(self.weight)!=self.num_classes:
+            raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
+        if self.weight is None:
+            self.weight=ones(self.num_classes).to(output.device)
+        else:
+            self.weight=to_tensor(self.weight).to(output.device)
+
+        #ignore_index
+        if isinstance(self.ignore_index, int) and 0 <= self.ignore_index < output.size(self.axis):
+            self.weight[self.ignore_index] = 0
+        elif isinstance(self.ignore_index, (list, tuple)):
+            for idx in self.ignore_index:
+                if isinstance(idx, int) and 0 <= idx < output.size(self.axis):
+                    self.weight[idx] = 0
+
+        #target_onehot
+        if self.target_onhot==True:
+            target = make_onehot(target, classes=self.num_classes, axis=self.axis).to(output.device)
+            if self.label_smooth:
+                target=target*(torch.Tensor(target.size()).uniform_(0.9,1).to(output.device))
+
+        #check is logit
+        if  (0<=output<=1).all() and np.abs(output.sum(self.axis)-1).mean()<1e-4:
+            output=clip(output,_session.epsilon,1-_session.epsilon)
+            self.self.is_logit=True
+            #setting cutoff
+            if self.cutoff is not None:
+                mask= (output > self.cutoff).float()
+                output=output*mask
+        return output, target
+
+    def calculate_loss(self,output, target):
+        raise NotImplementedError
+    def postprocess(self,loss):
+        if self.reduction=='mean':
+            return loss.mean()
+        elif self.reduction=='sum':
+            return  loss.sum()
+        elif self.reduction == 'batch_mean':
+            return loss.mean(0).sum()
+
+    def forward(self, output, target):
+        output, target=self.preprocess(output, target)
+        loss=self.calculate_loss(output, target)
+        loss=self.postprocess(loss)
+        return loss
+
 
 
 class CrossEntropyLoss(_Loss):
@@ -198,11 +271,14 @@ class CosineSimilarityLoss(_Loss):
 
 
 
-def make_onehot(labels, classes):
+def make_onehot(labels, classes,axis=1):
     one_hot_shape = list(labels.size())
-    one_hot_shape.insert(1, classes)
+    if axis==-1:
+        one_hot_shape.append(classes)
+    else:
+        one_hot_shape.insert(axis, classes)
     one_hot = torch.zeros(tuple(one_hot_shape)).to(_device)
-    target = one_hot.scatter_(1, labels.unsqueeze(1).data, 1)
+    target = one_hot.scatter_(axis, labels.unsqueeze(axis).data, 1)
     return target
 
 
@@ -310,19 +386,42 @@ class MS_SSIMLoss(_Loss):
 
 
 class CrossEntropyLabelSmooth(_Loss):
-    def __init__(self, num_classes, reduction='mean'):
+    def __init__(self, num_classes,axis=1,weight=None, reduction='mean'):
         super(CrossEntropyLabelSmooth, self).__init__()
         self.num_classes = num_classes
-        self.logsoftmax = nn.LogSoftmax(dim=1)
+        self.axis = axis
+        self.logsoftmax = nn.LogSoftmax(dim=self.axis)
+        self.reduction=reduction
+
+        if isinstance(weight, list):
+            weight = to_tensor(np.array(weight))
+        elif isinstance(weight, np.ndarray):
+            weight = to_tensor(weight)
+        if weight is None or isinstance(weight, torch.Tensor):
+            self.weight = weight
+        else:
+            raise ValueError('weight should be 1-D tensor')
+
 
     def forward(self, output, target):
         log_probs = self.logsoftmax(output)
-        target = torch.zeros_like(log_probs).scatter_(1, target.unsqueeze(1), 1)
+        target = make_onehot(target, classes=self.num_classes, axis=self.axis)
 
-        smooth = np.random.choice(np.arange(0, 0.12, 0.01))
+        smooth = np.random.uniform( 0, 0.12,target.shape)
+        smooth[:,0]=1
+        smooth=to_tensor(smooth)
         target = (1 - smooth) * target + smooth / self.num_classes
-        loss = (-target * log_probs).mean(0).sum()
-        return loss
+        if self.weight is not None and len(self.weight)==self.num_classes:
+            if self.reduction=='sum':
+                return (-target * log_probs*self.weight).sum()
+            elif self.reduction=='mean':
+                return (-target * log_probs * self.weight).mean()
+        else:
+            if self.reduction == 'sum':
+                return (-target * log_probs ).sum()
+            elif self.reduction == 'mean':
+                return (-target * log_probs).mean()
+
 
 
 def mixup_criterion(y_a, y_b, lam):
@@ -330,10 +429,12 @@ def mixup_criterion(y_a, y_b, lam):
 
 
 class DiceLoss(_Loss):
-    def __init__(self, weight=None, smooth=1., ignore_index=-100, reduction='mean'):
+    def __init__(self, axis=1,weight=None, smooth=1., ignore_index=-100,cutoff=None, reduction='mean'):
         super(DiceLoss, self).__init__(reduction=reduction)
         self.ignore_index = ignore_index
         self.smooth = smooth
+        self.axis=axis
+        self.cutoff=cutoff
         if isinstance(weight, list):
             weight = to_tensor(np.array(weight))
         elif isinstance(weight, np.ndarray):
@@ -344,28 +445,63 @@ class DiceLoss(_Loss):
             raise ValueError('weight should be 1-D tensor')
 
     def forward(self, output, target):
-        if self.weight is not None and len(self.weight) != output.size(1):
+        if self.weight is not None and len(self.weight) != output.size(self.axis):
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
 
-        target = make_onehot(target, classes=output.size()[1])
-        probs = F.softmax(output, dim=1)
-        # probs=output#*((output>0.5).float())
-        if self.reduction == 'mean':
-            intersection = (target * probs).sum(-1).sum(-1)
-            den1 = probs.sum(-1).sum(-1)
-            den2 = target.sum(-1).sum(-1)
-            dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-            if self.weight is not None:
-                dice = dice * (self.weight.unsqueeze(0))
-            dice1 = 1 - ((2 * intersection[:, 1:].sum() + self.smooth) / (
-                        den1[:, 1:].sum() + den2[:, 1:].sum() + self.smooth))
-            return dice[:, 1:].mean()  # +dice1#.sum()
-        else:
-            intersection = (target * probs)[:, 1:].sum()
-            den1 = probs[:, 1:].sum()
-            den2 = target[:, 1:].sum()
-            dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-            return dice
+        target = make_onehot(target, classes=output.size(self.axis),axis=self.axis)
+        probs = F.softmax(output, dim=self.axis)
+        if self.cutoff is not None:
+            mask=(probs>self.cutoff).float()
+            probs=probs*mask
+
+        if probs.ndim==3:
+            if self.weight is None:
+                self.weight=to_tensor(np.ones((output.size(self.axis))))
+            if isinstance(self.ignore_index,int) and 0<=self.ignore_index<output.size(self.axis):
+                self.weight[self.ignore_index]=0
+            elif isinstance(self.ignore_index,(list,tuple)):
+                for idx in self.ignore_index:
+                    if isinstance(idx, int) and 0 <= idx < output.size(self.axis):
+                        self.weight[idx] = 0
+
+
+            # probs=output#*((output>0.5).float())
+            if self.reduction == 'mean':
+
+                intersection = (target * probs).sum(1 if self.axis==-1 else -1)
+                den1 = probs.sum(1 if self.axis==-1 else -1)
+                den2 = target.sum(1 if self.axis==-1 else -1)
+                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+                if self.weight is not None:
+                    dice = dice * (self.weight.unsqueeze(0))
+                dice1 = 1 - ((2 * intersection[:, 1:].sum() + self.smooth) / (
+                            den1[:, 1:].sum() + den2[:, 1:].sum() + self.smooth))
+                return dice[:, 1:].mean()  # +dice1#.sum()
+            else:
+
+                intersection = (target * probs).sum(1)
+                den1 = probs.sum(1)
+                den2 = target.sum(1)
+                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+                return (dice.mean(0)*self.weight).sum()
+
+        elif probs.ndim==4:
+            # probs=output#*((output>0.5).float())
+            if self.reduction == 'mean':
+                intersection = (target * probs).sum(-1).sum(-1)
+                den1 = probs.sum(-1).sum(-1)
+                den2 = target.sum(-1).sum(-1)
+                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+                if self.weight is not None:
+                    dice = dice * (self.weight.unsqueeze(0))
+                dice1 = 1 - ((2 * intersection[:, 1:].sum() + self.smooth) / ( den1[:, 1:].sum() + den2[:, 1:].sum() + self.smooth))
+                return dice[:, 1:].mean()  # +dice1#.sum()
+            else:
+                intersection = (target * probs)[:, 1:].sum()
+                den1 = probs[:, 1:].sum()
+                den2 = target[:, 1:].sum()
+                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+                return dice
 
 
 class IouLoss(_Loss):

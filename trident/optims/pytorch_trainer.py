@@ -21,6 +21,7 @@ from .pytorch_regularizers import get_reg
 from .trainers import ModelBase, OptimizerBase, progress_bar
 from ..backend.common import *
 from ..backend.pytorch_backend import *
+from ..layers.pytorch_layers import *
 from ..backend.pytorch_ops import *
 from ..callbacks.lr_schedulers import get_lr_scheduler
 from ..data.image_common import *
@@ -70,7 +71,7 @@ class Model(ModelBase):
     def __init__(self, inputs=None, output=None, input_shape=None):
         super(Model, self).__init__(inputs, output, input_shape)
 
-    def _initial_graph(self, inputs=None, output=None, input_shape=None):
+    def _initial_graph(self, inputs=None, output=None, input_shape=None,initializer=None):
         if output is None:
             raise ValueError('There is at least one output')
         if isinstance(output,(np.ndarray,torch.Tensor)) and input_shape is None:
@@ -84,10 +85,6 @@ class Model(ModelBase):
                 input_shape = to_list(input_shape)
                 input_name = 'input_{0}'.format(len(self.inputs))
                 self.inputs[input_name] = input_shape
-        elif isinstance(inputs, Input):
-            input_name = inputs.name if inputs.name != '' else 'input_{0}'.format(len(self.inputs))
-            input_shape = to_numpy(inputs.input_shape).tolist()
-            self.inputs[input_name] = input_shape
         elif isinstance(inputs, (tuple, list)):
             for inp in inputs:
                 if isinstance(inp, Input):
@@ -101,10 +98,20 @@ class Model(ModelBase):
         if isinstance(output, (Layer, nn.Module)):
             output.input_shape = input_shape
             # output.cpu()
-            output.to(output.device)
-            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(output.device)
+
+            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(get_device())
+            output.to(get_device())
             out = output(dummay_input)
             self._model = output
+
+            # def _init_weghts(m: Layer):
+            #     if isinstance(m, (Conv2d, DepthwiseConv2d)):
+            #         if m.weight is not None:
+            #             nn.init.kaiming_normal_(m.weight, a=0.02)
+            #         else:
+            #             print('')
+            #
+            # self._model.apply(_init_weghts)
 
             if isinstance(out, torch.Tensor):
                 self._outputs['output'] = to_list(out.size())[1:]
@@ -120,7 +127,7 @@ class Model(ModelBase):
             for op in output:
                 if isinstance(op, (Layer, nn.Module)):
                     output_list.append(op)
-            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(output.device)
+            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(get_device())
             model = Combine(output_list)
             outs = model(dummay_input)
             self._model = model
@@ -142,7 +149,6 @@ class Model(ModelBase):
 
 
         self.training_context['current_model'] = self._model
-        self.device = self._model.device
         save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.name))
         self.save_path =sanitize_path(make_dir_if_need(save_path))
         self.training_context['save_path'] = self.save_path
@@ -279,7 +285,9 @@ class Model(ModelBase):
 
         outputs = self.outputs
         targets = self.targets
-        if outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input','output','y_pred'] and  argnames.key_list[1] in ['target','label','y_true']:
+        if all([k  in targets.key_list or k  in outputs.key_list for k  in argnames.key_list]):
+            pass
+        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input','output','y_pred'] and  argnames.key_list[1] in ['target','label','y_true']:
             argnames = OrderedDict()
             argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
             argnames[targets.key_list[0]] = targets[targets.key_list[0]]
@@ -361,7 +369,9 @@ class Model(ModelBase):
 
         outputs = self.outputs
         targets = self.targets
-        if outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input', 'output', 'y_pred'] and argnames.key_list[1] in ['target', 'label', 'y_true']:
+        if all([k  in targets.key_list or k  in outputs.key_list  for k  in argnames.key_list]):
+            pass
+        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input', 'output', 'y_pred'] and argnames.key_list[1] in ['target', 'label', 'y_true']:
             argnames = OrderedDict()
             argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
             argnames[targets.key_list[0]] = targets[targets.key_list[0]]
@@ -498,7 +508,8 @@ class Model(ModelBase):
         if self.training_context['current_batch'] == 0:
             temp = OrderedDict()
             for k in self.training_context['losses'].key_list:
-                temp[k] = self.training_context['losses'][k][-1]
+                if len(self.training_context['losses'][k])>0:
+                    temp[k] = self.training_context['losses'][k][-1]
             print(temp)
 
     def do_on_data_received(self, train_data, test_data):
@@ -628,13 +639,13 @@ class Model(ModelBase):
                             if para is not None  and para.grad is not None:
                                 grad_norm=para.grad.norm()
                                 if not 0<grad_norm<1e5:
-                                    sys.stderr.write('warning...Gradient norm exceed 1e5 nor less-or-equal zero')
+                                    sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
                         except:
                             PrintException()
                 elif isinstance(self._model,torch.Tensor):
                     grad_norm = self._model.grad.norm()
                     if not 0 < grad_norm < 1e5:
-                        sys.stderr.write('Gradient norm exceed 1e5 nor less-or-equal zero')
+                        sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
 
             for callback in self.training_context['callbacks']:
                 callback.on_optimization_step_start(self.training_context)
@@ -738,7 +749,7 @@ class Model(ModelBase):
 
     def load_model(self, file_path):
         print('Loading pretrained model from {}'.format(file_path))
-        pretrained_dict = torch.load(file_path, map_location=lambda storage, loc: storage)
+        pretrained_dict = torch.load(file_path,  map_location=torch.device(get_device()))
 
         if "state_dict" in pretrained_dict.keys():
             pretrained_dict = pretrained_dict['state_dict']
