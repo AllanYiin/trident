@@ -100,39 +100,49 @@ class MaxPool1d(tf.keras.layers.MaxPool1D):
         return s.format(**self.__dict__)
 
 
-class MaxPool2d(tf.keras.layers.MaxPool2D):
-    def __init__(self,kernel_size = (2, 2), strides=None, auto_pad=True,padding_mode='replicate', **kwargs ):
-        kernel_size=_pair(kernel_size)
-        strides=_pair(strides or kernel_size)
-        super(MaxPool2d, self).__init__( kernel_size,strides,
-                 padding='same' if auto_pad else 'valid', data_format='channels_last', **kwargs)
-
-    @property
-    def kernel_size(self):
-        return super().pool_size
-
-    @kernel_size.setter
-    def kernel_size(self,value):
-        self.pool_size=_pair(value)
-    def __repr__(self):
-        return get_layer_repr(self)
-    def extra_repr(self):
-        s = 'kernel_size={pool_size}, strides={strides}'
-        s += ',auto_pad={0}'.format(self.padding == 'same')
-        return s.format(**self.__dict__)
+class MaxPool2d(Layer):
+    def __init__(self,kernel_size = (2, 2), strides=None, auto_pad=True,padding_mode='replicate', name=None,**kwargs ):
+        super(MaxPool2d, self).__init__(name=name)
+        self.kernel_size=_pair(kernel_size)
+        self.strides=_pair(strides or kernel_size)
+        self.auto_pad = auto_pad
+        self.padding = 'VALID'
+        if self.auto_pad == True:
+            self.padding = 'SAME'
+    def build(self, input_shape):
+        if self._built == False:
+            self._built = True
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return tf.nn.max_pool2d(x, self.kernel_size, self.strides, self.padding, 'NHWC', self._name)
 
 
-class GlobalAvgPool2d(tf.keras.layers.Layer):
-    def __init__(self,name=''):
+
+class GlobalAvgPool2d(Layer):
+    def __init__(self, keepdim=False, name='avg_pool'):
         super(GlobalAvgPool2d, self).__init__(name=name)
+        self.keepdim = keepdim
 
-    def call(self, inputs, **kwargs):
-            if K.int_shape(inputs)[-1]==1:
-                return K.squeeze(K.mean(inputs, axis=[1, 2]))
-            return K.mean(inputs, axis=[1, 2])
-    def __repr__(self):
-        return get_layer_repr(self)
 
+    def build(self, input_shape):
+        if self._built == False:
+            if self.keepdim == True:
+                output_shape = input_shape.clone()
+                output_shape[0] = 1
+                output_shape[1] = 1
+                self.output_shape = output_shape
+            else:
+                self.output_shape = input_shape[-1]
+            self._built = True
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if self.keepdim == True:
+            x = tf.reduce_mean(x,[1,2],keepdims=True)
+
+        else:
+            x = tf.reduce_mean(x,[1,2],keepdims=False)
+        return x
 
 
 def get_pooling(fn_name):

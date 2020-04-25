@@ -12,11 +12,10 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from ..backend.common import epsilon, get_function, get_session, enforce_singleton
-from ..backend.pytorch_backend import Layer
+from ..backend.pytorch_backend import Layer,get_device
 
 __all__ = ['InstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm2d','SpectralNorm','get_normalization']
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _epsilon=_session.epsilon
 
 
@@ -48,6 +47,11 @@ class BatchNorm(Layer):
         if self.affine :
             init.ones_(self.weight)
             init.zeros_(self.bias)
+    def reset_parameters(self):
+        self.reset_running_stats()
+        if self.affine:
+            init.ones_(self.weight)
+            init.zeros_(self.bias)
 
 
     def build(self, input_shape):
@@ -70,8 +74,8 @@ class BatchNorm(Layer):
                 self.register_parameter('running_mean', None)
                 self.register_parameter('running_var', None)
                 self.register_parameter('num_batches_tracked', None)
-            self.reset_running_stats()
-            self.to(_device)
+            self.reset_parameters()
+            self.to(get_device())
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -190,7 +194,7 @@ class InstanceNorm(Layer):
                 self.register_parameter('running_var', None)
                 self.register_parameter('num_batches_tracked', None)
             self.reset_running_stats()
-            self.to(_device)
+            self.to(get_device())
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -220,7 +224,7 @@ class LayerNorm2d(Layer):
         self.normalizer = None
     def build(self, input_shape):
         if self._built == False or self.normalizer is None:
-            self.normalizer =_LayerNorm( self.input_filters, **self.norm_kwargs).to(_device)
+            self.normalizer =_LayerNorm( self.input_filters, **self.norm_kwargs).to(get_device())
             self._built=True
     def forward(self, *x):
         x = enforce_singleton(x)

@@ -23,6 +23,7 @@ from tensorflow.python.keras.engine import input_layer
 from tensorflow.python.keras.engine import training
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.engine.base_layer import Layer
+from tensorflow.python.ops import image_ops
 from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.saving.saved_model import model_serialization
 from tensorflow.python.keras.utils import conv_utils
@@ -46,7 +47,7 @@ from ..layers.tensorflow_layers import *
 
 _tf_data_format = 'channels_last'
 
-__all__ = ['Conv2d_Block', 'TransConv2d_Block', 'ShortCut2d']
+__all__ = ['Conv2d_Block', 'TransConv2d_Block','DepthwiseConv2d_Block','SeparableConv2d_Block', 'ShortCut2d','SqueezeExcite','For']
 
 _session = get_session()
 
@@ -121,12 +122,17 @@ class Conv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
+        self.depth_multiplier = depth_multiplier
         self.use_spectral = use_spectral
-        self.norm = get_normalization(normalization)
+        if not self.use_spectral:
+            self.conv= Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                              auto_pad=self.auto_pad, activation=None,
+                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                              depth_multiplier=self.depth_multiplier)
+            self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
-        self.depth_multiplier = depth_multiplier
+
 
 
     def build(self, input_shape):
@@ -166,7 +172,6 @@ class Conv2d_Block(Layer):
             elif isinstance(self.__dict__['activation'], Layer):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         return s.format(**self.__dict__)
-
 
 
 #
@@ -237,12 +242,12 @@ class Conv2d_Block(Layer):
 #         return get_layer_repr(self)
 
 
+
 class TransConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, **kwargs):
-
-        super(TransConv2d_Block, self).__init__(name=name)
+        super(TransConv2d_Block, self).__init__()
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -255,12 +260,18 @@ class TransConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
+        self.depth_multiplier = depth_multiplier
         self.use_spectral = use_spectral
-        self.norm = get_normalization(normalization)
+        if not self.use_spectral:
+            self.conv= TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                              auto_pad=self.auto_pad, activation=None,
+                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                              depth_multiplier=self.depth_multiplier)
+            self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
-        self.depth_multiplier = depth_multiplier
+
+
 
     def build(self, input_shape):
         if self._built == False:
@@ -332,6 +343,203 @@ class TransConv3d_Block(tf.keras.Sequential):
     @conv.setter
     def conv(self, value):
         self._conv = value
+
+
+class DepthwiseConv2d_Block(Layer):
+    def __init__(self, kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
+                 activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,  **kwargs):
+        super(DepthwiseConv2d_Block, self).__init__()
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.auto_pad = auto_pad
+
+        self.use_bias = use_bias
+        self.dilation = dilation
+        self.groups = groups
+
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
+        self.dropout_rate = dropout_rate
+        self.depth_multiplier = depth_multiplier
+        self.use_spectral = use_spectral
+        if not self.use_spectral:
+            self.conv= DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
+                              auto_pad=self.auto_pad, activation=None,
+                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
+            self.norm = get_normalization(normalization)
+            self.conv=None
+        self.activation = get_activation(activation)
+        self.droupout = None
+
+
+
+    def build(self, input_shape):
+        if self._built == False:
+            conv = DepthwiseConv2d(kernel_size=self.kernel_size,depth_multiplier=self.depth_multiplier, strides=self.strides,
+                          auto_pad=self.auto_pad, activation=None,
+                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
+            #conv.input_shape = input_shape
+
+            if self.use_spectral:
+                #self.conv = nn.utils.spectral_norm(conv)
+                self.norm=None
+            else:
+                self.conv = conv
+            self._built=True
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if self.training and self.add_noise == True:
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            x +=noise
+        x = self.conv(x)
+        if self.norm is not None:
+            x = self.norm(x)
+        if self.activation is not None:
+            x = self.activation(x)
+        if self.training and self.dropout_rate > 0 :
+            x = tf.nn.dropout(x, rate=self.dropout_rate)
+        return x
+
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], Layer):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
+
+class SeparableConv2d_Block(Layer):
+    def __init__(self, kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
+                 activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,  **kwargs):
+        super(SeparableConv2d_Block, self).__init__()
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.auto_pad = auto_pad
+
+        self.use_bias = use_bias
+        self.dilation = dilation
+        self.groups = groups
+
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
+        self.dropout_rate = dropout_rate
+        self.depth_multiplier = depth_multiplier
+        self.use_spectral = use_spectral
+        if not self.use_spectral:
+            self.conv= SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
+                              auto_pad=self.auto_pad, activation=None,
+                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
+            self.norm = get_normalization(normalization)
+        self.activation = get_activation(activation)
+        self.droupout = None
+
+
+
+    def build(self, input_shape):
+        if self._built == False:
+            conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
+                          auto_pad=self.auto_pad, activation=None,
+                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name
+                          )
+            #conv.input_shape = input_shape
+
+            if self.use_spectral:
+                #self.conv = nn.utils.spectral_norm(conv)
+                self.norm=None
+            else:
+                self.conv = conv
+            self._built=True
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if self.training and self.add_noise == True:
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            x +=noise
+        x = self.conv(x)
+        if self.norm is not None:
+            x = self.norm(x)
+        if self.activation is not None:
+            x = self.activation(x)
+        if self.training and self.dropout_rate > 0 :
+            x = tf.nn.dropout(x, rate=self.dropout_rate)
+        return x
+
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], Layer):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
+
+
+
+def For(what_range, constructor):
+    '''
+    For(what_range, constructor, name='')
+    Layer factory function to create a composite through a pattern similar to Python's `for` statement.
+    This layer factory loops over the given range and passes each value to the constructor function.
+    It is equivalent to
+    ``Sequential([constructor(i) for i in what_range])``.
+    It is acceptable that ``constructor`` takes no argument.
+    Example:
+     >>> from cntk.layers import *
+     >>> from cntk.ops import relu
+     >>> # stack of 3 Dense relu layers
+     >>> model = For(range(3), lambda: Dense(2000, activation=relu))
+     >>> # version of the above that has no activation for the last layer
+     >>> model = For(range(3), lambda i: Dense(2000, activation=relu if i < 2 else identity))
+     >>> # complex example that uses For() inside Sequential()
+     >>> with default_options(activation=relu, pad=True):  # default activation is relu
+     ...     model = Sequential([
+     ...          For(range(2), lambda : [
+     ...              Convolution2D((3,3), 64),
+     ...              Convolution2D((3,3), 64),
+     ...              MaxPooling((3,3), strides=2)
+     ...          ]),
+     ...          Label('ndfeat'),              # name this specific value
+     ...          For(range(2), lambda i: [     # this passes a nested list to Sequential
+     ...              Dense([256,128][i]),      # layer index i used to index into an array of parameters
+     ...              Dropout(0.5)
+     ...          ]),
+     ...          Label('hidden'),
+     ...          Dense(10, activation=None)    # activation parameter overrides default (which was set to relu)
+     ...      ])
+     >>> model.update_signature((3,32,32))      # RGB, 32 x 32 pixels
+     >>> model.ndfeat.shape                     # shape at top of convo/pooling pyramid
+         (64, 8, 8)
+     >>> model.hidden.shape                     # shape before classifier
+         (128,)
+    Args:
+     what_range (range): a Python range to loop over
+     constructor (Python function/lambda with 1 or 0 arguments): lambda that constructs a layer
+    Returns:
+        cntk.ops.functions.Function:
+        A function that accepts one argument and applies the layers as constructed by ``constructor`` one after another.
+    '''
+    # Python 2.7 support requires us to use getargspec() instead of inspect
+    takes_arg = len(inspect.getfullargspec(constructor).args) > 0
+
+    # For Python 3, check if it is a python function/lambda
+    if not callable(constructor):
+        raise ValueError("constructor must be a Python function/lambda")
+
+    # helper to call the layer constructor
+    def call(i):
+        if takes_arg:
+            return constructor(i)  # takes an arg: pass it
+        else:
+            return constructor()   # takes no arg: call without, that's fine too
+
+    layers = [call(i) for i in what_range]
+    sequential = Sequential(layers)
+    return sequential
+
 
 
 class Classifer1d(tf.keras.Sequential):
@@ -425,213 +633,117 @@ class Classifer1d(tf.keras.Sequential):
 #         return get_layer_repr(self)
 
 
-class ShortCut2d(training.Model):
-    @trackable.no_automatic_dependency_tracking
-    def __init__(self, *layers, activation=None, mode='add', name=None, **kwargs):
-        super(ShortCut2d, self).__init__(name=name)
-        self._build_input_shape = None
-        self._layer_call_argspecs = {}
-        has_identity = False
-        if len(layers) > 1:
-            for layer in layers:
-                if 'identity' in str(layer.__class__.__name__).lower():
-                    has_identity = True
-                if isinstance(layer, tf.keras.Sequential):
-                    self.add(layer)
-                elif isinstance(layer, (tuple, list)):
-                    self.add(Sequential(list(layer)))
-                else:
-                    self.add(layer)
-        elif len(layers) == 1 and isinstance(layers[0], tf.keras.layers.Layer):
-            self.add(layers[0])
-        elif len(layers) == 1 and isinstance(layers[0], list):
-            for layer in layers[0]:
-                self.add(layer)
-        elif len(layers) == 1 and isinstance(layers[0], OrderedDict):
-            for k, v in layers[0].items():
-                v.__name__ = k
-                self.add(v)
 
-        self.rank = 2
-        self.activation = get_activation(activation)
-        self.merge = None
-        self.mode=mode
-        if not hasattr(self, 'mode') or mode == 'add':
-            self.merge = tf.keras.layers.Add()
-        elif mode == 'dot':
-            self.merge = tf.keras.layers.Dot(axes=-1)
-        elif mode == 'concate':
-            self.merge = tf.keras.layers.Concatenate(axis=-1)
-
-    @trackable.no_automatic_dependency_tracking
-    def add(self, layer):
-        """Adds a layer instance on top of the layer stack.
-
-        Arguments:
-            layer: layer instance.
-
-        Raises:
-            TypeError: If `layer` is not a layer instance.
-            ValueError: In case the `layer` argument does not
-                know its input shape.
-            ValueError: In case the `layer` argument has
-                multiple output tensors, or is already connected
-                somewhere else (forbidden in `Sequential` models).
+class ShortCut2d(Layer):
+    def __init__(self, *args, output_idx=None,activation=None, mode='add', name='shortcut', **kwargs):
         """
-        # If we are passed a Keras tensor created by keras.Input(), we can extract
-        # the input layer from its keras history and use that without any loss of
-        # generality.
-        if hasattr(layer, '_keras_history'):
-            origin_layer = layer._keras_history[0]
-            if isinstance(origin_layer, input_layer.InputLayer):
-                layer = origin_layer
 
-        if not isinstance(layer, base_layer.Layer):
-            raise TypeError('The added layer must be '
-                            'an instance of class Layer. '
-                            'Found: ' + str(layer))
+        Parameters
+        ----------
+        layer_defs : object
+        """
+        super(ShortCut2d, self).__init__(name=name)
+        self.activation = get_activation(activation)
+        self.has_identity = False
+        self.mode = mode if isinstance(mode, str) else mode
+        self.output_idx=output_idx
+        self.skip_tensor=None
+        for i in range(len(args)):
+            arg = args[i]
+            if isinstance(arg, (Layer, list, dict)):
+                if isinstance(arg, list):
+                    arg = Sequential(*arg)
+                elif isinstance(arg, (dict,OrderedDict)) and len(args) == 1:
+                    for k, v in arg.items():
+                        if isinstance(v, Identity):
+                            self.has_identity = True
+                            self.add_module('Identity', v)
+                        else:
+                            self.add_module(k, v)
+                elif isinstance(arg,  (dict,OrderedDict)) and len(args) > 1:
+                    raise ValueError('more than one dict argument is not support.')
+                elif is_tensor(arg):
+                    raise ValueError('only layer can be branch of shortcut, not tensor...')
+                elif isinstance(arg, Identity):
+                    self.has_identity = True
+                    self.add_module('Identity', arg)
+                elif isinstance(arg, Layer):
+                    if len(arg.name)>0 :
+                        self.add_module(arg.name, arg)
+                    else:
+                        self.add(arg)
+                else:
+                    raise ValueError('{0} is not support.'.format(arg.__class__.__name))
+        if len(self._modules) == 1 and self.has_identity == False and self.output_idx is None:
+            self.has_identity = True
+            self.add_module('Identity', Identity())
 
-        tf_utils.assert_no_legacy_layers([layer])
 
-        # This allows the added layer to broadcast mutations to the current
-        # layer, which is necessary to ensure cache correctness.
-        layer._attribute_sentinel.add_parent(self._attribute_sentinel)
 
-        self.built = False
-        self._layers.append(layer)
-        if self._layers:
-            self._track_layers(self._layers)
+    def forward(self, *x):
+        x = enforce_singleton(x)
 
-        self._layer_call_argspecs[layer] = tf_inspect.getfullargspec(layer.call)
-        # Different Model types add to `._layers` in different ways, so for safety
-        # we do a cache invalidation to make sure the changes are reflected.
-        self._attribute_sentinel.invalidate_all()
+        current=None
+        if self.has_identity == True:
+            current=x
+        for k, v in self._modules.items():
+            if not isinstance(v, Identity):
+                if current is None:
+                    current=v(x)
+                else:
+                    if not hasattr(self, 'mode') or self.mode == 'add':
+                        current=current+v(x)
+                    elif self.mode == 'dot':
+                        current =current* v(x)
+                    elif self.mode == 'concate':
+                        current=tf.concat([current,v(x)], axis=1)
+                    else:
+                        raise ValueError('Not valid shortcut mode')
+        x=current
+        if hasattr(self,'skip_tensor') and self.skip_tensor is not None:
+            if not hasattr(self, 'mode') or self.mode == 'add':
+                x = x+self.skip_tensor
+            elif self.mode == 'dot':
+                x =x* self.skip_tensor
+            elif self.mode == 'concate':
+                x =tf.concat([x, self.skip_tensor], axis=-1)
+            else:
+                raise ValueError('Not valid shortcut mode')
+        if self.activation is not None:
+            x = self.activation(x)
+        return x
 
-    @property
-    def layers(self):
-        layers = super(ShortCut2d, self).layers
-        if layers and isinstance(layers[0], input_layer.InputLayer):
-            return layers[1:]
-        return layers[:]
 
-    @property
-    @trackable_layer_utils.cache_recursive_attribute('dynamic')
-    def dynamic(self):
-        return any(layer.dynamic for layer in self.layers)
 
+
+class SqueezeExcite(Layer):
+    def __init__(self, se_filters, num_filters, is_gather_excite=False, use_bias=False, name=''):
+        super(SqueezeExcite, self).__init__(name=name)
+
+        self.se_filters = se_filters
+        self.num_filters = num_filters
+        self.squeeze = None
+        self.excite = None
+        self.is_gather_excite = is_gather_excite
+        self.activation = get_activation('swish')
+        self.pool = GlobalAvgPool2d(keepdim=True)
+        self.use_bias = use_bias
 
     def build(self, input_shape):
-        if self._is_graph_network:
-            self._init_graph_network(self.inputs, self.outputs, name=self.name)
-        else:
-            if input_shape is None:
-                raise ValueError('You must provide an `input_shape` argument.')
-            input_shape = tuple(input_shape)
-            input_filters = int(input_shape[-1])
-            self._build_input_shape = input_shape
-            super(ShortCut2d, self).build(input_shape)
-        self.built = True
+        if self._built == False :
+            self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None,use_bias=self.use_bias, name=self.name + '_squeeze')
+            self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
+            self.to(self.device)
+            self._built = True
 
-    def call(self, inputs, training=tf.keras.backend.learning_phase(),**kwargs):
-        if self._is_graph_network:
-            if not self.built:
-                self._init_graph_network(self.inputs, self.outputs, name=self.name)
-            return super(ShortCut2d, self).call(inputs, )
+    def forward(self, x):
+        s = self.pool(x)
+        s = self.activation(self.squeeze(s))
+        s = tf.sigmoid(self.excite(s))
 
-        outputs = []  # handle the corner case where self.layers is empty
-        for layer in self.layers:
-            # During each iteration, `inputs` are the inputs to `layer`, and `outputs`
-            # are the outputs of `layer` applied to `inputs`. At the end of each
-            # iteration `inputs` is set to `outputs` to prepare for the next layer.
-            kwargs = {}
-            argspec = self._layer_call_argspecs[layer].args
-            if 'training' in argspec:
-                kwargs['training'] = training
-            if 'identity' in str(layer.__class__.__name__).lower():
-                outputs.append(inputs)
-            else:
-                outputs.append(layer(inputs, **kwargs))
-        if self.merge is not None and len(outputs)>=2:
-            outputs = self.merge(outputs)
-        else:
-            raise ValueError('Not valid shortcut mode')
+        if self.is_gather_excite:
+            s=image_ops.resize_images_v2(s, x.shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
+        x = s * x
+        return x
 
-        if self.activation is not None:
-            outputs = self.activation(outputs)
-        return outputs
 
-    def compute_output_shape(self, input_shape):
-        input_shape = tensor_shape.TensorShape(input_shape)
-        input_shape = input_shape.with_rank_at_least(4)
-
-        output_shapes = []
-        for layer in self.layers:
-            shape = layer.compute_output_shape(input_shape)
-            output_shapes.append(shape)
-        if self.mode == 'add' or self.mode == 'dot':
-            output_shapes = list(set(output_shapes))
-            if len(output_shapes) == 1:
-                return output_shapes[0]
-
-        elif self.mode == 'concate':
-            output_shape = list(output_shapes[0])
-            for shape in output_shapes[1:]:
-                if output_shape[3] is None or shape[3] is None:
-                    output_shape[3] = None
-                    break
-                output_shape[3] += shape[3]
-            return tuple(output_shape)
-
-    @property
-    def input_spec(self):
-        if self.layers and hasattr(self.layers[0], 'input_spec'):
-            return self.layers[0].input_spec
-        return None
-
-    @property
-    def _trackable_saved_model_saver(self):
-        return model_serialization.SequentialSavedModelSaver(self)
-
-    def get_config(self):
-        layer_configs = []
-        for layer in self.layers:
-            layer_configs.append(generic_utils.serialize_keras_object(layer))
-        # When constructed using an `InputLayer` the first non-input layer may not
-        # have the shape information to reconstruct `Sequential` as a graph network.
-        if (self._is_graph_network and layer_configs and 'batch_input_shape' not in layer_configs[0][
-            'config'] and isinstance(self._layers[0], input_layer.InputLayer)):
-            batch_input_shape = self._layers[0]._batch_input_shape
-            layer_configs[0]['config']['batch_input_shape'] = batch_input_shape
-
-        config = {'name': self.name,
-                  'layers': copy.deepcopy(layer_configs),
-                  'activation': generic_utils.serialize_keras_object(self.activation),
-                  'mode': self.mode,
-                  'merge': generic_utils.serialize_keras_object(self.merge), }
-        if self._build_input_shape:
-            config['build_input_shape'] = self._build_input_shape
-        return config
-
-    @classmethod
-    def from_config(cls, config, custom_objects=None):
-        activation = None
-        merge = None
-        if 'name' in config:
-            name = config['name']
-            build_input_shape = config.get('build_input_shape')
-            layer_configs = config['layers']
-            activation = layer_module.deserialize( config['activation'])
-            merge =  layer_module.deserialize(config['merge'])
-        else:
-            name = None
-            build_input_shape = None
-            layer_configs = config
-        model = cls(name=name)
-        model.activation = activation
-        model.merge = merge
-        for layer_config in layer_configs:
-            layer = layer_module.deserialize(layer_config, custom_objects=custom_objects)
-            model.add(layer)
-        if not model.inputs and build_input_shape:
-            model.build(build_input_shape)
-        return model

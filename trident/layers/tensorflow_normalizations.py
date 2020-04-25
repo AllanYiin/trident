@@ -45,9 +45,7 @@ class BatchNorm(Layer):
         self.weight=None
         self.bias=None
         self.renorm=renorm
-        self.running_mean = None
-        self.running_var =None
-        self.num_batches_tracked =None
+
 
     def reset_running_stats(self):
         if self.track_running_stats:
@@ -85,9 +83,10 @@ class BatchNorm(Layer):
                 self.bias = tf.Variable(tf.zeros(shape=[self.input_filters]), name='bias') #beta/ offset
 
             if self.track_running_stats:
-                self.running_mean = tf.Variable(tf.zeros(shape=[self.input_filters]), name='running_mean')
-                self.running_var = tf.Variable(tf.ones(shape=[self.input_filters]), name='running_var')
-                self.num_batches_tracked =0
+                self.register_buffer('running_mean',tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=False,name='running_mean'))
+                self.register_buffer('running_var',tf.Variable(tf.ones(shape=[self.input_filters]), trainable=False, name='running_var'))
+                self.register_buffer('num_batches_tracked',to_tensor(0,dtype=tf.int64))
+                self.num_batches_tracked =tf.constant(0)
 
             self._built = True
 

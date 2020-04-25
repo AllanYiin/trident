@@ -13,7 +13,7 @@ from ..backend.common import *
 from ..backend.tensorflow_backend import Layer, to_numpy, to_tensor, is_tensor, Sequential
 from ..backend.tensorflow_ops import *
 
-__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','Softmax','BertGELU','GPTGELU','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','get_activation']
+__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','Softmax','BertGELU','GPTGELU','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_sum_exp','LogSoftmax','bert_gelu','gpt_gelu','get_activation']
 
 
 def identity(x):
@@ -252,10 +252,37 @@ class LogLog(Layer):
 
 
 
-def softmax(x):
-    return tf.nn.softmax(x)
+def softmax(x,axis=-1):
+    return tf.nn.softmax(x,axis=axis)
 
-Softmax=tf.keras.layers.Softmax
+class Softmax(Layer):
+    def __init__(self):
+        super(Softmax, self).__init__()
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return tf.nn.softmax(x)
+
+def log_sum_exp(x):
+    """Activation function for computing log_sum_exp while determining
+    This will be used to determine unaveraged confidence loss across
+    all examples in a batch.
+    Args:
+        x : input tensor
+    """
+    x_max = x.data.max()
+    return log(reduce_sum(exp(x-x_max), 1, keepdims=True)) + x_max
+
+
+class LogSoftmax(Layer):
+    def __init__(self):
+        super(Softmax, self).__init__()
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return log_sum_exp(x)
+
+
 
 
 def mish(x):

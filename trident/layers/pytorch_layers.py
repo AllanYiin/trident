@@ -33,7 +33,7 @@ __all__ = ['Dense', 'Flatten', 'Concatenate', 'Concate','SoftMax','Add', 'Subtra
            'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention','SingleImageLayer']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 _epsilon = _session.epsilon
 
 
@@ -86,9 +86,9 @@ class Dense(Layer):
         torch.Size([128, 30])
     """
 
-    def __init__(self, output_shape, use_bias=True, activation=None,keep_output=False, name='', **kwargs):
+    def __init__(self, output_shape, use_bias=True, activation=None,keep_output=False, name=None, **kwargs):
         super(Dense, self).__init__()
-
+        self.rank=0
         if isinstance(output_shape, int):
             self.output_shape = _single(output_shape)
         elif isinstance(output_shape, list):
@@ -114,6 +114,7 @@ class Dense(Layer):
                 init.zeros_(self.bias)  # self._parameters['bias']=self.bias
             self.to(self.device)
             self._built = True
+
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -144,21 +145,11 @@ class Flatten(Layer):
 
 
 class Concate(Layer):
-    r"""Flatten layer to flatten a tensor after convolution."""
+    r"""Concate layer to splice  tensors ."""
 
     def __init__(self, axis=1):
         super(Concate, self).__init__()
         self.axis = axis
-
-    def build(self, input_shape):
-        if self._built == False:
-
-            self.output_shape = input_shape[0]
-            for inp in input_shape[1:]:
-                self.output_shape[0] = self.output_shape[0] + inp[0]
-
-            self._built = True
-
     def forward(self, *x) -> torch.Tensor:
         if not isinstance(x, list) or len(x) < 2:
             raise ValueError('A `Concatenate` layer should be called on a list of at least 2 inputs')
@@ -275,90 +266,109 @@ _get_divisors = get_divisors
 _isprime = isprime
 
 
+def get_static_padding(rank,input_shape,kernal_shape,strides,dilations):
+    if isinstance(strides,int):
+        strides= _ntuple(rank)(strides)
+    if isinstance(dilations,int):
+        dilations= _ntuple(rank)(dilations)
+
+    input_shape=to_numpy(input_shape)[-rank:]
+    kernal_shape=to_numpy(list(kernal_shape))[-rank:]
+    strides = to_numpy(list(strides))[-rank:]
+    dilations= to_numpy(list(dilations))[-rank:]
+    output_shape=np.ceil(input_shape/strides)
+
+    raw_padding=np.clip((output_shape-1)*strides+(kernal_shape-1)*dilations+1-input_shape,0,None)
+    remainder=np.remainder(raw_padding,np.ones_like(raw_padding)*2)
+
+    raw_padding=raw_padding+(remainder*np.greater(strides,1).astype(np.float32))
+    lefttop_pad = np.ceil(raw_padding/2.0).astype(np.int32)
+    rightbtm_pad=(raw_padding-lefttop_pad).astype(np.int32)
+    static_padding = []
+    for k in range(rank):
+        static_padding.append(lefttop_pad[-1-k])
+        static_padding.append(rightbtm_pad[-1-k])
+    return static_padding
+
+
+
+
+
+
 class _ConvNd(Layer):
     __constants__ = ['kernel_size', 'num_filters', 'strides', 'auto_pad', 'padding_mode', 'use_bias', 'dilation',
                      'groups', 'transposed']
 
-    def __init__(self, kernel_size, num_filters, strides, auto_pad, padding_mode, use_bias, dilation, groups,
-                 transposed, name, depth_multiplier, **kwargs):
+    def __init__(self, kernel_size, num_filters, strides, auto_pad,padding, padding_mode, use_bias, dilation, groups,
+                 transposed, name, depth_multiplier, depthwise=False,separable=False,**kwargs):
         super(_ConvNd, self).__init__(name=name)
 
-        self.num_filters = None
-        if num_filters is None and depth_multiplier is not None:
-            self.depth_multiplier = depth_multiplier
-        else:
-            self.num_filters = int(kwargs.get('out_channels', num_filters))
+        self.num_filters = kwargs.get('out_channels', num_filters)
+        self.depth_multiplier=depth_multiplier
+
         self.kernel_size = kernel_size
-        self.padding = kwargs.get('padding')  # padding if padding is not None else 0in_channel
+
         self.strides = kwargs['stride'] if 'stride' in kwargs else strides
-        if self.padding is not None:
-            self.auto_pad = None
-        else:
-            self.auto_pad = auto_pad
+        self.auto_pad=auto_pad
+        self.padding = padding
         self.padding_mode = padding_mode
-        self.static_padding = None
+
         self.dilation = dilation
         self.transposed = transposed
         self.groups = groups
+        self.depthwise = depthwise
+        self.separable = separable
+        if self.separable == True:
+            self.depthwise = True
+        self.register_parameter('weight',None)
+        self.register_parameter('bias', None)
 
         if groups != 1 and self.num_filters % groups != 0:
             raise ValueError('out_channels must be divisible by groups')
 
         self.transposed = transposed
-
-        self.weight = None
-
         self.use_bias = use_bias
-
-        # self.input_filters = kwargs.get('in_channels', None)
-        #         # if self.input_filters is not None:
-        #         #     self.build_once(self.input_filters)
-        #
-        # if self.input_filters is not None and self.input_filters % groups != 0:
-        #     raise ValueError('in_channels must be divisible by groups')
-        # if self.num_filters % groups != 0:
-        #     raise ValueError('out_channels must be divisible by groups')
-
         self.to(self.device)
 
-    def get_padding(self, input_shape):
-        pass
+
 
     def build(self, input_shape):
         if self._built == False:
             self.input_filters=input_shape[0].item()
+            if self.depthwise or self.separable:
+                self.groups=self.input_filters if self.groups==1 else self.groups
+                if self.depth_multiplier is None:
+                    self.depth_multiplier = 1
+
             if self.num_filters is None and self.depth_multiplier is not None:
                 self.num_filters = int(round(self.input_filters * self.depth_multiplier,0))
             if self.input_filters % self.groups != 0:
                 raise ValueError('in_channels must be divisible by groups')
 
-            self.get_padding(input_shape)
+            if self.depthwise and self.num_filters % self.groups != 0:
+                raise ValueError('out_channels must be divisible by groups')
+
+            channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier# default channel_multiplier
+
+            # if self.auto_pad==True and all([p==0 for p in self.padding]):
+            #     static_padding=get_static_padding(self.rank, input_shape, self.kernel_size, self.strides, self.dilation)
+            #     self.padding=tuple(static_padding)
+
+
 
             if self.transposed:
-                self.weight = Parameter(
-                    torch.Tensor(int(self.input_filters), int(self.num_filters) // self.groups, *self.kernel_size))
+                self.weight = Parameter(torch.Tensor(int(self.input_filters), int(self.num_filters // self.groups), *self.kernel_size))
             else:
-                self.weight = Parameter(
-                    torch.Tensor(int(self.num_filters), int(self.input_filters) // self.groups, *self.kernel_size))  #
+                self.weight = Parameter(torch.Tensor(int(self.num_filters), int(self.input_filters // self.groups) , *self.kernel_size))  #
+                if self.separable:
+                    pointwise_kernel_size = (1,) * len(self.kernel_size)
+                    self.pointwise = Parameter(torch.Tensor(int(self.input_filters * self.depth_multiplier), int(self.num_filters),1,1))
 
             init.kaiming_uniform_(self.weight, a=math.sqrt(5))
 
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(int(self.num_filters)))
                 init.zeros_(self.bias)
-            else:
-                self.register_parameter('bias', None)
-
-            batch_input_shape = self._input_shape.clone().tolist()
-            batch_input_shape.insert(0, 2)
-            x = torch.rand(*batch_input_shape).to(torch.device("cuda" if self.weight[0].data.is_cuda else "cpu")).to(self.weight[0].data.dtype)
-            out = self.forward(x)
-            if isinstance(out, (list, tuple)):
-                out = unpack_singleton(out)
-            if not isinstance(out, tuple):
-                self.output_shape = out.size()[1:]
-            else:
-                self.output_shape = torch.tensor([item.size()[1:] for item in out])
 
             self.to(self.device)
             self._built = True
@@ -389,12 +399,25 @@ class _ConvNd(Layer):
 
 class Conv1d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         kernel_size = _single(kernel_size)
         strides = _single(strides)
         dilation = _single(dilation)
-        super(Conv1d, self).__init__(kernel_size, num_filters, strides, auto_pad, padding_mode, use_bias, dilation,
+        padding = kwargs.get('padding', None)
+        if isinstance(padding,str) and padding.lower() in ['valid','same']:
+            if padding.lower()=='valid':
+                auto_pad=False
+            elif padding.lower()=='same':
+                auto_pad = True
+        elif isinstance(padding,int):
+            padding = _single(padding)
+        elif padding is None:
+            padding = _single(0)
+
+
+        super(Conv1d, self).__init__(kernel_size, num_filters, strides, auto_pad,padding,padding_mode, use_bias, dilation,
                                      groups, False, name, depth_multiplier, **kwargs)
+        self.rank=1
         self.activation = get_activation(activation)
         self.auto_pad = auto_pad
         self.padding = kwargs.get('padding', None)
@@ -403,23 +426,7 @@ class Conv1d(_ConvNd):
         else:
             self.padding = _single(0)
 
-    def get_padding(self, input_shape):
-        pad_w = 0
-        if self.auto_pad == True:
-            iw = list(input_shape)[-1]
-            kw = self.kernel_size[-1]
-            sw = self.strides[-1]
-            dw = self.dilation[-1]
-            ow = math.ceil(iw / sw)
-            pad_w = max((ow - 1) * sw + (kw - 1) * dw + 1 - iw, 0)
-            if pad_w % 2 == 1 and sw > 1:
-                pad_w += 1
-        elif len(self.padding) == 1:
-            pad_w = self.padding[0] * 2
-        if self.padding_mode == 'circular':
-            self.padding = ((pad_w + 1) // 2, pad_w // 2)
-        else:
-            self.padding = (pad_w // 2, pad_w - pad_w // 2)
+
 
     def conv1d_forward(self, x):
         x = F.pad(x, self.padding,mode='constant' if self.padding_mode=='zero' else self.padding_mode)
@@ -435,50 +442,36 @@ class Conv1d(_ConvNd):
 
 class Conv2d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         kernel_size = _pair(kernel_size)
         strides = _pair(strides)
         dilation = _pair(dilation)
+        static_padding = get_static_padding(2, (3,224,224), kernel_size, strides, dilation)
+        padding = kwargs.get('padding', None)
+        if isinstance(padding, str) and padding.lower() in ['valid', 'same']:
+            if padding.lower() == 'valid':
+                auto_pad = False
+            elif padding.lower() == 'same':
+                auto_pad = True
+        elif isinstance(padding, int):
+            padding = _pair(padding)
+        if padding is None or auto_pad==True:
+            padding = static_padding
 
-        super(Conv2d, self).__init__(kernel_size, num_filters, strides, auto_pad, padding_mode, use_bias, dilation,
+        super(Conv2d, self).__init__(kernel_size, num_filters, strides, auto_pad, padding,padding_mode, use_bias, dilation,
                                      groups, False, name, depth_multiplier, **kwargs)
+        self.rank=2
         self.activation = get_activation(activation)
 
-        self.padding = kwargs.get('padding', None)
-        self.auto_pad = auto_pad
-        if self.padding is not None:
-            self.padding = _pair(self.padding)
-        else:
-            self.padding = _pair(0)
-
-    def get_padding(self, input_shape):
-        pad_h = 0
-        pad_w = 0
-        if self.auto_pad == True:
-            ih, iw = to_list(input_shape)[-2:]
-            kh, kw = self.kernel_size[-2:]
-            sh, sw = self.strides[-2:]
-            dh, dw = self.dilation[-2:]
-            oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-            pad_h = max(round((oh - 1) * sh + (kh - 1) * dh + 1 - ih), 0)
-            pad_w = max(round((ow - 1) * sw + (kw - 1) * dw + 1 - iw), 0)
-            if pad_h % 2 == 1 and sh > 1:
-                pad_h += 1
-            if pad_w % 2 == 1 and sw > 1:
-                pad_w += 1
-        elif len(self.padding) == 2:
-            pad_h = self.padding[0] * 2
-            pad_w = self.padding[1] * 2
-
-        self.padding= (pad_h // 2,pad_w // 2)
-
     def conv2d_forward(self, x):
-
+        self.rank=2
+        if len(self.padding)==self.rank:
+            self.padding=(self.padding[1],self.padding[1],self.padding[0],self.padding[0])
         if self.padding_mode == 'circular':
-            expanded_padding = ((self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
-            x=F.pad(x, expanded_padding, mode='circular')
+            expanded_padding = ((self.padding[0] + 1) // 2, self.padding[1] // 2, (self.padding[2] + 1) // 2, self.padding[3] // 2)
+            x = F.pad(x, expanded_padding, mode='circular')
         else:
-            x = F.pad(x, (self.padding[1] , self.padding[1], self.padding[0] , self.padding[0] ), mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+            x = F.pad(x, self.padding,mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
@@ -492,7 +485,8 @@ class Conv2d(_ConvNd):
 
 class Conv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+        self.rank=3
         kernel_size = _triple(kernel_size)
         strides = _triple(strides)
         dilation = _triple(dilation)
@@ -552,12 +546,14 @@ class Conv3d(_ConvNd):
 
 class TransConv1d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+
         kernel_size = _single(kernel_size)
         strides = _single(strides)
         dilation = _single(dilation)
         super(TransConv1d, self).__init__(kernel_size, num_filters, strides, auto_pad, padding_mode, use_bias, dilation,
                                           groups, True, name, depth_multiplier, **kwargs)
+        self.rank = 1
         self.activation = get_activation(activation)
 
         if 'padding' in kwargs:
@@ -592,13 +588,14 @@ class TransConv1d(_ConvNd):
 
 class TransConv2d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         kernel_size = _pair(kernel_size)
         strides = _pair(strides)
         dilation = _pair(dilation)
 
         super(TransConv2d, self).__init__(kernel_size, num_filters, strides, auto_pad, padding_mode, use_bias, dilation,
                                           groups, True, name, depth_multiplier, **kwargs)
+        self.rank=2
         self.activation = get_activation(activation)
 
         if self.padding is not None:
@@ -638,12 +635,13 @@ class TransConv2d(_ConvNd):
 
 class TransConv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         kernel_size = _triple(kernel_size)
         strides = _triple(strides)
         dilation = _triple(dilation)
         super(TransConv3d, self).__init__(kernel_size, num_filters, strides, auto_pad, padding_mode, use_bias, dilation,
                                           groups, True, name, depth_multiplier, **kwargs)
+        self.rank=3
         if 'padding' in kwargs:
             self.padding = _triple(kwargs.get('padding'))
             self.auto_pad = False
@@ -677,10 +675,11 @@ class TransConv3d(_ConvNd):
         return x
 
 
-class SeparableConv1d(Layer):
+class SeparableConv1d(_ConvNd):
     def __init__(self, kernel_size,num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, **kwargs):
         super(SeparableConv1d, self).__init__()
+        self.rank=1
         self.kernel_size = _single(kernel_size)
         self.num_filters = kwargs.get('num_filters',num_filters)
         self.depth_multiplier = depth_multiplier
@@ -715,20 +714,26 @@ class SeparableConv1d(Layer):
         return x
 
 
-class SeparableConv2d(Layer):
+class SeparableConv2d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
-                 activation=None, use_bias=False, dilation=1, groups=1, name='', **kwargs):
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, **kwargs):
         super(SeparableConv2d, self).__init__()
+        self.rank=2
         self.kernel_size = _pair(kernel_size)
         self.num_filters = kwargs.get('num_filters',num_filters)
         self.depth_multiplier = depth_multiplier
         self.dilation = _pair(dilation)
         self.strides = _pair(strides)
         self.use_bias = use_bias
-        self.auto_pad = auto_pad
         self.padding_mode = padding_mode
 
         self.activation = get_activation(activation)
+        self.padding = kwargs.get('padding', None)
+        self.auto_pad = auto_pad
+        if self.padding is not None:
+            self.padding = _pair(self.padding)
+        else:
+            self.padding = _pair(0)
         self.conv1 = None
         self.pointwise = None
         self._built = False
@@ -753,10 +758,11 @@ class SeparableConv2d(Layer):
         return x
 
 
-class SeparableConv3d(Layer):
+class SeparableConv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None,depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, **kwargs):
         super(SeparableConv3d, self).__init__()
+        self.rank=3
         self.kernel_size = _triple(kernel_size)
         self.num_filters = kwargs.get('num_filters',num_filters)
 
@@ -792,143 +798,74 @@ class SeparableConv3d(Layer):
         return x
 
 
-class DepthwiseConv1d(Layer):
+class DepthwiseConv1d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='', **kwargs):
-        super(DepthwiseConv1d, self).__init__()
-        self.kernel_size = _single(kernel_size)
-        self.num_filters = kwargs.get('num_filters')
-        self.depth_multiplier = depth_multiplier
-        self.depth_multiplier = 1
-        self.dilation = _single(dilation)
-        self.strides = _single(strides)
-        self.use_bias = use_bias
-        self.auto_pad = auto_pad
-        self.padding_mode = padding_mode
+                 use_bias=False, dilation=1, groups=1, name=None, **kwargs):
 
+        kernel_size = _single(kernel_size)
+        strides = _single(strides)
+        dilation = _single(dilation)
+        padding = kwargs.get('padding', None)
+        if isinstance(padding, str) and padding.lower() in ['valid', 'same']:
+            if padding.lower() == 'valid':
+                auto_pad = False
+            elif padding.lower() == 'same':
+                auto_pad = True
+        elif isinstance(padding, int):
+            padding = _single(padding)
+        elif padding is None:
+            padding = _single(0)
+        super(DepthwiseConv1d, self).__init__(kernel_size, None, strides, auto_pad,padding, padding_mode, use_bias, dilation,
+                                     groups=1, transposed=False, name=name, depth_multiplier=depth_multiplier,depthwise=True,separable=False ,**kwargs)
+        self.rank=1
         self.activation = get_activation(activation)
-        self.conv1 = None
-        self._built = False
 
-    def build(self, input_shape):
-        if self._built == False or self.conv1 is None:
-            self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
-            self.conv1 = torch.nn.Conv1d(self.input_filters, self.num_filters, kernel_size=self.kernel_size,
-                                         stride=self.strides, padding=0, dilation=self.dilation,
-                                         groups=self.input_filters, bias=self.use_bias)
+    def conv1d_forward(self, x):
+        x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+        return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
-            self.to(self.device)
-            self._built = True
+
 
     def forward(self, *x):
-        x = enforce_singleton(x)
-        if self.auto_pad == True:
-            iw = x.size()[-1]
-            kw = self.weight.size()[-1]
-            sw = self.strides[-1]
-            dw = self.dilation[-1]
-            ow = math.ceil(iw / sw), math.ceil(iw / sw)
-            pad_w = max((ow - 1) * sw + (kw - 1) * dw + 1 - iw, 0)
-            if pad_w % 2 == 1 and sw > 1:
-                pad_w += 1
-            if pad_w > 0:
-                x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2], mode='constant' if self.padding_mode=='zero' else self.padding_mode)
-
-        x = self.conv1(x)
+        x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
         return x
 
 
-
-
-
-class DepthwiseConv2d(Layer):
+class DepthwiseConv2d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, name='', **kwargs):
-        super(DepthwiseConv2d, self).__init__()
-        self.kernel_size = _pair(kernel_size)
-        self.num_filters = kwargs.get('num_filters')
-        self.depth_multiplier = depth_multiplier
+                 use_bias=False, dilation=1, name=None, **kwargs):
+        kernel_size = _pair(kernel_size)
+        strides = _pair(strides)
+        dilation = _pair(dilation)
+        static_padding = get_static_padding(2, (3, 224, 224), kernel_size, strides, dilation)
+        padding = kwargs.get('padding', None)
+        if isinstance(padding, str) and padding.lower() in ['valid', 'same']:
+            if padding.lower() == 'valid':
+                auto_pad = False
+            elif padding.lower() == 'same':
+                auto_pad = True
+        elif isinstance(padding, int):
+            padding = _pair(padding)
+        if padding is None or auto_pad == True:
+            padding = static_padding
 
-        self.dilation = _pair(dilation)
-        self.strides = _pair(strides)
-        self.use_bias = use_bias
-        self.padding = kwargs.get('padding')  # padding if padding is not None else 0in_channel
-        if self.padding is not None:
-            self.auto_pad = None
-            self.padding = _pair(self.padding)
-        else:
-            self.padding = _pair(0)
-            self.auto_pad = auto_pad
-        self.padding_mode = padding_mode
-
+        super(DepthwiseConv2d, self).__init__(kernel_size, None, strides, auto_pad,padding, padding_mode, use_bias, dilation,
+                                     groups=1, transposed=False, name=name, depth_multiplier=depth_multiplier,depthwise=True,separable=False ,**kwargs)
+        self.rank=2
         self.activation = get_activation(activation)
-        self._built = False
 
-    def get_padding(self, input_shape):
-        pad_h = 0
-        pad_w = 0
-        if self.auto_pad == True:
-            ih, iw = to_list(input_shape)[-2:]
-            kh, kw = self.kernel_size[-2:]
-            sh, sw = self.strides[-2:]
-            dh, dw = self.dilation[-2:]
-            oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-            pad_h = max(round((oh - 1) * sh + (kh - 1) * dh + 1 - ih), 0)
-            pad_w = max(round((ow - 1) * sw + (kw - 1) * dw + 1 - iw), 0)
-            if pad_h % 2 == 1 and sh > 1:
-                pad_h += 1
-            if pad_w % 2 == 1 and sw > 1:
-                pad_w += 1
-        elif len(self.padding) == 2:
-            pad_h = self.padding[0] * 2
-            pad_w = self.padding[1] * 2
-        self.padding=(pad_h//2,pad_w//2)
-
-
-    def build(self, input_shape):
-        if self._built == False:
-            self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None  and self.num_filters is None else self.num_filters
-            self.groups = self.input_filters if self.depth_multiplier>=1 else int(self.input_filters *self.depth_multiplier)
-
-            if self.input_filters % self.groups != 0:
-                raise ValueError('in_channels must be divisible by groups')
-
-            self.get_padding(input_shape)
-
-            self.weight = Parameter(
-                torch.Tensor(int(self.num_filters), int(self.input_filters) // self.groups, *self.kernel_size))  #
-
-            init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-
-            if self.use_bias:
-                self.bias = Parameter(torch.Tensor(int(self.num_filters)))
-                init.zeros_(self.bias)
-            else:
-                self.register_parameter('bias', None)
-
-            batch_input_shape = self._input_shape.clone().tolist()
-            batch_input_shape.insert(0, 2)
-            x = torch.rand(*batch_input_shape).to(torch.device("cuda" if self.weight[0].data.is_cuda else "cpu")).to(
-                self.weight[0].data.dtype)
-            out = self.forward(x)
-            if isinstance(out, (list, tuple)):
-                out = unpack_singleton(out)
-            if not isinstance(out, tuple):
-                self.output_shape = out.size()[1:]
-            else:
-                self.output_shape = torch.tensor([item.size()[1:] for item in out])
-
-            self.to(self.device)
-            self._built = True
 
     def conv2d_forward(self, x):
+        self.rank = 2
+        if len(self.padding)==self.rank:
+            self.padding=(self.padding[1],self.padding[1],self.padding[0],self.padding[0])
         if self.padding_mode == 'circular':
-            expanded_padding = ((self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
+            expanded_padding = ( (self.padding[0] + 1) // 2, self.padding[1] // 2, (self.padding[2] + 1) // 2, self.padding[3] // 2)
             x = F.pad(x, expanded_padding, mode='circular')
         else:
-            x = F.pad(x, (self.padding[1], self.padding[1], self.padding[0], self.padding[0]),mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+            x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
@@ -940,10 +877,11 @@ class DepthwiseConv2d(Layer):
         return x
 
 
-class DepthwiseConv3d(Layer):
+class DepthwiseConv3d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name='',  **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None,  **kwargs):
         super(DepthwiseConv3d, self).__init__()
+        self.rank=3
         self.kernel_size = _triple(kernel_size)
         self.num_filters = kwargs.get('num_filters')
 
@@ -1015,8 +953,9 @@ class DepthwiseConv3d(Layer):
 
 class DeformConv2d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, offset_group=2, auto_pad=True, padding_mode='zero',
-                 activation=None, use_bias=False, dilation=1, groups=1, name='', depth_multiplier=None, **kwargs):
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         super(DeformConv2d, self).__init__()
+        self.rank=2
         self.kernel_size = _pair(kernel_size)
         self.num_filters = kwargs.get('num_filters')
         if self.num_filters is None and depth_multiplier is not None:
@@ -1115,9 +1054,10 @@ class DeformConv2d(Layer):
 
 class GcdConv1d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, divisor_rank=0, self_norm=True, is_shuffle=False, name='',
+                 use_bias=False, dilation=1, divisor_rank=0, self_norm=True, is_shuffle=False, name=None,
                  depth_multiplier=None, **kwargs):
         super(GcdConv1d, self).__init__()
+        self.rank=1
         self.kernel_size = _single(kernel_size)
         self.num_filters = num_filters
         if self.num_filters is None and depth_multiplier is not None:
@@ -1242,8 +1182,9 @@ class GcdConv1d(Layer):
 class GcdConv2d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, divisor_rank=0, self_norm=True, is_shuffle=False, crossgroup_fusion=True,
-                 name='', depth_multiplier=None, **kwargs):
+                 name=None, depth_multiplier=None, **kwargs):
         super(GcdConv2d, self).__init__()
+        self.rank=2
         self.kernel_size = _pair(kernel_size)
         self.num_filters = num_filters
         if self.num_filters is None and depth_multiplier is not None:
@@ -1399,8 +1340,9 @@ class GcdConv2d(Layer):
 
 class GcdConv2d_1(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, divisor_rank=0, dilation=1, self_norm=True, name='', depth_multiplier=None, **kwargs):
+                 use_bias=False, divisor_rank=0, dilation=1, self_norm=True, name=None, depth_multiplier=None, **kwargs):
         super(GcdConv2d_1, self).__init__(name=name)
+        self.rank=2
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         if self.num_filters is None and depth_multiplier is not None:
@@ -1527,114 +1469,6 @@ class GcdConv2d_1(Layer):
         return s.format(**self.__dict__)
 
 
-#
-# class GcdConv2d_2(Modulex):
-#     def __init__(self, kernel_size, num_filters, strides, auto_pad=True, activation=None, use_bias=False, dilation=1,
-#                  divisor_rank=0, self_norm=True, is_shuffle=False, **kwargs):
-#         super(GcdConv2d_2, self).__init__()
-#         self.kernel_size = _pair(kernel_size)
-#         self.num_filters = num_filters
-#         self.input_filters = None
-#         self.strides = _pair(strides)
-#         self.auto_pad = auto_pad
-#
-#         self.activation = get_activation(activation)
-#         self.dilation = _pair(dilation)
-#         self.self_norm = self_norm
-#         self.is_shuffle = is_shuffle
-#         self.use_bias = use_bias
-#         self.divisor_rank = divisor_rank
-#
-#         self.groups = 1
-#         self.weight = None
-#         self.bias = None
-#         self._built = False
-#
-#     def calculate_gcd(self):
-#         if self.input_filters is None or not isinstance(self.input_filters, int):
-#             raise ValueError('in_channels must be integer ')
-#         gcd_list = gcd(self.input_filters, self.num_filters)
-#         if len(gcd_list) == 0:
-#             self.groups = self.input_filters
-#             self.num_filters_1 = self.input_filters
-#         else:
-#             self.gcd = gcd_list[0]
-#             self.groups = gcd_list[min(int(self.divisor_rank), len(gcd_list))]
-#
-#         if self.input_filters == self.num_filters or self.input_filters == self.gcd or self.num_filters == self.gcd:
-#             self.groups = gcd_list[min(int(self.divisor_rank + 1), len(gcd_list))]
-#
-#     def build_once(self, input_shape):
-#         if self._built == False :
-#             self.calculate_gcd()
-#             print('input:{0} -> output:{1}   {2}  {3}  gcd:{4} group:{5}   通道縮放倍數:{5} '.format(self.input_filters,
-#                                                                                                self.num_filters,
-#                                                                                                self.input_filters // self.groups,
-#                                                                                                self.num_filters // self.groups,
-#                                                                                                self.gcd, self.groups,
-#                                                                                                self.num_filters / self.num_filters))
-#             self.channel_kernal = 2 if self.groups > 3 else 1
-#             self.channel_dilation = 1
-#             if self.groups > 4:
-#                 self.channel_dilation = 2
-#
-#             self.gcd_conv3d = Conv3d((self.channel_kernal,) + _pair(self.kernel_size), self.num_filters // self.groups,
-#                                      (1,) + _pair(self.strides), auto_pad=False, activation=None,
-#                                      use_bias=self.use_bias, dilation=(self.channel_dilation,) + _pair(self.dilation),
-#                                      groups=1).to(_device)
-#             self.gcd_conv3d.build_once(self.input_filters // self.groups)
-#             torch.nn.init.kaiming_uniform(self.gcd_conv3d.weight, mode='fan_in')
-#
-#             if self.self_norm == True:
-#                 self.norm = nn.BatchNorm2d(self.num_filters, momentum=0.1, affine=True, track_running_stats=True).to(
-#                     self.device)
-#                 init.ones_(self.norm.weight)
-#                 init.zeros_(self.norm.bias)
-#
-#             self.to(self.device)
-#             self._built = True
-#
-#     def forward(self, x):
-#         # self.build_once(x.size(1))
-#         if self.auto_pad:
-#             ih, iw = x.size()[-2:]
-#             kh, kw = self.kernel_size[-2:]
-#             sh, sw = self.strides[-2:]
-#             dh, dw = _pair(self.dilation)[-2:]
-#             oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
-#             pad_h = max((oh - 1) * sh + (kh - 1) * dh + 1 - ih, 0)
-#             pad_w = max((ow - 1) * sw + (kw - 1) * dw + 1 - iw, 0)
-#             if pad_h > 0 or pad_w > 0:
-#                 x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2], mode='replicate')
-#
-#         x = x.view(x.size(0), x.size(1) // self.groups, self.groups, x.size(2), x.size(3))
-#         pad_g = max((self.groups - 1) * 1 + (self.channel_kernal - 1) * self.channel_dilation + 1 - self.groups, 0)
-#         x = F.pad(x, [0, 0, 0, 0, pad_g // 2, pad_g - pad_g // 2], mode='circular')
-#
-#         x = self.gcd_conv3d(x)
-#         if self.is_shuffle == True:
-#             x = x.transpose([2, 1])
-#         x = x.view(x.size(0), x.size(1) * x.size(2), x.size(3), x.size(4))
-#         if self.self_norm == True:
-#             x = self.norm(x)
-#         if self.activation is not None:
-#             x = self.activation(x)
-#         if torch.isnan(x).any():
-#             print(self._get_name() + '  nan detected!!')
-#             raise ValueError('')
-#         return x
-#
-#     def extra_repr(self):
-#         s = (
-#             'kernel_size={kernel_size}, {num_filters}, strides={strides}, activation={activation}, auto_pad={auto_pad} , dilation={dilation}')
-#         #     if self.groups != 1:
-#         #         s += ', groups={groups}'
-#         #     if self.bias is None:
-#         #         s += ', use_bias=False'
-#         return s.format(**self.__dict__)
-#
-
-
 class Lambda(Layer):
     """
     Applies a lambda function on forward()
@@ -1642,7 +1476,7 @@ class Lambda(Layer):
         lamb (fn): the lambda function
     """
 
-    def __init__(self, function, name=''):
+    def __init__(self, function, name=None):
         super(Lambda, self).__init__(name=name)
         self.function = function
 
@@ -1658,7 +1492,7 @@ class Reshape(Layer):
         dimension, as it will remain unchanged.
     """
 
-    def __init__(self, target_shape, name=''):
+    def __init__(self, target_shape, name=None):
         super(Reshape, self).__init__(name=name)
         if isinstance(target_shape, tuple):
             self.target_shape = to_tensor([target_shape[i] for i in range(len(target_shape))])
@@ -1676,8 +1510,9 @@ class Reshape(Layer):
 class SelfAttention(Layer):
     """ Self attention Layer"""
 
-    def __init__(self, reduction_factor=8, name=''):
+    def __init__(self, reduction_factor=8, name=None):
         super(SelfAttention, self).__init__(name=name)
+        self.rank=2
         # self.activation = activation
         self.reduction_factor = reduction_factor
         self.query_conv = None
@@ -1696,7 +1531,7 @@ class SelfAttention(Layer):
         self.key_conv = nn.Conv2d(in_channels=self.input_filters,
                                   out_channels=self.input_filters // self.reduction_factor, kernel_size=1)
         self.value_conv = nn.Conv2d(in_channels=self.input_filters, out_channels=self.input_filters, kernel_size=1)
-        self.to(_device)
+        self.to(self.device)
 
     def forward(self, *x):
         """
@@ -1759,8 +1594,9 @@ https://github.com/mkocabas/CoordConv-pytorch/blob/master/CoordConv.py
 
 class CoordConv2d(Layer):
     def __init__(self, kernel_size, num_filters, strides, auto_pad=True, activation=None, use_bias=False, group=1,
-                 dilation=1, with_r=False, name='', **kwargs):
+                 dilation=1, with_r=False, name=None, **kwargs):
         super().__init__(name=name)
+        self.rank=2
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -1788,8 +1624,9 @@ class CoordConv2d(Layer):
 
 
 class Upsampling2d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=''):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None):
         super(Upsampling2d, self).__init__(name=name)
+        self.rank=2
         self.size = size
         if isinstance(scale_factor, tuple):
             self.scale_factor = tuple(float(factor) for factor in scale_factor)
@@ -1817,7 +1654,7 @@ class Upsampling2d(Layer):
 
 
 class Dropout(Layer):
-    def __init__(self, dropout_rate=0, name=''):
+    def __init__(self, dropout_rate=0, name=None):
         super(Dropout, self).__init__(name=name)
         self.inplace = True
         if dropout_rate < 0 or dropout_rate > 1:
@@ -1837,7 +1674,7 @@ class AlphaDropout(Layer):
      .. _Self-Normalizing Neural Networks: https://arxiv.org/abs/1706.02515
     '''
 
-    def __init__(self, dropout_rate=0, name=''):
+    def __init__(self, dropout_rate=0, name=None):
         super(AlphaDropout, self).__init__(name=name)
         self.inplace = True
         if dropout_rate < 0 or dropout_rate > 1:
@@ -1854,8 +1691,9 @@ class AlphaDropout(Layer):
 
 
 class SingleImageLayer(Layer):
-    def __init__(self, image,is_recursive=False,name=''):
+    def __init__(self, image,is_recursive=False,name=None):
         super(SingleImageLayer, self).__init__(name=name)
+        self.rank=2
         if isinstance(image,(np.ndarray,torch.Tensor)):
             self.origin_image = to_tensor(image).squeeze()
             self.input_shape = image.shape[1:]

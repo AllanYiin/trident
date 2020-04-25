@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import inspect
-import math
+
 import string
 from functools import partial
 from pydoc import locate
@@ -17,19 +17,17 @@ from torch.nn.parameter import Parameter
 
 from ..backend.common import get_function, get_class, camel2snake, enforce_singleton
 from ..backend.pytorch_backend import Layer
+from ..backend.pytorch_ops import *
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
-           'LogLog', 'Mish', 'Softmax', 'BertGelu', 'GptGelu', 'identity', 'sigmoid', 'tanh', 'relu', 'relu6',
-           'leaky_relu', 'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
-           'lecun_tanh', 'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax', 'bert_gelu',
-           'gpt_gelu', 'get_activation']
+           'LogLog', 'Mish', 'Softmax', 'BertGelu', 'GptGelu','LogSoftmax',  'get_activation']
 
-'''
-'''
 
 
 class Identity(Layer):
+    '''Identity activation Layer
+    '''
     def __init__(self, name=''):
         super(Identity, self).__init__(name=name)
 
@@ -37,15 +35,9 @@ class Identity(Layer):
         return x
 
 
-'''identity activation function 
-'''
-
-
-def identity(x):
-    return x
-
-
 class Relu(Layer):
+    '''Relu activation Layer
+    '''
     def __init__(self, name=''):
         super(Relu, self).__init__(name=name)
 
@@ -53,16 +45,9 @@ class Relu(Layer):
         x = enforce_singleton(x)
         return relu(x)
 
-
-'''relu activation function 
-'''
-
-
-def relu(x):
-    return torch.relu(x)
-
-
 class Relu6(Layer):
+    '''Relu6 activation Layer
+    '''
     def __init__(self, ):
         super(Relu6, self).__init__()
 
@@ -71,32 +56,21 @@ class Relu6(Layer):
         return relu6(x)
 
 
-'''relu6 activation function 
-'''
-
-
-def relu6(x):
-    return F.relu6(x)
-
-
 class LeakyRelu(Layer):
-    def __init__(self, ):
+    '''leaky_relu activation Layer
+    '''
+    def __init__(self, alpha=0.2):
         super(LeakyRelu, self).__init__()
+        self.alpha=alpha
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return leaky_relu(x)
-
-
-'''leaky_relu activation function 
-'''
-
-
-def leaky_relu(x):
-    return F.leaky_relu(x, negative_slope=0.2)
+        return leaky_relu(x,self.alpha)
 
 
 class LeakyRelu6(Layer):
+    '''leaky_relu6 activation Layer
+    '''
     def __init__(self):
         super(LeakyRelu6, self).__init__()
 
@@ -104,16 +78,9 @@ class LeakyRelu6(Layer):
         x = enforce_singleton(x)
         return leaky_relu6(x)
 
-
-'''leaky_relu6 activation function 
-'''
-
-
-def leaky_relu6(x):
-    return torch.clamp(F.leaky_relu(x, negative_slope=0.2), -6, 6)
-
-
 class SmoothRelu(Layer):
+    '''smooth_relu activation Layer
+    '''
     def __init__(self):
         super(SmoothRelu, self).__init__()
 
@@ -121,21 +88,9 @@ class SmoothRelu(Layer):
         x = enforce_singleton(x)
         return smooth_relu(x)
 
-
-'''smooth_relu activation function 
-'''
-
-
-def smooth_relu(x):
-    return torch.log(1 + torch.exp(x))
-
-
-'''PRelu activation function Layer
-'''
-
-
-
 class PRelu(Layer):
+    '''PRelu activation Layer
+    '''
     def __init__(self, num_parameters=1, init=0.25):
         super(PRelu, self).__init__()
         self.num_parameters=num_parameters
@@ -152,25 +107,15 @@ class PRelu(Layer):
 
 
 
-'''p_relu activation function 
-'''
-p_relu = torch.prelu
-
-'''Softmax activation function layer
-'''
-
 
 class Sigmoid(Layer):
-    """Softmax activation function.
+    """Sigmoid activation layer.
        # Arguments
            x: Input tensor.
-           axis: Integer, axis along which the softmax normalization is applied.
 
        # Returns
-           Tensor, output of softmax transformation.
+           Tensor, output of Sigmoid transformation.
 
-       # Raises
-           ValueError: In case `dim(x) == 1`.
        """
 
     def __init__(self):
@@ -181,12 +126,6 @@ class Sigmoid(Layer):
         return sigmoid(x)
 
 
-'''softmax activation function 
-'''
-
-
-def sigmoid(x):
-    return torch.sigmoid(x)
 
 
 class Tanh(Layer):
@@ -198,14 +137,6 @@ class Tanh(Layer):
         return tanh(x)
 
 
-'''tanh activation function 
-'''
-
-
-def tanh(x):
-    return torch.tanh(x)
-
-
 class Swish(Layer):
     def __init__(self):
         super(Swish, self).__init__()
@@ -214,13 +145,6 @@ class Swish(Layer):
         x = enforce_singleton(x)
         return swish(x)
 
-
-'''swish activation function 
-'''
-
-
-def swish(x):
-    return x * sigmoid(x)
 
 
 class HardSigmoid(Layer):
@@ -234,8 +158,6 @@ class HardSigmoid(Layer):
         return hard_sigmoid(x, inplace=self.inplace)
 
 
-def hard_sigmoid(x, inplace=False):
-    return F.relu6(x + 3, inplace) / 6
 
 
 class HardSwish(Layer):
@@ -249,8 +171,6 @@ class HardSwish(Layer):
         return hard_swish(x, inplace=self.inplace)
 
 
-def hard_swish(x, inplace=False):
-    return x * hard_sigmoid(x, inplace)
 
 
 class HardTanh(Layer):
@@ -262,8 +182,6 @@ class HardTanh(Layer):
         return hard_tanh(x)
 
 
-def hard_tanh(x):
-    return torch.clamp(x, -1, 1)
 
 
 class Selu(Layer):
@@ -277,13 +195,6 @@ class Selu(Layer):
         return selu(x)
 
 
-'''selu activation function 
-'''
-
-
-def selu(x):
-    return torch.selu(x)
-
 
 class Elu(Layer):
     def __init__(self):
@@ -294,8 +205,6 @@ class Elu(Layer):
         return elu(x)
 
 
-def elu(x):
-    return F.elu(x)
 
 
 class LecunTanh(Layer):
@@ -307,8 +216,6 @@ class LecunTanh(Layer):
         return hard_swish(x)
 
 
-def lecun_tanh(x):
-    return 1.7159 * torch.tanh(2 / 3 * x)
 
 
 class SoftSign(Layer):
@@ -320,10 +227,6 @@ class SoftSign(Layer):
         return soft_sign(x)
 
 
-def soft_sign(x):
-    return x.exp().add(1).log()
-
-
 class SoftPlus(Layer):
     def __init__(self):
         super(SoftPlus, self).__init__()
@@ -331,10 +234,6 @@ class SoftPlus(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return soft_plus(x)
-
-
-def soft_plus(x):
-    return F.softplus(x)
 
 
 class Logit(Layer):
@@ -345,11 +244,6 @@ class Logit(Layer):
         x = enforce_singleton(x)
         return logit(x)
 
-
-def logit(x):
-    return (x / (1 - x)).log()
-
-
 class LogLog(Layer):
     def __init__(self, ):
         super(LogLog, self).__init__()
@@ -359,14 +253,10 @@ class LogLog(Layer):
         return log_log(x)
 
 
-def log_log(x):
-    return 1 - torch.exp(-torch.exp(x))
-
 
 class Mish(Layer):
     '''
-        #Mish - "Mish: A Self Regularized Non-Monotonic Neural Activation Function"
-        #https://arxiv.org/abs/1908.08681v1
+
     '''
 
     def __init__(self):
@@ -377,15 +267,19 @@ class Mish(Layer):
         return mish(x)
 
 
-'''mish activation function 
-'''
-
-
-def mish(x):
-    return x * (torch.tanh(F.softplus(x)))
-
 
 class Softmax(Layer):
+    """Softmax activation layer.
+       # Arguments
+           x: Input tensor.
+           axis: Integer, axis along which the softmax normalization is applied.
+
+       # Returns
+           Tensor, output of softmax transformation.
+
+       # Raises
+           ValueError: In case `dim(x) == 1`.
+       """
     def __init__(self):
         super(Softmax, self).__init__()
 
@@ -394,8 +288,16 @@ class Softmax(Layer):
         return softmax(x)
 
 
-def softmax(x):
-    return torch.softmax(x, dim=-1)
+
+class LogSoftmax(Layer):
+    def __init__(self):
+        super(Softmax, self).__init__()
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return log_sum_exp(x)
+
+
 
 
 class BertGelu(Layer):
@@ -410,8 +312,7 @@ class BertGelu(Layer):
         return bert_gelu(x)
 
 
-def bert_gelu(x):
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
 
 
 class GptGelu(Layer):
@@ -427,19 +328,17 @@ class GptGelu(Layer):
         return gpt_gelu(x)
 
 
-def gpt_gelu(x):
-    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 
 def get_activation(fn_name):
     if fn_name is None:
         return None
-    fn_modules = ['trident.layers.pytorch_activations', 'torch.nn.functional']
+    fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops','torch.nn.functional']
     try:
         if isinstance(fn_name, str):
             if fn_name.lower() == fn_name:
                 activation_fn = get_function(fn_name, [
-                    'trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
+                     'trident.backend.pytorch_ops','trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
                 return activation_fn
             else:
                 try:
@@ -447,7 +346,7 @@ def get_activation(fn_name):
                     return activation_fn()
                 except Exception:
                     activation_fn = get_class(fn_name, [
-                        'trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
+                       'trident.backend.pytorch_ops', 'trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
                     return activation_fn
         elif getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
             if inspect.isfunction(fn_name):
