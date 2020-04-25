@@ -1,5 +1,6 @@
 import copy
 import inspect
+import itertools
 import random
 import sys
 import uuid
@@ -16,10 +17,11 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
 from tensorflow.python.module import module
 from tensorflow.python.util import object_identity
-
+from ..data.utils import pickle_it,unpickle
 from .common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, format_time, \
     get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, OrderedDict, \
     get_signature
+
 
 __all__ = [ 'Layer','to_numpy', 'to_tensor','is_tensor', 'get_flops','Sequential',
            'ConcatContainer', 'ReplayBuffer','summary']
@@ -192,14 +194,10 @@ class Layer(tf.Module):
     """
     Trident extened nn.Module
     """
-
+    _version = 1
     def __init__(self,name=None,**kwargs):
         super(Layer, self).__init__()
         self.training=True
-        # prefix =self._get_name()
-        # self.defaultname = camel2snake(prefix) + '_' + str(get_uid(prefix))
-        # if name is None or name =='':
-        #     self._name=self.defaultname
         self._built= False
         self._modules = OrderedDict()
         self._parameters = OrderedDict()
@@ -311,7 +309,7 @@ class Layer(tf.Module):
             raise KeyError("buffer name can't be empty string \"\"")
         elif hasattr(self, name) and name not in self._buffers:
             raise KeyError("attribute '{}' already exists".format(name))
-        elif tensor is not None and not isinstance(tensor,(tf.Tensor,tf.constant) and not is_tensor(tensor)):
+        elif tensor is not None and not isinstance(tensor,tf.Tensor) and not is_tensor(tensor):
             raise TypeError("cannot assign '{}' object to buffer '{}' "
                             "(torch Tensor or None required)"
                             .format(type(tensor).__name__, name))
@@ -396,7 +394,7 @@ class Layer(tf.Module):
             # nodes = self._nodes.copy()
             # for k, v in module.nodes.items():
             #     nodes[k] = v
-            self.add_module(module._name,module)
+            self.add_module(str(len(self._modules)),module)
             # self.nodes = nodes
             # for mod in self.modules():
             #     mod.nodes = nodes
@@ -519,6 +517,8 @@ class Layer(tf.Module):
             value =tf.TensorShape(list(value))
         elif is_tensor(value):
             value=to_numpy(value).tolist()
+        elif isinstance(value,int):#
+            value =tf.TensorShape(value)
         elif isinstance(value, np.ndarray) and value.ndim <= 1:
             value=tf.TensorShape(value.astype(np.uint8).tolist())
         elif isinstance(value,tf.TensorShape):
@@ -550,11 +550,13 @@ class Layer(tf.Module):
     @output_shape.setter
     def output_shape(self, value):
         if isinstance(value, (list, tuple)) and len(value) > 0:
-            value = tuple(value)
+            value = tf.TensorShape(list(value))
         elif is_tensor(value):
-            value = to_numpy(value).tolist()
+            value = tf.TensorShape(to_numpy(value).tolist())
+        elif isinstance(value,int):#
+            value =tf.TensorShape(value)
         elif isinstance(value, np.ndarray) and value.ndim <= 1:
-            value = value.astype(np.uint8).tolist()
+            value = tf.TensorShape(value.astype(np.uint8).tolist())
         elif isinstance(value,tf.TensorShape):
             value = value
         else:
@@ -581,20 +583,194 @@ class Layer(tf.Module):
             raise ValueError('Layer {0} has not set self.keep.output  to True, cannot access output '.format(self.name))
         return list(self._output_tensor) if isinstance(self._output_tensor,tuple) else self._output_tensor
 
-
-
-
     def reset_parameters(self):
         pass
 
     def copy(self):
         return copy.deepcopy(self)
 
+    def _save_to_state_dict(self, destination, prefix, keep_vars):
+        r"""Saves module state to `destination` dictionary, containing a state
+        of the module, but not its descendants. This is called on every
+        submodule in :meth:`Layer.state_dict`.
+        In rare cases, subclasses can achieve class-specific behavior by
+        overriding this method with custom logic.
+        Arguments:
+            destination (dict): a dict where state will be stored
+            prefix (str): the prefix for parameters and buffers used in this
+                module
+        """
+        for name, param in self._parameters.items():
+            if param is not None:
+                destination[prefix + name] = param if keep_vars else tf.stop_gradient(param)
+        for name, buf in self._buffers.items():
+            if buf is not None:
+                destination[prefix + name] = buf if keep_vars else tf.stop_gradient(buf)
+
+    def  state_dict(self, destination=None, prefix='', keep_vars=False):
+        r"""Returns a dictionary containing a whole state of the module.
+        Both parameters and persistent buffers (e.g. running averages) are
+        included. Keys are corresponding parameter and buffer names.
+        Returns:
+            dict:
+                a dictionary containing a whole state of the module
+        Example::
+            >>> module.state_dict().keys()
+            ['bias', 'weight']
+        """
+        if destination is None:
+            destination = OrderedDict()
+            destination._metadata = OrderedDict()
+        destination._metadata[prefix[:-1]] = local_metadata = dict(version=self._version)
+        self._save_to_state_dict(destination, prefix, keep_vars)
+        for name, module in self._modules.items():
+            if module is not None:
+                module.state_dict(destination, prefix + name + '.', keep_vars=keep_vars)
+        for hook in self._state_dict_hooks.values():
+            hook_result = hook(self, destination, prefix, local_metadata)
+            if hook_result is not None:
+                destination = hook_result
+        return destination
+
+    def _register_load_state_dict_pre_hook(self, hook):
+        r"""These hooks will be called with arguments: `state_dict`, `prefix`,
+        `local_metadata`, `strict`, `missing_keys`, `unexpected_keys`,
+        `error_msgs`, before loading `state_dict` into `self`. These arguments
+        are exactly the same as those of `_load_from_state_dict`.
+        """
+        handle = RemovableHandle(self._load_state_dict_pre_hooks)
+        self._load_state_dict_pre_hooks[handle.id] = hook
+        return handle
+
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys,
+                              error_msgs):
+        r"""Copies parameters and buffers from :attr:`state_dict` into only
+        this module, but not its descendants. This is called on every submodule
+        in :meth:`~torch.nn.Module.load_state_dict`. Metadata saved for this
+        module in input :attr:`state_dict` is provided as :attr:`local_metadata`.
+        For state dicts without metadata, :attr:`local_metadata` is empty.
+        Subclasses can achieve class-specific backward compatible loading using
+        the version number at `local_metadata.get("version", None)`.
+        .. note::
+            :attr:`state_dict` is not the same object as the input
+            :attr:`state_dict` to :meth:`~torch.nn.Module.load_state_dict`. So
+            it can be modified.
+        Arguments:
+            state_dict (dict): a dict containing parameters and
+                persistent buffers.
+            prefix (str): the prefix for parameters and buffers used in this
+                module
+            local_metadata (dict): a dict containing the metadata for this module.
+                See
+            strict (bool): whether to strictly enforce that the keys in
+                :attr:`state_dict` with :attr:`prefix` match the names of
+                parameters and buffers in this module
+            missing_keys (list of str): if ``strict=True``, add missing keys to
+                this list
+            unexpected_keys (list of str): if ``strict=True``, add unexpected
+                keys to this list
+            error_msgs (list of str): error messages should be added to this
+                list, and will be reported together in
+                :meth:`~torch.nn.Module.load_state_dict`
+        """
+        for hook in self._load_state_dict_pre_hooks.values():
+            hook(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
+
+        local_name_params = itertools.chain(self._parameters.items(), self._buffers.items())
+        local_state = {k: v for k, v in local_name_params if v is not None}
+
+        for name, param in local_state.items():
+            key = prefix + name
+            if key in state_dict:
+                input_param = state_dict[key]
+
+                # Backward compatibility: loading 1-dim tensor from 0.3.* to version 0.4+
+                if len(param.shape) == 0 and len(input_param.shape) == 1:
+                    input_param = input_param[0]
+
+                if input_param.shape != param.shape:
+                    # local shape should match the one in checkpoint
+                    error_msgs.append('size mismatch for {}: copying a param with shape {} from checkpoint, '
+                                      'the shape in current model is {}.'.format(key, input_param.shape, param.shape))
+                    continue
+
+                try:
+
+                    param.assign(tf.stop_gradient(input_param))
+                except Exception as ex:
+                    error_msgs.append('While copying the parameter named "{}", '
+                                      'whose dimensions in the model are {} and '
+                                      'whose dimensions in the checkpoint are {}, '
+                                      'an exception occured : {}.'.format(key, param.size(), input_param.size(),
+                                                                          ex.args))
+            elif strict:
+                missing_keys.append(key)
+
+        if strict:
+            for key in state_dict.keys():
+                if key.startswith(prefix):
+                    input_name = key[len(prefix):]
+                    input_name = input_name.split('.', 1)[0]  # get the name of param/buffer/child
+                    if input_name not in self._modules and input_name not in local_state:
+                        unexpected_keys.append(key)
+
+    def load_state_dict(self, state_dict, strict=True):
+        r"""Copies parameters and buffers from :attr:`state_dict` into
+        this module and its descendants. If :attr:`strict` is ``True``, then
+        the keys of :attr:`state_dict` must exactly match the keys returned
+        by this module's :meth:`~torch.nn.Module.state_dict` function.
+        Arguments:
+            state_dict (dict): a dict containing parameters and
+                persistent buffers.
+            strict (bool, optional): whether to strictly enforce that the keys
+                in :attr:`state_dict` match the keys returned by this module's
+                :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
+        Returns:
+            ``NamedTuple`` with ``missing_keys`` and ``unexpected_keys`` fields:
+                * **missing_keys** is a list of str containing the missing keys
+                * **unexpected_keys** is a list of str containing the unexpected keys
+        """
+        missing_keys = []
+        unexpected_keys = []
+        error_msgs = []
+
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, '_metadata', None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
+
+        def load(module, prefix=''):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys,
+                error_msgs)
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + '.')
+
+        load(self)
+        load = None  # break load->load reference cycle
+
+        if strict:
+            if len(unexpected_keys) > 0:
+                error_msgs.insert(0, 'Unexpected key(s) in state_dict: {}. '.format(
+                    ', '.join('"{}"'.format(k) for k in unexpected_keys)))
+            if len(missing_keys) > 0:
+                error_msgs.insert(0,
+                    'Missing key(s) in state_dict: {}. '.format(', '.join('"{}"'.format(k) for k in missing_keys)))
+
+        if len(error_msgs) > 0:
+            raise RuntimeError(
+                'Error(s) in loading state_dict for {}:\n\t{}'.format(self.__class__.__name__, "\n\t".join(error_msgs)))
+        return _IncompatibleKeys(missing_keys, unexpected_keys)
+
     def save(self, file_path=''):
-        tf.saved_model.save(self, file_path)
+        #save({'state_dict': self.state_dict()}, file_path)
+        pickle_it(file_path,{'state_dict': self.state_dict()})
 
     def save_onnx(self,file_path=''):
         pass
+
 
     def forward(self, *input, **kwargs):
         r"""Defines the computation performed at every call.
@@ -628,6 +804,7 @@ class Layer(tf.Module):
         #     if recording_scopes:
         #         tracing_state.pop_scope()
         # return result
+
 
     def __call__(self, *input, **kwargs):
         for hook in self._forward_pre_hooks.values():
@@ -1139,20 +1316,20 @@ class Sequential(Layer):
 
         if len(args) == 1 and isinstance(args[0], OrderedDict):
             for key, module in args[0].items():
-                module.name = key
+                module._name = key
                 self.add_module(key, module)
         elif len(args) == 1 and isinstance(args[0], list):
             for idx, module in enumerate(args[0]):
                 if module.name is not None and len(module.name)>0:
-                    self.add_module('{0}:{1}'.format(module.name, idx), module)
+                    self.add_module('{0}'.format(idx), module)
                 else:
-                    self.add_module('{0}:{1}'.format(camel2snake(type(module).__name__),idx), module)
+                    self.add_module('{0}'.format(idx), module)
         else:
             for idx, module in enumerate(args):
                 if module.name is not None and len(module.name)>0:
-                    self.add_module('{0}:{1}'.format(module.name, idx), module)
+                    self.add_module('{0}'.format(idx), module)
                 else:
-                    self.add_module('{0}:{1}'.format(camel2snake(type(module).__name__),idx), module)
+                    self.add_module('{0}'.format(idx), module)
 
         # self.to(self.device)
 
@@ -1214,6 +1391,7 @@ class Sequential(Layer):
         keys = super(Sequential, self).__dir__()
         keys = [key for key in keys if not key.isdigit()]
         return keys
+
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -1620,4 +1798,7 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,):
         else:
 
             print('uncomplete arg_map', arg_map.key_list)
+
+
+
 

@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import six
 import collections
 import datetime
 import inspect
@@ -26,7 +26,7 @@ from typing import List, Set, Tuple, Dict
 
 import numpy as np
 
-__all__ = ['get_session','get_trident_dir','get_signature','epsilon','set_epsilon','floatx','set_floatx','if_else','camel2snake','snake2camel','to_onehot','to_list','addindent','format_time', 'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime', 'next_prime', 'prev_prime', 'nearest_prime','PrintException','unpack_singleton','enforce_singleton','OrderedDict','get_python_function_arguments','map_function_arguments','ClassfierType','PaddingMode', 'DataRole',
+__all__ = ['get_session','get_trident_dir','get_signature','epsilon','set_epsilon','floatx','set_floatx','Signature','if_else','camel2snake','snake2camel','to_onehot','to_list','addindent','format_time', 'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime', 'next_prime', 'prev_prime', 'nearest_prime','PrintException','unpack_singleton','enforce_singleton','OrderedDict','get_python_function_arguments','map_function_arguments','ClassfierType','PaddingMode', 'DataRole',
 
            'ExpectDataType', 'GetImageMode','split_path', 'make_dir_if_need','sanitize_path', 'ShortcutMode', 'DataSpec','get_argument_maps','get_args_spec','get_gpu_memory_map']
 
@@ -74,7 +74,7 @@ _SESSION.epsilon= 1e-8
 _SESSION.numpy_print_format='{0:.4e}'
 
 
-_SESSION.user_defined_device=None
+_SESSION.device=None
 
 
 
@@ -618,8 +618,8 @@ def make_dir_if_need(path):
     return sanitize_path(path)
 
 class OrderedDict(collections.OrderedDict):
-    def __init__(self):
-        super(OrderedDict,self).__init__()
+    def __init__(self,*args, **kwds):
+        super(OrderedDict,self).__init__(*args, **kwds)
 
     @property
     def key_list(self):
@@ -639,6 +639,9 @@ class OrderedDict(collections.OrderedDict):
         return list(super().items())
     def items(self):
         return super().items()
+
+    def __repr__(self):
+        return '{ ' + (', '.join(['{0}: {1}'.format(k, v) for k, v in self.item_list])) + ' }'
 
 
 class ClassfierType(Enum):
@@ -699,7 +702,7 @@ class GetImageMode(Enum):
 
 
 
-def get_argument_maps(self, default_map, func):
+def get_argument_maps(default_map, func):
     r"""Extracts the signature of the `func`. Then it returns the list of arguments that
     are present in the object and need to be mapped and passed to the `func` when calling it.
     Args:
@@ -811,9 +814,75 @@ def get_args_spec(fn):
     return arg_spec
 
 
+def format_arg_spec(v, is_output=False):
+    s = v.name + ': ' if not is_output and v.name else ''  # (suppress output names, since they duplicate the
+    # function name)
+    return s + str(v._type)
+
+
+# def _make_tensor_meta(cls_name, **kwargs):
+#     class TensorMeta(type):
+#         def __getitem__(self, shape):
+#             if not isinstance(shape, tuple):
+#                 shape = (shape,)
+#             # the first shape parameter can be np.float32 or np.float64 or np.float16, similar to Eigen
+#             if len(shape) > 0 and (shape[0] == np.float32 or shape[0] == np.float64 or shape[0] == np.float16):
+#                 kwargs['dtype'] = shape[0]
+#                 shape = shape[1:]
+#             return Variable._Type(shape, **kwargs) # inject it for @Function
+#     return TensorMeta(cls_name, (), {})
+#
+
+def Signature(*args, **kwargs):
+    '''
+    ``@Signature`` is a decorator to implement the function-argument annotations in Python-2.7,
+    as needed by the ``@Function`` decorator.
+    This is only needed when you have not yet migrated to Python 3.x.
+    Note: Although this is aimed at enabling ``@Function`` syntax with type annotations
+    in Python 2.7, ``@Signature`` is independent of CNTK and can be used for any argument annotation.
+    Args:
+        *args: types of arguments of the function that this decorator is applied to, in the same order.
+        **kwargs: types of arguments with optional names, e.g. `x=Tensor[42]`. Use this second form for
+           longer argument lists.
+    Example::
+     # Python 3:
+     @Function
+     def f(x: Tensor[42]):
+         return sigmoid(x)
+     # Python 2.7:
+     @Function
+     @Signature(Tensor[42])
+     def f(x):
+         return sigmoid(x)
+     # note that this:
+     @Function
+     @Signature(x:int)
+     def sqr(x):
+         return x*x
+     # is identical to:
+     def sqr(x):
+         return x*x
+     sqr.__annotations__ = {'x': int}
+    '''
+    # this function returns another function which is the actual decorator applied to the def:
+    def add_annotations(f):
+        # prepare the signature
+        param_names, annotations = get_python_function_arguments(f)
+        if annotations:
+            raise ValueError('@Signature cannot be applied to functions that already have annotations')
+        annotations = {}
+        if len(args) + len(kwargs) != len(param_names):
+            raise TypeError("{} annotations provided for function to be decorated, but function has {} parameters".format(len(args) + len(kwargs), len(param_names)))
+        # implant anotations into f
+        params_dict = { name: name for name in param_names }
+        f.__annotations__ = map_function_arguments(param_names, params_dict, *args, **kwargs)
+        return f # and return the updated function
+    return add_annotations
+
 def update_signature(fn:callable,args:list):
     sig = signature(fn)
     sig = sig.replace(tuple(sig.parameters.values())[1:])
+
 
 
 
@@ -844,3 +913,62 @@ def get_gpu_memory_map():
         except:
             pass
     return gpu_memory_map
+
+
+class _tensor_op(collections.MutableMapping):
+    """Tensor manuplation utilities
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.__dict__.update(*args, **kwargs)
+
+    def __setitem__(self, key, value):
+        self.__dict__[key] = value
+
+    def __getitem__(self, key):
+        return self.__dict__[key]
+
+    def __delitem__(self, key):
+        del self.__dict__[key]
+
+    # noinspection PyUnusedLocal,PyUnusedLocal
+    def __getattr__(self, key):
+        return None
+
+    def __iter__(self):
+        return iter(self.__dict__)
+
+    def __len__(self):
+        return len(self.__dict__)
+
+    def __str__(self):
+        return str(self.__dict__)
+
+    def __repr__(self):
+        return self.__dict__.__repr__()
+
+    def __add__(self, other):
+        """Overloads `+` operator.
+        It does NOT overwrite the existing item.
+        """
+
+        res = _tensor_op(self.__dict__)
+        for k, v in six.iteritems(other):
+            if k not in res.__dict__ or res.__dict__[k] is None:
+                res.__dict__[k] = v
+        return res
+
+
+    def __mul__(self, other):
+        r"""Overloads `*` operator.
+        It overwrites the existing item.
+
+
+        ```
+        """
+        res = _tensor_op(self.__dict__)
+        for k, v in six.iteritems(other):
+            res.__dict__[k] = v
+        return res
+
+

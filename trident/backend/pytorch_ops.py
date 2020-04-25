@@ -3,7 +3,7 @@ import sys
 from collections import Sized, Iterable
 from functools import partial
 from typing import Tuple,List, Optional, Union
-
+import math
 import numpy as np
 import torch
 import torch.nn as nn
@@ -12,10 +12,15 @@ from torch.autograd import Variable
 from .common import *
 
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-__all__ = ['is_nan','is_abnormal_number','reshape','argmax','gram_matrix','log_sum_exp','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','expand_dims','shuffle','random_choice','meshgrid','element_cosine_distance','gram_matrix','get_rotation_matrix2d','warp_affine','binary_crossentropy']
+__all__ = ['is_nan','is_abnormal_number','reshape','concate','argmax','gram_matrix','log_sum_exp','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','expand_dims','shuffle','random_choice','meshgrid','element_cosine_distance','gram_matrix','get_rotation_matrix2d','warp_affine','binary_crossentropy', 'identity', 'sigmoid', 'tanh', 'relu', 'relu6',
+           'leaky_relu', 'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
+           'lecun_tanh', 'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax','log_sum_exp','bert_gelu',
+           'gpt_gelu','ones','ones_like','zeros','zeros_like','maximum','minimum','clip']
 
 
-
+############################
+## check operation
+###########################
 
 def is_nan(x):
     if isinstance(x,torch.Tensor):
@@ -47,15 +52,23 @@ def is_abnormal_number(x):
     return is_nan(x) or is_inf(x)or is_inf(-x)
 
 
-def clip(x:torch.Tensor,min_value=-np.inf,max_value=np.inf):
-    return x.clamp(min,max)
+############################
+## tensor attribute
+###########################
+
+
+
+
+
+############################
+## basic math operation
+###########################
 
 def sqrt(x:torch.Tensor):
     return x.sqrt()
 
 def square(x:torch.Tensor):
     return x**2
-
 
 def abs(x:torch.Tensor):
     return x.abs()
@@ -69,6 +82,164 @@ def log(x:torch.Tensor):
 def exp(x:torch.Tensor):
     return x.exp()
 
+
+
+############################
+## activationoperation
+###########################
+
+
+def identity(x):
+    return x
+
+
+
+def relu(x):
+    '''relu activation function
+    '''
+    return torch.relu(x)
+
+def relu6(x):
+    '''relu6 activation function
+    '''
+    return F.relu6(x)
+
+
+def leaky_relu(x,slope=0.2):
+    '''leaky_relu activation function
+    '''
+    return F.leaky_relu(x, negative_slope=slope)
+
+def leaky_relu6(x,slope=0.2):
+    '''leaky_relu6 activation function
+    '''
+    return torch.clamp(F.leaky_relu(x, negative_slope=slope), -6, 6)
+
+def smooth_relu(x):
+    '''smooth_relu activation function
+    '''
+    return torch.log(1 + torch.exp(x))
+
+'''p_relu activation function 
+'''
+
+
+
+def p_relu(x,weight):
+    '''
+
+    Args:
+        x ():
+        weight ():
+
+    Returns:
+
+    '''
+    return torch.prelu(x,weight=weight)
+
+
+def sigmoid(x):
+    '''softmax activation function
+    '''
+    return torch.sigmoid(x)
+
+
+def tanh(x):
+    return torch.tanh(x)
+
+
+'''swish activation function 
+'''
+
+
+def swish(x):
+    return x * sigmoid(x)
+
+
+def hard_sigmoid(x, inplace=False):
+    return F.relu6(x + 3, inplace) / 6
+
+def hard_swish(x, inplace=False):
+    return x * hard_sigmoid(x, inplace)
+
+def hard_tanh(x):
+    return torch.clamp(x, -1, 1)
+
+
+
+def selu(x):
+    '''
+    selu activation function
+    Args:
+        x ():
+
+    Returns:
+
+    '''
+    return torch.selu(x)
+
+
+def elu(x):
+    return F.elu(x)
+
+def lecun_tanh(x):
+    return 1.7159 * torch.tanh(2 / 3 * x)
+
+
+def soft_sign(x):
+    return x.exp().add(1).log()
+
+
+def soft_plus(x):
+    return F.softplus(x)
+
+
+def logit(x):
+    return (x / (1 - x)).log()
+
+def log_log(x):
+    return 1 - torch.exp(-torch.exp(x))
+
+
+def mish(x):
+    '''
+        mish activation function
+        Mish - "Mish: A Self Regularized Non-Monotonic Neural Activation Function"
+        https://arxiv.org/abs/1908.08681v1
+    Args:
+        x ():
+
+    Returns:
+
+    '''
+    return x * (torch.tanh(F.softplus(x)))
+
+
+def softmax(x,axis=1):
+    return torch.softmax(x, dim=axis)
+
+def log_sum_exp(x):
+    """Activation function for computing log_sum_exp while determining
+    This will be used to determine unaveraged confidence loss across
+    all examples in a batch.
+    Args:
+        x : input tensor
+    """
+    x_max = x.data.max()
+    return log(reduce_sum(exp(x - x_max), 1, keepdims=True)) + x_max
+
+
+def bert_gelu(x):
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+
+
+def gpt_gelu(x):
+    return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+
+
+############################
+## reduce operation
+###########################
 
 def reduce_mean(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
     axis=kwargs.get('dim',axis)
@@ -84,19 +255,40 @@ def reduce_mean(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
 def reduce_sum(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
-    return x.sum(dim=axis,keepdim=keepdims)
+    if isinstance(axis, int):
+        return x.sum(dim=axis, keepdim=keepdims)
+    elif isinstance(axis, list):
+        axis = sorted(axis).reverse()
+        for a in axis:
+            x = x.sum(dim=a, keepdim=keepdims)
+        return x
+
 
 def reduce_max(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
-    arr, idx = x.max(dim=axis,keepdim=keepdims)
-    return arr
+    if isinstance(axis, int):
+        arr, idx = x.max(dim=axis, keepdim=keepdims)
+        return arr
+    elif isinstance(axis, list):
+        axis = sorted(axis).reverse()
+        for a in axis:
+            arr, idx = x.max(dim=axis, keepdim=keepdims)
+            x = arr
+        return x
 
 def reduce_min(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
-    arr, idx = x.min(dim=axis,keepdim=keepdims)
-    return arr
+    if isinstance(axis, int):
+        arr, idx = x.min(dim=axis, keepdim=keepdims)
+        return arr
+    elif isinstance(axis, list):
+        axis = sorted(axis).reverse()
+        for a in axis:
+            arr, idx = x.min(dim=axis, keepdim=keepdims)
+            x = arr
+        return x
 
 mean=reduce_mean
 sum=reduce_sum
@@ -104,6 +296,21 @@ max=reduce_max
 min=reduce_min
 
 
+
+############################
+## element-wise operation
+###########################
+
+def element_cosine_distance(v1, v2, axis=-1):
+    reduce_dim = -1
+    cos = (v1 * v2).sum(dim=reduce_dim,keepdims=False) /((v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt()*(v2 * v2).sum(dim=reduce_dim, keepdims=False).sqrt())
+    return cos
+
+
+
+############################
+## tensor shape operation
+###########################
 def reshape(x,shape=None)-> torch.Tensor:
     if shape is None:
         return x
@@ -114,6 +321,77 @@ def reshape(x,shape=None)-> torch.Tensor:
         return torch.reshape(x,shape)
     else:
         return x
+
+def expand_dims(t:torch.Tensor,axis=0):
+    return t.unsqueeze(axis)
+
+
+############################
+## tensor generation
+###########################
+
+def ones(shape,dtype=torch.float32,requires_grad=False):
+    return torch.ones(shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+
+def ones_like(a,dtype=torch.float32,requires_grad=False):
+    return torch.ones(a.shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+
+def zeros(shape,dtype=torch.float32,requires_grad=False):
+    return torch.zeros(shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+
+def zeros_like(a,dtype=torch.float32,requires_grad=False):
+    return torch.zeros(a.shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+
+def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
+    '''Return meshgrid in range x & y.
+
+    Args:
+      requires_grad ():
+      normalized_coordinates ():
+      x: (int) first dim range.
+      y: (int) second dim range.
+      row_major: (bool) row major or column major.
+
+    Returns:
+      (tensor) meshgrid, sized [x*y,2]
+
+    Example:
+    >> meshgrid(3,2)
+    0  0
+    1  0
+    2  0
+    0  1
+    1  1
+    2  1
+    [torch.FloatTensor of size 6x2]
+
+    >> meshgrid(3,2,row_major=False)
+    0  0
+    0  1
+    0  2
+    1  0
+    1  1
+    1  2
+    [torch.FloatTensor of size 6x2]
+    '''
+    xs = torch.linspace(0, x - 1, x, device=_device, dtype=torch.float,requires_grad=requires_grad)
+    ys = torch.linspace(0, y - 1, y, device=_device, dtype=torch.float,requires_grad=requires_grad)
+    if normalized_coordinates:
+        xs = torch.linspace(-1, 1, x, device=_device, dtype=torch.float,requires_grad=requires_grad)
+        ys = torch.linspace(-1, 1, y, device=_device, dtype=torch.float,requires_grad=requires_grad)
+
+    return torch.stack(torch.meshgrid([xs, ys])).to(_device)
+
+
+
+
+
+
+def clip(x:torch.Tensor,min=-np.inf,max=np.inf):
+    return x.clamp(min,max)
+
+
+
 
 def gram_matrix(input):
     a, b, c, d = input.size()  # a=batch size(=1)
@@ -129,14 +407,13 @@ def gram_matrix(input):
     return G#.div(a * b * c * d)
 
 
-
 def log_sum_exp(x:torch.Tensor,axis=1)-> torch.Tensor:
 
     x_max = x.data.max()
     return torch.log(torch.sum(torch.exp(x-x_max), dim=axis, keepdim=True)) + x_max
 
-
-
+def concate(x:List[torch.Tensor],axis=1):
+    return torch.cat(x,dim=axis)
 
 
 
@@ -149,12 +426,21 @@ def argmax(x:torch.Tensor,axis=1)-> torch.Tensor:
     return idx
 
 
+def maximum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
+    if isinstance(other,torch.Tensor):
+        return torch.max(x,other)
+    elif isinstance(other,(int,float)):
+        return x.clamp(min=other)
+
+def minimum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
+    if isinstance(other,torch.Tensor):
+        return torch.min(x,other)
+    elif isinstance(other,(int,float)):
+        return x.clamp(max=other)
 
 
 
 
-def expand_dims(t:torch.Tensor,axis=0):
-    return t.unsqueeze(axis)
 
 def shuffle(t:torch.Tensor):
     order = np.random.shuffle(np.array(range(t.size(0))))
@@ -164,12 +450,6 @@ def shuffle(t:torch.Tensor):
 def random_choice(t:torch.Tensor):
     idx = np.random.choice(np.array(range(t.size(0))))
     return t[idx]
-
-def element_cosine_distance(v1, v2, axis=-1):
-    reduce_dim = -1
-    cos = (v1 * v2).sum(dim=reduce_dim,keepdims=False) /((v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt()*(v2 * v2).sum(dim=reduce_dim, keepdims=False).sqrt())
-    return cos
-
 
 
 def binary_crossentropy(target, output, from_logits=False):
@@ -291,44 +571,6 @@ def unpad_xyxy_bboxes(bboxes_tensor: torch.Tensor, pad, dim=-1):
 
 
 
-
-def meshgrid(x, y, normalized_coordinates=False):
-    '''Return meshgrid in range x & y.
-
-    Args:
-      x: (int) first dim range.
-      y: (int) second dim range.
-      row_major: (bool) row major or column major.
-
-    Returns:
-      (tensor) meshgrid, sized [x*y,2]
-
-    Example:
-    >> meshgrid(3,2)
-    0  0
-    1  0
-    2  0
-    0  1
-    1  1
-    2  1
-    [torch.FloatTensor of size 6x2]
-
-    >> meshgrid(3,2,row_major=False)
-    0  0
-    0  1
-    0  2
-    1  0
-    1  1
-    1  2
-    [torch.FloatTensor of size 6x2]
-    '''
-    xs = torch.linspace(0, x - 1, x, device=_device, dtype=torch.float)
-    ys = torch.linspace(0, y - 1, y, device=_device, dtype=torch.float)
-    if normalized_coordinates:
-        xs = torch.linspace(-1, 1, x, device=_device, dtype=torch.float)
-        ys = torch.linspace(-1, 1, y, device=_device, dtype=torch.float)
-
-    return torch.stack(torch.meshgrid([xs, ys]))
 
 
 def gram_matrix(input):
