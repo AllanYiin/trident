@@ -11,8 +11,8 @@ import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from ..backend.common import epsilon, get_function, get_session, enforce_singleton
-from ..backend.pytorch_backend import Layer,get_device
+from trident.backend.common import epsilon, get_function, get_session, enforce_singleton
+from trident.backend.pytorch_backend import Layer,get_device
 
 __all__ = ['InstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm2d','SpectralNorm','get_normalization']
 _session = get_session()

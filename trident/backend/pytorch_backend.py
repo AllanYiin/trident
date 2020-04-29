@@ -1,3 +1,6 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import copy
 import inspect
 import logging
@@ -25,11 +28,10 @@ import torch.onnx
 import torchvision
 from torch._six import container_abcs
 
-from .common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, \
-    get_signature,get_session,set_session
-from .pytorch_ops import *
+from trident.backend.common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, get_signature,get_session,set_session
+from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','get_uid','to_numpy','to_tensor','is_tensor','print_network','plot_tensor_grid','summary','calculate_flops', 'Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','check_keys','try_map_args_and_call']
+__all__ = ['get_device','set_device','get_uid','print_network','plot_tensor_grid','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','check_keys','try_map_args_and_call']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -84,70 +86,6 @@ import sys
 
 from functools import partial
 from typing import List, IO, Union, Tuple, Type, Callable
-
-
-
-def is_tensor(x):
-    return isinstance(x,torch.Tensor)
-
-def to_numpy(x) -> np.ndarray:
-
-    """
-    Convert whatever to numpy array
-    :param x: List, tuple, PyTorch tensor or numpy array
-    :return: Numpy array
-    """
-    if isinstance(x, np.ndarray):
-        return x
-    elif isinstance(x, torch.Tensor):
-        return x.clone().cpu().detach_().numpy()
-    elif isinstance(x, list):
-        return np.array(x)
-    elif isinstance(x, tuple):
-        return np.array(list(x))
-    elif  'int' in str(type(x)) or  'float' in str(type(x)):
-        return np.array([x])
-    else:
-        raise ValueError("Unsupported type")
-
-def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
-    if isinstance(x,  torch.Tensor):
-        x = x.clone().detach()
-        x = x.to(get_device())
-        if dtype is not None:
-            x = x.type(dtype)
-        if requires_grad ==False:
-            x.requires_grad =False
-        elif requires_grad ==True:
-            x.requires_grad=True
-
-        return x
-    elif isinstance(x, int):
-        return torch.tensor(x).int().to(_device) if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).int().to(_device)
-    elif isinstance(x, float):
-        return torch.tensor(x).float().to(_device) if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).float().to(_device)
-    elif isinstance(x, (list, tuple)):
-        if isinstance(x[0],int):
-            x =torch.tensor(x).int() if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).int()
-        else:
-            x=torch.tensor(x).float() if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).float()
-        x = x.to(_device)
-        return x
-    elif isinstance(x, np.ndarray):
-        npdtype=x.dtype
-        x = torch.tensor(x)
-        if 'int' in str(npdtype):
-            x = x.type(torch.int64)
-        else:
-            x = x.type(dtype)
-        x = x.to(get_device())
-        if requires_grad == False:
-            x.requires_grad = False
-        elif requires_grad == True:
-            x.requires_grad = True
-        return x
-    else:
-        raise ValueError("Unsupported input type" + str(type(x)))
 
 
 
@@ -232,9 +170,11 @@ class Layer(nn.Module):
             raise KeyError("module name can't be empty string \"\"")
 
         self._modules[name] = module
-        self.nodes=OrderedDict([(mod.uuid,mod)  for mod in list(self.modules())])
+
+        self.nodes=OrderedDict([(mod.uuid,mod)  for mod in list(self.modules()) if isinstance(mod,Layer)])
         for mod in self.modules():
-            mod.nodes =self.nodes
+            if isinstance(mod,Layer):
+                mod.nodes =self.nodes
 
 
 
@@ -979,39 +919,6 @@ def plot_tensor_grid(batch_tensor, save_filename=None):
 
 
 
-def calculate_flops(gen:nn.Module):
-    """
-    Calculate the flops given a generator of pytorch model.
-    It only compute the flops of forward pass.
-
-    Example:
-        >>> net = torchvision.models.resnet18()
-        >>> calculate_flops(net.children())
-    """
-    flops = 0
-    mods=gen.named_modules()
-    mods=list(mods)[1:]
-    param_nums = []
-    param_sizes = []
-    for mod_name,mod in mods:
-        p = list(mod.parameters())
-        modsz = []
-        all_params = 0
-        for j in range(len(p)):
-            modsz.append(np.array(p[j].size()))
-            all_params += np.prod(p[j].size())
-
-        param_nums.append(all_params)
-        param_sizes.append(modsz)
-
-    return np.array(param_nums).sum()
-
-
-# net = torchvision.models.resnet18()
-# flops = calculate_flops(net.children())
-# print(flops / 10 ** 9, 'G')  # 11.435429919 G
-
-
 
 def summary(model, input_size, batch_size=-1, device="cuda"):
     def register_hook(module):
@@ -1143,26 +1050,6 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
 
 
 
-
-def get_input_shape(x):
-    input_shape=None
-    if hasattr(x,'shape'):
-        input_shape=getattr(x,'shape')
-    elif hasattr(x,'calculated_output_shape'):
-        input_shape = getattr(x, 'calculated_output_shape')
-    return input_shape
-
-def get_out_shape(x:nn.Module,input_shape):
-    test_tensor = torch.Tensor(np.ones(input_shape, dtype=np.float32))
-
-    if nn.Module is nn.Sequential or nn.Module is nn.Sequential:
-        for module in x._modules.values():
-            test_tensor = module(test_tensor)
-        return test_tensor.shape
-    else:
-        test_tensor = x(test_tensor)
-    calculated_output_shape = test_tensor.shape
-    return calculated_output_shape
 
 
 

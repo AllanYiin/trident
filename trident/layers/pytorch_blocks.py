@@ -18,13 +18,13 @@ from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from .pytorch_activations import get_activation, Identity
-from .pytorch_layers import *
-from .pytorch_normalizations import get_normalization, SpectralNorm
-from .pytorch_pooling import *
-from ..backend.common import *
-from ..backend.pytorch_backend import  Layer, Sequential
-from ..backend.pytorch_ops import *
+from trident.layers.pytorch_activations import get_activation, Identity
+from trident.layers.pytorch_layers import *
+from trident.layers.pytorch_normalizations import get_normalization, SpectralNorm
+from trident.layers.pytorch_pooling import *
+from trident.backend.common import *
+from trident.backend.pytorch_backend import  Layer, Sequential
+from trident.backend.pytorch_ops import *
 
 __all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'GcdConv2d_Block',
            'TransConv2d_Block', 'GcdConv2d_Block_1', 'Classifier1d', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite','For']
@@ -558,40 +558,21 @@ def For(what_range, constructor):
     It is equivalent to
     ``Sequential([constructor(i) for i in what_range])``.
     It is acceptable that ``constructor`` takes no argument.
-    Example:
-     >>> from cntk.layers import *
-     >>> from cntk.ops import relu
-     >>> # stack of 3 Dense relu layers
-     >>> model = For(range(3), lambda: Dense(2000, activation=relu))
-     >>> # version of the above that has no activation for the last layer
-     >>> model = For(range(3), lambda i: Dense(2000, activation=relu if i < 2 else identity))
-     >>> # complex example that uses For() inside Sequential()
-     >>> with default_options(activation=relu, pad=True):  # default activation is relu
-     ...     model = Sequential([
-     ...          For(range(2), lambda : [
-     ...              Convolution2D((3,3), 64),
-     ...              Convolution2D((3,3), 64),
-     ...              MaxPooling((3,3), strides=2)
-     ...          ]),
-     ...          Label('ndfeat'),              # name this specific value
-     ...          For(range(2), lambda i: [     # this passes a nested list to Sequential
-     ...              Dense([256,128][i]),      # layer index i used to index into an array of parameters
-     ...              Dropout(0.5)
-     ...          ]),
-     ...          Label('hidden'),
-     ...          Dense(10, activation=None)    # activation parameter overrides default (which was set to relu)
-     ...      ])
-     >>> model.update_signature((3,32,32))      # RGB, 32 x 32 pixels
-     >>> model.ndfeat.shape                     # shape at top of convo/pooling pyramid
-         (64, 8, 8)
-     >>> model.hidden.shape                     # shape before classifier
-         (128,)
+
     Args:
      what_range (range): a Python range to loop over
      constructor (Python function/lambda with 1 or 0 arguments): lambda that constructs a layer
     Returns:
         cntk.ops.functions.Function:
         A function that accepts one argument and applies the layers as constructed by ``constructor`` one after another.
+
+    Example:
+     >>> # stack of 3 Dense relu layers
+     >>> model = For(range(3), lambda: Dense(200, activation=relu))
+     >>> # version of the above that has no activation for the last layer
+     >>> model = For(range(3), lambda i: Dense(200, name='dense_{0}'.format(i+1)))
+     >>> print(model[2].name)
+     dense_3
     '''
     # Python 2.7 support requires us to use getargspec() instead of inspect
     takes_arg = len(inspect.getfullargspec(constructor).args) > 0

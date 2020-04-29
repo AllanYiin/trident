@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import sys
 from collections import Sized, Iterable
@@ -9,13 +13,83 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from .common import *
+from  trident.backend.common import *
 
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-__all__ = ['is_nan','is_abnormal_number','reshape','concate','argmax','gram_matrix','log_sum_exp','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','expand_dims','shuffle','random_choice','meshgrid','element_cosine_distance','gram_matrix','get_rotation_matrix2d','warp_affine','binary_crossentropy', 'identity', 'sigmoid', 'tanh', 'relu', 'relu6',
+__all__ = ['to_numpy','to_tensor','is_tensor','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','reshape','concate','argmax','gram_matrix','log_sum_exp','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','expand_dims','shuffle','random_choice','meshgrid','element_cosine_distance','gram_matrix','get_rotation_matrix2d','warp_affine','binary_crossentropy', 'identity', 'sigmoid', 'tanh', 'relu', 'relu6',
            'leaky_relu', 'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
            'lecun_tanh', 'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax','log_sum_exp','bert_gelu',
            'gpt_gelu','ones','ones_like','zeros','zeros_like','maximum','minimum','clip']
+
+
+
+def get_device():
+    return get_session().device
+
+
+def is_tensor(x):
+    return isinstance(x,torch.Tensor)
+
+def to_numpy(x) -> np.ndarray:
+
+    """
+    Convert whatever to numpy array
+    :param x: List, tuple, PyTorch tensor or numpy array
+    :return: Numpy array
+    """
+    if isinstance(x, np.ndarray):
+        return x
+    elif isinstance(x, torch.Tensor):
+        return x.clone().cpu().detach_().numpy()
+    elif isinstance(x, list):
+        return np.array(x)
+    elif isinstance(x, tuple):
+        return np.array(list(x))
+    elif  'int' in str(type(x)) or  'float' in str(type(x)):
+        return np.array([x])
+    elif x is None:
+        return None
+    else:
+        raise ValueError("Unsupported type")
+
+def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
+    if isinstance(x,  torch.Tensor):
+        x = x.clone().detach()
+        x = x.to(get_device())
+        if dtype is not None:
+            x = x.type(dtype)
+        if requires_grad ==False:
+            x.requires_grad =False
+        elif requires_grad ==True:
+            x.requires_grad=True
+
+        return x
+    elif isinstance(x, int):
+        return torch.tensor(x).int().to(get_device()) if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).int().to(get_device())
+    elif isinstance(x, float):
+        return torch.tensor(x).float().to(get_device()) if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).float().to(get_device())
+    elif isinstance(x, (list, tuple)):
+        if isinstance(x[0],int):
+            x =torch.tensor(x).int() if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).int()
+        else:
+            x=torch.tensor(x).float() if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).float()
+        x = x.to(get_device())
+        return x
+    elif isinstance(x, np.ndarray):
+        npdtype=x.dtype
+        x = torch.tensor(x)
+        if 'int' in str(npdtype):
+            x = x.type(torch.int64)
+        else:
+            x = x.type(dtype)
+        x = x.to(get_device())
+        if requires_grad == False:
+            x.requires_grad = False
+        elif requires_grad == True:
+            x.requires_grad = True
+        return x
+    else:
+        raise ValueError("Unsupported input type" + str(type(x)))
+
 
 
 ############################
@@ -50,6 +124,35 @@ def is_inf(x):
 
 def is_abnormal_number(x):
     return is_nan(x) or is_inf(x)or is_inf(-x)
+
+def any_nan(x):
+    if isinstance(x,torch.Tensor):
+        return torch.isnan(x).any()
+    elif isinstance(x,nn.Module):
+        for para in x.parameters():
+            if torch.isnan(para).any():
+                return True
+        return False
+    elif isinstance(x, np.ndarray):
+        return np.isnan(x).any()
+    else:
+        raise NotImplementedError
+
+def any_inf(x):
+    if isinstance(x,torch.Tensor):
+        return torch.isinf(x).any()
+    elif isinstance(x,nn.Module):
+        for para in x.parameters():
+            if torch.isinf(para).any():
+                return True
+        return False
+    elif isinstance(x, np.ndarray):
+        return np.isinf(x).any()
+    else:
+        raise NotImplementedError
+
+def any_abnormal_number(x):
+    return any_nan(x) or any_inf(x)or any_inf(-x)
 
 
 ############################
@@ -218,15 +321,19 @@ def mish(x):
 def softmax(x,axis=1):
     return torch.softmax(x, dim=axis)
 
-def log_sum_exp(x):
+
+def log_sum_exp(x:torch.Tensor,axis=1,keepdims=False)-> torch.Tensor:
     """Activation function for computing log_sum_exp while determining
     This will be used to determine unaveraged confidence loss across
     all examples in a batch.
     Args:
+        keepdims ():
+        axis ():
         x : input tensor
     """
     x_max = x.data.max()
-    return log(reduce_sum(exp(x - x_max), 1, keepdims=True)) + x_max
+    return torch.log(torch.sum(torch.exp(x-x_max), dim=axis, keepdim=keepdims)) + x_max
+
 
 
 def bert_gelu(x):
@@ -242,53 +349,162 @@ def gpt_gelu(x):
 ###########################
 
 def reduce_mean(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+    Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
+
+    Args:
+        x (torch.Tensor):input tensor
+        axis (int,list):  axis along which the reduction will be performed
+        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+        **kwargs ():
+
+    Returns:
+
+
+    Exsample:
+    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+    >>> print(reduce_mean(data, 0).cpu())
+    tensor([[30.,  1.],
+            [40.,  2.]])
+    >>> print(reduce_mean(data, axis=0).cpu())
+    tensor([[30.,  1.],
+            [40.,  2.]])
+    >>> print(reduce_mean(data, axis=[0,2]).cpu())
+    tensor([15.5000, 21.0000])
+
+
+
+
+
+    '''
     axis=kwargs.get('dim',axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if isinstance(axis,int):
         return x.mean(dim=axis,keepdim=keepdims)
     elif isinstance(axis, list)  :
-        axis=sorted(axis).reverse()
+        axis=sorted(axis)
+        axis.reverse()
         for a in axis:
             x=x.mean(dim=a,keepdim=keepdims)
         return x
 
 def reduce_sum(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+        Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
+
+    Args:
+        x (torch.Tensor):input tensor
+        axis (int,list):  axis along which the reduction will be performed
+        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+        **kwargs ():
+
+    Returns:
+
+
+    Exsample:
+    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+    >>> print(reduce_sum(data, 0).cpu())
+    tensor([[ 90.,   3.],
+            [120.,   6.]])
+    >>> print(reduce_sum(data, axis=0).cpu())
+    tensor([[ 90.,   3.],
+            [120.,   6.]])
+    >>> print(reduce_sum(data, axis=[0,2]).cpu())
+    tensor([ 93., 126.])
+        '''
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if isinstance(axis, int):
         return x.sum(dim=axis, keepdim=keepdims)
     elif isinstance(axis, list):
-        axis = sorted(axis).reverse()
+        axis = sorted(axis)
+        axis.reverse()
         for a in axis:
             x = x.sum(dim=a, keepdim=keepdims)
         return x
 
-
 def reduce_max(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+        Computes the maximum of the input tensor's elements across a specified axis or a list of specified axes.
+
+        Args:
+            x (torch.Tensor):input tensor
+            axis (int,list):  axis along which the reduction will be performed
+            keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+            **kwargs ():
+
+        Returns:
+
+
+        Exsample:
+        >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+        >>> print(reduce_max(data, 0).cpu())
+        tensor([[55.,  1.],
+                [60.,  2.]])
+        >>> print(reduce_max(data, axis=0).cpu())
+        tensor([[55.,  1.],
+                [60.,  2.]])
+        >>> print(reduce_max(data, axis=[0,2]).cpu())
+        tensor([55., 60.])
+
+
+        '''
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if isinstance(axis, int):
         arr, idx = x.max(dim=axis, keepdim=keepdims)
         return arr
     elif isinstance(axis, list):
-        axis = sorted(axis).reverse()
+        axis = sorted(axis)
+        axis.reverse()
         for a in axis:
-            arr, idx = x.max(dim=axis, keepdim=keepdims)
+            arr, idx = x.max(dim=a, keepdim=keepdims)
             x = arr
         return x
 
 def reduce_min(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+    Computes the minimum of the input tensor's elements across a specified axis or a list of specified axes.
+
+    Args:
+        x (torch.Tensor):input tensor
+        axis (int,list):  axis along which the reduction will be performed
+        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+        **kwargs ():
+
+    Returns:
+
+
+    Exsample:
+    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+    >>> print(reduce_min(data, 0).cpu())
+    tensor([[ 5.,  1.],
+            [20.,  2.]])
+    >>> print(reduce_min(data, axis=0).cpu())
+    tensor([[ 5.,  1.],
+            [20.,  2.]])
+    >>> print(reduce_min(data, axis=[0,2]).cpu())
+    tensor([1., 2.])
+
+        '''
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if isinstance(axis, int):
         arr, idx = x.min(dim=axis, keepdim=keepdims)
         return arr
     elif isinstance(axis, list):
-        axis = sorted(axis).reverse()
+        axis = sorted(axis)
+        axis.reverse()
         for a in axis:
-            arr, idx = x.min(dim=axis, keepdim=keepdims)
+            arr, idx = x.min(dim=a, keepdim=keepdims)
             x = arr
         return x
+
+#reduce_log_sum_exp
+#reduce_prod
+#reduce_l1
+#reduce_l2
+#reduce_sum_square
 
 mean=reduce_mean
 sum=reduce_sum
@@ -331,16 +547,16 @@ def expand_dims(t:torch.Tensor,axis=0):
 ###########################
 
 def ones(shape,dtype=torch.float32,requires_grad=False):
-    return torch.ones(shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+    return torch.ones(shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
 
 def ones_like(a,dtype=torch.float32,requires_grad=False):
-    return torch.ones(a.shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+    return torch.ones(a.shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
 
 def zeros(shape,dtype=torch.float32,requires_grad=False):
-    return torch.zeros(shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+    return torch.zeros(shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
 
 def zeros_like(a,dtype=torch.float32,requires_grad=False):
-    return torch.zeros(a.shape,dtype=dtype,requires_grad=requires_grad).to(_device)
+    return torch.zeros(a.shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
 
 def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     '''Return meshgrid in range x & y.
@@ -374,13 +590,13 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     1  2
     [torch.FloatTensor of size 6x2]
     '''
-    xs = torch.linspace(0, x - 1, x, device=_device, dtype=torch.float,requires_grad=requires_grad)
-    ys = torch.linspace(0, y - 1, y, device=_device, dtype=torch.float,requires_grad=requires_grad)
+    xs = torch.linspace(0, int(x - 1), int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
+    ys = torch.linspace(0, int(y - 1), int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(-1, 1, x, device=_device, dtype=torch.float,requires_grad=requires_grad)
-        ys = torch.linspace(-1, 1, y, device=_device, dtype=torch.float,requires_grad=requires_grad)
+        xs = torch.linspace(-1, 1, int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
+        ys = torch.linspace(-1, 1,int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
 
-    return torch.stack(torch.meshgrid([xs, ys])).to(_device)
+    return torch.stack(torch.meshgrid([xs, ys])).to(get_device())
 
 
 
@@ -407,11 +623,6 @@ def gram_matrix(input):
     return G#.div(a * b * c * d)
 
 
-def log_sum_exp(x:torch.Tensor,axis=1)-> torch.Tensor:
-
-    x_max = x.data.max()
-    return torch.log(torch.sum(torch.exp(x-x_max), dim=axis, keepdim=True)) + x_max
-
 def concate(x:List[torch.Tensor],axis=1):
     return torch.cat(x,dim=axis)
 
@@ -424,6 +635,13 @@ def argmax(x:torch.Tensor,axis=1)-> torch.Tensor:
     else:
         _, idx = x.max()
     return idx
+def argmin(x:torch.Tensor,axis=1)-> torch.Tensor:
+    if len(x.shape)>axis:
+         _, idx = x.min(dim=axis)
+    else:
+        _, idx = x.min()
+    return idx
+
 
 
 def maximum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
@@ -431,7 +649,6 @@ def maximum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
         return torch.max(x,other)
     elif isinstance(other,(int,float)):
         return x.clamp(min=other)
-
 def minimum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
     if isinstance(other,torch.Tensor):
         return torch.min(x,other)

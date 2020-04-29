@@ -15,9 +15,9 @@ import torch.nn.functional as F
 import torch.nn.modules.activation as af
 from torch.nn.parameter import Parameter
 
-from ..backend.common import get_function, get_class, camel2snake, enforce_singleton
-from ..backend.pytorch_backend import Layer
-from ..backend.pytorch_ops import *
+from trident.backend.common import get_function, get_class, camel2snake, enforce_singleton
+from trident.backend.pytorch_backend import Layer
+from trident.backend.pytorch_ops import *
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',

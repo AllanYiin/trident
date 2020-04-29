@@ -664,6 +664,8 @@ class Model(ModelBase):
                     grad_norm = self._model.grad.norm()
                     if not 0 < grad_norm < 1e5:
                         sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
+                        if any_abnormal_number(grad_norm):
+                            raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
 
             for callback in self.training_context['callbacks']:
                 callback.on_optimization_step_start(self.training_context)
@@ -707,7 +709,7 @@ class Model(ModelBase):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if is_nan(self._model):
+        if any_abnormal_number(self._model):
             raise ValueError(self._get_name() + '  nan detected!!')
 
         if isinstance(self._model,nn.Module):
