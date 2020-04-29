@@ -23,7 +23,7 @@ from .pytorch_layers import *
 from .pytorch_normalizations import get_normalization, SpectralNorm
 from .pytorch_pooling import *
 from ..backend.common import *
-from ..backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from ..backend.pytorch_backend import  Layer, Sequential
 from ..backend.pytorch_ops import *
 
 __all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'GcdConv2d_Block',
@@ -140,28 +140,33 @@ class Conv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
-        self.use_spectral = use_spectral
-        self.norm = get_normalization(normalization)
-        self.activation = get_activation(activation)
         self.droupout = None
         self.depth_multiplier = depth_multiplier
-        self.keep_output=keep_output
+        self.keep_output = keep_output
+
+        norm=get_normalization(normalization)
+        self.use_spectral = use_spectral
+        if isinstance(norm,SpectralNorm):
+            self.use_spectral=True
+            norm=None
+
+
+        self.conv = Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                          auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                          depth_multiplier=self.depth_multiplier).to(self.device)
+
+        self.norm = norm
+        self.activation = get_activation(activation)
         self._name = name
 
     def build(self, input_shape):
         if self._built == False:
-            conv = Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                          auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                          depth_multiplier=self.depth_multiplier).to(self.device)
-            conv.input_shape = input_shape
-
+            self.conv.input_shape = input_shape
             if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(conv)
+                self.conv = nn.utils.spectral_norm(self.conv)
                 self.norm=None
-            else:
-                self.conv = conv
+
             # if self.norm is not None:
             #     self.norm.input_shape = self.conv.output_shape
             self.to(self.device)
@@ -477,7 +482,7 @@ class GcdConv2d_Block(Layer):
 class GcdConv2d_Block_1(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=32, strides=1, auto_pad=True, divisor_rank=0, activation='relu6',
                  normalization=None, self_norm=True, is_shuffle=False, init=None, use_bias=False, init_bias=0,
-                 dilation=1, groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, weights_contraint=None):
+                 dilation=1, groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, weights_contraint=None,name=None,**kwargs):
         super(GcdConv2d_Block_1, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.num_filters = num_filters
@@ -711,7 +716,7 @@ class ShortCut2d(Layer):
         super(ShortCut2d, self).__init__(name=name)
         self.activation = get_activation(activation)
         self.has_identity = False
-        self.mode = mode if isinstance(mode, str) else mode
+        self.mode = mode
         self.axis=axis
         self.branch_from=branch_from
         self.branch_from_uuid=None
@@ -745,7 +750,7 @@ class ShortCut2d(Layer):
                         self.add_module('branch{0}'.format(i + 1), arg)
                 else:
                     raise ValueError('{0} is not support.'.format(arg.__class__.__name))
-        if len(self._modules) == 1 and self.has_identity == False and self.branch_from is None:
+        if len(self._modules) == 1 and self.has_identity == False and self.branch_from is None and mode!='concate':
             self.has_identity = True
             self.add_module('Identity', Identity())
         self.to(self.device)
@@ -756,43 +761,34 @@ class ShortCut2d(Layer):
                     if v.name == self.branch_from:
                         v.keep_output = True
                         self.branch_from_uuid = k
+                        print('get {0} output info...'.format(self.branch_from))
                         break
                 if self.branch_from_uuid is None:
                     raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-
         current = None
         concate_list = []
-        if self.has_identity == True:
-            current = x
-        for k, v in self._modules.items():
-            if not isinstance(v, Identity):
-                if current is None:
-                    current = v(x)
-                else:
-                    if (not hasattr(self, 'mode') or self.mode == 'add'):
-                        current = current + v(x)
-                    elif self.mode == 'dot':
-                        current = current * v(x)
-                    elif self.mode == 'concate':
-                        if len(concate_list) == 0:
-                            concate_list.append(current)
-                        concate_list.append(v(x))
-                    else:
-                        raise ValueError('Not valid shortcut mode')
-        x = current
         if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
-            branch_tensor=self.nodes.get(self.branch_from_uuid)
-            if (not hasattr(self, 'mode') or self.mode == 'add'):
-                x = x + branch_tensor.output
-            elif self.mode == 'dot':
-                x = x * branch_tensor.output
-            elif self.mode == 'concate':
-                concate_list.append(branch_tensor.output)
+            current=self.nodes.get(self.branch_from_uuid).output
+            concate_list.append(current)
+
+        for k, v in self._modules.items():
+            new_item=v(x) if not isinstance(v, Identity) else x
+            if current is None:
+                current = new_item
+                concate_list.append(current)
             else:
-                raise ValueError('Not valid shortcut mode')
+                if self.mode == 'add':
+                    current = current +new_item
+                elif self.mode == 'dot':
+                    current = current * new_item
+                elif self.mode == 'concate':
+                    concate_list.append(new_item)
+                else:
+                    raise ValueError('Not valid shortcut mode')
+
         if self.mode == 'concate':
             x = concate(concate_list, axis=self.axis)
         if self.activation is not None:

@@ -43,6 +43,7 @@ from .tensorflow_normalizations import get_normalization
 from .tensorflow_pooling import get_pooling, GlobalAvgPool2d
 from ..backend.common import *
 from ..backend.tensorflow_backend import *
+from ..backend.tensorflow_ops import *
 from ..layers.tensorflow_layers import *
 
 _tf_data_format = 'channels_last'
@@ -563,79 +564,8 @@ class Classifer1d(tf.keras.Sequential):
         return get_layer_repr(self)
 
 
-#
-# class ShortCut2d(Layer):
-#     def __init__(self, *args, activation='relu', name="ShortCut2d", **kwargs):
-#         """
-#
-#         Parameters
-#         ----------
-#         layer_defs : object
-#         """
-#         super(ShortCut2d, self).__init__(name=name, **kwargs)
-#         self.activation = get_activation(activation)
-#         self.has_identity = False
-#         self.add_layer=Add()
-#         for i in range(len(args)):
-#             arg = args[i]
-#             if isinstance(arg, (tf.keras.layers.Layer, list, dict)):
-#                 if isinstance(arg, list):
-#                     arg = Sequential(*arg)
-#                     self.add(arg)
-#                 elif isinstance(arg, dict) and len(args) == 1:
-#                     for k, v in arg.items():
-#                         if v is Identity:
-#                             self.has_identity = True
-#                         self.add(v)
-#                 elif isinstance(arg, dict) and len(args) > 1:
-#                     raise ValueError('more than one dict argument is not support.')
-#                 elif arg is  Identity:
-#                     self.has_identity = True
-#                     self.add(arg)
-#                 else:
-#                     # arg.name='branch{0}'.format(i + 1)
-#                     self.add(arg)
-#         if len(self.layers) == 1 and self.has_identity == False:
-#             self.add(Identity(name='Identity'))
-#
-#         # Add to the model any layers passed to the constructor.
-#
-#
-#
-#     @property
-#     def layers(self):
-#         return self._layers
-#
-#     def add(self, layer):
-#         self._layers.append(layer)
-#
-#
-#     def compute_output_shape(self, input_shape):
-#         shape = input_shape
-#         shape = self.layers[0].compute_output_shape(shape)
-#         return shape
-#
-#     def call(self, inputs, training=None, mask=None):
-#         x = enforce_singleton(inputs)
-#         result=[]
-#         if 'Identity' in self._layers:
-#             result.append(x)
-#         for layer in self._layers:
-#             if layer is not Identity:
-#                 out = layer(x)
-#                 result.append(out)
-#         result=self.add_layer(result)
-#         if self.activation is not None:
-#             result = self.activation(result)
-#         return result
-#
-#     def __repr__(self):
-#         return get_layer_repr(self)
-
-
-
 class ShortCut2d(Layer):
-    def __init__(self, *args, output_idx=None,activation=None, mode='add', name='shortcut', **kwargs):
+    def __init__(self, *args, axis=-1,branch_from=None,activation=None, mode='add', name=None, keep_output=False,**kwargs):
         """
 
         Parameters
@@ -646,11 +576,16 @@ class ShortCut2d(Layer):
         self.activation = get_activation(activation)
         self.has_identity = False
         self.mode = mode if isinstance(mode, str) else mode
-        self.output_idx=output_idx
-        self.skip_tensor=None
+        self.axis=axis
+        self.branch_from=branch_from
+        self.branch_from_uuid=None
+        self.keep_output=keep_output
+
+
+
         for i in range(len(args)):
             arg = args[i]
-            if isinstance(arg, (Layer, list, dict)):
+            if isinstance(arg, (Layer,tf.Tensor, list, dict)):
                 if isinstance(arg, list):
                     arg = Sequential(*arg)
                 elif isinstance(arg, (dict,OrderedDict)) and len(args) == 1:
@@ -662,56 +597,68 @@ class ShortCut2d(Layer):
                             self.add_module(k, v)
                 elif isinstance(arg,  (dict,OrderedDict)) and len(args) > 1:
                     raise ValueError('more than one dict argument is not support.')
-                elif is_tensor(arg):
-                    raise ValueError('only layer can be branch of shortcut, not tensor...')
+                elif isinstance(arg, tf.Tensor):
+                    self.skip_tensor=arg
                 elif isinstance(arg, Identity):
                     self.has_identity = True
                     self.add_module('Identity', arg)
                 elif isinstance(arg, Layer):
-                    if len(arg.name)>0 :
+                    if len(arg.name)>0 and arg.name!=arg._name:
                         self.add_module(arg.name, arg)
                     else:
-                        self.add(arg)
+                        self.add_module('branch{0}'.format(i + 1), arg)
                 else:
                     raise ValueError('{0} is not support.'.format(arg.__class__.__name))
-        if len(self._modules) == 1 and self.has_identity == False and self.output_idx is None:
+        if len(self._modules) == 1 and self.has_identity == False and self.branch_from is None:
             self.has_identity = True
             self.add_module('Identity', Identity())
 
-
-
+    def build(self, input_shape):
+        if self._built == False:
+            if self.branch_from is not None:
+                for k, v in self.nodes.item_list:
+                    if v.name == self.branch_from:
+                        v.keep_output = True
+                        self.branch_from_uuid = k
+                        break
+                if self.branch_from_uuid is None:
+                    raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
+            self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
+        current = None
+        concate_list = []
+        if hasattr(self,
+                   'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
+            current = self.nodes.get(self.branch_from_uuid).output
+            concate_list.append(current)
 
-        current=None
-        if self.has_identity == True:
-            current=x
         for k, v in self._modules.items():
-            if not isinstance(v, Identity):
-                if current is None:
-                    current=v(x)
-                else:
-                    if not hasattr(self, 'mode') or self.mode == 'add':
-                        current=current+v(x)
-                    elif self.mode == 'dot':
-                        current =current* v(x)
-                    elif self.mode == 'concate':
-                        current=tf.concat([current,v(x)], axis=1)
-                    else:
-                        raise ValueError('Not valid shortcut mode')
-        x=current
-        if hasattr(self,'skip_tensor') and self.skip_tensor is not None:
-            if not hasattr(self, 'mode') or self.mode == 'add':
-                x = x+self.skip_tensor
-            elif self.mode == 'dot':
-                x =x* self.skip_tensor
-            elif self.mode == 'concate':
-                x =tf.concat([x, self.skip_tensor], axis=-1)
+            new_item = v(x) if not isinstance(v, Identity) else x
+            if current is None:
+                current = new_item
+                concate_list.append(current)
             else:
-                raise ValueError('Not valid shortcut mode')
+                if self.mode == 'add':
+                    current = current + new_item
+                elif self.mode == 'dot':
+                    current = current * new_item
+                elif self.mode == 'concate':
+                    concate_list.append(new_item)
+                else:
+                    raise ValueError('Not valid shortcut mode')
+
+        if self.mode == 'concate':
+            x = concate(concate_list, axis=self.axis)
         if self.activation is not None:
             x = self.activation(x)
         return x
+
+
+
+
+
+
 
 
 
