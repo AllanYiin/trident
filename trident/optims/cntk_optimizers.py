@@ -16,9 +16,9 @@ import numpy as np
 from cntk import cntk_py, NDArrayView, asarray
 from cntk.internal import typemap
 
-from .trainers import OptimizerBase
-from ..backend.cntk_backend import *
 from ..backend.common import *
+from ..backend.cntk_backend import *
+from ..backend.optimizer import OptimizerBase
 
 __all__ = ['RAdam','get_optimizer']
 

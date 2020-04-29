@@ -18,7 +18,7 @@ from .pytorch_losses import get_loss
 from .pytorch_metrics import get_metric
 from .pytorch_optimizers import get_optimizer
 from .pytorch_regularizers import get_reg
-from .trainers import ModelBase, OptimizerBase, progress_bar
+from .trainers import ModelBase, progress_bar
 from ..backend.common import *
 from ..backend.pytorch_backend import *
 from ..layers.pytorch_layers import *
@@ -26,6 +26,7 @@ from ..backend.pytorch_ops import *
 from ..callbacks.lr_schedulers import get_lr_scheduler
 from ..data.image_common import *
 from ..misc.visualization_utils import tile_rgb_images, loss_metric_curve
+from ..backend.optimizer import OptimizerBase
 
 __all__ = ['TrainingItem', 'Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel','FaceRecognitionModel']
@@ -96,13 +97,33 @@ class Model(ModelBase):
                     self.inputs[k] = to_numpy(v.input_shape).tolist()
 
         if isinstance(output, (Layer, nn.Module)):
-            output.input_shape = input_shape
-            # output.cpu()
+            #update notes
+            output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules())if isinstance(mod,Layer)])
+            for mod in output.modules():
+                if isinstance(mod, Layer):
+                    mod.nodes = output.nodes
 
-            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(get_device())
-            output.to(get_device())
-            out = output(dummay_input)
-            self._model = output
+            # output.cpu()
+            if  output.built and hasattr(output,'_output_shape') and  is_tensor(output._output_shape):
+                self._model = output
+                self._outputs['output'] = to_list(output._output_shape)
+                self._targets['target'] = to_list(output._output_shape)
+            else:
+                output.input_shape = input_shape
+                dummay_input = to_tensor(np.random.standard_normal((1,)+tuple(input_shape)).astype(np.float32)).to(get_device())
+                output.to(get_device())
+                out = output(dummay_input)
+                self._model = output
+                if isinstance(out, torch.Tensor):
+                    self._outputs['output'] = to_list(out.size())[1:]
+                    self._targets['target'] = to_list(out.size())[1:]
+                else:
+                    for i in range(len(out)):
+                        self._outputs['output_{0}'.format(i)] = to_list(out[i].size())[1:]
+                    self._targets['target_{0}'.format(i)] = to_list(out[i].size())[1:]
+
+
+
 
             # def _init_weghts(m: Layer):
             #     if isinstance(m, (Conv2d, DepthwiseConv2d)):
@@ -113,13 +134,7 @@ class Model(ModelBase):
             #
             # self._model.apply(_init_weghts)
 
-            if isinstance(out, torch.Tensor):
-                self._outputs['output'] = to_list(out.size())[1:]
-                self._targets['target'] = to_list(out.size())[1:]
-            else:
-                for i in range(len(out)):
-                    self._outputs['output_{0}'.format(i)] = to_list(out[i].size())[1:]
-                    self._targets['target_{0}'.format(i)] = to_list(out[i].size())[1:]
+
 
             self.signature = get_signature(self._model.forward)
         elif isinstance(output, (list, tuple)):
@@ -179,6 +194,9 @@ class Model(ModelBase):
         else:
             return self._outputs
 
+    @property
+    def device(self):
+        return get_device()
     def train(self):
         if self._model is not None and  isinstance(self._model, torch.Tensor):
             pass
@@ -717,12 +735,11 @@ class Model(ModelBase):
 
             import torch.onnx
             self._model.eval()
-            dummy_input = torch.randn(1, *self._model.input_shape.tolist(),
-                                      device="cuda" if self._model.weights[0].data.is_cuda else "cpu")
+            dummy_input = torch.randn(1, *self._model.input_shape.tolist(), device=get_device())
             file, ext = os.path.splitext(file_path)
             if ext is None or ext != '.onnx':
                 file_path = os.path.join(file, '.onnx')
-
+            self._model.to(get_device())
             outputs = self._model(dummy_input)
             if isinstance(outputs, torch.Tensor):
                 outputs = (outputs,)

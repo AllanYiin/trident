@@ -17,10 +17,11 @@ import torch.utils.hooks as hooks
 from torch.autograd import Variable
 from torch.optim.optimizer import Optimizer
 
-from .trainers import OptimizerBase
 from ..backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
     snake2camel, camel2snake
 from ..backend.pytorch_backend import *
+from ..backend.pytorch_ops import *
+from ..backend.optimizer import OptimizerBase
 
 __all__ = ['Adam','SGD','LBFGS','Adadelta','Adagrad','RMSprop','RAdam','PlainRAdam','AdamW','Lookahead','Ranger','get_optimizer']
 

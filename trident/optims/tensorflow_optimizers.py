@@ -18,10 +18,12 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.ops import nn_ops
 
-from .trainers import OptimizerBase
+
 from ..backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
     snake2camel, camel2snake
-from ..backend.tensorflow_backend import to_numpy, to_tensor, Sequential
+from ..backend.tensorflow_backend import  Sequential
+from ..backend.tensorflow_ops import to_numpy, to_tensor
+from ..backend.optimizer import OptimizerBase
 
 _session=get_session()
 _epsilon=_session.epsilon

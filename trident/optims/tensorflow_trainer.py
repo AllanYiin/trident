@@ -25,12 +25,13 @@ from .tensorflow_losses import *
 from .tensorflow_metrics import get_metric
 from .tensorflow_optimizers import get_optimizer
 from .tensorflow_regularizers import *
-from .trainers import ModelBase, OptimizerBase, progress_bar
+from .trainers import ModelBase, progress_bar
 from ..backend.common import *
-from ..backend.tensorflow_backend import Sequential, to_numpy, to_tensor, is_tensor, Layer, try_map_args_and_call,summary
+from ..backend.tensorflow_backend import Sequential,  Layer, try_map_args_and_call,summary
 from ..backend.tensorflow_ops import *
 from ..callbacks.lr_schedulers import get_lr_scheduler
 from ..data.image_common import *
+from ..backend.optimizer import OptimizerBase
 
 # from tensorflow.python.framework.ops import EagerTensor
 
