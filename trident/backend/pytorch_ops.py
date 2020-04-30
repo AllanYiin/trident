@@ -98,32 +98,26 @@ def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
 
 def is_nan(x):
     if isinstance(x,torch.Tensor):
-        return torch.isnan(x).any()
+        return torch.isnan(x)
     elif isinstance(x,nn.Module):
-        for para in x.parameters():
-            if torch.isnan(para).any():
-                return True
-        return False
+        return [torch.isnan(para) for para in x.parameters()]
     elif isinstance(x, np.ndarray):
-        return np.isnan(x).any()
+        return np.isnan(x)
     else:
         raise NotImplementedError
 
 def is_inf(x):
     if isinstance(x,torch.Tensor):
-        return torch.isinf(x).any()
+        return torch.isinf(x)
     elif isinstance(x,nn.Module):
-        for para in x.parameters():
-            if torch.isinf(para).any():
-                return True
-        return False
+        return [torch.isinf(para) for para in x.parameters()]
     elif isinstance(x, np.ndarray):
-        return np.isinf(x).any()
+        return np.isinf(x)
     else:
         raise NotImplementedError
 
 def is_abnormal_number(x):
-    return is_nan(x) or is_inf(x)or is_inf(-x)
+    return is_nan(x) or is_inf(x)
 
 def any_nan(x):
     if isinstance(x,torch.Tensor):
@@ -152,7 +146,251 @@ def any_inf(x):
         raise NotImplementedError
 
 def any_abnormal_number(x):
-    return any_nan(x) or any_inf(x)or any_inf(-x)
+    return any_nan(x) or any_inf(x)
+
+############################
+## compare operation
+###########################
+
+
+def less(left:torch.Tensor, right:torch.Tensor):
+    '''
+    Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        Result is 1 if left < right else 0.
+
+    Example:
+   >>> less(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+   tensor([1., 0., 0.])
+   >>> less(to_tensor([-1,0,1]), 0)
+   tensor([1., 0., 0.])
+    '''
+
+    return left.lt(right).float()
+
+def equal(left:torch.Tensor, right:torch.Tensor):
+    '''
+    Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if values are equal 0 otherwise
+
+    Example:
+    >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    tensor([0., 1., 0.])
+    >>> equal(to_tensor([-1,0,1]), 1)
+    tensor([0., 0., 1.])
+    '''
+    return left.eq(right).float()
+
+
+
+def greater(left:torch.Tensor, right:torch.Tensor):
+    '''
+    Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if left > right else 0.
+
+    Example:
+    >>> greater(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    tensor([0., 0., 1.])
+    >>> greater(to_tensor([-1,0,1]), 0)
+    tensor([0., 0., 1.])
+    '''
+    return left.gt(right).float()
+
+
+
+def greater_equal(left:torch.Tensor, right:torch.Tensor):
+    '''
+    Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if left >= right else 0
+
+    Example:
+    >>> greater_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    tensor([0., 1., 1.])
+    >>> greater_equal(to_tensor([-1,0,1]), 0)
+    tensor([0., 1., 1.])
+    '''
+    return left.ge(right).float()
+
+
+
+def not_equal(left:torch.Tensor, right:torch.Tensor):
+    '''
+    Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if left != right else 0.
+
+    Example:
+    >>> not_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    tensor([1., 0., 1.])
+    >>> not_equal(to_tensor([-1,0,1]), 0)
+    tensor([1., 0., 1.])
+    '''
+    return 1-(left.eq(right).float())
+
+
+
+def less_equal(left:torch.Tensor, right:torch.Tensor):
+    '''
+    Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+
+    Returns:
+        :Result is 1 if left <= right else 0.
+    Example:
+    >>> less_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    tensor([1., 1., 0.])
+    >>> less_equal(to_tensor([-1,0,1]), 0)
+    tensor([1., 1., 0.])
+
+    '''
+    return left.le(right).float()
+
+
+############################
+## elementwise operation
+###########################
+
+def element_times(left, right):
+    '''
+    The output of this operation is the element-wise product of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise product of the two  input
+
+    Example:
+    >>> element_times(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    tensor([0.5000, 0.2500, 0.1250, 0.0000])
+    >>> element_times(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    tensor([10., 20., 30., 60.])
+    >>> element_times(to_tensor([[5., 10.], [15., 30.]]), to_tensor([[1., 2.], [3.,1.]]))
+    tensor([[ 5., 20.],
+            [45., 30.]])
+    '''
+    return left*right
+
+
+
+def element_max(left, right):
+    '''
+    The output of this operation is the element-wise product of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise product of the two  input
+
+    Example:
+    >>> element_max(to_tensor([1., 1., 0., -1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    tensor([1.0000, 1.0000, 0.1250, 0.0000])
+    >>> element_max(to_tensor([5., 10., 15., 30.]),to_tensor([20.]))
+    tensor([20., 20., 20., 30.])
+    >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
+    tensor([10., 10., 15., 30.])
+    '''
+    return torch.max(left,right)
+
+def element_min (left, right):
+    '''
+    The output of this operation is the element-wise product of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise product of the two  input
+
+    Example:
+    >>> element_min(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    tensor([0.5000, 0.2500, 0.1250, 0.0000])
+    >>> element_min(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    tensor([2., 2., 2., 2.])
+    >>> element_min(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
+    tensor([1., 2., 1., 2.])
+    '''
+    return torch.min(left, right)
+
+def element_divide (left, right):
+    '''
+    The output of this operation is the element-wise divide of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise divide of the two  input
+
+    Example:
+    >>> element_divide(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    tensor([2., 4., 8., inf])
+    >>> element_divide(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    tensor([ 2.5000,  5.0000,  7.5000, 15.0000])
+    >>> element_divide(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
+    tensor([ 5.,  5., 15., 15.])
+    '''
+    return torch.true_divide(left, right)
+
+
+
+def element_cosine_distance(v1, v2, axis=-1):
+    reduce_dim = -1
+    cos = (v1 * v2).sum(dim=reduce_dim,keepdims=False) /((v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt()*(v2 * v2).sum(dim=reduce_dim, keepdims=False).sqrt())
+    return cos
+
+def where(flag, value_if_true, value_if_false):
+    '''
+    return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
+    If ``flag`` != 0 ``value_if_true`` is returned, otherwise ``value_if_false``.
+    Behaves analogously to numpy.where(...).
+
+    Args:
+        flag: condition tensor
+        value_if_true: true branch tensor
+        value_if_false: false branch tensor
+    Returns:
+        :conditional selection
+
+    Example:
+    >>> x=to_tensor([0.1, 0.9, 0.8, 0.4, 0.5])
+    >>> where(x>0.5, x, zeros_like(x))
+    tensor([0.0000, 0.9000, 0.8000, 0.0000, 0.0000])
+    '''
+    return torch.where(flag, value_if_true, value_if_false)
 
 
 ############################
@@ -166,6 +404,16 @@ def any_abnormal_number(x):
 ############################
 ## basic math operation
 ###########################
+
+def floor(x:torch.Tensor):
+    return x.floor()
+
+def ceil(x:torch.Tensor):
+    return x.ceil()
+
+def round(x:torch.Tensor):
+    return x.round()
+
 
 def sqrt(x:torch.Tensor):
     return x.sqrt()
@@ -184,6 +432,10 @@ def log(x:torch.Tensor):
 
 def exp(x:torch.Tensor):
     return x.exp()
+
+
+def clip(x:torch.Tensor,min=-np.inf,max=np.inf):
+    return x.clamp(min,max)
 
 
 
@@ -319,8 +571,56 @@ def mish(x):
 
 
 def softmax(x,axis=1):
-    return torch.softmax(x, dim=axis)
+    '''
+    Computes the gradient of :math:`f(z)=\log\sum_i\exp(z_i)` at ``z = x``. Concretely,
+    :math:`\mathrm{softmax}(x)=\left[\frac{\exp(x_1)}{\sum_i\exp(x_i)}\quad\frac{\exp(x_1)}{\sum_i\exp(x_i)}\quad\ldots\quad\frac{\exp(x_1)}{\sum_i\exp(x_i)}\right]`
+    with the understanding that the implementation can use equivalent formulas
+    for efficiency and numerical stability.
+    The output is a vector of non-negative numbers that sum to 1 and can
+    therefore be interpreted as probabilities for mutually exclusive outcomes
+    as in the case of multiclass classification.
+    If ``axis`` is given as integer, then the softmax will be computed along that axis.
+    If the provided ``axis`` is -1, it will be computed along the last axis. Otherwise,
+    softmax will be applied to all axes.
 
+    Args:
+        x: numpy array or any :class:`~cntk.ops.functions.Function` that outputs a tensor
+        axis (int or :class:`~cntk.axis.Axis`): axis along which the softmax operation will be performed
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    Example:
+    >>> softmax(to_tensor([[1, 1, 2, 3]]))
+    tensor([[0.0826, 0.0826, 0.2245, 0.6103]])
+    >>> softmax(to_tensor([1., 1.]))
+    tensor([0.5000, 0.5000])
+    >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=-1)
+    tensor([[[0.5000, 0.5000],
+             [0.1192, 0.8808]]])
+    >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=1)
+    tensor([[[0.1192, 0.0180],
+             [0.8808, 0.9820]]])
+
+    '''
+    if x.ndim==1:
+        return  x.exp().true_divide(x.exp().sum().clamp(min=epsilon()))
+    return torch.softmax(x.float(), dim=axis)
+
+def log_softmax(x,axis=1):
+    '''
+    Computes the logsoftmax normalized values of x. That is, y = x - log(reduce_sum(exp(x), axis))
+    (the implementation uses an equivalent formula for numerical stability).
+    It is also possible to use `x - reduce_log_sum_exp(x, axis)` instead of log_softmax:
+    this can be faster (one reduce pass instead of two), but can behave slightly differently numerically.
+    Args:
+        x: a tensor
+        axis (int): axis along which the logsoftmax operation will be performed (the default is the last axis)
+
+    Returns:
+        :output tensor
+    '''
+    return x - log(reduce_sum(exp(x), axis))
 
 def log_sum_exp(x:torch.Tensor,axis=1,keepdims=False)-> torch.Tensor:
     """Activation function for computing log_sum_exp while determining
@@ -517,12 +817,6 @@ min=reduce_min
 ## element-wise operation
 ###########################
 
-def element_cosine_distance(v1, v2, axis=-1):
-    reduce_dim = -1
-    cos = (v1 * v2).sum(dim=reduce_dim,keepdims=False) /((v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt()*(v2 * v2).sum(dim=reduce_dim, keepdims=False).sqrt())
-    return cos
-
-
 
 ############################
 ## tensor shape operation
@@ -537,6 +831,17 @@ def reshape(x,shape=None)-> torch.Tensor:
         return torch.reshape(x,shape)
     else:
         return x
+
+
+def transpose(x,shape=None)-> torch.Tensor:
+    return x.transpose(shape) if x.is_contiguous() else x.transpose(shape).contiguous()
+
+def permute(x,shape=None)-> torch.Tensor:
+    return x.permute(shape) if x.is_contiguous() else x.permute(shape).contiguous()
+
+
+def squeeze(t:torch.Tensor,axis=0):
+    return t.squeeze(axis)
 
 def expand_dims(t:torch.Tensor,axis=0):
     return t.unsqueeze(axis)
@@ -557,6 +862,57 @@ def zeros(shape,dtype=torch.float32,requires_grad=False):
 
 def zeros_like(a,dtype=torch.float32,requires_grad=False):
     return torch.zeros(a.shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
+
+def eye_like(a,dtype=torch.float32,requires_grad=False):
+    '''
+    Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
+    matrix,
+     ``x`` must have exactly two axes (counting both dynamic and static axes).
+
+    Args:
+        a: numpy array or  that outputs a tensor of rank 2
+        requires_grad ():
+        dtype ():
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    Example:
+    >>> eye_like(torch.Tensor(3,4))
+    tensor([[1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.]])
+
+    '''
+    if a.ndim==2:
+        return torch.eye(a.shape[0],a.shape[1],dtype=dtype,requires_grad=requires_grad).to(get_device())
+    else:
+        raise ValueError('input tensor must have exactly two axe.')
+
+def one_hot(a, num_classes, axis=-1):
+    '''
+    Create one hot tensor based on the input tensor
+    Args:
+        a: input tensor, the value must be positive integer and less than num_class
+        num_classes: the number of class in one hot tensor
+        axis: The axis to fill (default: -1, a new inner-most axis).
+    Returns:
+        :onehot tensor
+    Example:
+    >>> one_hot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
+     tensor([[[0., 1., 1., 0.],
+             [0., 1., 0., 1.]],
+    <BLANKLINE>
+            [[0., 0., 0., 0.],
+             [0., 0., 0., 0.]]])
+    '''
+
+    one_hot_shape = list(a.size())
+    flattend_a=a.view(-1)
+    one_hot_result = zeros((len(flattend_a),num_classes)).float()
+    target = one_hot_result.scatter_(1,a,1)
+    target=target.view(*one_hot_shape,num_classes).contiguous()
+    return target
 
 def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     '''Return meshgrid in range x & y.
@@ -601,10 +957,6 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
 
 
 
-
-
-def clip(x:torch.Tensor,min=-np.inf,max=np.inf):
-    return x.clamp(min,max)
 
 
 
