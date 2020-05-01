@@ -18,7 +18,7 @@ from  trident.backend.common import *
 __all__ = ['to_numpy','to_tensor','is_tensor','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','reshape','concate','argmax','gram_matrix','log_sum_exp','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','expand_dims','shuffle','random_choice','meshgrid','element_cosine_distance','gram_matrix','get_rotation_matrix2d','warp_affine','binary_crossentropy', 'identity', 'sigmoid', 'tanh', 'relu', 'relu6',
            'leaky_relu', 'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
            'lecun_tanh', 'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax','log_sum_exp','bert_gelu',
-           'gpt_gelu','ones','ones_like','zeros','zeros_like','maximum','minimum','clip']
+           'gpt_gelu','ones','ones_like','zeros','zeros_like','maximum','minimum','clip','floor','ceil','round','element_times','element_max','element_min','element_divide','element_cosine_distance','where','less','equal','greater','greater_equal','not_equal','less_equal']
 
 
 
@@ -52,6 +52,24 @@ def to_numpy(x) -> np.ndarray:
         raise ValueError("Unsupported type")
 
 def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
+    '''
+
+    Args:
+        x ():
+        dtype ():
+        requires_grad ():
+
+    Returns: output tensor
+
+    Examples
+    >>> to_tensor(5)
+    tensor(5, dtype=torch.int32)
+    >>> to_tensor((3,2))
+    tensor([3, 2], dtype=torch.int32)
+    >>> to_tensor(np.arange(0,10))
+    tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+    '''
     if isinstance(x,  torch.Tensor):
         x = x.clone().detach()
         x = x.to(get_device())
@@ -90,6 +108,26 @@ def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
     else:
         raise ValueError("Unsupported input type" + str(type(x)))
 
+############################
+## tensor attribute
+###########################
+def ndim(x:torch.Tensor):
+    return x.ndim
+
+def int_shape(x:torch.Tensor):
+    '''
+
+    Args:
+        x : input tensor
+
+    Returns: tuple of integer as shape representation
+
+    Examples:
+    >>> int_shape(ones((3,3,7)))
+    (3, 3, 7)
+
+    '''
+    return tuple(list(x.size()))
 
 
 ############################
@@ -414,7 +452,6 @@ def ceil(x:torch.Tensor):
 def round(x:torch.Tensor):
     return x.round()
 
-
 def sqrt(x:torch.Tensor):
     return x.sqrt()
 
@@ -525,11 +562,21 @@ def hard_tanh(x):
 def selu(x):
     '''
     selu activation function
+    Scaled exponential linear unit operation. Computes the element-wise exponential linear
+    of ``x``: ``scale * x`` for ``x >= 0`` and ``x``: ``scale * alpha * (exp(x)-1)`` otherwise.
+    scale=1.0507009873554804934193349852946, alpha=1.6732632423543772848170429916717
+
+    paper: https://arxiv.org/abs/1706.02515
+    Self-Normalizing Neural Networks
+    Günter Klambauer, Thomas Unterthiner, Andreas Mayr, Sepp Hochreiter
+
     Args:
-        x ():
+        x (tensor): input tensor
 
-    Returns:
-
+    Returns:The output tensor has the same shape as ``x``
+    Example:
+        >>> selu([[-1, -0.5, 0, 1, 2]])
+        tensor([[-1.111331, -0.691758,  0.      ,  1.050701,  2.101402]])
     '''
     return torch.selu(x)
 
@@ -900,11 +947,12 @@ def one_hot(a, num_classes, axis=-1):
         :onehot tensor
     Example:
     >>> one_hot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
-     tensor([[[0., 1., 1., 0.],
+    tensor([[[0., 1., 1., 0.],
              [0., 1., 0., 1.]],
     <BLANKLINE>
             [[0., 0., 0., 0.],
              [0., 0., 0., 0.]]])
+
     '''
 
     one_hot_shape = list(a.size())
@@ -922,37 +970,43 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
       normalized_coordinates ():
       x: (int) first dim range.
       y: (int) second dim range.
-      row_major: (bool) row major or column major.
 
     Returns:
       (tensor) meshgrid, sized [x*y,2]
 
     Example:
-    >> meshgrid(3,2)
-    0  0
-    1  0
-    2  0
-    0  1
-    1  1
-    2  1
-    [torch.FloatTensor of size 6x2]
+    >>> grid=meshgrid(3,2)
+    >>> grid
+    tensor([[[0., 0.],
+             [0., 1.]],
+    <BLANKLINE>
+            [[1., 0.],
+             [1., 1.]],
+    <BLANKLINE>
+            [[2., 0.],
+             [2., 1.]]])
+    >>> print(grid.shape)
+    torch.Size([3, 2, 2])
 
-    >> meshgrid(3,2,row_major=False)
-    0  0
-    0  1
-    0  2
-    1  0
-    1  1
-    1  2
-    [torch.FloatTensor of size 6x2]
+
+    >>> meshgrid(3,2,normalized_coordinates=True)
+    tensor([[[0.0000, 0.0000],
+             [0.0000, 1.0000]],
+    <BLANKLINE>
+            [[0.5000, 0.0000],
+             [0.5000, 1.0000]],
+    <BLANKLINE>
+            [[1.0000, 0.0000],
+             [1.0000, 1.0000]]])
+
     '''
     xs = torch.linspace(0, int(x - 1), int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
     ys = torch.linspace(0, int(y - 1), int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(-1, 1, int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
-        ys = torch.linspace(-1, 1,int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
+        xs = torch.linspace(0, 1, int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
+        ys = torch.linspace(0, 1,int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
 
-    return torch.stack(torch.meshgrid([xs, ys])).to(get_device())
+    return torch.stack(torch.meshgrid([xs, ys]),-1).to(get_device())
 
 
 
@@ -1174,10 +1228,7 @@ def angle_to_rotation_matrix(angle) -> torch.Tensor:
     return torch.stack([cos_a, sin_a, -sin_a, cos_a], dim=-1).view(*angle.shape, 2, 2)
 
 
-def get_rotation_matrix2d(
-        center: torch.Tensor,
-        angle,
-        scale) -> torch.Tensor:
+def get_rotation_matrix2d(center: torch.Tensor,angle,scale) -> torch.Tensor:
     r"""Calculates an affine matrix of 2D rotation.
 
     The function calculates the following matrix:
@@ -1200,11 +1251,11 @@ def get_rotation_matrix2d(
     If this is not the target, adjust the shift.
 
     Args:
-        center (Tensor): center of the rotation in the source image.
-        angle (Tensor): rotation angle in degrees. Positive values mean
+        center (Tensor,tuple): center of the rotation in the source image.
+        angle (Tensor,float): rotation angle in degrees. Positive values mean
             counter-clockwise rotation (the coordinate origin is assumed to
             be the top-left corner).
-        scale (Tensor): isotropic scale factor.
+        scale (Tensor,float): isotropic scale factor.
 
     Returns:
         Tensor: the affine matrix of 2D rotation.
@@ -1217,14 +1268,16 @@ def get_rotation_matrix2d(
         >>> center = torch.zeros(1, 2)
         >>> scale = torch.ones(1)
         >>> angle = 45. * torch.ones(1)
-        >>> M = get_rotation_matrix2d(center, angle, scale)
+        >>> get_rotation_matrix2d(center, angle, scale)
         tensor([[[ 0.7071,  0.7071,  0.0000],
                  [-0.7071,  0.7071,  0.0000]]])
     """
-    if not torch.is_tensor(center):
-        raise TypeError("Input center type is not a torch.Tensor. Got {}"
-                        .format(type(center)))
+    center=to_tensor(center)
+    angle = to_tensor(angle)
+    scale = to_tensor(scale)
 
+    if len(center)==2 and ndim(center)==1:
+        center=center.unsqueeze(0)
     if not (len(center.shape) == 2 and center.shape[1] == 2):
         raise ValueError("Input center must be a Bx2 tensor. Got {}"
                          .format(center.shape))

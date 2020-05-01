@@ -154,7 +154,7 @@ class Conv2d_Block(Layer):
         self.conv = Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
                           auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
                           use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                          depth_multiplier=self.depth_multiplier).to(self.device)
+                          depth_multiplier=self.depth_multiplier, **kwargs).to(self.device)
 
         self.norm = norm
         self.activation = get_activation(activation)
@@ -703,20 +703,27 @@ class ShortCut2d(Layer):
         self.branch_from_uuid=None
         self.keep_output=keep_output
 
-
-
         for i in range(len(args)):
             arg = args[i]
             if isinstance(arg, (Layer,torch.Tensor, list, dict)):
                 if isinstance(arg, list):
                     arg = Sequential(*arg)
-                elif isinstance(arg, (dict,OrderedDict)) and len(args) == 1:
+                elif isinstance(arg, OrderedDict) and len(args) == 1:
                     for k, v in arg.items():
                         if isinstance(v, Identity):
                             self.has_identity = True
                             self.add_module('Identity', v)
                         else:
                             self.add_module(k, v)
+                elif isinstance(arg, dict) and len(args) == 1:
+                    keys=sorted(list(arg.keys()))
+                    for k in keys:
+                        v=arg[k]
+                        if isinstance(v, Identity):
+                            self.has_identity = True
+                            self.add_module('Identity', v)
+                        else:
+                            self.add_module(str(k), v)
                 elif isinstance(arg,  (dict,OrderedDict)) and len(args) > 1:
                     raise ValueError('more than one dict argument is not support.')
                 elif isinstance(arg, torch.Tensor):
@@ -751,9 +758,6 @@ class ShortCut2d(Layer):
         x = enforce_singleton(x)
         current = None
         concate_list = []
-        if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
-            current=self.nodes.get(self.branch_from_uuid).output
-            concate_list.append(current)
 
         for k, v in self._modules.items():
             new_item=v(x) if not isinstance(v, Identity) else x
@@ -770,8 +774,19 @@ class ShortCut2d(Layer):
                 else:
                     raise ValueError('Not valid shortcut mode')
 
+        if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
+            new_item=self.nodes.get(self.branch_from_uuid).output
+            if self.mode == 'add':
+                current = current + new_item
+            elif self.mode == 'dot':
+                current = current * new_item
+            elif self.mode == 'concate':
+                concate_list.append(new_item)
+
         if self.mode == 'concate':
             x = concate(concate_list, axis=self.axis)
+        else:
+            x=current
         if self.activation is not None:
             x = self.activation(x)
         return x

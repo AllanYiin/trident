@@ -31,7 +31,7 @@ from torch._six import container_abcs
 from trident.backend.common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, get_signature,get_session,set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','get_uid','print_network','plot_tensor_grid','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','check_keys','try_map_args_and_call']
+__all__ = ['get_device','set_device','get_uid','print_network','plot_tensor_grid','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -1341,19 +1341,6 @@ def get_human_readable_count(number):
     number = number * (10 ** shift)
     index = num_groups - 1
     return '{int(number):,d} {labels[index]}'
-
-def check_keys(model, pretrained_state_dict):
-    ckpt_keys = set(pretrained_state_dict.keys())
-    model_keys = set(model.state_dict().keys())
-    used_pretrained_keys = model_keys & ckpt_keys
-    unused_pretrained_keys = ckpt_keys - model_keys
-    missing_keys = model_keys - ckpt_keys
-    print('Missing keys:{}'.format(len(missing_keys)))
-    print('Unused checkpoint keys:{}'.format(len(unused_pretrained_keys)))
-    print('Used keys:{}'.format(len(used_pretrained_keys)))
-    assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
-    return True
-
 
 
 def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,):
