@@ -13,17 +13,16 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.python.eager as tfe
 from tensorflow.python import enable_eager_execution
-from tensorflow.python.eager import context
-from tensorflow.python.framework import ops
+
 from tensorflow.python.module import module
 from tensorflow.python.util import object_identity
 from ..data.utils import pickle_it,unpickle
 from .common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, format_time, \
     get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, OrderedDict, \
-    get_signature
+    get_signature,normalize_padding
+from .tensorflow_ops import *
 
-
-__all__ = [ 'Layer','to_numpy', 'to_tensor','is_tensor', 'get_flops','Sequential',
+__all__ = [ 'Layer', 'get_flops','Sequential',
            'ConcatContainer', 'ReplayBuffer','summary']
 gpus = tf.config.list_physical_devices('GPU')
 def get_device():
@@ -84,69 +83,6 @@ class RemovableHandle(object):
 
 
 
-
-
-def is_tensor(x):
-    if hasattr(x, 'numpy'):
-        with context.eager_mode() :
-            return True
-    elif x.__class__.__name__=='EagerTensor':
-        return True
-    elif tf.is_tensor(x):
-        return True
-    return False
-
-
-def to_numpy(x) -> np.ndarray:
-    """
-    Convert whatever to numpy array
-    :param x: List, tuple, PyTorch tensor or numpy array
-    :return: Numpy array
-    """
-    if isinstance(x, np.ndarray):
-        return x
-    # elif isinstance(x,EagerTensor):
-    #     return x.numpy()
-    elif hasattr(x, 'numpy'):
-        with context.eager_mode():
-            return x.__copy__().numpy()
-    elif isinstance(x, tf.TensorShape):
-        return np.array(copy.deepcopy(x.as_list()))
-    elif isinstance(x, (tf.Tensor, tf.Variable)):
-        return copy.deepcopy(x).value()
-    # elif isinstance(x, tf.Variable):
-    #     sess = tf.compat.v1.Session()
-    #     x = sess.run(x.value())
-    #     return x
-    # elif isinstance(x, ops.Tensor):
-    #     sess = tf.compat.v1.Session()
-    #     x= sess.run(x)
-    #     return x
-
-    elif isinstance(x, (list, tuple, int, float)):
-        return np.array(x)
-    else:
-        try:
-            x = tf.keras.backend.get_value(x)
-            if isinstance(x, np.ndarray):
-                return x
-        except:
-            raise ValueError("Unsupported type")
-
-
-def to_tensor(x, dtype=tf.float32,requires_grad=None) -> ops.Tensor:
-    if isinstance(x, int):
-        return tf.constant(value=x,dtype=tf.int32)
-    elif   isinstance(x, float):
-        return tf.constant(value=x,dtype=tf.float32)
-    else:
-        if requires_grad == False:
-            x =tf.stop_gradient(ops.convert_to_tensor_v2(x, dtype=dtype))
-        elif requires_grad == True:
-            x= ops.convert_to_tensor_v2(x, dtype=dtype)
-        else :
-            x =ops.convert_to_tensor_v2(x, dtype=dtype)
-        return x
 
 
 def get_flops(model):
@@ -216,12 +152,37 @@ class Layer(tf.Module):
 
         self.input_filters =None
         self.uuid=uuid.uuid4().node
+        prefix = self.__class__.__name__
+        self.defaultname = camel2snake(prefix) + '_' + str(get_uid(prefix))
+        self._name = kwargs.get('name',name)
+        # self.dump_patches = True
 
-        self._nodes = OrderedDict()
-        self._nodes[self.uuid]=self
+        self.uuid = uuid.uuid4().node
+
+        self._nodes = None
 
         self._device='/cpu:0' if gpus is None or len(gpus)==0 else gpus[0]
 
+
+    @property
+    def name(self):
+        return self._name if self._name is not None and len(self._name)>0 else self.defaultname
+
+    @name.setter
+    def name(self,value):
+        self._name=value
+
+
+    @property
+    def nodes(self):
+        return self._nodes
+
+    @nodes.setter
+    def nodes(self,value):
+        if self._nodes!=value:
+            self._nodes=value
+            for mod in self.modules():
+                mod._nodes=value
     # @property
     # def nodes(self):
     #     return self._nodes
@@ -344,7 +305,7 @@ class Layer(tf.Module):
             self._parameters[name] = None
         elif not isinstance(param, tf.Variable):
             raise TypeError("cannot assign '{}' object to parameter '{}' "
-                            "(torch.nn.Parameter or None required)"
+                            "(tf.Variable or None required)"
                             .format(type(param).__name__, name))
         else:
 
@@ -377,12 +338,17 @@ class Layer(tf.Module):
             # nodes = self._nodes.copy()
             # for k, v in module.nodes.items():
             #     nodes[k] = v
-
-            module._name=name
             self._modules[name] = module
+
+            self.nodes = OrderedDict([(mod.uuid, mod) for mod in list(self.modules()) if isinstance(mod, Layer)])
+            for mod in self.modules():
+                if isinstance(mod, Layer):
+                    mod.nodes = self.nodes
+
         elif inspect.isfunction(module) or callable(module):
             module.__name__=name
             self._modules[name] = module
+
         else:
             raise  ValueError('Not valid module')
 
@@ -695,13 +661,14 @@ class Layer(tf.Module):
                     continue
 
                 try:
+                    setattr(self, name,tf.Variable(to_numpy(input_param)))
+                    #param=input_param
 
-                    param.assign(tf.stop_gradient(input_param))
                 except Exception as ex:
                     error_msgs.append('While copying the parameter named "{}", '
                                       'whose dimensions in the model are {} and '
                                       'whose dimensions in the checkpoint are {}, '
-                                      'an exception occured : {}.'.format(key, param.size(), input_param.size(),
+                                      'an exception occured : {}.'.format(key, param.shape, input_param.shape,
                                                                           ex.args))
             elif strict:
                 missing_keys.append(key)
@@ -824,20 +791,27 @@ class Layer(tf.Module):
             self.build(self.input_shape)
 
         #don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
-        result = self.forward(*input, **kwargs)
-        result=unpack_singleton(result)
-        if hasattr(self,'keep_output') and self.keep_output==True:
-            self._output_tensor=result
-        if is_tensor(result) :
-            if self._output_shape is None:
-                self.output_shape=result.get_shape()[1:]
+        try:
+            result = self.forward(*input, **kwargs)
+            result = unpack_singleton(result)
+            if hasattr(self, 'keep_output') and self.keep_output == True:
+                self._output_tensor = result
+            if is_tensor(result):
+                if self._output_shape is None:
+                    self.output_shape = result.get_shape()[1:]
 
-        for hook in self._forward_hooks.values():
-            hook_result = hook(self, input, result)
-            if hook_result is not None:
-                result = hook_result
-                return result
-        return result
+            for hook in self._forward_hooks.values():
+                hook_result = hook(self, input, result)
+                if hook_result is not None:
+                    result = hook_result
+                    return result
+            return result
+        except Exception as e:
+            print('{0} ({1} call failed.)'.format(self.name,self.defaultname))
+            print(e)
+            raise e
+
+
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -881,7 +855,7 @@ class Layer(tf.Module):
         elif params is not None and name in params:
             if value is not None:
                 raise TypeError("cannot assign '{}' as parameter '{}' "
-                                "(torch.nn.Parameter or None expected)"
+                                "(tf.Variable or None expected)"
                                 .format(type(value).__name__, name))
             self.register_parameter(name, value)
         else:
@@ -1144,8 +1118,8 @@ class Layer(tf.Module):
             Module: self
         """
         self.training = mode
-        for module in self.submodules:
-            module.train(mode)
+        for module in self.modules():
+            module.training = mode
         return self
 
     def eval(self):
@@ -1312,24 +1286,17 @@ class Sequential(Layer):
 
     def __init__(self, *args,name=None):
         super(Sequential, self).__init__(name=name)
-        self._output_repository = OrderedDict()
-
+        self._built = False
         if len(args) == 1 and isinstance(args[0], OrderedDict):
             for key, module in args[0].items():
-                module._name = key
+                module.name = key
                 self.add_module(key, module)
         elif len(args) == 1 and isinstance(args[0], list):
             for idx, module in enumerate(args[0]):
-                if module.name is not None and len(module.name)>0:
-                    self.add_module('{0}'.format(idx), module)
-                else:
-                    self.add_module('{0}'.format(idx), module)
+                self.add_module(str(idx), module)
         else:
             for idx, module in enumerate(args):
-                if module.name is not None and len(module.name)>0:
-                    self.add_module('{0}'.format(idx), module)
-                else:
-                    self.add_module('{0}'.format(idx), module)
+                self.add_module(str(idx), module)
 
         # self.to(self.device)
 
@@ -1395,12 +1362,8 @@ class Sequential(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        for module in self._modules.value_list:
-            if 'ShortCut2d' in module.__class__.__name__ and hasattr(module,'output_idx') and module.output_idx is not None:
-                module.skip_tensor=self._output_repository.value_list[module.output_idx]
+        for module in self._modules.values():
             x = module(x)
-            if hasattr(module, 'keep_output') and module.keep_output == True:
-                self._output_repository[module.uuid] = x
         return x
 
 
@@ -1649,7 +1612,7 @@ def summary(model, input_size, batch_size=-1):
                 summary[m_key]["flops"] += (2*np.prod(np.array(summary[m_key]["weight"]).astype(np.float64))-1) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
                 summary[m_key]["macc"] += np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
 
-            if hasattr(module, "bias") and hasattr(module.bias, "shape"):
+            if hasattr(module, "bias") and module.bias is not None and hasattr(module.bias, "shape"):
                 params += np.prod(np.array(to_numpy(module.bias).shape))
                 summary[m_key]["bias"] =list(to_numpy(module.bias).shape)
                 summary[m_key]["flops"]+=np.prod(np.array(summary[m_key]["bias"]).astype(np.float64))*np.prod(np.array( summary[m_key]["output_shape"][2:]).astype(np.float64))
@@ -1668,10 +1631,10 @@ def summary(model, input_size, batch_size=-1):
         input_size = [input_size]
 
     if isinstance(input_size, int):
-        x = [ to_tensor(np.random.standard_normal((2, *input_size)).astype(np.float32))]
+        x = [ to_tensor(np.random.standard_normal((1, *input_size)).astype(np.float32))]
     else:
         # batch_size of 2 for batchnorm
-        x = [ to_tensor(np.random.standard_normal((2, *in_size)).astype(np.float32)) for in_size in input_size]
+        x = [ to_tensor(np.random.standard_normal((1, *in_size)).astype(np.float32)) for in_size in input_size]
     # p    rint(type(x[0]))
 
     # create properties
@@ -1697,7 +1660,7 @@ def summary(model, input_size, batch_size=-1):
     total_params = 0
     total_output = 0
     trainable_params = 0
-    flops=0
+    flops=np.array([0],dtype=np.float64)
     macc=0
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
@@ -1711,7 +1674,7 @@ def summary(model, input_size, batch_size=-1):
             summary[layer]["flops"][0]
         )
         total_params += summary[layer]["nb_params"]
-        flops+= float(summary[layer]["flops"][0])
+        flops+= float(summary[layer]["flops"])
         macc += float(summary[layer]["macc"][0])
         total_output += np.prod(to_numpy(summary[layer]["output_shape"]))
         if "trainable" in summary[layer]:
@@ -1720,9 +1683,9 @@ def summary(model, input_size, batch_size=-1):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = abs(np.prod(input_size) * batch_size * 4. / (1024 ** 2.))
-    total_output_size = abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
-    total_params_size = abs(total_params * 4. / (1024 ** 2.))
+    total_input_size = np.abs(np.prod(input_size) * batch_size * 4. / (1024 ** 2.))
+    total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
+    total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
 
     print("================================================================")
@@ -1730,7 +1693,7 @@ def summary(model, input_size, batch_size=-1):
     print("Trainable params: {0:,}".format(trainable_params))
     print("Non-trainable params: {0:,}".format(total_params - trainable_params))
     print("Total MACC: {0:,}".format(round(macc,0)))
-    print("Total FLOPs: {0:.5f} GFLOPs".format(round(flops / 10.**9, 5)))
+    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10.**9, 5)[0]))
     print("----------------------------------------------------------------")
     print("Input size (MB): %0.2f" % total_input_size)
     print("Forward/backward pass size (MB): %0.2f" % total_output_size)

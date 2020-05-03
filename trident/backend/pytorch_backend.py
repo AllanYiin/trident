@@ -942,15 +942,15 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             summary[m_key]["flops"]=np.array([0],dtype=np.float64)
             summary[m_key]["macc"] = np.array([0], dtype=np.float64)
             if hasattr(module, "weight") and hasattr(module.weight, "size"):
-                params += torch.prod(torch.LongTensor(list(module.weight.size())))
-                summary[m_key]["weight"] =list(module.weight.size())
+                params += torch.prod(torch.LongTensor(list(module.weight.shape)))
+                summary[m_key]["weight"] =list(module.weight.shape)
                 summary[m_key]["trainable"] = module.weight.requires_grad
                 summary[m_key]["flops"] += (2*np.prod(np.array(summary[m_key]["weight"]).astype(np.float64))-1) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
                 summary[m_key]["macc"] += np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
 
-            if hasattr(module, "bias") and hasattr(module.bias, "size"):
-                params += torch.prod(torch.LongTensor(list(module.bias.size())))
-                summary[m_key]["bias"] =list(module.bias.size())
+            if hasattr(module, "bias") and module.bias is not None and hasattr(module.bias, "size"):
+                params += torch.prod(torch.LongTensor(list(module.bias.shape)))
+                summary[m_key]["bias"] =list(module.bias.shape)
                 summary[m_key]["flops"]+=np.prod(np.array(summary[m_key]["bias"]).astype(np.float64))*np.prod(np.array( summary[m_key]["output_shape"][2:]).astype(np.float64))
             summary[m_key]["nb_params"] = params
 
@@ -977,10 +977,10 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         input_size = [input_size]
 
     if isinstance(input_size, int):
-        x = [torch.rand(2, input_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu")]
+        x = [torch.rand(1, input_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu")]
     else:
         # batch_size of 2 for batchnorm
-        x = [torch.rand(2, *in_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu") for in_size in input_size]
+        x = [torch.rand(1, *in_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu") for in_size in input_size]
     # p    rint(type(x[0]))
 
     # create properties
@@ -1005,7 +1005,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     total_params = 0
     total_output = 0
     trainable_params = 0
-    flops=0
+    flops=np.array([0],dtype=np.float64)
     macc=0
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
@@ -1019,7 +1019,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             summary[layer]["flops"][0]
         )
         total_params += summary[layer]["nb_params"]
-        flops+= float(summary[layer]["flops"][0])
+        flops+= float(summary[layer]["flops"])
         macc += float(summary[layer]["macc"][0])
         total_output += np.prod(summary[layer]["output_shape"])
         if "trainable" in summary[layer]:
@@ -1039,7 +1039,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     print("Trainable params: {0:,}".format(trainable_params))
     print("Non-trainable params: {0:,}".format(total_params - trainable_params))
     print("Total MACC: {0:,}".format(round(macc,0)))
-    print("Total FLOPs: {0:.5f} GFLOPs".format(round(flops / 10.**9, 5)))
+    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10.**9, 5)[0]))
     print("----------------------------------------------------------------")
     print("Input size (MB): %0.2f" % total_input_size)
     print("Forward/backward pass size (MB): %0.2f" % total_output_size)
