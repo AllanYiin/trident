@@ -12,17 +12,11 @@ from functools import wraps
 from itertools import repeat
 
 import tensorflow as tf
-from tensorflow.keras import backend as K
-from tensorflow.python.client import device_lib
-from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras.engine.input_spec import InputSpec
-from tensorflow.python.keras.utils import conv_utils
-from tensorflow.python.ops import nn_ops
 
 from ..backend.common import *
 from ..backend.tensorflow_backend import *
 from ..data.image_common import *
-from ..data.utils import download_file_from_google_drive
+from ..data.utils import download_model_from_google_drive,download_file_from_google_drive,unpickle
 from ..layers.tensorflow_activations import get_activation, Identity, Relu
 from ..layers.tensorflow_blocks import *
 from ..layers.tensorflow_layers import *
@@ -30,9 +24,7 @@ from ..layers.tensorflow_normalizations import get_normalization, BatchNorm
 from ..layers.tensorflow_pooling import get_pooling, GlobalAvgPool2d, MaxPool2d
 from ..optims.tensorflow_trainer import *
 
-__all__ = ['basic_block','bottleneck', 'ResNet','ResNet50',]
-
-USE_V2_BEHAVIOR=False
+__all__ = ['basic_block','bottleneck', 'ResNet','ResNet50','ResNet101','ResNet152']
 
 _session = get_session()
 _epsilon=_session.epsilon
@@ -49,30 +41,34 @@ if not os.path.exists(dirname):
         pass
 
 model_urls = {
-    'resnet50': '1dYlgpFtqi87KDG54_db4ALWKLARxCWMS',
     'resnet101': '17moUOsGynsWALLHyv3yprHWbbDMrdiOP',
     'resnet152': '1BIaHb7_qunUVvt4TDAwonSKI2jYg4Ybj',
 }
 
-
-def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortcut=False,name=''):
+def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortcut=False,use_bias=True,name=None):
     shortcut = Identity()
     if strides>1 or conv_shortcut is True:
-        shortcut =Conv2d_Block((1,1),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,name=name + '_downsample')
+        shortcut =Conv2d_Block((1,1),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_downsample')
 
-    return ShortCut2d(Sequential(Conv2d_Block((3,3),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',name=name + '_0_conv'),
-                                 Conv2d_Block((3,3),num_filters=num_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,name=name + '_1_conv')),
-                      shortcut,activation='relu')
+    return ShortCut2d(Sequential(Conv2d_Block((3,3),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias,name=name + '_0_conv'),
+                                 Conv2d_Block((3,3),num_filters=num_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_1_conv')),
+                      shortcut,activation='relu',name=name)
 
-def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=False,name=''):
+def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=True,name=None):
     #width = int(num_filters * (base_width / 64.)) * 1#groups'
     shortcut = Identity()
-    if strides>1 or conv_shortcut is True:
-        shortcut =Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_downsample')
-    return ShortCut2d(Sequential(Conv2d_Block((1,1),num_filters=num_filters ,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias,name=name + '_0_conv'),
-                                 Conv2d_Block((3, 3), num_filters=num_filters , strides=1, auto_pad=True,padding_mode='zero',normalization='batch', activation='relu',use_bias=use_bias,name=name + '_1_conv'),
-                                 Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_2_conv')),
-                      shortcut,activation='relu')
+    shortcut_name='0'
+    if conv_shortcut is True:
+        shortcut =Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias)
+        shortcut_name = '0'
+
+    return ShortCut2d({shortcut_name:shortcut,
+        '1':Sequential(Conv2d_Block((1,1),num_filters=num_filters ,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias),
+                                 Conv2d_Block((3, 3), num_filters=num_filters , strides=1, auto_pad=True,padding_mode='zero',normalization='batch', activation='relu',use_bias=use_bias,name=name),
+                                 Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name)),
+                     },activation='relu',name=name)
+
+
 
 def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=True, zero_init_residual=False,
            width_per_group=64, replace_stride_with_dilation=None, include_top=True, model_name='',
@@ -135,43 +131,50 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=T
     #                      ' as true, `classes` should be 1000')
 
     def _make_layer(block, num_filters, blocklayers, strides=1, dilate=False,use_bias=use_bias,layer_name=''):
-        conv_shortcut=False
-        if strides!=1 or block is bottleneck:
-            conv_shortcut=True
-
-        layers = []
-        layers.append(block(num_filters=num_filters, strides=strides, expansion = 4, conv_shortcut=conv_shortcut,use_bias=use_bias, name=layer_name+'.0'))
+        layers = OrderedDict()
+        layers['0']=block(num_filters=num_filters, strides=strides, expansion = 4, conv_shortcut=True,use_bias=use_bias, name=layer_name+'1')
 
         for k in range(1, blocklayers):
-            layers.append(block(num_filters=num_filters,  strides=1, expansion = 4, conv_shortcut=False, use_bias=use_bias,name=layer_name+'.{0}'.format(k)))
+            layers['{0}'.format(k)]=block(num_filters=num_filters,  strides=1, expansion = 4, conv_shortcut=False, use_bias=use_bias,name=layer_name+'{0}'.format(k+1))
 
-        layers_block=Sequential(*layers)
-        return layers_block
+        laters_block=Sequential(layers)
+        laters_block._name=layer_name
+        return laters_block
 
     flow_list=[]
-    resnet = Sequential(name=model_name)
-    resnet.add(Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',name='first_block'))
-    resnet.add(MaxPool2d((3,3),strides=2,auto_pad=True,padding_mode='zero',name='maxpool'))
-    resnet.add(_make_layer(block, 64, layers[0],strides=1, dilate=None,use_bias=use_bias,layer_name='layer1' ))
-    resnet.add(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='layer2' ))
-    resnet.add(_make_layer(block, 256, layers[2], strides=2, dilate=None,use_bias=use_bias,layer_name='layer3' ))
-    resnet.add(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='layer4' ))
-    resnet.add(GlobalAvgPool2d(name='avg_pool'))
+    resnet = Sequential()
+    resnet.add_module('conv1',Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',name='first_block'))
+    resnet.add_module('maxpool',(MaxPool2d((3,3),strides=2,auto_pad=True,padding_mode='zero')))
+    resnet.add_module('conv2_block',(_make_layer(block, 64, layers[0],strides=1, dilate=None,use_bias=use_bias,layer_name='conv2_block' )))
+    resnet.add_module('conv3_block',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='conv3_block' )))
+    resnet.add_module('conv4_block',(_make_layer(block, 256, layers[2], strides=2, dilate=None,use_bias=use_bias,layer_name='conv4_block' )))
+    resnet.add_module('conv5_block' ,(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='conv5_block' )))
+    resnet.add_module('avg_pool',GlobalAvgPool2d(name='avg_pool'))
     if include_top:
-        resnet.add(Dense(num_classes,activation='softmax',name='fc1000'))
-    for layer in resnet.layers:
-        if layer is BatchNorm:
-            layer._USE_V2_BEHAVIOR = False
-
+        resnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
+        resnet.add_module('softmax', SoftMax(name='softmax'))
+    resnet._name=model_name
     model=ImageClassificationModel(input_shape=input_shape,output=resnet)
+    model.signature = get_signature(model.model.forward)
 
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names=labels
-    model.preprocess_flow=[resize((input_shape[1],input_shape[0]),keep_aspect=True),channel_reverse(),normalize([103.939, 116.779, 123.68],[1,1,1])]
+    model.preprocess_flow=[resize((input_shape[0],input_shape[1]),keep_aspect=True), to_bgr(), normalize([103.939, 116.779, 123.68], [1, 1, 1])]
     #model.summary()
     return model
 
+#
+# def ResNet18(include_top=True,
+#              weights='imagenet',
+#              input_shape=None,
+#              classes=1000,
+#              **kwargs):
+#     if input_shape is not None and len(input_shape)==3:
+#         input_shape=tuple(input_shape)
+#     else:
+#         input_shape=(3, 224, 224)
+#     resnet18 = ResNet(basic_block, [2, 2, 2, 2], input_shape, model_name='resnet18')
 
 def ResNet50(include_top=True,
              pretrained=True,
@@ -183,19 +186,83 @@ def ResNet50(include_top=True,
     else:
         input_shape=(224, 224,3)
     resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
-    # if pretrained==True:
-    #     download_file_from_google_drive(model_urls['resnet50'],dirname,'resnet50.pth')
-    #     recovery_model=torch.load(os.path.join(dirname,'resnet50.pth'))
-    #     recovery_model.to(_device)
-    #     if include_top==False:
-    #         recovery_model.__delitem__(-1)
-    #     else:
-    #         if classes!=1000:
-    #
-    #             new_fc = Dense(classes, activation='softmax', name='fc')
-    #             new_fc.input_shape=recovery_model.fc.input_shape
-    #             recovery_model.fc=new_fc
-    #
-    #
-    #     resnet50.model=recovery_model
+    if pretrained==True:
+        download_model_from_google_drive('1V5VzPRzEq92vEr8pJJ5n9-PxcxJqI4Gr',dirname,'resnet50.pkl')
+        recovery_model=unpickle(os.path.join(dirname,'resnet50.pkl'))
+        recovery_model.eval()
+
+        if include_top==False:
+            recovery_model.__delitem__(-1)
+        else:
+            if classes!=1000:
+
+                new_fc = Dense(classes, activation=None, name='fc')
+                new_fc.input_shape=recovery_model.fc.input_shape
+                recovery_model.fc=new_fc
+
+
+        resnet50.model=recovery_model
+        resnet50.rebinding_input_output(input_shape)
+        resnet50.signature = get_signature(resnet50.model.forward)
     return resnet50
+
+def ResNet101(include_top=True,
+             pretrained=True,
+             input_shape=None,
+             classes=1000,
+             **kwargs):
+    if input_shape is not None and len(input_shape)==3:
+        input_shape=tuple(input_shape)
+    else:
+        input_shape=(224, 224,3)
+    resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
+    if pretrained==True:
+        download_model_from_google_drive(model_urls['resnet101'],dirname,'resnet101.pkl')
+        recovery_model=unpickle(os.path.join(dirname,'resnet101.pkl'))
+        recovery_model.eval()
+        if include_top == False:
+            recovery_model.__delitem__(-1)
+        else:
+            if classes != 1000:
+                recovery_model.fc = Dense(classes, activation=None, name='fc')
+
+        resnet101.model=recovery_model
+        resnet101.rebinding_input_output(input_shape)
+        resnet101.signature = get_signature(resnet101.model.forward)
+    return resnet101
+
+
+def ResNet152(include_top=True,
+             pretrained=True,
+             input_shape=None,
+             classes=1000,
+             **kwargs):
+    if input_shape is not None and len(input_shape)==3:
+        input_shape=tuple(input_shape)
+    else:
+        input_shape=(224, 224,3)
+    resnet152 =ResNet(bottleneck, [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
+    if pretrained==True:
+        download_model_from_google_drive(model_urls['resnet152'],dirname,'resnet152.pth')
+        recovery_model=unpickle(os.path.join(dirname,'resnet152.pth'))
+        recovery_model.eval()
+
+        if include_top == False:
+            recovery_model.__delitem__(-1)
+        else:
+            if classes != 1000:
+                recovery_model.fc = Dense(classes, activation=None, name='fc')
+
+        resnet152.model=recovery_model
+        resnet152.rebinding_input_output(input_shape)
+        resnet152.signature = get_signature(resnet152.model.forward)
+    return resnet152
+
+
+#
+#
+# resnet34=ResNet(basic_block, [3, 4, 6, 3], (3, 224, 224))
+# resnet50=ResNet(bottleneck, [3, 4, 6, 3], (3, 224, 224))
+# resnet101=ResNet(bottleneck, [3, 4, 23, 3], (3, 224, 224))
+# resnet152=ResNet(bottleneck, [3, 8, 36, 3], (3, 224, 224))
+

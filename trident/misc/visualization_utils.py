@@ -1,5 +1,9 @@
-from .ipython_utils import is_in_ipython, is_in_colab
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
+from trident.misc.ipython_utils import is_in_ipython, is_in_colab
+import math
 if is_in_ipython():
     from IPython import display
 
@@ -9,18 +13,64 @@ if not is_in_colab:
 else:
     import matplotlib
 
-
-
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
+import matplotlib.patches as patches
+import matplotlib.font_manager
+fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+names = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
 
+if  'Microsoft YaHei' in names:
+    matplotlib.rc('font', family='Microsoft YaHei')
+
+
+import PIL
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
+
+import colorsys
 import itertools
 import numpy as np
 from ..backend.common import get_time_suffix,make_dir_if_need
 from ..data.image_common import *
 
 
-__all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram']
+__all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram','generate_palette','plot_bbox']
+
+
+def generate_palette(num_classes):
+    hsv_tuples = [(x / num_classes, 1., 1.) for x in range(num_classes)]
+    colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
+    colors = list(map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)), colors))
+    return colors
+
+
+
+def plot_bbox(x, img, color=None, label=None, line_thickness=None):
+    img_shape = img.shape
+    tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
+    img = array2image(img)
+    draw = ImageDraw.Draw(img)
+    draw.rectangle(((x[0], x[1]), (x[2], x[3])), outline=color, width=tl)
+
+    fontcolor = (255, 255, 255)
+    avg_color = np.array(list(color)).mean()
+    if avg_color > 150:
+        fontcolor = (0, 0, 0)
+    if label:
+        font = ImageFont.truetype(fonts[names.index('Microsoft YaHei')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+        tf = max(tl - 1, 1)  # font thickness
+        size = draw.textsize(label, font=font)
+        offset = font.getoffset(label)
+        draw.rectangle(((x[0], x[1] - size[1] - 2*(offset[1]+1)), (x[0] + 2*(size[0] + offset[0] + 1), x[1])), fill=color,
+                       width=2)
+        draw.text((x[0] + 2, x[1] - size[1] - offset[1]- 1), u'{0}'.format(label), fill=fontcolor, font=font)
+
+    rgb_image = image2array(img)
+    return rgb_image
+
+
 
 
 def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):

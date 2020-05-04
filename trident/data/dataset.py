@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import hashlib
 import itertools
 import os
@@ -13,7 +17,7 @@ from typing import List, TypeVar, Iterable, Tuple, Union
 import numpy as np
 from skimage import color
 
-from .bbox_common import xywh_to_xyxy, xyxy_to_xywh
+from .bbox_common import xywh2xyxy, xyxy2xywh
 from .image_common import gray_scale, image2array, mask2array, image_backend_adaptive, reverse_image_backend_adaptive, \
     unnormalize, array2image, ExpectDataType, GetImageMode
 from .label_common import label_backend_adaptive
@@ -31,7 +35,7 @@ if get_backend() == 'pytorch':
     from ..backend.pytorch_backend import to_numpy, to_tensor, ReplayBuffer
     import torch
 
-__all__ = ['Dataset', 'ImageDataset', 'MaskDataset', 'LabelDataset', 'BboxDataset', 'SsdBboxDataset', 'Iterator',
+__all__ = ['Dataset', 'ImageDataset', 'MaskDataset', 'LabelDataset', 'BboxDataset', 'MultipleDataset', 'Iterator',
            'NumpyDataset', 'RandomNoiseDataset']
 
 T = TypeVar('T', int, float, str, np.ndarray)
@@ -55,6 +59,39 @@ class Dataset(List):
     def __len__(self):
         return super().__len__()
 
+
+
+class MultipleDataset(List):
+    def __init__(self, datasets,symbol=None, expect_data_type=None, name=''):
+        super().__init__()
+        self.parameter = None
+        self.name = name
+        self.symbol = symbol
+        self.is_pair_process = False
+        self.expect_data_type = expect_data_type
+        for d in datasets:
+            self.__add__(d)
+
+    def __add__(self, other):
+        if super().__len__()==0 and isinstance(other,Dataset):
+            super().append(other)
+        elif isinstance(other,Dataset):
+            if len(super().__getitem__(0))==len(other):
+                super().append(other)
+            else:
+                raise ValueError('the dataset you add does not have same length with the existing dataset')
+
+    def add(self,other):
+        self.__add__(other)
+
+    def __getitem__(self, index: int):
+        results=[]
+        for i in range(super().__len__()):
+            results.append(super().__getitem__(i).__getitem__(index) )
+        return tuple(results)
+
+    def __len__(self):
+        return len(super().__getitem__(0))
 
 class ImageDataset(Dataset):
     def __init__(self, images=None, expect_data_type: ExpectDataType = ExpectDataType.rgb,
@@ -342,133 +379,6 @@ class BboxDataset(Dataset):
         return bbox
 
 
-class SsdBboxDataset(BboxDataset):
-    def __init__(self, boxes=None, image_size=None, priors=None, center_variance=0.1, size_variance=0.2,
-                 gt_overlap_tolerance=0.5, expect_data_type=ExpectDataType.absolute_bbox, class_names=None,
-                 symbol='bbox', name=''):
-        super().__init__(boxes=boxes, image_size=image_size, expect_data_type=expect_data_type, class_names=class_names,
-                         symbol=symbol, name=name)
-        self.priors = priors
-        self.center_variance = center_variance
-        self.size_variance = size_variance
-        self.label_transform_funcs = []
-        self.gt_overlap_tolerance = gt_overlap_tolerance
-        self.bbox_post_transform_funcs = []
-
-    def area_of(self, left_top, right_bottom):
-        """Compute the areas of rectangles given two corners.
-
-        Args:
-            left_top (N, 2): left top corner.
-            right_bottom (N, 2): right bottom corner.
-
-        Returns:
-            area (N): return the area.
-        """
-        hw = np.clip(right_bottom - left_top, 0.0, None)
-        return hw[..., 0] * hw[..., 1]
-
-    def iou_of(self, boxes0, boxes1, eps=1e-5):
-        """Return intersection-over-union (Jaccard index) of boxes.
-
-        Args:
-            boxes0 (N, 4): ground truth boxes.
-            boxes1 (N or 1, 4): predicted boxes.
-            eps: a small number to avoid 0 as denominator.
-        Returns:
-            iou (N): IoU values.
-        """
-        overlap_left_top = np.maximum(boxes0[..., :2], boxes1[..., :2])
-        overlap_right_bottom = np.minimum(boxes0[..., 2:], boxes1[..., 2:])
-
-        overlap_area = self.area_of(overlap_left_top, overlap_right_bottom)
-        area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:])
-        area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
-        return overlap_area / (area0 + area1 - overlap_area + eps)
-
-    def convert_boxes_to_locations(self, center_form_boxes, center_form_priors):
-        if len(center_form_priors.shape) + 1 == len(center_form_boxes.shape):
-            center_form_priors = np.expand_dims(center_form_priors, 0)
-        return np.concatenate([(center_form_boxes[..., :2] - center_form_priors[..., :2]) / center_form_priors[...,
-                                                                                            2:] / self.center_variance,
-                               np.log(center_form_boxes[..., 2:] / center_form_priors[..., 2:]) / self.size_variance],
-                              axis=len(center_form_boxes.shape) - 1)
-
-    def assign_priors(self, gt_boxes, gt_labels, center_form_priors, iou_threshold):
-        # """Assign ground truth boxes and targets to priors.
-        #
-        # Args:
-        #     gt_boxes (num_targets, 4): ground truth boxes.
-        #     gt_labels (num_targets): labels of targets.
-        #     priors (num_priors, 4): corner form priors
-        # Returns:
-        #     boxes (num_priors, 4): real values for priors.
-        #     labels (num_priros): labels for priors.
-        # """
-        # # size: num_priors x num_targets
-        # # if gt_boxes is not None :
-        #
-        # ious = self.iou_of(gt_boxes.unsqueeze(0), corner_form_priors.unsqueeze(1))
-        # # size: num_priors
-        # best_target_per_prior, best_target_per_prior_index = ious.max(1)
-        # # size: num_targets
-        # best_prior_per_target, best_prior_per_target_index = ious.max(0)
-        #
-        # for target_index, prior_index in enumerate(best_prior_per_target_index):
-        #     best_target_per_prior_index[prior_index] = target_index
-        # # 2.0 is used to make sure every target has a prior assigned
-        # best_target_per_prior.index_fill_(0, best_prior_per_target_index, 2)
-        # # size: num_priors
-        # labels = gt_labels[best_target_per_prior_index]
-        # labels[best_target_per_prior < iou_threshold] = 0  # the backgournd id
-        # boxes = gt_boxes[best_target_per_prior_index]
-        # return boxes, labels
-        corner_form_priors = xywh_to_xyxy(center_form_priors)
-        ious = self.iou_of(np.expand_dims(gt_boxes, 0), np.expand_dims(corner_form_priors, 1))
-        # size: num_priors
-        best_target_per_prior, best_target_per_prior_index = np.max(ious, axis=1), np.argmax(ious, axis=1)
-        # size: num_targets
-        best_prior_per_target, best_prior_per_target_index = np.max(ious, axis=0), np.argmax(ious, axis=0)
-        for target_index, prior_index in enumerate(best_prior_per_target_index):
-            best_target_per_prior_index[prior_index] = target_index
-        # 2.0 is used to make sure every target has a prior assigned
-        best_prior_per_target_index_list = best_prior_per_target_index.tolist()
-        for i in range(best_target_per_prior.shape[0]):
-            if i in best_prior_per_target_index_list:
-                best_target_per_prior[i] = 2
-        labels = gt_labels[best_target_per_prior_index]
-        labels[best_target_per_prior < iou_threshold] = 0  # the backgournd id
-        boxes = gt_boxes[best_target_per_prior_index]
-        return boxes, labels
-
-    def binding_class_names(self, class_names=None, language=None):
-        if class_names is not None and hasattr(class_names, '__len__'):
-            if language is None:
-                language = 'en-us'
-            self.class_names[language] = list(class_names)
-            self.__default_language__ = language
-            self._lab2idx = {v: k for k, v in enumerate(self.class_names[language])}
-            self._idx2lab = {k: v for k, v in enumerate(self.class_names[language])}
-
-    def bbox_transform(self, bbox):
-        if bbox is None or len(bbox) == 0:
-            return np.zeros((self.priors.shape[0], 4)).astype(np.float32), np.zeros((self.priors.shape[0])).astype(
-                np.int64)
-        elif isinstance(bbox, np.ndarray):
-            height, width = self.image_size
-            bbox[:, 0] = bbox[:, 0] / width
-            bbox[:, 2] = bbox[:, 2] / width
-            bbox[:, 1] = bbox[:, 1] / height
-            bbox[:, 3] = bbox[:, 3] / height
-            if bbox.shape[-1] == 5:
-                gt_box = bbox[:, :4]
-                gt_label = bbox[:, 4]
-                boxes, labels = self.assign_priors(gt_box, gt_label, to_numpy(self.priors), 0.3)
-                boxes = xyxy_to_xywh(boxes)
-                locations = self.convert_boxes_to_locations(boxes, self.priors)
-                return boxes.astype(np.float32), labels.astype(np.int64)
-            else:
-                return bbox
 
 
 class NumpyDataset(Dataset):
@@ -511,13 +421,11 @@ class Iterator(object):
         self._unpair = NumpyDataset()
         self.workers = 2
         self.itr = 0
-        if data is not None and isinstance(data, Dataset):
+        if data is not None and isinstance(data, (Dataset,MultipleDataset)):
             self._data = data
-        if label is not None and isinstance(label, Dataset):
+        if label is not None and isinstance(label, (Dataset,MultipleDataset)):
             self._label = label
-            if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data,
-                                                                                                ImageDataset) and len(
-                self._label) == len(self._data):
+            if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset,MultipleDataset)) and isinstance(self._data, ImageDataset) and len( self._label) == len(self._data):
                 self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = True
             else:
                 self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = False
@@ -606,7 +514,7 @@ class Iterator(object):
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
         elif len(self.signature.key_list) != len(arg_names):
-            raise ValueError('data deed and arg_names should be the same length')
+            raise ValueError('data feed and arg_names should be the same length')
         else:
             self.signature = OrderedDict()
             iterdata = self.next()
@@ -646,6 +554,7 @@ class Iterator(object):
             # stop = time.time()
             # print('get data:{0}'.format(stop - start))
             # start=stop
+
             label = self.label.__getitem__(index % len(self.label)) if len(self.label) > 0 else None
             # stop = time.time()
             # print('get label:{0}'.format(stop - start))
@@ -708,7 +617,7 @@ class Iterator(object):
                     self.signature['mask' if self.label.symbol is None or len(
                         self.label.symbol) == 0 else self.label.symbol] = mask.shape
                 if label is not None:
-                    self.signature['label' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] = label.shape if isinstance(label, np.ndarray) else type(label)
+                    self.signature['label' if self.label.symbol is None or len(self.label.symbol) == 0 or self.label.symbol in self.signature else self.label.symbol] = label.shape if isinstance(label, np.ndarray) else type(label)
                 if unpair is not None:
                     self.signature['unpair' if self.unpair.symbol is None or len(
                         self.unpair.symbol) == 0 else self.unpair.symbol] = unpair.shape  # stop = time.time()  #
@@ -716,12 +625,12 @@ class Iterator(object):
 
             if data is not None:
                 return_data.append(data)
-            if label is not None:
-                return_data.append(label)
             if bbox is not None:
                 return_data.append(bbox)
             if mask is not None:
                 return_data.append(mask)
+            if label is not None:
+                return_data.append(label)
             if unpair is not None:
                 return_data.append(unpair)
             # stop = time.time()

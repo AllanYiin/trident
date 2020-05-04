@@ -27,7 +27,7 @@ from trident.backend.pytorch_backend import  Layer, Sequential
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'GcdConv2d_Block',
-           'TransConv2d_Block', 'GcdConv2d_Block_1', 'Classifier1d', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite','For']
+           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite','For']
 
 _session = get_session()
 
@@ -125,9 +125,21 @@ class Conv2d_Block(Layer):
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
-        self.auto_pad = auto_pad
-        self.padding = 0
+
         self.padding_mode = padding_mode
+        padding = kwargs.get('padding', None)
+        if 'padding' in kwargs:
+            kwargs.pop('padding')
+        if isinstance(padding, str) and auto_pad == False:
+            auto_pad = (padding.lower() == 'same')
+        elif isinstance(padding, int) and padding > 0:
+            padding = _pair(padding)
+            auto_pad = False
+        elif isinstance(padding, tuple):
+            auto_pad = False
+            pass
+        self.auto_pad=auto_pad
+        self.padding=padding
         # if self.auto_pad == False:
         #     self.padding = 0
         # else:
@@ -151,10 +163,12 @@ class Conv2d_Block(Layer):
             norm=None
 
 
-        self.conv = Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+        self.add_module('conv',Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
                           auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                          depth_multiplier=self.depth_multiplier, **kwargs).to(self.device)
+                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                          depth_multiplier=self.depth_multiplier,padding=self.padding, **kwargs).to(self.device))
+        if self.use_spectral:
+            self.conv=SpectralNorm(self.conv)
 
         self.norm = norm
         self.activation = get_activation(activation)
@@ -182,7 +196,7 @@ class Conv2d_Block(Layer):
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
-        if self.dropout_rate > 0 :
+        if self.training and self.dropout_rate > 0 :
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
@@ -479,74 +493,6 @@ class GcdConv2d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-class GcdConv2d_Block_1(Layer):
-    def __init__(self, kernel_size=(3, 3), num_filters=32, strides=1, auto_pad=True, divisor_rank=0, activation='relu6',
-                 normalization=None, self_norm=True, is_shuffle=False, init=None, use_bias=False, init_bias=0,
-                 dilation=1, groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, weights_contraint=None,name=None,**kwargs):
-        super(GcdConv2d_Block_1, self).__init__(name=name)
-        self.kernel_size = kernel_size
-        self.num_filters = num_filters
-        self.strides = _pair(strides)
-        self.auto_pad = auto_pad
-
-        self.init = init
-        self.use_bias = use_bias
-        self.init_bias = init_bias
-        self.dilation = dilation
-        self.groups = groups
-        self.weights_contraint = weights_contraint
-        self.add_noise = add_noise
-        self.noise_intensity = noise_intensity
-        self.dropout_rate = dropout_rate
-        self.activation = get_activation(activation)
-        self.self_norm = self_norm
-        self.is_shuffle = is_shuffle
-        self.norm = get_normalization(normalization)
-        self.normalization = normalization
-        self.conv = None
-        self.droupout = None
-        self.divisor_rank = divisor_rank
-
-    def build(self, input_shape):
-        if self._built == False or self.conv is None:
-
-            conv = GcdConv2d_1(self.kernel_size, input_filters=self.input_filters, num_filters=self.num_filters,
-                               strides=self.strides, auto_pad=self.auto_pad, activation=None, init=None,
-                               use_bias=self.use_bias, init_bias=0, divisor_rank=self.divisor_rank,
-                               self_norm=self.self_norm, is_shuffle=self.is_shuffle, dilation=self.dilation).to(
-                self.device)
-            conv.input_shape = input_shape
-            self._modules['conv'] = conv
-            self.conv = conv
-            output_shape = self._input_shape.clone().tolist()
-            output_shape[0] = self.num_filters
-            if self.norm != None:
-                self.norm.input_shape = output_shape
-            self._built = True
-            self.to(self.device)
-
-    def forward(self, *x):
-        x = enforce_singleton(x)
-        if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
-            x = x + noise
-        x = self.conv(x)
-
-        if self.normalization is not None:
-            x = self.norm(x)
-
-        if self.activation is not None:
-            x = self.activation(x)
-        if self.dropout_rate > 0:
-            x = F.dropout(x, p=self.dropout_rate, training=self.training)
-
-        return x
-
-    def extra_repr(self):
-        s = ('kernel_size={kernel_size}, {num_filters}, strides={strides},activation={activation} ')
-
-        return s.format(**self.__dict__)
-
 
 
 
@@ -726,13 +672,12 @@ class ShortCut2d(Layer):
                             self.add_module(str(k), v)
                 elif isinstance(arg,  (dict,OrderedDict)) and len(args) > 1:
                     raise ValueError('more than one dict argument is not support.')
-                elif isinstance(arg, torch.Tensor):
-                    self.skip_tensor=arg
+
                 elif isinstance(arg, Identity):
                     self.has_identity = True
                     self.add_module('Identity', arg)
                 elif isinstance(arg, nn.Module):
-                    if len(arg.name)>0 and arg.name!=arg.defaultname:
+                    if len(arg.name)>0 and arg.name!=arg.default_name:
                         self.add_module(arg.name, arg)
                     else:
                         self.add_module('branch{0}'.format(i + 1), arg)

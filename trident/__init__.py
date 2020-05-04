@@ -11,10 +11,8 @@ if sys.getdefaultencoding() != defaultencoding:
 
 
 
-__version__ = '0.5.2'
+__version__ = '0.5.4'
 stderr.write('trident {0}\n'.format(__version__))
-
-
 
 from . import backend
 from .backend import *

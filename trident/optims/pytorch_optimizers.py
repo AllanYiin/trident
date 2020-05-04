@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import itertools as it
 import math
 import os
@@ -17,11 +21,11 @@ import torch.utils.hooks as hooks
 from torch.autograd import Variable
 from torch.optim.optimizer import Optimizer
 
-from ..backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
+from trident.backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
     snake2camel, camel2snake
-from ..backend.pytorch_backend import *
-from ..backend.pytorch_ops import *
-from ..backend.optimizer import OptimizerBase
+from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_ops import *
+from trident.backend.optimizer import OptimizerBase
 
 __all__ = ['Adam','SGD','LBFGS','Adadelta','Adagrad','RMSprop','RAdam','PlainRAdam','AdamW','Lookahead','Ranger','get_optimizer']
 

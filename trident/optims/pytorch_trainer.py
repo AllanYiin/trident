@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import copy
 import inspect
 import os
@@ -13,18 +17,19 @@ import numpy as np
 import torch
 import torch.nn as nn
 
+from trident import __version__
 from .pytorch_constraints import get_constraint
 from .pytorch_losses import get_loss
-from .pytorch_metrics import get_metric
-from .pytorch_optimizers import get_optimizer
-from .pytorch_regularizers import get_reg
-from .trainers import ModelBase, progress_bar
-from ..backend.common import *
-from ..backend.pytorch_backend import *
-from ..layers.pytorch_layers import *
-from ..backend.pytorch_ops import *
-from ..callbacks.lr_schedulers import get_lr_scheduler
-from ..data.image_common import *
+from trident.optims.pytorch_metrics import get_metric
+from trident.optims.pytorch_optimizers import get_optimizer
+from trident.optims.pytorch_regularizers import get_reg
+from trident.optims.trainers import ModelBase, progress_bar
+from trident.backend.common import *
+from trident.backend.pytorch_backend import *
+from trident.layers.pytorch_layers import *
+from trident.backend.pytorch_ops import *
+from trident.callbacks.lr_schedulers import get_lr_scheduler
+from trident.data.image_common import *
 from ..misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from ..backend.optimizer import OptimizerBase
 
@@ -120,7 +125,7 @@ class Model(ModelBase):
                 else:
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = to_list(out[i].size())[1:]
-                    self._targets['target_{0}'.format(i)] = to_list(out[i].size())[1:]
+                        self._targets['target_{0}'.format(i)] = to_list(out[i].size())[1:]
 
 
 
@@ -716,7 +721,13 @@ class Model(ModelBase):
             save_path=self.get_save_path(save_path,default_folder='Models',default_file_name= '{0}_epoch{1}.pth.tar_'.format(self._model.name,self.training_context['current_epoch']))
             self._model.eval()
 
-            torch.save({'state_dict': self._model.state_dict()}, save_path)
+            torch.save({
+                'state_dict': self._model.state_dict(),
+                'backend':'pytorch',
+                'trident_version':__version__,
+                'pytorch_version':torch.__version__,
+                'signature':self.signature
+            }, save_path)
             self._model.train()
             shutil.copy(save_path, save_path.replace('.pth.tar_','.pth.tar'))
 

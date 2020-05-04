@@ -1,9 +1,14 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+import inspect
 import tensorflow as tf
 
-from ..backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
+from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
     format_time, get_terminal_size, snake2camel, camel2snake
-from ..backend.tensorflow_backend import Layer, Sequential,to_tensor
-from ..backend.tensorflow_ops import *
+from trident.backend.tensorflow_backend import Layer, Sequential
+from trident.backend.tensorflow_ops import *
+
 __all__ = ['BatchNorm','BatchNorm2d','BatchNorm3d','get_normalization']
 
 _session = get_session()
@@ -38,7 +43,7 @@ class BatchNorm(Layer):
         else:
             raise TypeError('Expected an int or a list/tuple of ints for the '
                             'argument \'axis\', but received: %r' % axis)
-        self.eps = _epsilon
+        self.eps = eps
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
@@ -412,15 +417,21 @@ BatchNorm3d=BatchNorm
 def get_normalization(fn_name):
     if fn_name is None:
         return None
-    if isinstance(fn_name, str):
+    elif isinstance(fn_name,Layer) and 'Norm' in fn_name.__class__.__name__:
+        return fn_name
+    elif inspect.isclass(fn_name):
+        return fn_name
+    elif isinstance(fn_name, str):
         if fn_name.lower().strip() in ['instance','in','i']:
             return None
             #return InstanceNorm()
-        elif  fn_name.lower().strip() in ['batch','b']:
-            return BatchNorm()
+        elif fn_name.lower().strip() in ['batch_norm', 'batch', 'bn', 'b']:
+            return BatchNorm2d()
         elif  fn_name.lower().strip() in ['group','g']:
             return None
             #return GroupNorm(num_groups=16)
+    elif inspect.isclass(fn_name):
+        return fn_name
     fn_modules = ['trident.layers.tensorflow_normalizations']
     normalization_fn_ = get_class(fn_name, fn_modules)
     normalization_fn = normalization_fn_

@@ -24,6 +24,7 @@ import numpy as np
 import six
 import torch
 import torch.nn as nn
+from torch.nn.parameter import Parameter
 import torch.onnx
 import torchvision
 from torch._six import container_abcs
@@ -31,7 +32,7 @@ from torch._six import container_abcs
 from trident.backend.common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, get_signature,get_session,set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','get_uid','print_network','plot_tensor_grid','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call']
+__all__ = ['get_device','set_device','print_network','plot_tensor_grid','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -82,19 +83,38 @@ def load(path):
         item.to(_device)
     return item
 
+def save(obj,path,is_compressed=False):
+    torch.save(obj,path,_use_new_zipfile_serialization=is_compressed)
+    return True
+
+
+
 import sys
 
 from functools import partial
 from typing import List, IO, Union, Tuple, Type, Callable
 
 
+def reset_name(module:nn.Module, prefix_dict=None):
+    def get_uid(prefix,seq):
+        if prefix not in module._uid_prefixs or seq<module._uid_prefixs[prefix]:
+            module._uid_prefixs[prefix]=seq
+        return module._uid_prefixs[prefix]
+    if not hasattr(module,'_uid_prefixs') or prefix_dict is not None:
+        module._uid_prefixs=prefix_dict
+    if not hasattr(module,'_default_name'):
+        module._default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
+    prefix,seq=module._default_name.rsplit('_', 1) #if '_' in module._default_name else
+    seq=int(seq)
+    module.default_name = prefix + '_' + str(seq-get_uid(prefix,seq)+1)
 
-_UID_PREFIXES = defaultdict(int)
 
-def get_uid(prefix=''):
-    _UID_PREFIXES[prefix] += 1
-    return _UID_PREFIXES[prefix]
+_UID_PREFIX = defaultdict(int)
 
+
+def get_global_uid(prefix=''):
+    _UID_PREFIX[prefix] += 1
+    return _UID_PREFIX[prefix]
 
 class Layer(nn.Module):
     """
@@ -103,7 +123,9 @@ class Layer(nn.Module):
 
     def __init__(self,**kwargs):
         super(Layer, self).__init__()
+        self.training = True
         self._built= False
+        self._uid_prefixs ={}
         self.rank= kwargs.get('rank',None)
         self._input_shape = None
         self._output_shape = None
@@ -111,13 +133,13 @@ class Layer(nn.Module):
         self.keep_output= kwargs.get('keep_output',False)
         self.signature=None
 
+        prefix = self.__class__.__name__
+        self._default_name= camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
+        reset_name(self,self._uid_prefixs)
+        self.relative_name=''
         # self._input_shape=None
         # self._output_shape = None
         self.input_filters =None
-
-
-        prefix = self.__class__.__name__
-        self.defaultname = camel2snake(prefix) + '_' + str(get_uid(prefix))
 
         self._name = kwargs.get('name')
         #self.dump_patches = True
@@ -127,13 +149,18 @@ class Layer(nn.Module):
         self._nodes = None
 
 
+
+
     @property
     def name(self):
-        return self._name if self._name is not None and len(self._name)>0 else self.defaultname
+        return self._name if self._name is not None and len(self._name)>0 else self.default_name
 
     @name.setter
     def name(self,value):
         self._name=value
+
+
+
 
 
     @property
@@ -170,13 +197,19 @@ class Layer(nn.Module):
             raise KeyError("module name can't be empty string \"\"")
 
         self._modules[name] = module
+        if isinstance(module,Layer):
+            reset_name(module, self._uid_prefixs)
+            module.relative_name = name if module.relative_name == '' else name + '.' + module.relative_name
+            for mod in module.modules():
+                if isinstance(mod,Layer) and mod.uuid!=module.uuid:
+                    mod.nodes =self.nodes
+                    reset_name(mod,self._uid_prefixs)
+                    mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
         self.nodes=OrderedDict([(mod.uuid,mod)  for mod in list(self.modules()) if isinstance(mod,Layer)])
         for mod in self.modules():
             if isinstance(mod,Layer):
                 mod.nodes =self.nodes
-
-
 
     def build(self, input_shape):
         pass  #pass if no need shape infer
@@ -482,6 +515,68 @@ class Layer(nn.Module):
                     update_wrapper(wrapper, hook)
                     grad_fn.register_hook(wrapper)
         return result
+
+    def __getattr__(self, name):
+        if '_parameters' in self.__dict__:
+            _parameters = self.__dict__['_parameters']
+            if name in _parameters:
+                return _parameters[name]
+        if '_buffers' in self.__dict__:
+            _buffers = self.__dict__['_buffers']
+            if name in _buffers:
+                return _buffers[name]
+        if '_modules' in self.__dict__:
+            modules = self.__dict__['_modules']
+            if name in modules:
+                return modules[name]
+        raise AttributeError("'{}' object has no attribute '{}'".format(
+            type(self).__name__, name))
+
+    def __setattr__(self, name, value):
+        def remove_from(*dicts):
+            for d in dicts:
+                if name in d:
+                    del d[name]
+
+        params = self.__dict__.get('_parameters')
+        if isinstance(value, Parameter):
+            if params is None:
+                raise AttributeError(
+                    "cannot assign parameters before Module.__init__() call")
+            remove_from(self.__dict__, self._buffers, self._modules)
+            self.register_parameter(name, value)
+        elif params is not None and name in params:
+            if value is not None:
+                raise TypeError("cannot assign '{}' as parameter '{}' "
+                                "(torch.nn.Parameter or None expected)"
+                                .format(torch.typename(value), name))
+            self.register_parameter(name, value)
+        else:
+            modules = self.__dict__.get('_modules')
+            if isinstance(value, nn.Module):
+                if modules is None:
+                    raise AttributeError(
+                        "cannot assign module before Module.__init__() call")
+                remove_from(self.__dict__, self._parameters, self._buffers)
+                modules[name] = value
+                reset_name(value,self._uid_prefixs)
+                value.relative_name= name if not hasattr(value,'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+            elif modules is not None and name in modules:
+                if value is not None:
+                    raise TypeError("cannot assign '{}' as child module '{}' "
+                                    "(torch.nn.Module or None expected)"
+                                    .format(torch.typename(value), name))
+                modules[name] = value
+            else:
+                buffers = self.__dict__.get('_buffers')
+                if buffers is not None and name in buffers:
+                    if value is not None and not isinstance(value, torch.Tensor):
+                        raise TypeError("cannot assign '{}' as buffer '{}' "
+                                        "(torch.Tensor or None expected)"
+                                        .format(torch.typename(value), name))
+                    buffers[name] = value
+                else:
+                    object.__setattr__(self, name, value)
 
     def __repr__(self):
         # We treat the extra repr like the sub-module, one item per line
@@ -926,7 +1021,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             class_name = str(module.__class__).split(".")[-1].split("'")[0]
             module_idx = len(summary)
 
-            m_key =module.name if hasattr(module,'name') else camel2snake(module.__class__.__name__) + '_' + str(get_uid(module.__class__.__name__))
+            m_key =module.name
             summary[m_key] = OrderedDict()
             summary[m_key]["keep_output"] = module.keep_output
             summary[m_key]["input_shape"] = list(input[0].size())
@@ -955,8 +1050,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             summary[m_key]["nb_params"] = params
 
         if (
-            not isinstance(module, nn.Sequential)
-            and not isinstance(module, nn.ModuleList)
+            not isinstance(module, (nn.Sequential,Sequential,nn.ModuleList,ModuleList))
             and not (module == model)
         ):
             hooks.append(module.register_forward_hook(hook))

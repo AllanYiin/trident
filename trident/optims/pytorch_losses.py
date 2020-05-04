@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import random
 from math import *
 
@@ -13,11 +17,11 @@ from torch.nn.modules.loss import _Loss, _WeightedLoss
 from torchvision import transforms
 from torchvision.transforms import functional as tvf
 
-from ..backend.common import *
-from ..backend.pytorch_backend import *
-from ..backend.pytorch_ops import *
-from ..data.image_common import *
-from ..layers.pytorch_activations import sigmoid
+from trident.backend.common import *
+from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_ops import *
+from trident.data.image_common import *
+from trident.layers.pytorch_activations import sigmoid
 
 
 _session = get_session()

@@ -67,6 +67,10 @@ class LeakyRelu(Layer):
         x = enforce_singleton(x)
         return leaky_relu(x,self.alpha)
 
+    def extra_repr(self):
+        s = 'alpha={alpha}'
+        return s.format(**self.__dict__)
+
 
 class LeakyRelu6(Layer):
     '''leaky_relu6 activation Layer
@@ -77,6 +81,10 @@ class LeakyRelu6(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return leaky_relu6(x)
+
+    def extra_repr(self):
+        s = 'alpha={alpha}'
+        return s.format(**self.__dict__)
 
 class SmoothRelu(Layer):
     '''smooth_relu activation Layer
@@ -158,8 +166,6 @@ class HardSigmoid(Layer):
         return hard_sigmoid(x, inplace=self.inplace)
 
 
-
-
 class HardSwish(Layer):
     def __init__(self, inplace=False):
         super(HardSwish, self).__init__()
@@ -171,8 +177,6 @@ class HardSwish(Layer):
         return hard_swish(x, inplace=self.inplace)
 
 
-
-
 class HardTanh(Layer):
     def __init__(self, ):
         super(HardTanh, self).__init__()
@@ -180,9 +184,6 @@ class HardTanh(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return hard_tanh(x)
-
-
-
 
 class Selu(Layer):
     def __init__(self, inplace=False):
@@ -194,8 +195,6 @@ class Selu(Layer):
         x = enforce_singleton(x)
         return selu(x)
 
-
-
 class Elu(Layer):
     def __init__(self):
         super(Elu, self).__init__()
@@ -203,8 +202,6 @@ class Elu(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return elu(x)
-
-
 
 
 class LecunTanh(Layer):
@@ -216,8 +213,6 @@ class LecunTanh(Layer):
         return hard_swish(x)
 
 
-
-
 class SoftSign(Layer):
     def __init__(self):
         super(SoftSign, self).__init__()
@@ -225,7 +220,6 @@ class SoftSign(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return soft_sign(x)
-
 
 class SoftPlus(Layer):
     def __init__(self):

@@ -19,18 +19,19 @@ from tensorflow.python.keras import backend
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.utils import losses_utils
 from tensorflow.python.ops.losses import util as tf_losses_utils
-
-from .tensorflow_constraints import get_constraint
-from .tensorflow_losses import *
-from .tensorflow_metrics import get_metric
-from .tensorflow_optimizers import get_optimizer
-from .tensorflow_regularizers import *
-from .trainers import ModelBase, progress_bar
-from ..backend.common import *
-from ..backend.tensorflow_backend import Sequential,  Layer, try_map_args_and_call,summary
-from ..backend.tensorflow_ops import *
-from ..callbacks.lr_schedulers import get_lr_scheduler
-from ..data.image_common import *
+from trident import __version__
+from trident.optims.tensorflow_constraints import get_constraint
+from trident.optims.tensorflow_losses import *
+from trident.optims.tensorflow_metrics import get_metric
+from trident.optims.tensorflow_optimizers import get_optimizer
+from trident.optims.tensorflow_regularizers import *
+from trident.optims.trainers import ModelBase, progress_bar
+from trident.backend.common import *
+from trident.backend.tensorflow_backend import Sequential,  Layer, try_map_args_and_call,summary
+from trident.backend.tensorflow_ops import *
+from trident.callbacks.lr_schedulers import get_lr_scheduler
+from trident.data.image_common import *
+from trident.data.utils import pickle_it,unpickle
 from ..backend.optimizer import OptimizerBase
 
 # from tensorflow.python.framework.ops import EagerTensor
@@ -86,19 +87,31 @@ class Model(ModelBase):
                 if isinstance(v, tf.keras.Input):
                     self.inputs[k] = v.get_shape()[1:]
 
-        if isinstance(out_var, Layer):
-            dummay_input = to_tensor(np.random.standard_normal((2, *input_shape)).astype(np.float32))
-            out = out_var(dummay_input)
-            #out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
-            self._model = out_var
-            self.signature = get_signature(self._model.forward)
-            if is_tensor(out):
-                self._outputs['output'] = out.get_shape()[1:]
-                self._targets['target'] = out.get_shape()[1:]
+        if isinstance(output, (Layer, tf.Module)):
+            # update notes
+            output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules()) if isinstance(mod, Layer)])
+            for mod in output.modules():
+                if isinstance(mod, Layer):
+                    mod.nodes = output.nodes
+
+            # output.cpu()
+            if output.built and hasattr(output, '_output_shape') and is_tensor(output._output_shape):
+                self._model = output
+                self._outputs['output'] = to_list(output._output_shape)
+                self._targets['target'] = to_list(output._output_shape)
             else:
-                for i in range(len(out)):
-                    self._outputs['output_{0}'.format(i)] = out[i].get_shape()[1:]
-                    self._targets['target_{0}'.format(i)] = out[i].get_shape()[1:]
+                dummay_input = to_tensor(np.random.standard_normal((1, *input_shape)).astype(np.float32))
+                out = out_var(dummay_input)
+                #out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
+                self._model = out_var
+                self.signature = get_signature(self._model.forward)
+                if is_tensor(out):
+                    self._outputs['output'] = out.get_shape()[1:]
+                    self._targets['target'] = out.get_shape()[1:]
+                else:
+                    for i in range(len(out)):
+                        self._outputs['output_{0}'.format(i)] = out[i].get_shape()[1:]
+                        self._targets['target_{0}'.format(i)] = out[i].get_shape()[1:]
 
 
         elif is_tensor(out_var):
@@ -595,18 +608,26 @@ class Model(ModelBase):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if is_abnormal_number(self._model):
+        if any_abnormal_number(self._model):
             raise ValueError(self._get_name() + '  nan detected!!')
 
         if isinstance(self._model, Layer):
             save_path = self.get_save_path(save_path, default_folder='Models',
-                                           default_file_name='{0}_epoch{1}.pkl_'.format(self._model.name,
+                                           default_file_name='{0}_epoch{1}.pth.tar_'.format(self._model.name,
                                                                                             self.training_context[
                                                                                                 'current_epoch']))
             folder, _, _ = split_path(save_path)
             self._model.eval()
-            self._model.save(save_path)
-            shutil.copy(save_path, save_path.replace('.pkl_', '.pkl'))
+            pickle_it(save_path,{
+                'state_dict': self._model.state_dict(),
+                'backend':'tensorflow',
+                'trident_version':__version__,
+                'tensorflow_version':tf.version.VERSION,
+                'signature':self.signature
+            })
+            shutil.copy(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
+
+            #tf.saved_model.save(self._model, "new_models")
             self._model.train()
 
 

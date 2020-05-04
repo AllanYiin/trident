@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import itertools
 import math
 import os
@@ -16,8 +20,8 @@ from ..misc.visualization_utils import *
 if get_backend() == 'pytorch':
     import torch
     import torch.nn as nn
-    from ..backend.pytorch_backend import to_numpy, to_tensor, ReplayBuffer
-    from ..backend.pytorch_ops import binary_crossentropy, shuffle, random_choice
+    from ..backend.pytorch_backend import ReplayBuffer
+    from ..backend.pytorch_ops import to_numpy, to_tensor,  shuffle, random_choice
     from ..optims.pytorch_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss
     from ..optims.pytorch_constraints import min_max_norm
     from ..optims.pytorch_trainer import *
@@ -25,7 +29,8 @@ if get_backend() == 'pytorch':
     from ..backend.pytorch_ops import *
     from ..models.pytorch_efficientnet import EfficientNetB0
 elif get_backend() == 'tensorflow':
-    from ..backend.tensorflow_backend import to_numpy, to_tensor, ReplayBuffer
+    from ..backend.tensorflow_backend import  ReplayBuffer
+    from ..backend.tensorflow_ops import to_numpy, to_tensor
     from ..optims.tensorflow_losses import CrossEntropyLoss, MSELoss
     from ..optims.tensorflow_constraints import min_max_norm
     from ..optims.tensorflow_trainer import *

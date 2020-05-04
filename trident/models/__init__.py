@@ -1,7 +1,7 @@
 
 from ..backend.load_backend import get_backend
 
-__all__ = ['vgg','resnet','densenet','efficientnet','mobilenet','gan','deeplab','arcfacenet','mtcnn','rfbnet']
+__all__ = ['vgg','resnet','densenet','efficientnet','mobilenet','gan','deeplab','arcfacenet','mtcnn','rfbnet','yolo']
 
 if get_backend()=='pytorch':
     from . import pytorch_vgg as vgg
@@ -14,9 +14,11 @@ if get_backend()=='pytorch':
     from . import pytorch_arcfacenet as arcfacenet
     from . import pytorch_mtcnn as mtcnn
     from . import pytorch_rfbnet as rfbnet
+    from . import pytorch_ssd as ssd
+    from . import pytorch_yolo as yolo
 elif get_backend()=='tensorflow':
     from . import tensorflow_resnet as resnet
-    from ..backend.tensorflow_backend import  to_numpy,to_tensor
-elif get_backend()=='cntk':
-    from ..backend.cntk_backend import  to_numpy,to_tensor
+    from . import tensorflow_efficientnet as efficientnet
+
+
 

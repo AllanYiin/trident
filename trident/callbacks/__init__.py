@@ -352,8 +352,9 @@ class NumberOfEpochsStoppingCriterionCallback(StoppingCriterionCallback):
 from .lr_schedulers import AdjustLRCallbackBase,ReduceLROnPlateau,reduce_lr_on_plateau,lambda_lr,LambdaLR,RandomCosineLR,random_cosine_lr
 from .saving_strategies import *
 from .visualization_callbacks import *
-from .gan_callbacks import *
+
 from .regularization_callbacks import RegularizationCallbacksBase, MixupCallback, CutMixCallback
 from .data_flow_callbacks import DataProcessCallback
+from .gan_callbacks import *
 __all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','NumberOfEpochsStoppingCriterionCallback','GanCallback','CycleGanCallback','GanCallbacksBase','RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback', 'AdjustLRCallbackBase', 'ReduceLROnPlateau', 'reduce_lr_on_plateau','lambda_lr','LambdaLR','RandomCosineLR','random_cosine_lr','TileImageCallback','SegTileImageCallback','PrintGradientsCallback','DataProcessCallback']
 

@@ -7,12 +7,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from ..backend.common import get_session
+from trident.backend.common import get_session
 
 __all__ = ['max_norm', 'non_neg_norm', 'unit_norm', 'min_max_norm', 'maxnorm', 'nonnegnorm', 'unitnorm', 'minmaxnorm', 'get_constraint']
 
-
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _session=get_session()
 _epsilon=_session.epsilon
 

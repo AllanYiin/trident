@@ -1,3 +1,6 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import math
 import os
 import sys
@@ -9,10 +12,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from ..backend.common import get_session, addindent, get_time_suffix, get_class, get_function, camel2snake
-from ..backend.pytorch_backend import to_numpy
-from ..backend.pytorch_ops import *
-from ..data.mask_common import mask2trimap
+from trident.backend.common import get_session, addindent, get_time_suffix, get_class, get_function, camel2snake
+from trident.backend.pytorch_ops import *
+from trident.data.mask_common import mask2trimap
 
 __all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 

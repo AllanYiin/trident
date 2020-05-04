@@ -198,7 +198,7 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
 
     try:
         session = requests.Session()
-        response = session.get(url, params={'id': '1AujFsfyzyYUcUrNI_GT1dvNrHaXIQkGz'}, stream=False)
+        response = session.get(url, params={'id': '12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_'}, stream=False)
         if os.path.exists(os.path.join(dirname, 'models_md5.json')):
             os.remove(os.path.join(dirname, 'models_md5.json'))
         with open(os.path.join(dirname, 'models_md5.json'),"wb") as f:
@@ -339,6 +339,11 @@ def extract_archive(file_path, target_folder=None, archive_format='auto'):
         _write_h(target_folder, False, False)
   return False
 
+
+def pickle_it(file_path,dict):
+    import pickle as pickle
+    with open(file_path, 'wb') as handle:
+        pickle.dump(dict, handle, protocol=2)
 
 def unpickle(file):
     import _pickle as pickle

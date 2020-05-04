@@ -10,9 +10,9 @@ import warnings
 
 import numpy as np
 
-from .image_common import check_same_size
-from ..backend.common import OrderedDict
-from ..backend.load_backend import get_backend
+from trident.data.image_common import check_same_size
+from trident.backend.common import OrderedDict
+from trident.backend.load_backend import get_backend
 
 __all__ = ['Sampler','SequentialSampler','RandomSampler','BatchSampler']
 

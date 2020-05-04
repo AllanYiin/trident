@@ -1,10 +1,6 @@
-from __future__ import absolute_import
-from __future__ import print_function
-
 import json
 import os
 from sys import stderr
-
 from .common import *
 
 _session=get_session()
@@ -86,9 +82,9 @@ elif _session.backend == 'pytorch':
     _session.backend='pytorch'
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
-
-    from .pytorch_backend import *
     from .pytorch_ops import *
+    from .pytorch_backend import *
+
     #module = importlib.import_module(mName)
     #layers=importlib.import_module('layers.pytorch_layers')
 
@@ -100,9 +96,9 @@ elif _session.backend == 'tensorflow':
     _session.backend = 'tensorflow'
     _session.image_data_format = 'channels_last'
     _session.image_channel_order = 'rgb'
-
+    from .tensorflow_ops import *
     from .tensorflow_backend import  *
-    from  .tensorflow_ops import *
+
 
 if 'TRIDENT_IMG_BACKEND' in os.environ:
     _image_backend = os.environ['TRIDENT_IMG_BACKEND']

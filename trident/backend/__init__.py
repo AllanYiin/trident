@@ -1,9 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
 import six
-
 from .load_backend import get_backend, get_image_backend, PrintException, if_else
 from .load_backend import get_session, get_trident_dir, epsilon, set_epsilon, floatx, set_floatx, camel2snake, \
     snake2camel, addindent, format_time, get_time_suffix, get_function, get_class, get_terminal_size, gcd, \

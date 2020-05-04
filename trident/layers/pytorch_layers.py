@@ -275,6 +275,7 @@ def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None):
         kernal_shape (tuple of integer):
         strides (tuple of integer):
         dilations (tuple of integer):
+        input_shape (None or tuple of integer):
 
     Returns: the padding we need (shape: 2*rank )
 
@@ -377,8 +378,6 @@ class _ConvNd(Layer):
                     pass
 
 
-
-
             if self.depthwise or self.separable:
                 self.groups=self.input_filters if self.groups==1 else self.groups
                 if self.depth_multiplier is None:
@@ -451,8 +450,10 @@ class Conv1d(_ConvNd):
             kwargs.pop('padding')
         if isinstance(padding, str) and auto_pad==False:
             auto_pad = (padding.lower()  == 'same')
+            auto_pad = False
         elif isinstance(padding, int):
             padding = _single(padding)
+            auto_pad = False
         elif isinstance(padding, tuple):
             pass
         super(Conv1d, self).__init__(rank,kernel_size, num_filters, strides, auto_pad,padding,padding_mode, use_bias, dilation,

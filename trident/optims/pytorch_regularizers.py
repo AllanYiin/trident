@@ -1,15 +1,15 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ..backend.common import get_session,addindent,get_time_suffix,get_class,format_time,get_terminal_size,snake2camel,camel2snake,get_function
-from ..backend.pytorch_ops import *
-from ..backend.pytorch_backend import to_tensor,to_numpy
-
-
+from trident.backend.common import get_session,addindent,get_time_suffix,get_class,format_time,get_terminal_size,snake2camel,camel2snake,get_function
+from trident.backend.pytorch_ops import *
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _epsilon = _session.epsilon
 
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']

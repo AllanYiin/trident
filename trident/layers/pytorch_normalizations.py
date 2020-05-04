@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import math
-
+import inspect
 import numpy as np
 import torch
 import torch.nn as nn
@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from trident.backend.common import epsilon, get_function, get_session, enforce_singleton
+from trident.backend.common import epsilon, get_function, get_session, enforce_singleton,get_class
 from trident.backend.pytorch_backend import Layer,get_device
 
 __all__ = ['InstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm2d','SpectralNorm','get_normalization']
@@ -34,7 +34,7 @@ class BatchNorm(Layer):
         """
         super().__init__()
 
-        self.eps = _epsilon
+        self.eps = eps
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
@@ -326,7 +326,11 @@ class SpectralNorm(Layer):
 def get_normalization(fn_name):
     if fn_name is None:
         return None
-    if isinstance(fn_name, str):
+    elif isinstance(fn_name,Layer) and 'Norm' in fn_name.__class__.__name__:
+        return fn_name
+    elif inspect.isclass(fn_name):
+        return fn_name
+    elif isinstance(fn_name, str):
         if fn_name.lower().strip() in ['instance_norm','instance','in','i']:
             return InstanceNorm()
         elif  fn_name.lower().strip() in ['batch_norm','batch','bn','b']:
@@ -335,7 +339,9 @@ def get_normalization(fn_name):
             return GroupNorm(num_groups=16)
         elif fn_name.lower().strip() in ['spectral_norm','spectral','spec','sp' ,'s']:
             return SpectralNorm()
+    elif inspect.isclass(fn_name):
+        return fn_name
     fn_modules = ['trident.layers.pytorch_normalizations']
-    normalization_fn_ = get_function(fn_name, fn_modules)
+    normalization_fn_ = get_class(fn_name, fn_modules)
     normalization_fn = normalization_fn_
     return normalization_fn

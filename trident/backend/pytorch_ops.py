@@ -443,31 +443,67 @@ def where(flag, value_if_true, value_if_false):
 ## basic math operation
 ###########################
 
-def floor(x:torch.Tensor):
+def floor(x:(torch.Tensor,float)):
+    if not is_tensor(x):
+        x=to_tensor(x)
     return x.floor()
 
-def ceil(x:torch.Tensor):
+def ceil(x:(torch.Tensor,float)):
+    if not is_tensor(x):
+        x=to_tensor(x)
     return x.ceil()
 
-def round(x:torch.Tensor):
-    return x.round()
+def round(x:(torch.Tensor,float),digit:int=0):
+    '''
+
+    Args:
+        x ():
+        digit ():
+
+    Returns:
+    Examples;
+    >>> round(to_tensor([[1,2,3,4,5]])/3,0)
+    tensor([[0., 1., 1., 1., 2.]], device='cuda:0')
+    >>> round(to_tensor([[1,2,3,4,5]])/3,-2)
+    tensor([[0.3300, 0.6700, 1.0000, 1.3300, 1.6700]], device='cuda:0')
+
+    '''
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    if digit!=0:
+        factor=to_tensor(float(math.pow(10,digit)))
+        return (x/factor).round()*factor
+    else:
+        return torch.round(x)
 
 def sqrt(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
     return x.sqrt()
 
 def square(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
     return x**2
 
 def abs(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
     return x.abs()
 
 def pow(x:torch.Tensor,y):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
     return x.pow(y)
 
 def log(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
     return x.log()
 
 def exp(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
     return x.exp()
 
 
@@ -985,6 +1021,10 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     <BLANKLINE>
             [[2., 0.],
              [2., 1.]]])
+    >>> print(grid[0,0,:])
+    [0.0000e+00, 1.0000e+00]
+    >>> print(grid[:,0,0])
+    [0.0000e+00, 1.0000e+00]
     >>> print(grid.shape)
     torch.Size([3, 2, 2])
 

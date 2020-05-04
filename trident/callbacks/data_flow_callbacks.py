@@ -1,3 +1,6 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 import math
 import warnings
@@ -12,10 +15,10 @@ from ..data.image_common import *
 if get_backend()=='pytorch':
     import torch
     import torch.nn as nn
-    from ..backend.pytorch_backend import to_numpy,to_tensor
+    from ..backend.pytorch_ops import to_numpy,to_tensor
     from ..optims.pytorch_losses import CrossEntropyLoss
 elif get_backend()=='tensorflow':
-    from ..backend.tensorflow_backend import  to_numpy,to_tensor
+    from ..backend.tensorflow_ops import  to_numpy,to_tensor
     from ..optims.tensorflow_losses import CrossEntropyLoss
 elif get_backend()=='cntk':
     from ..backend.cntk_backend import  to_numpy,to_tensor
