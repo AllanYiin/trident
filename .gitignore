@@ -242,7 +242,7 @@ trident/experiments/tfe_layers.py
 /examples_cntk/
 /examples_pytorch/
 /examples_tensorflow/
-/internal_tool/
+
 /trident/experiments/
 /trident/faces/
 docs/en-us/
@@ -258,3 +258,5 @@ docs/zh-cn/
 
 !/trident/data/text_common.py
 !/trident/data/cntk_datasets.py
+/tests/
+/internal_tool/
