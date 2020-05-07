@@ -15,7 +15,7 @@ from typing import List
 import weakref
 import numpy as np
 import tensorflow as tf
-import tensorflow.python.eager as tfe
+
 from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
 from tensorflow.python.module import module
