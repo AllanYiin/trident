@@ -380,12 +380,8 @@ class Model(ModelBase):
         if 'reg_weight' in args:
             args.pop('reg_weight')
 
-        if 'model' in args:
-            self._model_regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
-            self._model_regs[reg_fn.__name__].signature = args
-        elif 'output' in args:
-            self._output_regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
-            self._output_regs[reg_fn.__name__].signature = args
+        self._regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
+        self._regs[reg_fn.__name__].signature = args
         return self
 
     def with_constraint(self, constraint, **kwargs):
@@ -811,12 +807,11 @@ class Model(ModelBase):
 
                 if accumulate_grads == False:
                     # regularizer
-                    for k, v in self._output_regs.items():
+                    for k, v in self._regs.items():
                         if k + '_Loss' not in self.training_context['losses']:
                             self.training_context['losses'][k + '_Loss'] = []
 
-                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) * (
-                            1 if self.training_context['stop_update'] < 1 else 0)
+                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed'],self._model) * ( 1 if self.training_context['stop_update'] < 1 else 0)
 
                         overall_loss = None
                         if isinstance(this_loss, tuple):
@@ -833,24 +828,7 @@ class Model(ModelBase):
                         if is_collect_data:
                             self.training_context['losses'][k + '_Loss'].append(float(to_numpy(this_loss)))
 
-                    # model regulaizer
-                    for k, v in self._model_regs.items():
-                        if k + '_Loss' not in self.training_context['losses']:
-                            self.training_context['losses'][k + '_Loss'] = []
 
-                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0)
-
-                        overall_loss = None
-                        if isinstance(this_loss, tuple):
-                            overall_loss = this_loss[0]
-
-                            for i in range(1, len(this_loss)):
-                                overall_loss += this_loss[i]
-                        else:
-                            overall_loss = this_loss
-                        self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
-                        if is_collect_data:
-                            self.training_context['losses'][k + '_Loss'].append(float(to_numpy(overall_loss)))
 
                     self.training_context['optimizer'] = self.optimizer
 
@@ -1088,9 +1066,9 @@ class ImageClassificationModel(Model):
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
                     img = func(img)
-            img = image_backend_adaptive(img)
+            img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0))
             result = self._model(inp)
             result = to_numpy(result)[0]

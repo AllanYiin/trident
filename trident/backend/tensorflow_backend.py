@@ -1772,15 +1772,19 @@ def summary(model, input_size, batch_size=-1):
 
 
 
-def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,):
+def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,model=None):
     if isinstance(fn,tf.Tensor) or 'EagerTensor' in fn.__class__.__name__:
         return fn
     else:
         arg_map = OrderedDict()
         if isinstance(fn,Layer) :
             for arg in fn.signature.key_list:
-                if arg in data_feed:
+                if arg in data:
+                    arg_map[arg] = data[arg]
+                elif arg in data_feed:
                     arg_map[arg]=data[data_feed[arg]]
+                elif arg == 'model' and model is not None:
+                    arg_map[arg] = model
                 else:
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
             #print('arg_map',arg_map.key_list)
@@ -1797,6 +1801,8 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,):
                     arg_map[arg]=data[arg]
                 elif arg in data_feed:
                     arg_map[arg]=data[data_feed[arg]]
+                elif arg == 'model' and model is not None:
+                    arg_map[arg] = model
                 elif arg=='y_pred' and  'output' in data:
                     arg_map[arg] = data['output']
                 elif arg=='y_true' and  'target' in data:

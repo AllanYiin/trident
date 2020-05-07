@@ -62,8 +62,7 @@ class ModelBase(object):
         self._metrics = OrderedDict()
         self.loss_weights = OrderedDict()
         self._signature = None
-        self._output_regs = OrderedDict()
-        self._model_regs = OrderedDict()
+        self._regs = OrderedDict()
         self._constraints = OrderedDict()
         self.base_lr = None
         self.warmup = 0
@@ -254,7 +253,7 @@ class ModelBase(object):
     @property
     def reverse_preprocess_flow(self):
         return_list = []
-        return_list.append(reverse_image_backend_adaptive)
+        return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.preprocess_flow)):
             fn = self.preprocess_flow[-1 - i]
             if fn.__qualname__ == 'normalize.<locals>.img_op':
@@ -266,12 +265,12 @@ class ModelBase(object):
         if img_data.ndim==4:
             return to_tensor(to_numpy([self.data_preprocess(im) for im in img_data]))
         if len(self.preprocess_flow) == 0:
-            return image_backend_adaptive(img_data)
+            return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.preprocess_flow:
                 if not fc.__qualname__.startswith('random_') or  'crop' in fc.__qualname__  or  'rescale' in fc.__qualname__  or  (fc.__qualname__.startswith('random_') and random.randint(0,10)%2==0):
                     img_data = fc(img_data)
-            img_data = to_tensor(image_backend_adaptive(img_data)).unsqueeze(0)
+            img_data = to_tensor(image_backend_adaption(img_data)).unsqueeze(0)
             return img_data
         else:
             return img_data
@@ -280,12 +279,12 @@ class ModelBase(object):
         if img_data.ndim==4:
             return to_numpy([self.reverse_data_preprocess(im) for im in img_data])
         if len(self.reverse_preprocess_flow) == 0:
-            return reverse_image_backend_adaptive(img_data)
+            return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.reverse_preprocess_flow:
                 img_data = fc(img_data)
-            img_data = reverse_image_backend_adaptive(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
         return img_data
 
     def _initial_graph(self, inputs=None, output=None, input_shape=None):
@@ -623,41 +622,22 @@ class ModelBase(object):
 
             if accumulate_grads == False:
                 # regularizer
-                for k, v in self._output_regs.items():
+                for k, v in self._regs.items():
                     if k + '_Loss' not in self.training_context['losses']:
                         self.training_context['losses'][k + '_Loss'] = []
+                    this_loss=0
+                    if 'model' in v.signature:
+                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else torch.tensor(0)
+                    elif 'output' in v.signature:
 
-                    this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
-                    overall_loss=None
-                    if isinstance(this_loss, tuple):
-                        overall_loss = this_loss[0]
+                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
 
-                        for i in range(1, len(this_loss)):
-                            overall_loss += this_loss[i]
-                    else:
-                        overall_loss=this_loss
 
-                    self.training_context['current_loss'] += overall_loss  # self.training_context[
+                    self.training_context['current_loss'] += this_loss  # self.training_context[
                     # 'current_loss'] + this_loss
                     if is_collect_data:
                         self.training_context['losses'][k + '_Loss'].append(float(to_numpy(this_loss)))
 
-                # model regulaizer
-                for k, v in self._model_regs.items():
-                    if k + '_Loss' not in self.training_context['losses']:
-                        self.training_context['losses'][k + '_Loss'] = []
-                    this_loss = v(self._model) if  self.training_context['stop_update']<1 else torch.tensor(0)
-                    overall_loss = None
-                    if isinstance(this_loss, tuple):
-                        overall_loss = this_loss[0]
-
-                        for i in range(1, len(this_loss)):
-                            overall_loss += this_loss[i]
-                    else:
-                        overall_loss = this_loss
-                    self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
-                    if is_collect_data:
-                        self.training_context['losses'][k + '_Loss'].append(float(to_numpy(overall_loss)))
 
                 self.training_context['optimizer'] = self.optimizer
                 # self.do_post_loss_calculation()
@@ -934,7 +914,7 @@ class TrainingPlan(object):
         plan = cls()
         return plan
 
-    def add_training_item(self, training_item, start_epoch=0,name=''):
+    def add_training_item(self, training_item,name='', start_epoch=0):
         n = len(self.training_items)
 
         alias=name if len(name)>0 else  training_item.name
@@ -1008,7 +988,11 @@ class TrainingPlan(object):
 
     def display_tile_image_scheduling(self, frequency: int, unit='batch', save_path: str = None,
                                       name_prefix: str = 'tile_image_{0}.png', include_input=True, include_output=True,
-                                      include_target=True, include_mask=None, imshow=False):
+                                      include_target=True, include_mask=None, imshow=None):
+        if (is_in_ipython() or is_in_colab()) and imshow is None:
+            imshow=True
+        elif not is_in_ipython() and not  is_in_colab()and imshow is None:
+            imshow=False
         if unit not in ['batch', 'epoch']:
             raise ValueError('unit should be batch or epoch')
 
@@ -1022,7 +1006,12 @@ class TrainingPlan(object):
 
     def display_loss_metric_curve_scheduling(self, frequency: int, unit='batch', save_path: str = None,
                                              name_prefix: str = 'loss_metric_curve_{0}.png',
-                                             clean_ipython_output_frequency=5, imshow=False):
+                                             clean_ipython_output_frequency=5, imshow=None):
+        if (is_in_ipython() or is_in_colab()) and imshow is None:
+            imshow=True
+        elif not is_in_ipython() and not  is_in_colab()and imshow is None:
+            imshow=False
+
         if save_path is not None:
             folder, _,_ =split_path(save_path)
             if not os.path.exists(folder):
@@ -1165,7 +1154,7 @@ class TrainingPlan(object):
                                     test_data[k]=v.copy()
 
                             trainitem.training_context['model_name']=trainitem_name
-                            if epoch<trainitem.start_epoch:
+                            if epoch<int(trainitem.start_epoch):
                                 trainitem.training_context['stop_update']=1
                             trainitem.train_model(train_data,test_data, epoch if only_steps==False else 0,mbs if only_steps==False else  num_batches, self.num_epochs if only_steps==False else  1,
                                                   len(data_loader.batch_sampler) if only_steps==False else max_batches,

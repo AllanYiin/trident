@@ -115,8 +115,10 @@ class Model(ModelBase):
                 self._targets['target'] = to_list(output._output_shape)
             else:
                 output.input_shape = input_shape
+
                 dummay_input = to_tensor(np.random.standard_normal((1,)+tuple(input_shape)).astype(np.float32)).to(get_device())
                 output.to(get_device())
+                output.eval()
                 out = output(dummay_input)
                 self._model = output
                 if isinstance(out, torch.Tensor):
@@ -434,13 +436,8 @@ class Model(ModelBase):
         args = get_signature(reg_fn)
         if 'reg_weight' in args:
             args.pop('reg_weight')
-
-        if 'model' in args:
-            self._model_regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
-            self._model_regs[reg_fn.__name__].signature = args
-        elif 'output' in args:
-            self._output_regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
-            self._output_regs[reg_fn.__name__].signature = args
+        self._regs[reg_fn.__name__] = partial(reg_fn, **kwargs)
+        self._regs[reg_fn.__name__].signature = args
         return self
 
     def with_constraint(self, constraint, **kwargs):
@@ -525,7 +522,8 @@ class Model(ModelBase):
         pass  # if self.training_context['current_epoch'] > self.warmup:  #     if self.lr_scheduler is not None:  #         self.lr_scheduler.step(np.array(self.training_context['metrics'][list(self._metrics.keys())[0]]).mean())  #         self.training_context['current_lr'] = self.optimizer.lr  #     if self.optimizer.param_groups[0]['lr'] < 1e-8:  #         self.optimizer.param_groups[0]['lr'] = 0.05 * self.base_lr  #         self.training_context['current_lr'] =  0.05 * self.base_lr  # elif  self.warmup>0 and self.training_context['current_epoch'] == self.warmup:  #     self.optimizer.adjust_learning_rate(self.base_lr, True)  #     self.training_context['current_lr'] =self.base_lr  # elif   self.warmup>0 and self.training_context['current_epoch'] < self.warmup:  #     self.optimizer.adjust_learning_rate(1e-5*(self.training_context['current_epoch']+1), True)  #     self.training_context['current_lr'] = 1e-5*(self.training_context['current_epoch']+1)
 
     def do_on_batch_start(self):
-        pass
+        if self.model.device == 'cuda':
+            torch.cuda.empty_cache()
 
     def do_on_batch_end(self):
         if self.training_context['current_batch'] == 0:
@@ -767,7 +765,7 @@ class Model(ModelBase):
                               dummy_input,  # model input (or a tuple for multiple inputs)
                               save_path,  # where to save the model (can be a file or file-like object)
                               export_params=True,  # store the trained parameter weights inside the model file
-                              opset_version=11,  # the ONNX version to export the model to
+                              opset_version=10,  # the ONNX version to export the model to
                               do_constant_folding=True,  # whether to execute constant folding for optimization
                               input_names=self.inputs.key_list,  # the model's input names
                               output_names=output_names,  # the model's output names
@@ -904,9 +902,9 @@ class ImageClassificationModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
                     img = func(img)
-            img = image_backend_adaptive(img)
+            img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
                 self._model.weights[0].data.dtype)
@@ -955,7 +953,7 @@ class ImageDetectionModel(Model):
             for func in self.preprocess_flow:
                 if inspect.isfunction(func):
                     img = func(img)
-            img = image_backend_adaptive(img)
+            img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
                 self._model.weights[0].data.dtype)
@@ -1003,9 +1001,9 @@ class ImageGenerationModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
                     img = func(img)
-            img = image_backend_adaptive(img)
+            img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
             result = self._model(inp)
             result = to_numpy(result)[0]
@@ -1032,7 +1030,7 @@ class FaceRecognitionModel(Model):
     @property
     def reverse_preprocess_flow(self):
         return_list = []
-        return_list.append(reverse_image_backend_adaptive)
+        return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.preprocess_flow)):
             fn = self.preprocess_flow[-1 - i]
             if fn.__qualname__ == 'normalize.<locals>.img_op':
@@ -1063,9 +1061,9 @@ class FaceRecognitionModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaptive:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
                     img = func(img)
-            img = image_backend_adaptive(img)
+            img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
             result = self._model(inp)[0]
             embedding = to_numpy(result)
