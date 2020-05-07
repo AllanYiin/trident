@@ -18,8 +18,7 @@ from copy import copy, deepcopy
 from functools import partial, wraps, update_wrapper
 from itertools import islice
 
-import matplotlib
-import matplotlib.pyplot as plt
+
 import numpy as np
 import six
 import torch
@@ -32,7 +31,7 @@ from torch._six import container_abcs
 from trident.backend.common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, get_signature,get_session,set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','print_network','plot_tensor_grid','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call']
+__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -1001,16 +1000,6 @@ def print_network(net, verbose=False):
 
 
 
-def plot_tensor_grid(batch_tensor, save_filename=None):
-    ''' Helper to visualize a batch of images.
-        A non-None filename saves instead of doing a show()'''
-
-    grid_img = torchvision.utils.make_grid(batch_tensor, nrow=5)
-    plt.imshow(grid_img.permute(1, 2, 0))
-    if save_filename is not None:
-        torchvision.utils.save_image(batch_tensor, save_filename, padding=5)
-    else:
-        plt.show()
 
 
 
@@ -1437,7 +1426,7 @@ def get_human_readable_count(number):
     return '{int(number):,d} {labels[index]}'
 
 
-def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,):
+def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
     if isinstance(fn,torch.Tensor):
         return fn
     else:
@@ -1467,7 +1456,9 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,):
 
             args=get_signature(fn).key_list
             for arg in args:
-                if arg in  data_feed:
+                if arg in data:
+                    arg_map[arg]=data[arg]
+                elif arg in  data_feed:
                     arg_map[arg]=data[data_feed[arg]]
                 else:
                     arg_map[arg] = ''
