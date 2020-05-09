@@ -12,7 +12,7 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework.ops import EagerTensor
 from trident.backend.common import _tensor_op,to_list
 
-__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','less','equal','greater','greater_equal','not_equal','less_equal']
+__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','less','equal','greater','greater_equal','not_equal','less_equal','concate','stack','gram_matrix','shuffle','random_choice']
 
 _context = []
 
@@ -536,8 +536,8 @@ def dot(x, y):
         out = tf.matmul(x, y)
     return out
 
-def matmul(x,y,transpose_x=False,transpose_y=False):
-    return tf.matmul(x,y,transpose_a=transpose_x,transpose_b=transpose_y)
+def matmul(a,b,transpose_a=False,transpose_b=False):
+    return tf.matmul(a,b,transpose_a=transpose_b,transpose_b=transpose_b)
 
 
 def true_divide(x, y):
@@ -1199,5 +1199,40 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     return transpose(tf.cast(tf.stack(grid_list, -1), tf.float32),[1,0,2])
 
 
+
+
+
+############################
+## tensor manipulation
+###########################
+
 def concate(x:List[tf.Tensor],axis=1):
     return tf.concat(concat_dim=axis,values=x)
+
+def stack(x:List[tf.Tensor],axis=1):
+    return tf.stack(concat_dim=axis,values=x)
+
+def gram_matrix(x:tf.Tensor):
+  temp = x
+  temp = squeeze(temp)
+  fun = reshape(temp, [temp.shape[2], temp.shape[0]*temp.shape[1]])
+  result = matmul(temp, temp, transpose_b=True)
+  gram = expand_dims(result, axis=0)
+  return gram
+
+
+
+############################
+## random
+###########################
+
+
+def shuffle(x:tf.Tensor):
+    order = np.random.shuffle(np.array(range(x.size(0))))
+    x[np.array(range(x.size(0)))] = x[order]
+    return x
+
+def random_choice(x:tf.Tensor):
+    idx = np.random.choice(np.array(range(x.size(0))))
+    return x[idx]
+

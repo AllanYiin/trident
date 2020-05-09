@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import builtins
 import inspect
 import math
 from collections import OrderedDict
@@ -239,7 +239,7 @@ class Dot(Layer):
 
 
 class SoftMax(Layer):
-    r"""Flatten layer to flatten a tensor after convolution."""
+    r"""SoftMax layer to accelerate  classification model training"""
 
     def __init__(self, axis=1, add_noise=False, noise_intensity=0.005, **kwargs):
         super(SoftMax, self).__init__()
@@ -266,8 +266,8 @@ _get_divisors = get_divisors
 _isprime = isprime
 
 
-@torch.jit.ignore
-def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None):
+
+def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None,transpose=False):
     ''' Calcualte the actual padding we need in different rank and different convlution settings.
 
     Args:
@@ -276,22 +276,25 @@ def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None):
         strides (tuple of integer):
         dilations (tuple of integer):
         input_shape (None or tuple of integer):
+        transpose (bool): wheather transposed
 
     Returns: the padding we need (shape: 2*rank )
 
     Examples
     >>> get_static_padding(1,(3,),(2,),(2,))
-    [2, 2]
+    (2, 2)
     >>> get_static_padding(2,(3,3),(2,2),(1,1),(224,224))
-    [1, 1, 1, 1]
+    (1, 1, 1, 1)
+    >>> get_static_padding(2,(3,3),(2,2),(1,1),(224,224),True)
+    ((1, 1, 1, 1), (1, 1))
     >>> get_static_padding(2,(5,5),(1,1),(2,2))
-    [4, 4, 4, 4]
+    (4, 4, 4, 4)
     >>> get_static_padding(2,(5,5),(1,1),(1,1))
-    [2, 2, 2, 2]
+    (2, 2, 2, 2)
     >>> get_static_padding(2,(2,2),(1,1),(1,1))
-    [1, 0, 1, 0]
+    (1, 0, 1, 0)
     >>> get_static_padding(3,(5,5,5),(1,1,1),(2,2,2))
-    [4, 4, 4, 4, 4, 4]
+    (4, 4, 4, 4, 4, 4)
     '''
     if input_shape is None:
         input_shape=[224]*rank
@@ -306,23 +309,36 @@ def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None):
     kernal_shape=to_numpy(list(kernal_shape))
     strides = to_numpy(list(strides)).astype(np.float32)
     dilations= to_numpy(list(dilations))
+    if transpose==False:
+        output_shape=np.ceil(input_shape/strides)
+        raw_padding=np.clip((output_shape-1)*strides+(kernal_shape-1)*dilations+1-input_shape,a_min=0,a_max=np.inf)
+        remainder=np.remainder(raw_padding,np.ones_like(raw_padding)*2)
 
-    output_shape=np.ceil(input_shape/strides)
-    raw_padding=np.clip((output_shape-1)*strides+(kernal_shape-1)*dilations+1-input_shape,a_min=0,a_max=np.inf)
-    remainder=np.remainder(raw_padding,np.ones_like(raw_padding)*2)
+        raw_padding=raw_padding+(remainder*np.greater(strides,1).astype(np.float32))
+        lefttop_pad = np.ceil(raw_padding/2.0).astype(np.int32)
+        rightbtm_pad=(raw_padding-lefttop_pad).astype(np.int32)
+        static_padding = []
+        for k in range(rank):
+            static_padding.append(lefttop_pad[-1-k])
+            static_padding.append(rightbtm_pad[-1-k])
+        return static_padding
+    else:
+        output_shape = input_shape * strides
+        raw_padding = np.clip( ((input_shape - 1) * strides + (kernal_shape - 1) * dilations + 1 )-input_shape * strides, a_min=0, a_max=np.inf)
+        remainder = np.remainder(raw_padding, np.ones_like(raw_padding) * 2)
 
-    raw_padding=raw_padding+(remainder*np.greater(strides,1).astype(np.float32))
-    lefttop_pad = np.ceil(raw_padding/2.0).astype(np.int32)
-    rightbtm_pad=(raw_padding-lefttop_pad).astype(np.int32)
-    static_padding = []
-    for k in range(rank):
-        static_padding.append(lefttop_pad[-1-k])
-        static_padding.append(rightbtm_pad[-1-k])
-    return static_padding
+        raw_padding= raw_padding + (remainder * np.greater(strides, 1).astype(np.float32))
+        lefttop_pad = np.ceil(raw_padding / 2.0).astype(np.int32)
+        rightbtm_pad = (raw_padding- lefttop_pad).astype(np.int32)
 
+        out_pad=output_shape-((input_shape - 1) * strides + (kernal_shape - 1) * dilations + 1-lefttop_pad-rightbtm_pad)
 
+        static_padding = []
 
-
+        for k in range(rank):
+            static_padding.append(lefttop_pad[-1 - k])
+            static_padding.append(rightbtm_pad[-1 - k])
+        return tuple(static_padding), tuple(out_pad.astype(np.int32).tolist())
 
 
 class _ConvNd(Layer):
@@ -339,6 +355,8 @@ class _ConvNd(Layer):
         self.strides = strides
         self.dilation = dilation
         self.transposed = transposed
+        if self.transposed:
+            self.output_padding=_ntuple(rank)(0)
         self.groups = groups
         self.auto_pad = auto_pad
         self.padding_mode = padding_mode
@@ -355,9 +373,6 @@ class _ConvNd(Layer):
         self.register_parameter('weight',None)
         self.register_parameter('bias', None)
 
-        if groups != 1 and self.num_filters % groups != 0:
-            raise ValueError('out_channels must be divisible by groups')
-
         self.transposed = transposed
         self.use_bias = use_bias
         self.to(self.device)
@@ -366,7 +381,11 @@ class _ConvNd(Layer):
         if self._built == False:
             self.input_filters=input_shape[0].item()
             if self.auto_pad:
-                self.padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation,input_shape.tolist()[1:])
+                if self.transposed==False:
+                    padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation,input_shape.tolist()[1:])
+                    self.padding=tuple(padding)
+                else:
+                    self.padding ,self.output_padding= get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[1:], self.transposed)
             else:
                 if self.padding is None:
                     self.padding = [0] * (2 * self.rank)
@@ -379,15 +398,21 @@ class _ConvNd(Layer):
 
 
             if self.depthwise or self.separable:
-                self.groups=self.input_filters if self.groups==1 else self.groups
                 if self.depth_multiplier is None:
                     self.depth_multiplier = 1
+                if self.groups>1:
+                    pass
+                elif self.depth_multiplier<1:
+                    self.groups=int(builtins.round(self.input_filters*self.depth_multiplier,0))
+                else:
+                    self.groups=self.input_filters if self.groups==1 else self.groups
+
 
             if self.num_filters is None and self.depth_multiplier is not None:
-                self.num_filters = int(round(self.input_filters * self.depth_multiplier,0))
+                self.num_filters = int(builtins.round(self.input_filters * self.depth_multiplier,0))
 
-            if self.input_filters % self.groups != 0:
-                raise ValueError('in_channels must be divisible by groups')
+            if self.groups != 1 and self.num_filters % self.groups != 0:
+                raise ValueError('out_channels must be divisible by groups')
 
             if self.depthwise and self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
@@ -436,7 +461,97 @@ class _ConvNd(Layer):
 
 
 class Conv1d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    r"""Applies to create a 1D convolution layer
+
+        Args:
+            kernel_size :(int or tupleof ints)
+                shape (spatial extent) of the receptive field
+
+            num_filters :(int  or None, default to None)
+                number of output channel (filters)`, sometimes in backbond design output channel is propotional to input channel.
+                But in trident all layer is shape  delay inferred
+
+            strides:(int or tupleof ints ,default to 1)
+                 stride of the convolution (increment when sliding the filter over the input)
+
+            auto_pad:bool
+                if `False`, then the filter will be shifted over the "valid" area of input, that is, no value outside the area is used. If ``pad=True`` means 'same
+
+            *padding (optional)
+                auto_pad can help you calculate the pad you need.
+                if you have special need , you still can use the paddding
+                implicit paddings on both sides of the input. Can be a single number or a double tuple (padH, padW)
+                or quadruple(pad_left, pad_right, pad_top, pad_btm )
+
+            padding_mode:string (default is 'zero', available option are 'reflect', 'replicate','constant','circular')
+
+            activation: (None, string, function or Layer)
+                activation function after the convolution operation for apply non-linearity.
+
+            use_bias:bool
+                the layer will have no bias if `False` is passed here
+
+            dilation:(int or tupleof ints)
+                the spacing between kernel elements. Can be a single number or a tuple (dH, dW). Default: 1
+
+            groups
+                split input into groups, \text{in\_channels}in_channels should be divisible by the number of groups. Default: 1
+            depth_multiplier: (int of decimal)
+
+
+            name
+                name of the layer
+
+        Shape:
+            - Input: :math:`(N, *, H_{in})` where :math:`*` means any number of
+              additional dimensions and :math:`H_{in} = \text{in\_features}`
+            - Output: :math:`(N, *, H_{out})` where all but the last dimension
+              are the same shape as the input and :math:`H_{out} = \text{out\_features}`.
+
+        Attributes:
+            weight: the learnable weights of the module of shape
+                :math:`(\text{out\_features}, \text{in\_features})`. The values are
+                initialized from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})`, where
+                :math:`k = \frac{1}{\text{in\_features}}`
+            bias:   the learnable bias of the module of shape :math:`(\text{out\_features})`.
+                    If :attr:`bias` is ``True``, the values are initialized from
+                    :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
+                    :math:`k = \frac{1}{\text{in\_features}}`
+
+        Examples::
+            >>> input = to_tensor(torch.randn(1,64,32))
+            >>> conv1= Conv1d(3,64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
+            >>> output = conv1(input)
+            >>> print(output.size())
+            torch.Size([1, 64, 16])
+            >>> print(conv1.weight.size())
+            torch.Size([64, 64, 3])
+            >>> print(conv1.padding)
+            (1, 1)
+            >>> conv2= Conv1d(3, 256, strides=2, auto_pad=False, padding=1)
+            >>> output = conv2(input)
+            >>> print(output.size())
+            torch.Size([1, 256, 16])
+            >>> print(conv2.weight.size())
+            torch.Size([256, 64, 3])
+            >>> print(conv2.padding)
+            (1, 1)
+            >>> conv3= Conv1d(5,64,strides=1,activation=mish, auto_pad=True,use_bias=False,dilation=4,groups=16)
+            >>> output = conv3(input)
+            >>> print(output.size())
+            torch.Size([1, 64, 32])
+            >>> print(conv3.weight.size())
+            torch.Size([64, 4, 5])
+            >>> print(conv3.padding)
+            (8, 8)
+            >>> input = to_tensor(torch.randn(1,32,37))
+            >>> conv4= Conv1d(3,64,strides=2,activation=mish, auto_pad=True,use_bias=False)
+            >>> output = conv4(input)
+            >>> print(output.size())
+            torch.Size([1, 64, 19])
+
+        """
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
@@ -445,10 +560,9 @@ class Conv1d(_ConvNd):
         num_filters=kwargs.get('filters',kwargs.get('out_channels',num_filters))
         use_bias=kwargs.get('bias',use_bias)
         padding_mode = padding_mode.lower().replace('zeros','zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str) and auto_pad==False:
+            #avoid someone use the definition as keras padding
             auto_pad = (padding.lower()  == 'same')
             auto_pad = False
         elif isinstance(padding, int):
@@ -540,7 +654,7 @@ class Conv2d(_ConvNd):
             >>> print(conv1.weight.size())
             torch.Size([64, 32, 3, 3])
             >>> print(conv1.padding)
-            [1, 1, 1, 1]
+            (1, 1, 1, 1)
             >>> conv2= Conv2d((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)))
             >>> output = conv2(input)
             >>> print(output.size())
@@ -556,7 +670,7 @@ class Conv2d(_ConvNd):
             >>> print(conv3.weight.size())
             torch.Size([64, 2, 3, 5])
             >>> print(conv3.padding)
-            [8, 8, 4, 4]
+            (8, 8, 4, 4)
             >>> input = to_tensor(torch.randn(1,32,37,37))
             >>> conv4= Conv2d((3,3),64,strides=2,activation=mish, auto_pad=True,use_bias=False)
             >>> output = conv4(input)
@@ -565,7 +679,7 @@ class Conv2d(_ConvNd):
 
         """
 
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
@@ -574,9 +688,7 @@ class Conv2d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str) and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int) and padding>0:
@@ -611,7 +723,7 @@ class Conv2d(_ConvNd):
 
 
 class Conv3d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
@@ -620,9 +732,7 @@ class Conv3d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -634,35 +744,6 @@ class Conv3d(_ConvNd):
                                      depthwise=False, separable=False, **kwargs)
 
         self.activation = get_activation(activation)
-
-    def get_padding(self, input_shape):
-        pad_w = 0
-        pad_h = 0
-        pad_z = 0
-        if self.auto_pad == True:
-            iz, ih, iw = list(input_shape)[-3:]
-            kz, kh, kw = self.kernel_size[-3:]
-            sz, sh, sw = self.strides[-3:]
-            dz, dh, dw = self.dilation[-3:]
-            oz, oh, ow = math.ceil(iz / sz), math.ceil(ih / sh), math.ceil(iw / sw)
-            pad_z = max((oz - 1) * sz + (kz - 1) * dz + 1 - iz, 0)
-            pad_h = max((oh - 1) * sh + (kh - 1) * dh + 1 - ih, 0)
-            pad_w = max((ow - 1) * sw + (kw - 1) * dw + 1 - iw, 0)
-            if pad_h % 2 == 1 and sh > 1:
-                pad_h += 1
-            if pad_w % 2 == 1 and sw > 1:
-                pad_w += 1
-            if pad_z % 2 == 1 and sz > 1:
-                pad_z += 1
-        elif len(self.padding) == 3:
-            pad_z = self.padding[0] * 2
-            pad_h = self.padding[1] * 2
-            pad_w = self.padding[2] * 2
-
-        if self.padding_mode == 'circular':
-            self.padding = (pad_z // 2, pad_z-(pad_z // 2), pad_h // 2, pad_h-(pad_h // 2), pad_w// 2,pad_w- (pad_w // 2))
-        else:
-            self.padding = (pad_z // 2, pad_h // 2, pad_w // 2)
 
     def conv3d_forward(self, x):
         if self.padding_mode == 'circular':
@@ -682,7 +763,7 @@ class Conv3d(_ConvNd):
 
 
 class TransConv1d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
@@ -691,9 +772,7 @@ class TransConv1d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -708,18 +787,10 @@ class TransConv1d(_ConvNd):
         self.output_padding = _single(0)
 
     def conv1d_forward(self, x):
-        if self.auto_pad == True:
-            iw = list(x.size())[-1]
-            kw = self.kernel_size[-1]
-            sw = self.strides[-1]
-            dw = self.dilation[-1]
-            ow = math.ceil(iw / sw), math.ceil(iw / sw)
-            pad_w = max((ow - 1) * sw + (kw - 1) * dw + 1 - iw, 0)
-            if pad_w > 0:
-                self.output_padding = _single(1)
-                x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2], mode=self.padding_mode)
-        return F.conv_transpose1d(x, self.weight, self.bias, self.strides, padding=_single(0),
-                                  output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
+        x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+        if self.padding>0:
+            self.output_padding = _single(1)
+        return F.conv_transpose1d(x, self.weight, self.bias, self.strides, padding=_single(0),output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -730,7 +801,20 @@ class TransConv1d(_ConvNd):
 
 
 class TransConv2d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    '''
+    Examples:
+        >>> input = to_tensor(torch.randn(1,32,128,128))
+        >>> conv1= TransConv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
+        >>> output = conv1(input)
+        >>> conv1.padding
+        (1, 1, 1, 1)
+        >>> conv1.output_padding
+        (1, 1)
+        >>> print(output.size())
+        torch.Size([1, 64, 256, 256])
+
+    '''
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
@@ -739,9 +823,7 @@ class TransConv2d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -755,25 +837,32 @@ class TransConv2d(_ConvNd):
         self.activation = get_activation(activation)
         self.output_padding = _pair(0)
 
-    def get_padding(self, input_shape):
-        pad_h = 0
-        pad_w = 0
-        if self.auto_pad == True:
-            ih, iw = list(input_shape)[-2:]
-            kh, kw = self.kernel_size[-2:]
-            sh, sw = self.strides[-2:]
-            dh, dw = self.dilation[-2:]
-            oh, ow = (ih - 1) * sh + (kh - 1) * dh + 1, (iw - 1) * sw + (kw - 1) * dw + 1
-            pad_h = max(oh - ih * sh, 0)
-            pad_w = max(ow - iw * sw, 0)
-            self.padding = (pad_h, pad_w)
-            if pad_h != 0 or pad_w != 0:
-                self.output_padding = (pad_h % 2 if pad_h > 0 else pad_h, pad_w % 2 if pad_w > 0 else pad_w)
-
-                # x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2], mode=self.padding_mode)
+    # def get_padding(self, input_shape):
+    #     pad_h = 0
+    #     pad_w = 0
+    #     if self.auto_pad == True:
+    #         ih, iw = list(input_shape)[-2:]
+    #         kh, kw = self.kernel_size[-2:]
+    #         sh, sw = self.strides[-2:]
+    #         dh, dw = self.dilation[-2:]
+    #         oh, ow = (ih - 1) * sh + (kh - 1) * dh + 1, (iw - 1) * sw + (kw - 1) * dw + 1
+    #         pad_h = max(oh - ih * sh, 0)
+    #         pad_w = max(ow - iw * sw, 0)
+    #         self.padding = (pad_h, pad_w)
+    #         if pad_h != 0 or pad_w != 0:
+    #             self.output_padding = (pad_h % 2 if pad_h > 0 else pad_h, pad_w % 2 if pad_w > 0 else pad_w)
 
     def conv2d_forward(self, x):
-        return F.conv_transpose2d(x, self.weight, self.bias, self.strides, padding=self.padding,
+        # if len(self.padding) == self.rank:
+        #     self.padding = (self.padding[1], self.padding[1], self.padding[0], self.padding[0])
+        # if self.padding_mode == 'circular':
+        #     expanded_padding = (
+        #     (self.padding[0] + 1) // 2, self.padding[1] // 2, (self.padding[2] + 1) // 2, self.padding[3] // 2)
+        #     x = F.pad(x, expanded_padding, mode='circular')
+        # else:
+        #     x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
+
+        return F.conv_transpose2d(x, self.weight, self.bias, self.strides, padding=(self.padding[0],self.padding[2]),
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, *x):
@@ -785,7 +874,7 @@ class TransConv2d(_ConvNd):
 
 
 class TransConv3d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
@@ -794,9 +883,7 @@ class TransConv3d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -837,7 +924,7 @@ class TransConv3d(_ConvNd):
 
 
 class SeparableConv1d(_ConvNd):
-    def __init__(self, kernel_size,num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size,num_filters=None, depth_multiplier=1, strides=1, auto_pad=True,padding=None, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
@@ -846,9 +933,7 @@ class SeparableConv1d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -863,18 +948,6 @@ class SeparableConv1d(_ConvNd):
         self.conv1 = None
         self.pointwise = None
 
-    def build(self, input_shape):
-        if self._built == False or self.conv1 is None:
-            if self.num_filters is None:
-                self.num_filters = self.input_filters * self.depth_multiplier
-            self.conv1 = DepthwiseConv1d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                         strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                         dilation=self.dilation, groups=self.input_filters, bias=self.use_bias)
-            self.pointwise = Conv2d(kernel_size=1, num_filters=self.num_filters, strides=1, use_bias=self.use_bias, dilation=1,
-                                    groups=1)
-            self.to(self.device)
-            self._built = True
-
     def forward(self, *x):
         x = enforce_singleton(x)
         x = self.conv1(x)
@@ -885,7 +958,7 @@ class SeparableConv1d(_ConvNd):
 
 
 class SeparableConv2d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None,padding_mode='zero',
                  activation=None, use_bias=False, dilation=1, groups=1, name=None, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
@@ -894,9 +967,7 @@ class SeparableConv2d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -932,7 +1003,7 @@ class SeparableConv2d(_ConvNd):
 
 
 class SeparableConv3d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None,depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, num_filters=None,depth_multiplier=1, strides=1, auto_pad=True,padding=None, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
@@ -941,9 +1012,7 @@ class SeparableConv3d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str)and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -979,7 +1048,7 @@ class SeparableConv3d(_ConvNd):
 
 
 class DepthwiseConv1d(_ConvNd):
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True,padding=None, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1,  name=None, **kwargs):
 
         rank = 1
@@ -989,9 +1058,7 @@ class DepthwiseConv1d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', kwargs.get('num_filters', None)))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str) and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -1087,13 +1154,13 @@ class DepthwiseConv2d(_ConvNd):
      >>> print(conv1.weight.size())
      torch.Size([64, 1, 3, 3])
      >>> print(conv1.padding)
-     [1, 1, 1, 1]
+     (1, 1, 1, 1)
      >>> print(conv1.num_filters)
      64
 
      """
 
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, name=None, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
@@ -1102,9 +1169,7 @@ class DepthwiseConv2d(_ConvNd):
         num_filters =kwargs.get('filters', kwargs.get('out_channels', kwargs.get('num_filters', None)))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str) and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -1141,7 +1206,7 @@ class DepthwiseConv2d(_ConvNd):
 
 
 class DepthwiseConv3d(_ConvNd):
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None,  **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
@@ -1150,9 +1215,7 @@ class DepthwiseConv3d(_ConvNd):
         num_filters =kwargs.get('filters', kwargs.get('out_channels', kwargs.get('num_filters', None)))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str) and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
         elif isinstance(padding, int):
@@ -1166,45 +1229,7 @@ class DepthwiseConv3d(_ConvNd):
         self.activation = get_activation(activation)
         self._built = False
 
-    def build(self, input_shape):
-        if self._built == False or self.conv1 is None:
-            self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
-            self.conv1 = torch.nn.Conv3d(self.input_filters, self.num_filters, kernel_size=self.kernel_size,
-                                         stride=self.strides, padding=0, dilation=self.dilation,
-                                         groups=self.input_filters, bias=self.use_bias)
 
-            self.to(self.device)
-            self._built = True
-
-    def get_padding(self, input_shape):
-        pad_w = 0
-        pad_h = 0
-        pad_z = 0
-        if self.auto_pad == True:
-            iz, ih, iw = list(input_shape)[-3:]
-            kz, kh, kw = self.kernel_size[-3:]
-            sz, sh, sw = self.strides[-3:]
-            dz, dh, dw = self.dilation[-3:]
-            oz, oh, ow = math.ceil(iz / sz), math.ceil(ih / sh), math.ceil(iw / sw)
-            pad_z = max((oz - 1) * sz + (kz - 1) * dz + 1 - iz, 0)
-            pad_h = max((oh - 1) * sh + (kh - 1) * dh + 1 - ih, 0)
-            pad_w = max((ow - 1) * sw + (kw - 1) * dw + 1 - iw, 0)
-            if pad_h % 2 == 1 and sh > 1:
-                pad_h += 1
-            if pad_w % 2 == 1 and sw > 1:
-                pad_w += 1
-            if pad_z % 2 == 1 and sz > 1:
-                pad_z += 1
-        elif len(self.padding) == 3:
-            pad_z = self.padding[0] * 2
-            pad_h = self.padding[1] * 2
-            pad_w = self.padding[2] * 2
-
-        if self.padding_mode == 'circular':
-            self.padding = (
-            pad_z // 2, pad_z - (pad_z // 2), pad_h // 2, pad_h - (pad_h // 2), pad_w // 2, pad_w - (pad_w // 2))
-        else:
-            self.padding = (pad_z // 2, pad_h // 2, pad_w // 2)
 
     def forward(self, *x):
         x = enforce_singleton(x)

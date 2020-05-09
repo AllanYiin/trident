@@ -25,7 +25,7 @@ import numpy as np
 import six
 
 __all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'set_epsilon', 'floatx', 'set_floatx','check_keys',
-           'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list','normalize_padding', 'addindent', 'format_time',
+           'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
            'OrderedDict', 'get_python_function_arguments', 'map_function_arguments', 'ClassfierType', 'PaddingMode',
@@ -325,44 +325,6 @@ def enforce_singleton(x):
         return x[0]
     return x
 
-
-def normalize_padding(padding, rank):
-    '''
-
-    Args:
-        padding (None, int, tuple):
-        rank (int):
-
-    Returns:
-        the normalized format of padding
-    Examples
-    >>> normalize_padding(((1,0),(1,0)),2)
-    (1, 0, 1, 0)
-    >>> normalize_padding((1,0),2)
-    (0, 0, 1, 1)
-    '''
-    if padding is None:
-        padding=(0,)*(2*rank)
-    elif isinstance(padding,int):
-        padding = (padding,) * (2 * rank)
-    elif isinstance(padding,(list,tuple)) and len(padding)==1:
-        padding = padding * (2 * rank)
-    elif isinstance(padding,(list,tuple)) and len(padding)==rank and  isinstance(padding[0],int):
-        # rank=2 (1,1)=>(1,1,1,1)   (1,0)=>(0,0,1,1)
-        reversed_padding=list(padding)
-        reversed_padding.reverse()
-        return_padding=[]
-        for i in range(rank):
-            return_padding.append(reversed_padding[i])
-            return_padding.append(reversed_padding[i])
-
-        padding = tuple(return_padding)
-    elif isinstance(padding, (list,tuple)) and len(padding) == rank and isinstance(padding[0], (list,tuple)):
-        # rank=2  ((1,0),(1,0)=>(1,0,1,0)
-        padding= tuple(list(itertools.chain(*list(padding))))
-    elif isinstance(padding, (list,tuple)) and len(padding) == 2*rank and isinstance(padding[0], int):
-        padding=padding
-    return padding
 
 
 

@@ -7,18 +7,13 @@ Author: Allan Yiin
 Author-email: allan@datadecision.ai
 License: MIT
 Download-URL: https://test.pypi.org/project/tridentx
-Description: ### Trident 
+Description: ![trident](trident_logo.png)
+        Multiverses for Deep Learning Developers without Pitfall
         
-        ### Learning Trident 
         
-        You can learn more about using and contributing to CNTK with the following resources:
-        
-        * [General documentation](https://docs.microsoft.com/en-us/cognitive-toolkit/)
-        * [CNTK Examples](./exsamples_cntk)
-        * [Pytorch Examples](./exsamples_tensorflow)
-        * [Tensorflow Examples](./exsamples_pytorch)
-        * [Pretrained models](./PretrainedModels)
-        * [License](./LICENSE.md)
+        | version| pytorch| tensorflow |
+        |-------------|-------------|---------------|
+        | [![version](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | [![pytorch](https://img.shields.io/static/v1?label=&message=>1.2&color=377EF0&style=for-the-badge)](https://cntk.ai/nightly-windows.html) | [![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0rc0&color=377EF0&style=for-the-badge)](https://cntk.ai/nightly-linux.html) |
         
 Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta

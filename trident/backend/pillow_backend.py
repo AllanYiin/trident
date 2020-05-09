@@ -32,36 +32,66 @@ sys.stderr.write('Pillow version:{0}.\n'.format(version))
 
 
 def read_image(im_path:str):
+    '''
+    Read pillow image from the image file path
+
+    Args:
+        im_path (str):
+
+    Returns:
+        pillow image
+
+    '''
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
             img=pil_image.open(im_path)
             return img
         else:
             if not os.path.exists(im_path):
-                sys.stderr.write('{0} not exsit'.format(im_path))
+                raise ValueError('{0} not exsit'.format(im_path))
             else:
-                sys.stderr.write('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
-            return   None
+                raise ValueError('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
     except Exception as e:
         sys.stderr.write(e)
         return None
 
 def read_mask(im_path:str):
+    '''
+    Read pillow image as mask from the image file path
+    The result is the same as  pillow_image.convert('L')
+
+    Args:
+        im_path (str):
+
+    Returns:
+        pillow image
+
+    '''
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
             img=pil_image.open(im_path).convert('L')
             return img
         else:
             if not os.path.exists(im_path):
-                sys.stderr.write('{0} not exsit'.format(im_path))
+                raise ValueError('{0} not exsit'.format(im_path))
             else:
-                sys.stderr.write('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
-            return   None
+                raise ValueError('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
     except Exception as e:
         sys.stderr.write(e)
         return None
 
 def save_image(arr,file_path):
+    '''
+    Saving a ndarray/ pillow image as image file
+
+    Args:
+        arr (tensor, ndarray, pillow image):
+        file_path ():
+
+    Returns:
+
+    '''
+
     img=array2image(arr)
     img.save(file_path)
 
@@ -69,16 +99,18 @@ def save_mask(arr,file_path):
     img=array2mask(arr)
     img.save(file_path)
 
+
+
+
+
 def image2array(img):
     '''
 
-    Parameters
-    ----------
-    img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
+    Args:
+        img (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
 
-    Returns ndarray  (HWC / RGB)
-    -------
-
+    Returns:
+        ndarray  (HWC / RGB)
     '''
     if isinstance(img,str):
         if os.path.exists(img) and img.split('.')[-1] in ('jpg','jpeg','png','bmp','tiff'):

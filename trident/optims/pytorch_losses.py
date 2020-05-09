@@ -32,62 +32,85 @@ __all__ = ['MSELoss', 'CrossEntropyLoss', 'NllLoss', 'BCELoss', 'F1ScoreLoss', '
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
 
-class _ClassificationLoss(nn.Module):
-    def __init__(self,axis=1,weight=None,  ignore_index=-100,cutoff=None ,target_onhot=False,label_smooth=False, reduction='mean'):
-        super(_ClassificationLoss, self).__init__()
-        if label_smooth==True and target_onhot==False:
-            raise ValueError('label_smooth need to set target_onhot==True')
+class _ClassificationLoss(Layer):
+    '''Calculate loss for classification task.
 
+    '''
+    def __init__(self,axis=1,loss_weights=None, from_logits=False, ignore_index=-100,cutoff=None ,label_smooth=False, reduction='mean',name=None,**kwargs):
+        '''
+
+        Args:
+            axis (int): the position where the classes is.
+            loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as number of classes.
+            from_logits (bool): wheather the output tensor is normalized as a probability (total equal to 1)
+            ignore_index (int or list of int):
+            cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number less than 1..
+            is_target_onehot (bool): Is the target tensor in onehot format?
+            label_smooth (bool): Should use label smoothing?
+            reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+                'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then summation them.
+
+        '''
+        super(_ClassificationLoss, self).__init__(name=name)
+        self.need_target_onehot = False
         self.reduction = reduction
-        self.axis=1
-        self.weight=weight
+        self.axis=axis
+        self.from_logits=from_logits
+        self.loss_weights=loss_weights
         self.ignore_index=ignore_index
-        if cutoff is None and not 0<cutoff<1:
+        if cutoff is not None and not 0<cutoff<1:
             raise ValueError('cutoff should between 0 and 1')
         self.cutoff=cutoff
         self.num_classes=None
-        self.target_onhot=target_onhot
         self.label_smooth=label_smooth
-        self.is_logit=False
 
-    def preprocess(self, output:torch.Tensor, target:torch.Tensor):
+
+
+    def preprocess(self, output:torch.Tensor, target:torch.Tensor,**kwargs):
         #check num_clases
         if self.num_classes is None:
             self.num_classes=output.shape[self.axis]
 
+
         #initilize weight
-        if self.weight is not None and len(self.weight)!=self.num_classes:
+        if self.loss_weights is not None and len(self.loss_weights)!=self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
-        if self.weight is None:
-            self.weight=ones(self.num_classes).to(output.device)
+        if self.loss_weights is None:
+            self.loss_weights=ones(self.num_classes).to(output.device)
         else:
-            self.weight=to_tensor(self.weight).to(output.device)
+            self.loss_weights=to_tensor(self.loss_weights).to(output.device)
 
         #ignore_index
         if isinstance(self.ignore_index, int) and 0 <= self.ignore_index < output.size(self.axis):
-            self.weight[self.ignore_index] = 0
+            self.loss_weights[self.ignore_index] = 0
         elif isinstance(self.ignore_index, (list, tuple)):
             for idx in self.ignore_index:
                 if isinstance(idx, int) and 0 <= idx < output.size(self.axis):
-                    self.weight[idx] = 0
-
-        #target_onehot
-        if self.target_onhot==True:
+                    self.loss_weights[idx] = 0
+        if self.label_smooth:
+            self.need_target_onehot=True
+        #need target onehot but currently not
+        if self.need_target_onehot==True and (target>1).float().sum()>0:
             target = make_onehot(target, classes=self.num_classes, axis=self.axis).to(output.device)
             if self.label_smooth:
                 target=target*(torch.Tensor(target.size()).uniform_(0.9,1).to(output.device))
 
         #check is logit
-        if  (0<=output<=1).all() and np.abs(output.sum(self.axis)-1).mean()<1e-4:
-            output=clip(output,_session.epsilon,1-_session.epsilon)
-            self.self.is_logit=True
+        if  self.from_logits==True or  (0<=output<=1).all() and np.abs(output.sum(self.axis)-1).mean()<1e-4:
+            self.from_logits=True
+        else:
+            # avoid numerical instability with epsilon clipping
+            output = clip(softmax(output,self.axis), epsilon(), 1.0 - epsilon())
+            self.from_logits=False
+
             #setting cutoff
             if self.cutoff is not None:
                 mask= (output > self.cutoff).float()
                 output=output*mask
         return output, target
 
-    def calculate_loss(self,output, target):
+    def calculate_loss(self,output, target,**kwargs):
+        ##dont do aggregation
         raise NotImplementedError
     def postprocess(self,loss):
         if self.reduction=='mean':
@@ -97,29 +120,52 @@ class _ClassificationLoss(nn.Module):
         elif self.reduction == 'batch_mean':
             return loss.mean(0).sum()
 
-    def forward(self, output, target):
-        output, target=self.preprocess(output, target)
-        loss=self.calculate_loss(output, target)
+    def forward(self, output, target,**kwargs):
+        loss=self.calculate_loss(*self.preprocess(output, target))
         loss=self.postprocess(loss)
         return loss
 
 
 
-class CrossEntropyLoss(_Loss):
-    def __init__(self, weight=None, with_logits=True, ignore_index=-100, reduction='mean', name='CrossEntropyLoss'):
-        super().__init__(reduction=reduction)
-        self.name = name
-        self.weight = weight
-        self.ignore_index = ignore_index
-        self.with_logits = with_logits
+class CrossEntropyLoss(_ClassificationLoss):
+    '''
+    Calculate the cross entropy loss
 
-    def forward(self, output, target):
-        if not self.with_logits:
-            output = torch.softmax(output, dim=1)
-        if len(output.size()) == len(target.size()):
-            target = argmax(target, 1)
-        return F.cross_entropy(output, target, weight=self.weight, ignore_index=self.ignore_index,
-                               reduction=self.reduction)
+    Examples:
+    >>> output=to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]]).float()
+    >>> print(output.shape)
+    torch.Size([4, 3])
+    >>> target=to_tensor([1,0,1,2]).long()
+    >>> print(target.shape)
+    torch.Size([4])
+    >>> CrossEntropyLoss(reduction='mean')(output,target).cpu()
+    tensor(1.1034)
+    >>> CrossEntropyLoss(reduction='sum')(output,target).cpu()
+    tensor(4.4136)
+    >>> CrossEntropyLoss(label_smooth=True,reduction='mean')(output,target).cpu()
+    tensor(1.1034)
+    >>> CrossEntropyLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
+    tensor(0.8259)
+    >>> CrossEntropyLoss(ignore_index=2,reduction='mean')(output,target).cpu()
+    tensor(0.8259)
+
+
+
+
+    '''
+    def __init__(self, axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='CrossEntropyLoss'):
+        super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
+        self._built = True
+    def calculate_loss(self, output, target, **kwargs):
+        if not self.need_target_onehot:
+            loss=torch.nn.functional.cross_entropy(output,target,self.loss_weights,reduction= 'none')
+        else:
+            reshape_shape=list(ones(len(output.shape)))
+            reshape_shape[self.axis]=self.num_classes
+            loss = -target *nn.LogSoftmax(dim=self.axis)(output) * reshape(self.loss_weights,reshape_shape)
+        return loss
+
+
 
 
 class NllLoss(_Loss):

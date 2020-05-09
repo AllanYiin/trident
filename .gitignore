@@ -92,6 +92,7 @@ ipython_config.py
 #unused
 *_1.py
 _*.py
+*.pypirc
 .pypirc
 
 
@@ -241,13 +242,6 @@ trident/experiments/tfe_layers.py
 
 docs/en-us/
 docs/zh-cn/
-!/trident/backend/functions.py
-!/trident/optims/pytorch_profiling.py
-!/trident/optims/saving.py
-!/trident/misc/detection_utils.py
-!/trident/misc/segment_utils.py
-!/trident/callbacks/saving_strategies.py
-!/trident/data/text_common.py
-/internal_tool/
+
 
 trident.png

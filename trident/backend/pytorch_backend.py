@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+import itertools
 import copy
 import inspect
 import logging
@@ -31,7 +32,7 @@ from torch._six import container_abcs
 from trident.backend.common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, get_signature,get_session,set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call']
+__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -997,13 +998,6 @@ def print_network(net, verbose=False):
         logging.info(net)
     logging.info('Total number of parameters: %d\n' % num_params)
 
-
-
-
-
-
-
-
 def summary(model, input_size, batch_size=-1, device="cuda"):
     def register_hook(module):
         def hook(module, input, output):
@@ -1132,11 +1126,43 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     # return summary
 
 
+def normalize_padding(padding, rank):
+    '''
 
+    Args:
+        padding (None, int, tuple):
+        rank (int):
 
+    Returns:
+        the normalized format of padding
+    Examples
+    >>> normalize_padding(((1,0),(1,0)),2)
+    (1, 0, 1, 0)
+    >>> normalize_padding((1,0),2)
+    (0, 0, 1, 1)
+    '''
+    if padding is None:
+        padding=(0,)*(2*rank)
+    elif isinstance(padding,int):
+        padding = (padding,) * (2 * rank)
+    elif isinstance(padding,(list,tuple)) and len(padding)==1:
+        padding = padding * (2 * rank)
+    elif isinstance(padding,(list,tuple)) and len(padding)==rank and  isinstance(padding[0],int):
+        # rank=2 (1,1)=>(1,1,1,1)   (1,0)=>(0,0,1,1)
+        reversed_padding=list(padding)
+        reversed_padding.reverse()
+        return_padding=[]
+        for i in range(rank):
+            return_padding.append(reversed_padding[i])
+            return_padding.append(reversed_padding[i])
 
-
-
+        padding = tuple(return_padding)
+    elif isinstance(padding, (list,tuple)) and len(padding) == rank and isinstance(padding[0], (list,tuple)):
+        # rank=2  ((1,0),(1,0)=>(1,0,1,0)
+        padding= tuple(list(itertools.chain(*list(padding))))
+    elif isinstance(padding, (list,tuple)) and len(padding) == 2*rank and isinstance(padding[0], int):
+        padding=padding
+    return padding
 
 
 def summary_str(model):

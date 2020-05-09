@@ -33,12 +33,7 @@ elif _backend == 'tensorflow':
     from ..backend.tensorflow_backend import *
     from ..backend.tensorflow_ops import *
     from ..optims.tensorflow_optimizers import *
-elif _backend == 'cntk':
-    import cntk as C
-    from cntk.learners import *
-    from ..backend.cntk_backend import *
-    from ..backend.cntk_ops import *
-    from ..optims.cntk_optimizers import *
+
 
 _, term_width = get_terminal_size()
 term_width = int(term_width)

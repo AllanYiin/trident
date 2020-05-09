@@ -210,6 +210,10 @@ def default_restore_location(storage, location):
                        + location + ")")
 
 
+def normalize_storage_type(storage_type):
+    return storage_type.__name__
+    #return getattr(trident.backend, storage_type.__name__)
+
 
 
 def storage_to_tensor_type(storage):

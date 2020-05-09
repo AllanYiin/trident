@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from  trident.backend.common import *
 
-__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid',]
+__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid','concate','stack','gram_matrix','shuffle','random_choice']
 
 
 
@@ -391,12 +391,12 @@ def true_divide(x, y):
 def pi():
     return to_tensor(np.pi)
 
-def matmul(x,y,transpose_x=False,transpose_y=False):
-    if transpose_x:
-        x=x.T
-    if transpose_y:
-        y=y.T
-    return torch.matmul(x,y)
+def matmul(a,b,transpose_a=False,transpose_b=False):
+    if transpose_a:
+        a=a.T
+    if transpose_b:
+        b=b.T
+    return torch.matmul(a,b)
 
 
 def prod(x):
@@ -1435,16 +1435,23 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
 
 
 
+############################
+## tensor manipulation
+###########################
+
+def concate(x:List[torch.Tensor],axis=1):
+    return torch.cat(x,dim=axis)
+
+def stack(x:List[torch.Tensor],axis=1):
+    return torch.stack(x,dim=axis)
 
 
-
-
-def gram_matrix(input):
-    a, b, c, d = input.size()  # a=batch size(=1)
+def gram_matrix(x:torch.Tensor):
+    a, b, c, d = x.size()  # a=batch size(=1)
     # b=number of feature maps
     # (c,d)=dimensions of a f. map (N=c*d)
 
-    features = input.view(a * b, c * d)  # resise F_XL into \hat F_XL
+    features = x.view(a * b, c * d)  # resise F_XL into \hat F_XL
     features=features-features.mean(-1)
     G = torch.mm(features, features.t())  # compute the gram product
 
@@ -1453,12 +1460,13 @@ def gram_matrix(input):
     return G#.div(a * b * c * d)
 
 
-def concate(x:List[torch.Tensor],axis=1):
-    return torch.cat(x,dim=axis)
 
 
 
 
+############################
+## random
+###########################
 
 
 def shuffle(t:torch.Tensor):
@@ -1470,6 +1478,10 @@ def random_choice(t:torch.Tensor):
     idx = np.random.choice(np.array(range(t.size(0))))
     return t[idx]
 
+
+############################
+## loss
+###########################
 
 def binary_crossentropy(target, output, from_logits=False):
     if from_logits:
@@ -1592,13 +1604,6 @@ def unpad_xyxy_bboxes(bboxes_tensor: torch.Tensor, pad, dim=-1):
 
 
 
-def gram_matrix(input):
-    a, b, c, d = input.size()  # a=batch size(=1)
-    # b=number of feature maps
-    # (c,d)=dimensions of a f. map (N=c*d)
-    features = input.view(a * b, c * d)  # resise F_XL into \hat F_XL
-    G = torch.mm(features, features.t())  # compute the gram product
-    return G
 
 
 def angle_to_rotation_matrix(angle) -> torch.Tensor:

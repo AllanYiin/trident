@@ -1,14 +1,15 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import functools
 import math
 import os
 import random
 import re
 import time
 from itertools import repeat
-
+from functools import partial
+import inspect
 import cv2
 import numpy as np
 import six
@@ -19,12 +20,12 @@ from skimage import morphology
 from skimage import transform, exposure
 from skimage.filters import *
 
-from ..backend.common import *
+from trident.backend.common import *
 
-__all__ = ['read_image', 'read_mask', 'save_image', 'save_mask', 'image2array', 'array2image', 'mask2array',
+__all__ = ['transform','read_image', 'read_mask', 'save_image', 'save_mask', 'image2array', 'array2image', 'mask2array',
            'array2mask', 'list_pictures', 'normalize', 'unnormalize', 'channel_reverse', 'blur', 'random_blur',
            'random_crop', 'resize', 'rescale', 'downsample_then_upsample', 'add_noise', 'gray_scale', 'to_rgb',
-           'to_bgr', 'auto_level', 'random_invert_color', 'image_backend_adaptive', 'reverse_image_backend_adaptive',
+           'to_bgr', 'auto_level', 'random_invert_color', 'image_backend_adaption', 'reverse_image_backend_adaption',
            'random_adjust_hue', 'random_channel_shift', 'random_cutout', 'random_rescale_crop', 'random_center_crop',
            'adjust_gamma', 'random_adjust_gamma', 'adjust_contrast', 'random_adjust_contrast', 'clahe',
            'erosion_then_dilation', 'dilation_then_erosion', 'image_erosion', 'image_dilation', 'adaptive_binarization',
@@ -48,6 +49,31 @@ array2image = array2image
 mask2array = mask2array
 array2mask = array2mask
 
+
+def transform(func):
+    '''
+
+    Args:
+        func ():
+
+    Returns:
+
+
+
+    '''
+    def wrapper(*args, **kwargs):
+        argspec = inspect.getfullargspec(func)
+
+        if len(args)>len(argspec.varargs)-1:
+            raise ValueError('Beside image, there should be only {0} in {1} function, but you get {2}'.format(len(argspec.varargs)-1,func.__name__,len(args)))
+        if len(kwargs) > len(argspec.kwonlyargs) - 1:
+            raise ValueError('there should be only {0} in {1} function, but you get {2}'.format(len(argspec.kwonlyargs) , func.__name__, len(kwargs)))
+        for i in range(len(args)):
+            kwargs[argspec.args[i+1]]=args[i]
+        ret = partial(func,**kwargs)
+        return ret
+
+    return wrapper
 
 def list_pictures(directory, ext='jpg|jpeg|bmp|png|ppm|jfif'):
     return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
@@ -115,7 +141,7 @@ def normalize(mean, std):
 
 def unnormalize(mean, std):
     def img_op(image: np.ndarray):
-        image = reverse_image_backend_adaptive(image)
+        image = reverse_image_backend_adaption(image)
         norm_mean = mean
         norm_std = std
         if isinstance(norm_mean, tuple):
@@ -676,7 +702,20 @@ def random_mirror():
     return img_op
 
 
-def image_backend_adaptive(image):
+def image_backend_adaption(image):
+    if  _session.backend == 'tensorflow':
+        if image.ndim==2: #gray-scale image
+            image=np.expand_dims(image,-1).astype(np.float32)
+        elif image.ndim in (3,4):
+            image=image.astype(np.float32)
+    else:
+        if image.ndim==2: #gray-scale image
+            image=np.expand_dims(image,0).astype(np.float32)
+        elif image.ndim==3:
+            image = np.transpose(image, [2, 0, 1]).astype(np.float32)
+        elif image.ndim==4:
+            image = np.transpose(image, [0, 3, 1, 2]).astype(np.float32)
+
     if _session.backend == 'tensorflow' and image.ndim in (3, 4):
         image = image.astype(np.float32)
     elif _session.backend in ['pytorch', 'cntk'] and image.ndim == 3:
@@ -690,7 +729,7 @@ def image_backend_adaptive(image):
     return image
 
 
-def reverse_image_backend_adaptive(image):
+def reverse_image_backend_adaption(image):
     if _session.backend in ['pytorch', 'cntk'] and image.ndim == 3 and image.shape[0] in [3, 4]:
         image = np.transpose(image, [1, 2, 0]).astype(np.float32)
     elif _session.backend in ['pytorch', 'cntk'] and image.ndim == 4 and image.shape[1] in [3, 4]:
