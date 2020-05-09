@@ -17,9 +17,9 @@ from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.ops import nn_ops
 
 from .tensorflow_activations import get_activation
-from ..backend.common import *
-from ..backend.tensorflow_backend import *
-from ..backend.tensorflow_ops import *
+from trident.backend.common import *
+from trident.backend.tensorflow_backend import *
+from trident.backend.tensorflow_ops import *
 _tf_data_format= 'channels_last'
 
 __all__ = ['MaxPool1d', 'MaxPool2d','GlobalAvgPool2d','get_pooling']

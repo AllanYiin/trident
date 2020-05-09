@@ -14,21 +14,21 @@ else:
 _SESSION.trident_dir=_trident_dir
 
 from ..backend.load_backend import get_backend,get_image_backend
-from .data_provider import *
-from .image_common import *
-from .text_common import *
-from .image_reader import ImageReader,ImageThread
-from .data_loaders import *
-from .utils import *
-from .preprocess_policy import *
-from .augment_policy import *
-from .mask_common import *
-from .label_common import *
-from .bbox_common  import *
+from trident.data.data_provider import *
+from trident.data.image_common import *
+
+from trident.data.image_reader import ImageReader,ImageThread
+from trident.data.data_loaders import *
+from trident.data.utils import *
+from trident.data.preprocess_policy import *
+from trident.data.augment_policy import *
+from trident.data.mask_common import *
+from trident.data.label_common import *
+from trident.data.bbox_common  import *
 
 # import pyximport; pyximport.install()
 # from .cython_nms import *
 # from .cython_bbox import *
-from .bbox_common import *
+
 
 

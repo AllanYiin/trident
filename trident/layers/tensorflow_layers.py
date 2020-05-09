@@ -414,18 +414,25 @@ class _ConvNd(Layer):
                     print(self.padding)
 
             if self.depthwise or self.separable:
-                self.groups = self.input_filters if self.groups == 1 else self.groups
                 if self.depth_multiplier is None:
                     self.depth_multiplier = 1
+                if self.groups > 1:
+                    pass
+                elif self.depth_multiplier < 1:
+                    self.groups = int(builtins.round(self.input_filters * self.depth_multiplier, 0))
+                else:
+                    self.groups = self.input_filters if self.groups == 1 else self.groups
+
 
             if self.num_filters is None and self.depth_multiplier is not None:
-                self.num_filters = int(round(self.input_filters * self.depth_multiplier, 0))
+                self.num_filters = int(builtins.round(self.input_filters * self.depth_multiplier,0))
 
-            if self.input_filters % self.groups != 0:
-                raise ValueError('in_channels must be divisible by groups')
+            if self.groups != 1 and self.num_filters % self.groups != 0:
+                raise ValueError('out_channels must be divisible by groups')
 
             if self.depthwise and self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
+
 
             channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
 
@@ -986,7 +993,7 @@ class Upsampling2d(Layer):
             new_shape[1] = int(new_shape[1] * self.scale_factor[1])
         new_shape=to_tensor(new_shape,dtype=tf.int32)
         if self.mode == 'pixel_shuffle':
-            return depth_to_space(x,int(self.scale_factor[0]))
+            return tf.nn.depth_to_space(x,int(self.scale_factor[0]))
         elif self.mode == 'nearest':
             return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
         elif self.mode == 'bilinear':

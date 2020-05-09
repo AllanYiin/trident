@@ -25,14 +25,14 @@ _backend = _session.backend
 if _backend == 'pytorch':
     import torch
     import torch.nn as nn
-    from ..backend.pytorch_backend import *
-    from ..backend.pytorch_ops import *
-    from ..optims.pytorch_optimizers import *
+    from trident.backend.pytorch_backend import *
+    from trident.backend.pytorch_ops import *
+    from trident.optims.pytorch_optimizers import *
 elif _backend == 'tensorflow':
     import tensorflow as tf
-    from ..backend.tensorflow_backend import *
-    from ..backend.tensorflow_ops import *
-    from ..optims.tensorflow_optimizers import *
+    from trident.backend.tensorflow_backend import *
+    from trident.backend.tensorflow_ops import *
+    from trident.optims.tensorflow_optimizers import *
 
 
 _, term_width = get_terminal_size()

@@ -13,38 +13,19 @@ from itertools import repeat
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import backend as K
+
 from tensorflow.python.client import device_lib
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras import layers as layer_module
-from tensorflow.python.keras.engine import base_layer
-from tensorflow.python.keras.engine import base_layer_utils
-from tensorflow.python.keras.engine import input_layer
-from tensorflow.python.keras.engine import training
-from tensorflow.python.keras.engine import training_utils
-from tensorflow.python.keras.engine.base_layer import Layer
 from tensorflow.python.ops import image_ops
-from tensorflow.python.keras.engine.input_spec import InputSpec
-from tensorflow.python.keras.saving.saved_model import model_serialization
-from tensorflow.python.keras.utils import conv_utils
-from tensorflow.python.keras.utils import generic_utils
-from tensorflow.python.keras.utils import layer_utils
-from tensorflow.python.keras.utils import tf_utils
-from tensorflow.python.ops import nn_ops
-from tensorflow.python.training.tracking import base as trackable
-from tensorflow.python.training.tracking import layer_utils as trackable_layer_utils
-from tensorflow.python.util import nest
-from tensorflow.python.util import tf_inspect
-from tensorflow.python.util.tf_export import keras_export
 
-from .tensorflow_activations import get_activation, Identity
-from .tensorflow_layers import *
-from .tensorflow_normalizations import get_normalization
-from .tensorflow_pooling import get_pooling, GlobalAvgPool2d
-from ..backend.common import *
-from ..backend.tensorflow_backend import *
-from ..backend.tensorflow_ops import *
-from ..layers.tensorflow_layers import *
+from trident.backend.common import *
+from trident.layers.tensorflow_activations import get_activation, Identity
+from trident.layers.tensorflow_layers import *
+from trident.layers.tensorflow_normalizations import get_normalization
+from trident.layers.tensorflow_pooling import get_pooling, GlobalAvgPool2d
+from trident.backend.tensorflow_backend import *
+from trident.backend.tensorflow_ops import *
+from trident.layers.tensorflow_layers import *
 
 _tf_data_format = 'channels_last'
 

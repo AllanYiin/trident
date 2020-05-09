@@ -1,21 +1,14 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import math
-
-
-from tensorflow.python.framework import tensor_shape
-from tensorflow.python.ops import nn_ops
-from ..backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
-
-
 import itertools
-
-
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import nn_ops
+from trident.backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
 
-from ..backend.common import get_session, addindent, get_time_suffix, get_function, get_class, format_time, \
-    get_terminal_size, snake2camel, camel2snake
 
 __all__ = ['accuracy','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 

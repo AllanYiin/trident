@@ -18,8 +18,8 @@ except ImportError:
     ImageFilter=None
 import numpy as np
 from trident.backend.common import get_session
-#from .load_backend import to_numpy
-#__all__ = ['read_image','read_mask','save_image','save_mask','image2array','array2image','mask2array','array2mask','adjust_brightness','adjust_blur','adjust_saturation']
+
+__all__ = ['read_image','read_mask','save_image','save_mask','image2array','array2image','mask2array','array2mask','adjust_brightness','adjust_blur','adjust_saturation']
 
 
 _session=get_session()

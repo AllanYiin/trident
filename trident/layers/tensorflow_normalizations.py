@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import inspect
 import tensorflow as tf
-
+import numpy as np
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
     format_time, get_terminal_size, snake2camel, camel2snake
 from trident.backend.tensorflow_backend import Layer, Sequential
@@ -18,6 +18,23 @@ _session = get_session()
 
 
 _epsilon = _session.epsilon
+
+
+def instance_std(x, eps=1e-5):
+    reduce_shape=range(len(x.shape))
+    _, var = tf.nn.moments(x, axes=reduce_shape[1:-1], keepdims=True)
+    return tf.sqrt(var + eps)
+
+
+
+def group_std(x, groups, eps = 1e-5):
+    rank = len(x.shape) - 2
+    spaceshape=x.shape[1:-1]
+    N=x.shape[0]
+    C=x.shape[-1]
+    x1 = x.reshape(N,groups,-1)
+    var = (x1.var(dim=-1, keepdim = True)+eps).reshape(N,groups,-1)
+    return (x1 / var.sqrt()).reshape((N,C,)+spaceshape)
 
 
 
@@ -413,6 +430,73 @@ BatchNorm3d=BatchNorm
 #         }
 #         base_config = super(InstanceNorm, self).get_config()
 #         return dict(list(base_config.items()) + list(config.items()))
+
+
+class EvoNormB0(Layer):
+    def __init__(self,rank=2,nonlinear=True,momentum=0.9,eps = 1e-5):
+        super(EvoNormB0, self).__init__()
+        self.rank=rank
+        self.nonlinear = nonlinear
+        self.momentum = momentum
+        self.eps = eps
+
+    def build(self, input_shape):
+        if self._built == False :
+            newshape=np.ones(self.rank+2)
+            newshape[-1]=self.input_filters
+            newshape=tuple(newshape.astype(np.int32).tolist())
+            self.weight = tf.Variable(ones(newshape))
+            self.bias = tf.Variable(zeros(newshape))
+            if self.nonlinear:
+                self.v = tf.Variable(ones(newshape))
+            self.register_buffer('running_var', ones(newshape))
+            self._built=True
+
+    def forward(self, x):
+        if self.training:
+            permute_pattern=np.arange(0,self.rank+2)
+            permute_pattern[0]=1
+            permute_pattern[1]=0
+
+            x1 = x.permute(tuple(permute_pattern)).reshape(self.input_filters, -1)
+            var = x1.var(dim=1).reshape(self.weight.shape)
+            self.running_var.assign(self.momentum * self.running_var + (1 - self.momentum) * var)
+        else:
+            var = self.running_var
+        if self.nonlinear:
+            den = torch.max((var+self.eps).sqrt(), self.v * x + instance_std(x))
+            return x / den * self.weight + self.bias
+        else:
+            return x * self.weight + self.bias
+
+
+class EvoNormS0(Layer):
+    def __init__(self,rank=2,groups=8,nonlinear=True):
+        super(EvoNormS0, self).__init__()
+        self.nonlinear = nonlinear
+        self.groups = groups
+
+    def build(self, input_shape):
+        if self._built == False :
+            newshape = np.ones(self.rank + 2)
+            newshape[-1] = self.input_filters
+            newshape = tuple(newshape.astype(np.int32).tolist())
+            self.weight = tf.Variable(ones(newshape))
+            self.bias = tf.Variable(zeros(newshape))
+            if self.nonlinear:
+                self.v = tf.Variable(ones(newshape))
+            self.register_buffer('running_var', ones(newshape))
+            self._built=True
+
+    def forward(self, x):
+        if self.nonlinear:
+            num = sigmoid(self.v * x)
+            std = group_std(x,self.groups)
+            return num * std * self.gamma + self.beta
+        else:
+            return x * self.gamma + self.beta
+
+
 
 def get_normalization(fn_name):
     if fn_name is None:

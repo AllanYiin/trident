@@ -11,20 +11,20 @@ import numpy as np
 import math
 from itertools import product as product
 import cv2
-from ..data.dataset import BboxDataset
-from ..backend.common import *
-from ..backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
-from ..backend.pytorch_ops import *
-from ..data.bbox_common import xywh2xyxy, xyxy2xywh,bbox_giou,bbox_giou_numpy
-from ..data.image_common import *
-from ..data.utils import download_model_from_google_drive
-from ..layers.pytorch_activations import get_activation, Identity, Relu, softmax
-from ..layers.pytorch_blocks import *
-from ..layers.pytorch_layers import *
-from ..layers.pytorch_normalizations import get_normalization
-from ..layers.pytorch_pooling import *
-from ..optims.pytorch_trainer import *
-from ..optims.pytorch_losses import *
+from trident.data.dataset import BboxDataset
+from trident.backend.common import *
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_ops import *
+from trident.data.bbox_common import xywh2xyxy, xyxy2xywh,bbox_giou,bbox_giou_numpy
+from trident.data.image_common import *
+from trident.data.utils import download_model_from_google_drive
+from trident.layers.pytorch_activations import get_activation, Identity, Relu, softmax
+from trident.layers.pytorch_blocks import *
+from trident.layers.pytorch_layers import *
+from trident.layers.pytorch_normalizations import get_normalization
+from trident.layers.pytorch_pooling import *
+from trident.optims.pytorch_trainer import *
+from trident.optims.pytorch_losses import *
 
 image_size = [640, 480]
 cfg = {'min_sizes': [[10, 16, 24], [32, 48], [64, 96], [128, 192, 256]], 'steps': [8, 16, 32, 64],
@@ -847,10 +847,10 @@ class SsdDetectionModel(ImageDetectionModel):
                         if func.__qualname__ == 'resize.<locals>.img_op':
                             scale = func.scale
 
-                img = image_backend_adaptive(img)
+                img = image_backend_adaption(img)
                 inp = to_tensor(np.expand_dims(img, 0)).to(
-                    torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
-                    self._model.weights[0].data.dtype)
+                    torch.device("cuda" if self._model.loss_weights[0].data.is_cuda else "cpu")).to(
+                    self._model.loss_weights[0].data.dtype)
 
                 confidence, boxes = self._model(inp)
                 boxes = boxes[0]

@@ -1,8 +1,11 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import numpy as np
 import tensorflow as tf
 
-from ..backend.common import get_session, get_function, camel2snake, snake2camel
-from  ..backend.tensorflow_ops import *
+from trident.backend.common import get_session, get_function, camel2snake, snake2camel
+from  trident.backend.tensorflow_ops import *
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
 

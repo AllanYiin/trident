@@ -13,11 +13,26 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import epsilon, get_function, get_session, enforce_singleton,get_class
 from trident.backend.pytorch_backend import Layer,get_device
+from trident.backend.pytorch_ops import *
 
-__all__ = ['InstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm2d','SpectralNorm','get_normalization']
+__all__ = ['InstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm2d','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
 _session = get_session()
 _epsilon=_session.epsilon
 
+def instance_std(x, eps=1e-5):
+    rank=len(x.shape)-2
+    new_shape=range(len(x.shape))
+    _, var = moments(x, axis=new_shape[2:], keepdims=True)
+    return sqrt(var + eps)
+
+def group_std(x, groups, eps = 1e-5):
+    rank = len(x.shape) - 2
+    spaceshape=x.shape[2:]
+    N = x.size(0)
+    C = x.size(1)
+    x1 = x.reshape(N,groups,-1)
+    var = (x1.var(dim=-1, keepdim = True)+eps).reshape(N,groups,-1)
+    return (x1 / var.sqrt()).reshape((N,C,)+spaceshape)
 
 
 class BatchNorm(Layer):
@@ -129,7 +144,7 @@ class GroupNorm(Layer):
 
 
     def build(self, input_shape):
-        if self._built == False or self.normalizer is None:
+        if self._built == False :
             assert  self.input_filters % self.num_groups == 0, 'number of groups {} must divide number of channels {}'.format(self.num_groups,  self.input_filters)
             if self.affine:
                 self.weight = Parameter(torch.Tensor(self.input_filters))
@@ -206,59 +221,43 @@ InstanceNorm3d=InstanceNorm
 
 
 class LayerNorm2d(Layer):
-    def __init__(self, momentum=0.1, affine=True, track_running_stats=True):
-        """
-        http://pytorch.org/docs/stable/nn.html#batchnorm1d
+    """
+    Layer Normalization (https://arxiv.org/pdf/1607.06450.pdf).
 
-        Args:
-            dim: 1d, 2d, or 3d BatchNorm
-         eps: nn.BatchNorm parameter
-            momentum: nn.BatchNorm parameter
-            affine: nn.BatchNorm parameter
-            track_running_stats: nn.BatchNorm parameter
-        """
+    http://pytorch.org/docs/stable/nn.html#batchnorm1d
+
+    Args:
+
+        eps: nn.BatchNorm parameter
+        momentum: nn.BatchNorm parameter
+        affine: nn.BatchNorm parameter
+        axis: 1d, 2d, or 3d BatchNorm
+    """
+    def __init__(self, momentum=0.1, affine=True, axis=-1,  eps=_epsilon):
         super().__init__()
-        self.norm_kwargs = dict(eps=_epsilon, momentum=momentum, affine=affine, track_running_stats=track_running_stats)
-        self.bias = None
-        self._built = False
-        self.normalizer = None
+        self.momentum=momentum
+        self.affine=affine
+        self.eps=eps
+        self.axis=axis
     def build(self, input_shape):
-        if self._built == False or self.normalizer is None:
-            self.normalizer =_LayerNorm( self.input_filters, **self.norm_kwargs).to(get_device())
+        if self._built == False :
+            if self.affine:
+                self.weight = Parameter(torch.Tensor(self.input_filters))
+                self.bias = Parameter(torch.Tensor(self.input_filters))
+                init.ones_(self.weight)
+                init.zeros_(self.bias)
             self._built=True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return self.normalizer(x)
-
-class _LayerNorm(nn.Module):
-    """
-    Layer Normalization (https://arxiv.org/pdf/1607.06450.pdf).
-    """
-    def __init__(self, last_dim_size, eps=1e-6):
-        """
-        :param last_dim_size: Size of last dimension.
-        :param eps: Small number for numerical stability (avoid division by zero).
-        """
-        super(_LayerNorm, self).__init__()
-        self._a_2 = nn.Parameter(torch.ones(last_dim_size))
-        self._b_2 = nn.Parameter(torch.zeros(last_dim_size))
-        self._eps = eps
-    def forward(self, *x):
-        """
-        :param x: Tensor to be layer normalized.
-        :return: Layer normalized Tensor.
-        """
-        x = enforce_singleton(x)
-        mean = x.mean(dim=-1, keepdim=True).detach()
-        std = x.std(dim=-1, keepdim=True).detach()
-        return self._a_2 * (x - mean) / (std + self._eps) + self._b_2
+        mean = x.mean(dim=self.axis, keepdim=True).detach()
+        std = x.std(dim=self.axis, keepdim=True).detach()
+        return self.weight * (x - mean) / (std + self._eps) +self.bias
 
 
 
 
 
-def l2normalize(v, eps=1e-12):
-    return v / (v.norm() + eps)
+
 
 
 class SpectralNorm(Layer):
@@ -276,8 +275,8 @@ class SpectralNorm(Layer):
 
         height = w.data.shape[0]
         for _ in range(self.power_iterations):
-            v.data = l2normalize(torch.mv(torch.t(w.view(height,-1).data), u.data))
-            u.data = l2normalize(torch.mv(w.view(height,-1).data, v.data))
+            v.data = l2_normalize(torch.mv(torch.t(w.view(height,-1).data), u.data))
+            u.data = l2_normalize(torch.mv(w.view(height,-1).data, v.data))
 
         # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
         sigma = u.dot(w.view(height, -1).mv(v))
@@ -301,8 +300,8 @@ class SpectralNorm(Layer):
 
         u = Parameter(w.data.new(height).normal_(0, 1), requires_grad=False)
         v = Parameter(w.data.new(width).normal_(0, 1), requires_grad=False)
-        u.data = l2normalize(u.data)
-        v.data = l2normalize(v.data)
+        u.data = l2_normalize(u.data)
+        v.data = l2_normalize(v.data)
         w_bar = Parameter(w.data)
 
         del self.module._parameters[self.name]
@@ -321,6 +320,67 @@ class SpectralNorm(Layer):
         return self.module(x)
 
 
+class EvoNormB0(Layer):
+    def __init__(self,rank=2,nonlinear=True,momentum=0.9,eps = 1e-5):
+        super(EvoNormB0, self).__init__()
+        self.rank=rank
+        self.nonlinear = nonlinear
+        self.momentum = momentum
+        self.eps = eps
+
+    def build(self, input_shape):
+        if self._built == False :
+            newshape=np.ones(self.rank+2)
+            newshape[1]=self.input_filters
+            newshape=tuple(newshape.astype(np.int32).tolist())
+            self.weight = Parameter(ones(newshape))
+            self.bias = Parameter(zeros(newshape))
+            if self.nonlinear:
+                self.v = Parameter(ones(newshape))
+            self.register_buffer('running_var', ones(newshape))
+            self._built=True
+
+    def forward(self, x):
+        if self.training:
+            permute_pattern=np.arange(0,self.rank+2)
+            permute_pattern[0]=1
+            permute_pattern[1]=0
+            x1 = x.permute(tuple(permute_pattern))
+            _, x_var = moments(x1, [1, 2, 3], keepdims=True)
+            x_var=x_var.permute(tuple(permute_pattern))
+            self.running_var=self.momentum * self.running_var + (1 - self.momentum) * x_var
+        else:
+            x_var=self.running_var
+        if self.nonlinear:
+            den =maximum((x_var+self.eps).sqrt(), self.v * x + instance_std(x))
+            return (x* self.weight )/ den + self.bias
+        else:
+            return (x * self.weight) + self.bias
+
+
+class EvoNormS0(Layer):
+    def __init__(self,rank=2,groups=8,nonlinear=True):
+        super(EvoNormS0, self).__init__()
+        self.nonlinear = nonlinear
+        self.groups = groups
+
+    def build(self, input_shape):
+        if self._built == False :
+            self.input_filters=input_shape[0].item
+            self.weight = Parameter(ones((1, self.input_filters)+(1,)*self.rank))
+            self.bias = Parameter(zeros((1, self.input_filters)+(1,)*self.rank))
+            if self.nonlinear:
+                self.v = Parameter(ones((1, self.input_filters)+(1,)*self.rank))
+            self.register_buffer('running_var', ones((1, self.input_filters)+(1,)*self.rank))
+            self._built=True
+
+    def forward(self, x):
+        if self.nonlinear:
+            num = torch.sigmoid(self.v * x)
+            std = group_std(x,self.groups)
+            return num * std * self.gamma + self.beta
+        else:
+            return x * self.gamma + self.beta
 
 
 def get_normalization(fn_name):
@@ -337,8 +397,13 @@ def get_normalization(fn_name):
             return BatchNorm()
         elif  fn_name.lower().strip() in ['group_norm','group','gn','g']:
             return GroupNorm(num_groups=16)
+        elif fn_name.lower().strip() in ['evo_normb0', 'evo-b0', 'evob0']:
+            return EvoNormB0()
+        elif fn_name.lower().strip() in ['evo_norms0', 'evo-s0', 'evos0']:
+            return EvoNormS0()
         elif fn_name.lower().strip() in ['spectral_norm','spectral','spec','sp' ,'s']:
-            return SpectralNorm()
+            return SpectralNorm
+
     elif inspect.isclass(fn_name):
         return fn_name
     fn_modules = ['trident.layers.pytorch_normalizations']

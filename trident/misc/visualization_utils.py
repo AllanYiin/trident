@@ -38,8 +38,8 @@ from PIL import ImageFont
 import colorsys
 import itertools
 import numpy as np
-from ..backend.common import get_time_suffix,make_dir_if_need
-from ..data.image_common import *
+from trident.backend.common import get_time_suffix,make_dir_if_need
+from trident.data.image_common import *
 
 
 __all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram','generate_palette','plot_bbox','plot_3d_histogram','plot_centerloss']

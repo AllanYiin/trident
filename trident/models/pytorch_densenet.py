@@ -20,16 +20,16 @@ from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from ..backend.common import *
-from ..backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary
-from ..data.image_common import *
-from ..data.utils import download_model_from_google_drive
-from ..layers.pytorch_activations import get_activation, Identity, Relu
-from ..layers.pytorch_blocks import *
-from ..layers.pytorch_layers import *
-from ..layers.pytorch_normalizations import get_normalization, BatchNorm2d
-from ..layers.pytorch_pooling import *
-from ..optims.pytorch_trainer import *
+from trident.backend.common import *
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary
+from trident.data.image_common import *
+from trident.data.utils import download_model_from_google_drive
+from trident.layers.pytorch_activations import get_activation, Identity, Relu
+from trident.layers.pytorch_blocks import *
+from trident.layers.pytorch_layers import *
+from trident.layers.pytorch_normalizations import get_normalization, BatchNorm2d
+from trident.layers.pytorch_pooling import *
+from trident.optims.pytorch_trainer import *
 
 __all__ = ['DenseNet','DenseNet121','DenseNet161','DenseNet169','DenseNet201','DenseNetFcn']
 

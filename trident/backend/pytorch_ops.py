@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from  trident.backend.common import *
 
-__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid','concate','stack','gram_matrix','shuffle','random_choice']
+__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid','reshape','permute','transpose','squeeze','expand_dims','concate','stack','gram_matrix','shuffle','random_choice','get_rotation_matrix2d','warp_affine']
 
 
 
@@ -1169,11 +1169,13 @@ def reshape(x,shape=None)-> torch.Tensor:
         return x
 
 
-def transpose(x,shape=None)-> torch.Tensor:
-    return x.transpose(shape) if x.is_contiguous() else x.transpose(shape).contiguous()
+def transpose(x,pattern=None)-> torch.Tensor:
+    return x.transpose(pattern) if x.is_contiguous() else x.transpose(pattern).contiguous()
 
-def permute(x,shape=None)-> torch.Tensor:
-    return x.permute(shape) if x.is_contiguous() else x.permute(shape).contiguous()
+def permute(x,pattern=None)-> torch.Tensor:
+    return x.permute(pattern) if x.is_contiguous() else x.permute(pattern).contiguous()
+
+
 
 
 def squeeze(t:torch.Tensor,axis=0):

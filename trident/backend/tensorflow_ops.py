@@ -12,7 +12,7 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework.ops import EagerTensor
 from trident.backend.common import _tensor_op,to_list
 
-__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','less','equal','greater','greater_equal','not_equal','less_equal','concate','stack','gram_matrix','shuffle','random_choice']
+__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','less','equal','greater','greater_equal','not_equal','less_equal','reshape','permute','transpose','squeeze','expand_dims','concate','stack','gram_matrix','shuffle','random_choice',]
 
 _context = []
 
@@ -977,6 +977,8 @@ def reshape(x:tf.Tensor,shape=None)->tf.Tensor:
     else:
         shape=to_list(shape)
         return tf.reshape(x,shape)
+
+
 
 
 def squeeze(x:tf.Tensor,axis=None):

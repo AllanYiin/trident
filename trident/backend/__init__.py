@@ -17,48 +17,47 @@ from trident.misc import *
 if get_backend()=='pytorch':
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
-    from ..layers.pytorch_activations import *
-    from ..layers.pytorch_layers import *
-    from ..layers.pytorch_pooling import *
-    from ..layers.pytorch_blocks import *
-    from ..layers.pytorch_normalizations import *
-    from ..optims.pytorch_regularizers import *
+    from trident.layers.pytorch_activations import *
+    from trident.layers.pytorch_layers import *
+    from trident.layers.pytorch_pooling import *
+    from trident.layers.pytorch_blocks import *
+    from trident.layers.pytorch_normalizations import *
+    from trident.optims.pytorch_regularizers import *
 
-    from ..optims.pytorch_constraints import *
-    from ..optims.pytorch_losses import *
-    from ..optims.pytorch_metrics import *
-    from ..optims.pytorch_optimizers import *
-    from ..optims.pytorch_trainer import *
-    from ..data.pytorch_datasets import *
+    from trident.optims.pytorch_constraints import *
+    from trident.optims.pytorch_losses import *
+    from trident.optims.pytorch_metrics import *
+    from trident.optims.pytorch_optimizers import *
+    from trident.optims.pytorch_trainer import *
 
 
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
     from trident.backend.tensorflow_serialization import *
-    from ..layers.tensorflow_activations import *
+    from trident.layers.tensorflow_activations import *
 
-    from ..layers.tensorflow_layers import *
-    from ..layers.tensorflow_pooling import *
-    from ..layers.tensorflow_blocks import *
-    from ..layers.tensorflow_normalizations import *
+    from trident.layers.tensorflow_layers import *
+    from trident.layers.tensorflow_pooling import *
+    from trident.layers.tensorflow_blocks import *
+    from trident.layers.tensorflow_normalizations import *
 
-    from ..optims.tensorflow_regularizers import*
-    from ..optims.tensorflow_constraints import *
-    from ..optims.tensorflow_losses import *
-    from ..optims.tensorflow_metrics import *
-    from ..optims.tensorflow_trainer import *
-    from ..optims.tensorflow_optimizers import *
-
-
+    from trident.optims.tensorflow_regularizers import*
+    from trident.optims.tensorflow_constraints import *
+    from trident.optims.tensorflow_losses import *
+    from trident.optims.tensorflow_metrics import *
+    from trident.optims.tensorflow_trainer import *
+    from trident.optims.tensorflow_optimizers import *
 
 
-from  ..optims.trainers import *
-from ..optims.trainers import *
 
-from ..misc.ipython_utils import *
-from ..misc.visualization_utils import *
+
+from  trident.optims.trainers import *
+from trident.optims.trainers import *
+
+from trident.misc.ipython_utils import *
+from trident.misc.visualization_utils import *
 from .iteration_tools import *
-from ..callbacks  import *
+from trident.callbacks  import *
 
 

@@ -20,8 +20,8 @@ from torch.nn import Module
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from ..backend.common import *
-from ..backend.pytorch_backend import  Layer, Sequential
+from trident.backend.common import *
+from trident.backend.pytorch_backend import  Layer, Sequential
 
 __all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
            'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d']

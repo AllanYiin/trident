@@ -1,10 +1,13 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import tensorflow as tf
 from tensorflow.python.keras.losses import LossFunctionWrapper
 from tensorflow.python.keras.utils import losses_utils
 from tensorflow.python.ops.losses import util as tf_losses_utils
 
-from ..backend.common import get_session, get_function, camel2snake, get_class
-from ..backend.tensorflow_ops import *
+from trident.backend.common import get_session, get_function, camel2snake, get_class
+from trident.backend.tensorflow_ops import *
 
 # def cosine_similarity(y_true, y_pred):
 #     assert y_true.ndim == 2

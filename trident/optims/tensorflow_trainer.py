@@ -10,7 +10,7 @@ from functools import partial
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import backend as K
+
 from tensorflow.python.client import device_lib
 from tensorflow.python.eager import context, tape, function
 from tensorflow.python.eager import forwardprop
@@ -19,20 +19,21 @@ from tensorflow.python.keras import backend
 from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.utils import losses_utils
 from tensorflow.python.ops.losses import util as tf_losses_utils
+
 from trident import __version__
+from trident.backend.common import *
+from trident.backend.optimizer import OptimizerBase
+from trident.backend.tensorflow_backend import Sequential, Layer, try_map_args_and_call, summary
+from trident.backend.tensorflow_ops import *
+from trident.callbacks.lr_schedulers import get_lr_scheduler
+from trident.data.image_common import *
+from trident.data.utils import pickle_it, unpickle
 from trident.optims.tensorflow_constraints import get_constraint
 from trident.optims.tensorflow_losses import *
 from trident.optims.tensorflow_metrics import get_metric
 from trident.optims.tensorflow_optimizers import get_optimizer
 from trident.optims.tensorflow_regularizers import *
 from trident.optims.trainers import ModelBase, progress_bar
-from trident.backend.common import *
-from trident.backend.tensorflow_backend import Sequential,  Layer, try_map_args_and_call,summary
-from trident.backend.tensorflow_ops import *
-from trident.callbacks.lr_schedulers import get_lr_scheduler
-from trident.data.image_common import *
-from trident.data.utils import pickle_it,unpickle
-from ..backend.optimizer import OptimizerBase
 
 # from tensorflow.python.framework.ops import EagerTensor
 

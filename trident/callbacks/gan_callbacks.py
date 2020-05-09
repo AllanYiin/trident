@@ -11,29 +11,29 @@ import warnings
 
 import numpy as np
 
-from ..backend.common import *
-from ..backend.load_backend import get_backend
-from ..callbacks import CallbackBase
-from ..data.image_common import *
-from ..misc.visualization_utils import *
+from trident.backend.common import *
+from trident.backend.load_backend import get_backend
+from trident.callbacks import CallbackBase
+from trident.data.image_common import *
+from trident.misc.visualization_utils import *
 
 if get_backend() == 'pytorch':
     import torch
     import torch.nn as nn
-    from ..backend.pytorch_backend import ReplayBuffer
-    from ..backend.pytorch_ops import to_numpy, to_tensor,  shuffle, random_choice
-    from ..optims.pytorch_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss
-    from ..optims.pytorch_constraints import min_max_norm
-    from ..optims.pytorch_trainer import *
-    from ..layers.pytorch_activations import *
-    from ..backend.pytorch_ops import *
-    from ..models.pytorch_efficientnet import EfficientNetB0
+    from trident.backend.pytorch_backend import ReplayBuffer
+    from trident.backend.pytorch_ops import to_numpy, to_tensor,  shuffle, random_choice
+    from trident.optims.pytorch_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss
+    from trident.optims.pytorch_constraints import min_max_norm
+    from trident.optims.pytorch_trainer import *
+    from trident.layers.pytorch_activations import *
+    from trident.backend.pytorch_ops import *
+    from trident.models.pytorch_efficientnet import EfficientNetB0
 elif get_backend() == 'tensorflow':
-    from ..backend.tensorflow_backend import  ReplayBuffer
-    from ..backend.tensorflow_ops import to_numpy, to_tensor
-    from ..optims.tensorflow_losses import CrossEntropyLoss, MSELoss
-    from ..optims.tensorflow_constraints import min_max_norm
-    from ..optims.tensorflow_trainer import *
+    from trident.backend.tensorflow_backend import  ReplayBuffer
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor
+    from trident.optims.tensorflow_losses import CrossEntropyLoss, MSELoss
+    from trident.optims.tensorflow_constraints import min_max_norm
+    from trident.optims.tensorflow_trainer import *
 
 
 __all__ = ['GanCallbacksBase', 'GanCallback', 'CycleGanCallback']

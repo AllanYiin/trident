@@ -13,16 +13,16 @@ from itertools import repeat
 
 import tensorflow as tf
 
-from ..backend.common import *
-from ..backend.tensorflow_backend import *
-from ..data.image_common import *
-from ..data.utils import download_model_from_google_drive,download_file_from_google_drive,unpickle
-from ..layers.tensorflow_activations import get_activation, Identity, Relu
-from ..layers.tensorflow_blocks import *
-from ..layers.tensorflow_layers import *
-from ..layers.tensorflow_normalizations import get_normalization, BatchNorm
-from ..layers.tensorflow_pooling import get_pooling, GlobalAvgPool2d, MaxPool2d
-from ..optims.tensorflow_trainer import *
+from trident.backend.common import *
+from trident.backend.tensorflow_backend import *
+from trident.data.image_common import *
+from trident.data.utils import download_model_from_google_drive,download_file_from_google_drive,unpickle
+from trident.layers.tensorflow_activations import get_activation, Identity, Relu
+from trident.layers.tensorflow_blocks import *
+from trident.layers.tensorflow_layers import *
+from trident.layers.tensorflow_normalizations import get_normalization, BatchNorm
+from trident.layers.tensorflow_pooling import get_pooling, GlobalAvgPool2d, MaxPool2d
+from trident.optims.tensorflow_trainer import *
 
 __all__ = ['basic_block','bottleneck', 'ResNet','ResNet50','ResNet101','ResNet152']
 

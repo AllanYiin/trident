@@ -23,20 +23,20 @@ from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from ..backend.common import *
-from ..backend.pytorch_backend import *
-from ..backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine
-from ..backend.pytorch_ops import meshgrid
-from ..data.bbox_common import clip_boxes_to_image, nms
-from ..data.image_common import *
-from ..data.utils import download_model_from_google_drive
-from ..layers.pytorch_activations import get_activation, Identity, PRelu
-from ..layers.pytorch_blocks import *
-from ..layers.pytorch_layers import *
-from ..layers.pytorch_normalizations import get_normalization
-from ..layers.pytorch_pooling import *
-from ..optims.pytorch_trainer import *
-from ..optims.pytorch_trainer import ImageDetectionModel
+from trident.backend.common import *
+from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine
+from trident.backend.pytorch_ops import meshgrid
+from trident.data.bbox_common import clip_boxes_to_image, nms
+from trident.data.image_common import *
+from trident.data.utils import download_model_from_google_drive
+from trident.layers.pytorch_activations import get_activation, Identity, PRelu
+from trident.layers.pytorch_blocks import *
+from trident.layers.pytorch_layers import *
+from trident.layers.pytorch_normalizations import get_normalization
+from trident.layers.pytorch_pooling import *
+from trident.optims.pytorch_trainer import *
+from trident.optims.pytorch_trainer import ImageDetectionModel
 
 __all__ = ['Pnet','Rnet','Onet','Mtcnn']
 
@@ -56,7 +56,8 @@ if not os.path.exists(dirname):
         pass
 
 
-p_net=Sequential(
+def p_net():
+    return Sequential(
     Conv2d((3,3),10,strides=1,auto_pad=False,use_bias=True,name='conv1'),
     PRelu(),
     MaxPool2d((2,2),strides=2,auto_pad=False),
@@ -67,11 +68,12 @@ p_net=Sequential(
     Combine(
         Conv2d((1,1),1,strides=1,auto_pad=False,use_bias=True,activation='sigmoid',name='conv4_1'),
         Conv2d((1,1),4,strides=1,auto_pad=False,use_bias=True,name='conv4_2'),
-        Conv2d((1,1),10,strides=1,auto_pad=False,use_bias=True,name='conv4_3')),name='detector_head')
-p_net.name='pnet'
+        Conv2d((1,1),10,strides=1,auto_pad=False,use_bias=True,name='conv4_3')),name='pnet')
 
 
-r_net=Sequential(
+
+def r_net():
+    return Sequential(
     Conv2d((3,3),28,strides=1,auto_pad=False,use_bias=True,name='conv1'),
     PRelu(),
     MaxPool2d((3,3),strides=2,auto_pad=False),
@@ -86,11 +88,13 @@ r_net=Sequential(
     Combine(
         Dense(1,activation='sigmoid',use_bias=True,name='conv5_1'),
         Dense(4,activation=None,use_bias=True,name='conv5_2'),
-        Dense(10,activation=None,use_bias=True,name='conv5_3')),name='detector_head')
-r_net.name='rnet'
+        Dense(10,activation=None,use_bias=True,name='conv5_3'))
+    ,name='rnet')
 
 
-o_net=Sequential(
+
+def o_net():
+    return Sequential(
     Conv2d((3,3),32,strides=1,auto_pad=False,use_bias=True,name='conv1'),
     PRelu(),
     MaxPool2d((3,3),strides=2,auto_pad=False),
@@ -108,8 +112,8 @@ o_net=Sequential(
     Combine(
         Dense(1,activation='sigmoid',use_bias=True,name='conv6_1'),
         Dense(4,activation=None,use_bias=True,name='conv6_2'),
-        Dense(10,activation=None,use_bias=True,name='conv6_3')),name='detector_head')
-o_net.name='onet'
+        Dense(10,activation=None,use_bias=True,name='conv6_3')),name='onet')
+
 
 
 def Pnet(pretrained=True,
@@ -119,8 +123,8 @@ def Pnet(pretrained=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(3,12,12)
-    pnet =ImageDetectionModel(input_shape=(3,12,12),output=p_net)
-    pnet.preprocess_flow = [normalize(0, 255), image_backend_adaptive]
+    pnet =ImageDetectionModel(input_shape=(3,12,12),output=p_net())
+    pnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX',dirname,'pnet.pth')
         recovery_model=torch.load(os.path.join(dirname,'pnet.pth'))
@@ -136,8 +140,8 @@ def Rnet(pretrained=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(3,24,24)
-    rnet =ImageDetectionModel(input_shape=(3,24,24),output=r_net)
-    rnet.preprocess_flow = [normalize(0, 255), image_backend_adaptive]
+    rnet =ImageDetectionModel(input_shape=(3,24,24),output=r_net())
+    rnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1CH7z133_KrcWMx9zXAblMCV8luiQ3wph',dirname,'rnet.pth')
         recovery_model=torch.load(os.path.join(dirname,'rnet.pth'))
@@ -152,8 +156,8 @@ def Onet(pretrained=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(3,48,48)
-    onet =ImageDetectionModel(input_shape=(3,48,48),output=o_net)
-    onet.preprocess_flow = [normalize(0, 255), image_backend_adaptive]
+    onet =ImageDetectionModel(input_shape=(3,48,48),output=o_net())
+    onet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1a1dAlSzJOAfIz77Ic38JMQJYWDG_b7-_',dirname,'onet.pth')
         recovery_model=torch.load(os.path.join(dirname,'onet.pth'))
@@ -254,9 +258,9 @@ def calibrate_box(bboxes, offsets):
 
 class Mtcnn(ImageDetectionModel):
     def __init__(self, pretrained=True, min_size=10, **kwargs):
-        pnet = ImageDetectionModel(input_shape=(3, 12, 12), output=p_net).model
-        self.rnet = ImageDetectionModel(input_shape=(3, 24, 24), output=r_net).model
-        self.onet = ImageDetectionModel(input_shape=(3, 48, 48), output=o_net).model
+        pnet = ImageDetectionModel(input_shape=(3, 12, 12), output=p_net()).model
+        self.rnet = ImageDetectionModel(input_shape=(3, 24, 24), output=r_net()).model
+        self.onet = ImageDetectionModel(input_shape=(3, 48, 48), output=o_net()).model
         if pretrained == True:
             pnet = Pnet().model
             self.rnet = Rnet().model
@@ -294,7 +298,7 @@ class Mtcnn(ImageDetectionModel):
                 for func in self.preprocess_flow:
                     if inspect.isfunction(func):
                         scaled_img=func(scaled_img)
-            images.append(image_backend_adaptive(scaled_img))
+            images.append(image_backend_adaption(scaled_img))
             minl = minl * factor
             factor_count += 1
         return images, scales

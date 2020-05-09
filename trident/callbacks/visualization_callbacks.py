@@ -9,13 +9,13 @@ import warnings
 
 import numpy as np
 
-from ..backend.common import *
-from ..backend.load_backend import *
-from ..backend.pillow_backend import image2array
-from ..callbacks import CallbackBase
-from ..data.mask_common import label2color
-from ..misc.ipython_utils import is_in_ipython, is_in_colab
-from ..misc.visualization_utils import *
+from trident.backend.common import *
+from trident.backend.load_backend import *
+from trident.backend.pillow_backend import image2array
+from trident.callbacks import CallbackBase
+from trident.data.mask_common import label2color
+from trident.misc.ipython_utils import is_in_ipython, is_in_colab
+from trident.misc.visualization_utils import *
 
 if is_in_ipython() or is_in_colab():
     from IPython import display

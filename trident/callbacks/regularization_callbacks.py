@@ -8,19 +8,19 @@ import warnings
 
 import numpy as np
 
-from ..backend.common import *
-from ..backend.load_backend import get_backend
-from ..callbacks import CallbackBase
-from ..data.image_common import *
+from trident.backend.common import *
+from trident.backend.load_backend import get_backend
+from trident.callbacks import CallbackBase
+from trident.data.image_common import *
 
 if get_backend()=='pytorch':
     import torch
     import torch.nn as nn
-    from ..backend.pytorch_ops import to_numpy,to_tensor
-    from ..optims.pytorch_losses import CrossEntropyLoss
+    from trident.backend.pytorch_ops import to_numpy,to_tensor
+    from trident.optims.pytorch_losses import CrossEntropyLoss
 elif get_backend()=='tensorflow':
-    from ..backend.tensorflow_ops import  to_numpy,to_tensor
-    from ..optims.tensorflow_losses import CrossEntropyLoss
+    from trident.backend.tensorflow_ops import  to_numpy,to_tensor
+
 
 
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']

@@ -2,27 +2,20 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import random
 from math import *
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision
-from torch.autograd import Variable
-from torch.nn import _reduction as _Reduction
+
 from torch.nn import init
-from torch.nn.modules.loss import _Loss, _WeightedLoss
-from torchvision import transforms
-from torchvision.transforms import functional as tvf
+from torch.nn.modules.loss import _Loss
 
 from trident.backend.common import *
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
-from trident.data.image_common import *
 from trident.layers.pytorch_activations import sigmoid
-
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -808,7 +801,7 @@ class LovaszSoftmax(_Loss):
         perm = perm.data
         gt_sorted = labels[perm]
         grad = _lovasz_grad(gt_sorted)
-        loss = torch.dot(F.relu(errors_sorted), Variable(grad))
+        loss = torch.dot(F.relu(errors_sorted),grad)
         return loss
 
     def forward(self, output, target):

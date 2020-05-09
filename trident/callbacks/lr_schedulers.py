@@ -8,16 +8,16 @@ import warnings
 
 import numpy as np
 
-from ..backend.common import *
-from ..backend.load_backend import get_backend
-from ..callbacks import CallbackBase
+from trident.backend.common import *
+from trident.backend.load_backend import get_backend
+from trident.callbacks import CallbackBase
 
 _session = get_session()
 
 if get_backend()=='pytorch':
-    from ..backend.pytorch_ops import to_numpy,to_tensor
+    from trident.backend.pytorch_ops import to_numpy,to_tensor
 elif get_backend()=='tensorflow':
-    from ..backend.tensorflow_ops import  to_numpy,to_tensor
+    from trident.backend.tensorflow_ops import  to_numpy,to_tensor
 
 
 
@@ -34,18 +34,18 @@ class AdjustLRCallbackBase(CallbackBase):
 
 
 class ReduceLROnPlateau(AdjustLRCallbackBase):
-    """Reduce learning rate when a metric has stopped improving.
+    '''Reduce learning rate when a metric has stopped improving.
     Models often benefit from reducing the learning rate by a factor
     of 2-10 once learning stagnates. This callback monitors a
     quantity and if no improvement is seen for a 'patience' number
     of epochs, the learning rate is reduced.
-    # Example
+    Example
     ```python
     reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
                                   patience=5, min_lr=0.001)
     model.fit(X_train, Y_train, callbacks=[reduce_lr])
     ```
-    # Arguments
+    Arguments
         monitor: quantity to be monitored.
         factor: factor by which the learning rate will
             be reduced. new_lr = lr * factor
@@ -68,7 +68,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
         cooldown: number of epochs to wait before resuming
             normal operation after lr has been reduced.
         min_lr: lower bound on the learning rate.
-    """
+    '''
 
     def __init__(self, monitor='total_losses', factor=0.1, patience=10,
                  verbose=0, mode='auto', min_delta=1e-4, cooldown=0, min_lr=0,

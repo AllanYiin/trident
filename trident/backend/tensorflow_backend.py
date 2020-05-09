@@ -23,8 +23,7 @@ from tensorflow.python.util import object_identity
 from tensorflow.python.framework import func_graph,ops
 from trident.data.utils import pickle_it,unpickle
 from trident.backend.common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, format_time, \
-    get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, OrderedDict, \
-    get_signature,normalize_padding
+    get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_signature
 from trident.backend.tensorflow_ops import *
 
 __all__ = [ 'Layer', 'get_flops','Sequential', 'ConcatContainer', 'ReplayBuffer','summary']

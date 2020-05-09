@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from ..misc.ipython_utils import is_in_ipython, is_in_colab
+from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 
 if is_in_ipython():
     from IPython import display
@@ -18,7 +18,7 @@ import sys
 import cv2
 import numpy as np
 
-from .common import get_session,floatx
+from trident.backend.common import get_session,floatx
 
 
 

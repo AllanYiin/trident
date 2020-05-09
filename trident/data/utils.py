@@ -29,7 +29,7 @@ from six.moves.urllib.request import urlopen
 from tqdm import tqdm
 from urllib3.exceptions import NewConnectionError
 
-from ..backend.common import OrderedDict, PrintException
+from trident.backend.common import OrderedDict, PrintException
 
 try:
     from urllib.request import urlretrieve
