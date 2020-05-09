@@ -25,7 +25,7 @@ import numpy as np
 import six
 
 __all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'set_epsilon', 'floatx', 'set_floatx','check_keys',
-           'Signature', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list','normalize_padding', 'addindent', 'format_time',
+           'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list','normalize_padding', 'addindent', 'format_time',
            'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
            'OrderedDict', 'get_python_function_arguments', 'map_function_arguments', 'ClassfierType', 'PaddingMode',
@@ -219,32 +219,47 @@ def to_onehot(label, classes):
 
 
 def to_list(x):
-    """Normalizes a list/tensor into a list.
-    If a tensor is passed, we return
-    a list of size 1 containing the tensor.
-    # Arguments
-        x: target object to be normalized.
-        allow_tuple: If False and x is a tuple,
-            it will be converted into a list
-            with a single element (the tuple).
-            Else converts the tuple to a list.
-    # Returns
-        A list.
-    """
-    if isinstance(x, list):
+    '''
+     Convert anything to a list.
+     if input is a tensor or a ndarray, to_list only unfold the first dimention , its different to the numpy behavior.
+    Args:
+        x ():
+
+    Returns: a list
+    Examples:
+        >>> np.arange(16).reshape((4,2,2)).tolist()
+        [[[0, 1], [2, 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]], [[12, 13], [14, 15]]]
+        >>> to_list(np.arange(16).reshape((4,2,2)))
+        [array([[0, 1],
+               [2, 3]]), array([[4, 5],
+               [6, 7]]), array([[ 8,  9],
+               [10, 11]]), array([[12, 13],
+               [14, 15]])]
+        >>> to_list((2,5,(3,8)))
+        [2, 5, (3, 8)]
+        >>> to_list(range(8))
+        [0, 1, 2, 3, 4, 5, 6, 7]
+        >>> to_list(5)
+        [5]
+        >>> to_list({'x':3,'y':5})
+        [('x', 3), ('y', 5)]
+    '''
+    if x is None:
+        return None
+    elif isinstance(x, list):
         return x
     elif isinstance(x, tuple):
         return [x[i] for i in range(len(x))]
     elif isinstance(x, np.ndarray):
-        return x.tolist()
+        return [x[i] for i in range(len(x))]
+    elif 'tensor' in x.__class__.__name__.lower():
+        return [x[i] for i in range(len(x))]
     elif hasattr(x, 'tolist') and callable(x.tolist):
         return x.tolist()
     elif isinstance(x, (int, float)):
         return [x]
-    elif isinstance(x, type({}.keys())):
-        return list(x)
-    elif isinstance(x, type({}.values())):
-        return list(x)
+    elif isinstance(x, dict):
+        return list(x.items())
     elif isinstance(x, types.GeneratorType):
         return list(x)
     elif inspect.isgenerator(x):
@@ -266,14 +281,28 @@ def if_else(a, b):
 
 
 def unpack_singleton(x):
-    """Gets the first element if the iterable has only one value.
-    Otherwise return the iterable.
-    # Argument
-        x: A list or tuple.
-    # Returns
-        The same iterable or the first element.
-    """
-    if 'tensor' in x.__class__.__name__.lower() or isinstance(x, np.ndarray):
+    '''
+    Gets the first element if the iterable has only one value. Otherwise return the iterable.But would not split a tensor.
+
+    Args:
+        x (iterable, except tensor and array):
+
+    Returns:  The same iterable or the first element.
+
+    Examples
+    >>> unpack_singleton(10, )
+    10
+    >>> unpack_singleton([0] )
+    0
+    >>> unpack_singleton(np.ones((2,5), dtype=np.int32))
+    array([[1, 1, 1, 1, 1],
+           [1, 1, 1, 1, 1]])
+    >>> unpack_singleton({'x':3,'y':5})
+    {'x': 3, 'y': 5}
+    '''
+    if x is None :
+        return None
+    elif 'tensor' in x.__class__.__name__.lower() or isinstance(x, np.ndarray):
         return x
     elif isinstance(x, (tuple, list)) and len(x) == 1:
         return x[0]
@@ -281,13 +310,15 @@ def unpack_singleton(x):
 
 
 def enforce_singleton(x):
-    """Gets the first element if the iterable has only one value.
-    Otherwise return the iterable.
-    # Argument
-        x: A list or tuple.
-    # Returns
-        The same iterable or the first element.
-    """
+    '''
+    Enforce only first element can pass if input is a a tuple or a list. It always use for singleton check if the function only accept one input.
+    Args:
+        x ():
+
+    Returns:
+        first element
+
+    '''
     if 'tensor' in x.__class__.__name__.lower() or isinstance(x, np.ndarray):
         return x
     elif hasattr(x, '__len__'):
@@ -828,69 +859,6 @@ def format_arg_spec(v, is_output=False):
     # function name)
     return s + str(v._type)
 
-
-# def _make_tensor_meta(cls_name, **kwargs):
-#     class TensorMeta(type):
-#         def __getitem__(self, shape):
-#             if not isinstance(shape, tuple):
-#                 shape = (shape,)
-#             # the first shape parameter can be np.float32 or np.float64 or np.float16, similar to Eigen
-#             if len(shape) > 0 and (shape[0] == np.float32 or shape[0] == np.float64 or shape[0] == np.float16):
-#                 kwargs['dtype'] = shape[0]
-#                 shape = shape[1:]
-#             return Variable._Type(shape, **kwargs) # inject it for @Function
-#     return TensorMeta(cls_name, (), {})
-#
-
-def Signature(*args, **kwargs):
-    '''
-    ``@Signature`` is a decorator to implement the function-argument annotations in Python-2.7,
-    as needed by the ``@Function`` decorator.
-    This is only needed when you have not yet migrated to Python 3.x.
-    Note: Although this is aimed at enabling ``@Function`` syntax with type annotations
-    in Python 2.7, ``@Signature`` is independent of CNTK and can be used for any argument annotation.
-    Args:
-        *args: types of arguments of the function that this decorator is applied to, in the same order.
-        **kwargs: types of arguments with optional names, e.g. `x=Tensor[42]`. Use this second form for
-           longer argument lists.
-    Example::
-     # Python 3:
-     @Function
-     def f(x: Tensor[42]):
-         return sigmoid(x)
-     # Python 2.7:
-     @Function
-     @Signature(Tensor[42])
-     def f(x):
-         return sigmoid(x)
-     # note that this:
-     @Function
-     @Signature(x:int)
-     def sqr(x):
-         return x*x
-     # is identical to:
-     def sqr(x):
-         return x*x
-     sqr.__annotations__ = {'x': int}
-    '''
-
-    # this function returns another function which is the actual decorator applied to the def:
-    def add_annotations(f):
-        # prepare the signature
-        param_names, annotations = get_python_function_arguments(f)
-        if annotations:
-            raise ValueError('@Signature cannot be applied to functions that already have annotations')
-        annotations = {}
-        if len(args) + len(kwargs) != len(param_names):
-            raise TypeError(
-                "{} annotations provided for function to be decorated, but function has {} parameters".format(
-                    len(args) + len(kwargs), len(param_names)))
-        # implant anotations into f
-        params_dict = {name: name for name in param_names}
-        f.__annotations__ = map_function_arguments(param_names, params_dict, *args, **kwargs)
-        return f  # and return the updated function
-
-    return add_annotations
 
 
 def update_signature(fn: callable, args: list):
