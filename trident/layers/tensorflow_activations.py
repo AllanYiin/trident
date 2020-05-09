@@ -205,11 +205,11 @@ class Softmax(Layer):
 
 class LogSoftmax(Layer):
     def __init__(self):
-        super(Softmax, self).__init__()
+        super(LogSoftmax, self).__init__()
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return log_sum_exp(x)
+        return reduce_logsumexp(x)
 
 
 

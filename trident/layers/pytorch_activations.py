@@ -285,11 +285,11 @@ class Softmax(Layer):
 
 class LogSoftmax(Layer):
     def __init__(self):
-        super(Softmax, self).__init__()
+        super(LogSoftmax, self).__init__()
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return log_sum_exp(x)
+        return reduce_logsumexp(x)
 
 
 
@@ -331,8 +331,9 @@ def get_activation(fn_name):
     try:
         if isinstance(fn_name, str):
             if fn_name.lower() == fn_name:
-                activation_fn = get_function(fn_name, [
-                     'trident.backend.pytorch_ops','trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
+                if fn_name=='p_relu' or fn_name=='prelu':
+                    return PRelu()
+                activation_fn = get_function(fn_name, [ 'trident.backend.pytorch_ops','trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
                 return activation_fn
             else:
                 try:
