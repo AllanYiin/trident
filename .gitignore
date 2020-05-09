@@ -18,7 +18,6 @@ experiments/*
 examples/*
 datav3/*
 internal_tool/*
-tests/*
 eggs/
 .eggs/
 lib/
@@ -44,7 +43,7 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
-# Unit test / coverage reports
+# Unit tests / coverage reports
 htmlcov/
 .tox/
 .nox/
@@ -238,25 +237,17 @@ fabric.properties
 trident/experiments/tfe_layers.py
 .idea/.name
 .idea/Trident.iml
-/examples/
-/examples_cntk/
-/examples_pytorch/
-/examples_tensorflow/
 
-/trident/experiments/
-/trident/faces/
+
 docs/en-us/
 docs/zh-cn/
-!/trident/backend/tensorflow_saving.py
 !/trident/backend/functions.py
 !/trident/optims/pytorch_profiling.py
 !/trident/optims/saving.py
 !/trident/misc/detection_utils.py
 !/trident/misc/segment_utils.py
-!/trident/layers/layer_utils.py
 !/trident/callbacks/saving_strategies.py
-
 !/trident/data/text_common.py
-!/trident/data/cntk_datasets.py
-/tests/
 /internal_tool/
+
+trident.png
