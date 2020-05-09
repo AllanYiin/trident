@@ -43,8 +43,8 @@ class Dataset(object):
     def mapping(self,data,labels=None,masks=None,scenario=None):
         if scenario is None:
             scenario= 'raw'
-        elif scenario not in ['training','testing','validation','train','val','test','raw']:
-            raise ValueError('Only training,testing,validation,val,test,raw is valid senario')
+        elif scenario not in ['training','testing','validation','train','val','tests','raw']:
+            raise ValueError('Only training,testing,validation,val,tests,raw is valid senario')
         self.current_scenario=scenario
         if data is not None and hasattr(data, '__len__'):
             self.data[scenario]=list(data)

@@ -41,8 +41,8 @@ def get_device():
 version = tf.version
 sys.stdout.write('Tensorflow version:{0}.\n'.format(version.VERSION))
 
-if version.VERSION < '2.0.0':
-    raise ValueError('Not support Tensorflow below 2.0\n')
+if version.VERSION < '2.2.0-rc0':
+    raise ValueError('Not support Tensorflow below 2.2.0-rc0\n')
 
 sys.stdout.write('use device:{0}.\n'.format(get_device()))
 

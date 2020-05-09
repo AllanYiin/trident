@@ -34,11 +34,7 @@ elif get_backend() == 'tensorflow':
     from ..optims.tensorflow_losses import CrossEntropyLoss, MSELoss
     from ..optims.tensorflow_constraints import min_max_norm
     from ..optims.tensorflow_trainer import *
-elif get_backend() == 'cntk':
-    from ..backend.cntk_backend import to_numpy, to_tensor, ReplayBuffer
-    from ..optims.cntk_losses import CrossEntropyLoss, MSELoss
-    from ..optims.cntk_constraints import min_max_norm
-    from ..optims.cntk_trainer import *
+
 
 __all__ = ['GanCallbacksBase', 'GanCallback', 'CycleGanCallback']
 

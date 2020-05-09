@@ -20,9 +20,6 @@ if get_backend()=='pytorch':
 elif get_backend()=='tensorflow':
     from ..backend.tensorflow_ops import  to_numpy,to_tensor
     from ..optims.tensorflow_losses import CrossEntropyLoss
-elif get_backend()=='cntk':
-    from ..backend.cntk_backend import  to_numpy,to_tensor
-    from ..optims.cntk_losses import CrossEntropyLoss
 
 
 __all__ = ['DataProcessCallback']

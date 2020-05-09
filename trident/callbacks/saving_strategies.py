@@ -15,5 +15,4 @@ if get_backend()=='pytorch':
     from ..backend.pytorch_ops import to_numpy,to_tensor
 elif get_backend()=='tensorflow':
     from ..backend.tensorflow_ops import  to_numpy,to_tensor
-elif get_backend()=='cntk':
-    from ..backend.cntk_backend import  to_numpy,to_tensor
+

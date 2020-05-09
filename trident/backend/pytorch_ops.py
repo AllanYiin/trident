@@ -15,14 +15,11 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 from  trident.backend.common import *
 
-__all__ = ['to_numpy','to_tensor','is_tensor','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','reshape','concate','argmax','gram_matrix','log_sum_exp','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','expand_dims','shuffle','random_choice','meshgrid','element_cosine_distance','gram_matrix','get_rotation_matrix2d','warp_affine','binary_crossentropy', 'identity', 'sigmoid', 'tanh', 'relu', 'relu6',
-           'leaky_relu', 'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
-           'lecun_tanh', 'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax','log_sum_exp','bert_gelu',
-           'gpt_gelu','ones','ones_like','zeros','zeros_like','maximum','minimum','clip','floor','ceil','round','element_times','element_max','element_min','element_divide','element_cosine_distance','where','less','equal','greater','greater_equal','not_equal','less_equal']
+__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid',]
 
 
 
-def get_device():
+def _get_device():
     return get_session().device
 
 
@@ -52,27 +49,32 @@ def to_numpy(x) -> np.ndarray:
         raise ValueError("Unsupported type")
 
 def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
-    '''
-
+    ''''
+     Convert input  to a tensor as possible
     Args:
-        x ():
-        dtype ():
-        requires_grad ():
+        x (int,float,list,tuple,ndarray,tensor):
+        dtype :
+        requires_grad (bool): wheather need grade
 
     Returns: output tensor
-
-    Examples
-    >>> to_tensor(5)
-    tensor(5, dtype=torch.int32)
-    >>> to_tensor((3,2))
-    tensor([3, 2], dtype=torch.int32)
-    >>> to_tensor(np.arange(0,10))
-    tensor([0, 1, 2, 3, 4, 5, 6, 7, 8, 9])
+    Examples:
+        >>> to_tensor(2)
+        tensor(2, dtype=torch.int32)
+        >>> to_tensor([1.0,2.0,3.0],requires_grad=True)
+        tensor([1., 2., 3.], requires_grad=True)
+        >>> to_tensor([1.0,2.0,3.0],requires_grad=False)
+        tensor([1., 2., 3.])
+        >>> to_tensor([1.0,2.0,3.0])
+        tensor([1., 2., 3.])
+        >>> to_tensor((1.0,2.0,3.0))
+        tensor([1., 2., 3.])
+        >>> to_tensor(np.arange(0,5))
+        tensor([0, 1, 2, 3, 4])
 
     '''
     if isinstance(x,  torch.Tensor):
         x = x.clone().detach()
-        x = x.to(get_device())
+        x = x.to(_get_device())
         if dtype is not None:
             x = x.type(dtype)
         if requires_grad ==False:
@@ -82,15 +84,15 @@ def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
 
         return x
     elif isinstance(x, int):
-        return torch.tensor(x).int().to(get_device()) if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).int().to(get_device())
+        return torch.tensor(x).int().to(_get_device()) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(_get_device())
     elif isinstance(x, float):
-        return torch.tensor(x).float().to(get_device()) if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).float().to(get_device())
+        return torch.tensor(x).float().to(_get_device()) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).float().to(_get_device())
     elif isinstance(x, (list, tuple)):
         if isinstance(x[0],int):
             x =torch.tensor(x).int() if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).int()
         else:
             x=torch.tensor(x).float() if requires_grad is None else torch.tensor(x,requires_grad=requires_grad).float()
-        x = x.to(get_device())
+        x = x.to(_get_device())
         return x
     elif isinstance(x, np.ndarray):
         npdtype=x.dtype
@@ -99,7 +101,7 @@ def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
             x = x.type(torch.int64)
         else:
             x = x.type(dtype)
-        x = x.to(get_device())
+        x = x.to(_get_device())
         if requires_grad == False:
             x.requires_grad = False
         elif requires_grad == True:
@@ -128,6 +130,50 @@ def int_shape(x:torch.Tensor):
 
     '''
     return tuple(list(x.size()))
+
+def is_sparse(x):
+    return 'sparse' in str(type(x))
+
+def cast(x, dtype):
+    if isinstance(dtype,torch.dtype):
+       if dtype==torch.float64 or dtype==torch.double:
+           return x.double()
+       elif dtype==torch.float16 or dtype==torch.half:
+           return x.float()
+       elif dtype==torch.float32:
+           return x.float()
+       elif dtype==torch.int64:
+           return x.long()
+       elif dtype==torch.int32:
+           return x.int()
+       elif dtype==torch.int16:
+           return x.short()
+       elif dtype==torch.int8:
+           return x.char()
+       elif dtype==torch.uint8:
+           return x.byte()
+       elif dtype==torch.bool:
+           return x.bool()
+    elif isinstance(dtype,str):
+        if 'float64' in  dtype.lower() or 'double' in  dtype.lower():
+            return x.type
+        elif 'float16' in  dtype.lower() or 'half' in  dtype.lower():
+            return x.half()
+        elif 'float' in  dtype.lower():
+            return x.float()
+        elif 'int64' in dtype.lower() or 'long' in dtype.lower():
+            return x.long()
+        elif 'int16' in dtype.lower() or 'short' in dtype.lower():
+            return x.short()
+        elif 'uint8' in dtype.lower() or 'byte' in dtype.lower():
+            return x.byte()
+        elif 'int8' in dtype.lower() or 'char' in dtype.lower():
+            return x.char()
+        elif 'int32' in dtype.lower() or 'int' in dtype.lower():
+            return x.int()
+        elif 'bool' in dtype.lower() :
+            return x.bool()
+
 
 
 ############################
@@ -186,6 +232,7 @@ def any_inf(x):
 def any_abnormal_number(x):
     return any_nan(x) or any_inf(x)
 
+
 ############################
 ## compare operation
 ###########################
@@ -227,8 +274,6 @@ def equal(left:torch.Tensor, right:torch.Tensor):
     '''
     return left.eq(right).float()
 
-
-
 def greater(left:torch.Tensor, right:torch.Tensor):
     '''
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
@@ -245,8 +290,6 @@ def greater(left:torch.Tensor, right:torch.Tensor):
     tensor([0., 0., 1.])
     '''
     return left.gt(right).float()
-
-
 
 def greater_equal(left:torch.Tensor, right:torch.Tensor):
     '''
@@ -266,8 +309,6 @@ def greater_equal(left:torch.Tensor, right:torch.Tensor):
     '''
     return left.ge(right).float()
 
-
-
 def not_equal(left:torch.Tensor, right:torch.Tensor):
     '''
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
@@ -285,8 +326,6 @@ def not_equal(left:torch.Tensor, right:torch.Tensor):
     tensor([1., 0., 1.])
     '''
     return 1-(left.eq(right).float())
-
-
 
 def less_equal(left:torch.Tensor, right:torch.Tensor):
     '''
@@ -306,6 +345,270 @@ def less_equal(left:torch.Tensor, right:torch.Tensor):
 
     '''
     return left.le(right).float()
+
+
+def argmax(x:torch.Tensor,axis=1)-> torch.Tensor:
+    if len(x.shape)>axis:
+         _, idx = x.max(dim=axis)
+    else:
+        _, idx = x.max()
+    return idx
+def argmin(x:torch.Tensor,axis=1)-> torch.Tensor:
+    if len(x.shape)>axis:
+         _, idx = x.min(dim=axis)
+    else:
+        _, idx = x.min()
+    return idx
+def argsort(x:torch.Tensor,axis=1,descending=True)-> torch.Tensor:
+    return torch.argsort(x,dim=axis,descending=descending)
+
+def maximum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
+    if isinstance(other,torch.Tensor):
+        return torch.max(x,other)
+    elif isinstance(other,(int,float)):
+        return x.clamp(min=other)
+def minimum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
+    if isinstance(other,torch.Tensor):
+        return torch.min(x,other)
+    elif isinstance(other,(int,float)):
+        return x.clamp(max=other)
+
+
+
+
+
+############################
+## basic math operation
+###########################
+def add(x, y):
+    return torch.add(x,y)
+def subtract(x, y):
+    return torch.sub(x,y)
+def dot(x, y):
+    return torch.dot(x,y)
+def true_divide(x, y):
+    return torch.true_divide(x,y)
+def pi():
+    return to_tensor(np.pi)
+
+def matmul(x,y,transpose_x=False,transpose_y=False):
+    if transpose_x:
+        x=x.T
+    if transpose_y:
+        y=y.T
+    return torch.matmul(x,y)
+
+
+def prod(x):
+    return torch.prod(x)
+
+def floor(x:(torch.Tensor,float)):
+    if not is_tensor(x):
+        x=to_tensor(x)
+    return x.floor()
+
+def ceil(x:(torch.Tensor,float)):
+    if not is_tensor(x):
+        x=to_tensor(x)
+    return x.ceil()
+
+def round(x:(torch.Tensor,float),digit:int=0):
+    '''
+
+    Args:
+        x ():
+        digit ():
+
+    Returns:
+    Examples;
+    >>> round(to_tensor([[1,2,3,4,5]])/3,0)
+    tensor([[0., 1., 1., 1., 2.]])
+    >>> round(to_tensor([[1,2,3,4,5]])/3,2)
+    tensor([[0.3300, 0.6700, 1.0000, 1.3300, 1.6700]])
+     >>> round(to_tensor([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
+     tensor([[ 0., 10., 10.,  0., 10.]])
+
+    '''
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    if digit!=0:
+        factor=to_tensor(float(math.pow(10,-1*digit)))
+        return (x/factor).round()*factor
+    else:
+        return torch.round(x)
+
+def sqrt(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    return x.sqrt()
+
+def square(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    return x**2
+
+def abs(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    return x.abs()
+
+def pow(x:torch.Tensor,y):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    return x.pow(y)
+
+def log(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    return x.log()
+
+def exp(x:torch.Tensor):
+    if not is_tensor(x):
+        x=to_tensor(x,dtype=torch.float32)
+    return x.exp()
+
+
+def clip(x:torch.Tensor,min=-np.inf,max=np.inf):
+    return x.clamp(min,max)
+
+
+def sin(x:torch.Tensor):
+    '''
+    Computes the element-wise sine
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise sine
+
+    Examples
+    >>> sin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[ 0.8415,  0.4794],
+            [-0.2474, -0.6816]])
+    '''
+    return torch.sin(x.float())
+def cos(x:torch.Tensor):
+    '''
+    Computes the element-wise cosine
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise cosine
+
+    Examples
+    >>> cos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[0.5403, 0.8776],
+            [0.9689, 0.7317]])
+    '''
+    return torch.cos(x.float())
+def tan(x:torch.Tensor):
+    '''
+    Computes the element-wise tan
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise tan
+
+    Examples
+    >>> tan(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[ 1.5574,  0.5463],
+            [-0.2553, -0.9316]])
+    '''
+    return torch.tan(x.float())
+
+
+def asin(x:torch.Tensor):
+    '''
+    Computes the element-wise arcsin (inverse sine)
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise arcsin
+
+    Examples
+    >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[ 1.5708,  0.5236],
+            [-0.2527, -0.8481]])
+    '''
+    return torch.asin(x.float())
+def acos(x:torch.Tensor):
+    '''
+    Computes the element-wise arccos (inverse cosine)
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise arccos
+
+    Examples
+    >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[0.0000, 1.0472],
+            [1.8235, 2.4189]])
+    '''
+    return torch.acos(x.float())
+def atan(x:torch.Tensor):
+    '''
+    Computes the element-wise arctan (inverse tan)
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise arccos
+
+    Examples
+    >>> atan(to_tensor([-1, 0, 1])).cpu()
+    tensor([-0.7854,  0.0000,  0.7854])
+    '''
+    return torch.atan(x.float())
+
+
+def sinh(x:torch.Tensor):
+    '''
+    Computes the element-wise sinh
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise sinh
+
+    Examples
+    >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[ 1.1752,  0.5211],
+            [-0.2526, -0.8223]])
+    '''
+    return torch.sinh(x.float())
+def cosh(x:torch.Tensor):
+    '''
+    Computes the element-wise cosh
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise cosh
+
+    Examples
+    >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[1.5431, 1.1276],
+            [1.0314, 1.2947]])
+    '''
+    return torch.cosh(x.float())
+def tanh(x:torch.Tensor):
+    '''
+    Computes the element-wise tanh
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise tanh
+
+    Examples
+    >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[ 0.7616,  0.4621],
+            [-0.2449, -0.6351]])
+    '''
+    return torch.tanh(x.float())
+
+
+
+
+
+
+
+
 
 
 ############################
@@ -334,8 +637,6 @@ def element_times(left, right):
             [45., 30.]])
     '''
     return left*right
-
-
 
 def element_max(left, right):
     '''
@@ -432,83 +733,222 @@ def where(flag, value_if_true, value_if_false):
 
 
 ############################
-## tensor attribute
+## reduce operation
 ###########################
 
-
-
-
-
-############################
-## basic math operation
-###########################
-
-def floor(x:(torch.Tensor,float)):
-    if not is_tensor(x):
-        x=to_tensor(x)
-    return x.floor()
-
-def ceil(x:(torch.Tensor,float)):
-    if not is_tensor(x):
-        x=to_tensor(x)
-    return x.ceil()
-
-def round(x:(torch.Tensor,float),digit:int=0):
+def reduce_mean(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
     '''
+    Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
-        x ():
-        digit ():
+        x (torch.Tensor):input tensor
+        axis (int,list):  axis along which the reduction will be performed
+        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+        **kwargs ():
 
     Returns:
-    Examples;
-    >>> round(to_tensor([[1,2,3,4,5]])/3,0)
-    tensor([[0., 1., 1., 1., 2.]], device='cuda:0')
-    >>> round(to_tensor([[1,2,3,4,5]])/3,-2)
-    tensor([[0.3300, 0.6700, 1.0000, 1.3300, 1.6700]], device='cuda:0')
+
+
+    Exsample:
+    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+    >>> print(reduce_mean(data, 0).cpu())
+    tensor([[30.,  1.],
+            [40.,  2.]])
+    >>> print(reduce_mean(data, axis=0).cpu())
+    tensor([[30.,  1.],
+            [40.,  2.]])
+    >>> print(reduce_mean(data, axis=[0,2]).cpu())
+    tensor([15.5000, 21.0000])
+
+
+
+
 
     '''
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    if digit!=0:
-        factor=to_tensor(float(math.pow(10,digit)))
-        return (x/factor).round()*factor
+    axis=kwargs.get('dim',axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+    if axis is None:
+        return x.mean()
+    elif isinstance(axis,int):
+        return x.mean(dim=axis,keepdim=keepdims)
+    elif isinstance(axis, list)  :
+        axis=sorted(axis)
+        axis.reverse()
+        for a in axis:
+            x=x.mean(dim=a,keepdim=keepdims)
+        return x
+
+def reduce_sum(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+        Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
+
+    Args:
+        x (torch.Tensor):input tensor
+        axis (int,list):  axis along which the reduction will be performed
+        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+        **kwargs ():
+
+    Returns:
+
+
+    Exsample:
+    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+    >>> print(reduce_sum(data).cpu())
+    tensor(219.)
+    >>> print(reduce_sum(data, 0).cpu())
+    tensor([[ 90.,   3.],
+            [120.,   6.]])
+    >>> print(reduce_sum(data, axis=0).cpu())
+    tensor([[ 90.,   3.],
+            [120.,   6.]])
+    >>> print(reduce_sum(data, axis=[0,2]).cpu())
+    tensor([ 93., 126.])
+        '''
+    axis = kwargs.get('dim', axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+    if axis is None:
+        return x.sum()
+    elif isinstance(axis, int):
+        return x.sum(dim=axis, keepdim=keepdims)
+    elif isinstance(axis, list):
+        axis = sorted(axis)
+        axis.reverse()
+        for a in axis:
+            x = x.sum(dim=a, keepdim=keepdims)
+        return x
+
+def reduce_max(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+        Computes the maximum of the input tensor's elements across a specified axis or a list of specified axes.
+
+        Args:
+            x (torch.Tensor):input tensor
+            axis (int,list):  axis along which the reduction will be performed
+            keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+            **kwargs ():
+
+        Returns:
+
+
+        Exsample:
+        >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+        >>> print(reduce_max(data, 0).cpu())
+        tensor([[55.,  1.],
+                [60.,  2.]])
+        >>> print(reduce_max(data, axis=0).cpu())
+        tensor([[55.,  1.],
+                [60.,  2.]])
+        >>> print(reduce_max(data, axis=[0,2]).cpu())
+        tensor([55., 60.])
+
+
+        '''
+    axis = kwargs.get('dim', axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+    if axis is None:
+        return x.max()
+    elif isinstance(axis, int):
+        arr, idx = x.max(dim=axis, keepdim=keepdims)
+        return arr
+    elif isinstance(axis, list):
+        axis = sorted(axis)
+        axis.reverse()
+        for a in axis:
+            arr, idx = x.max(dim=a, keepdim=keepdims)
+            x = arr
+        return x
+
+def reduce_min(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+    Computes the minimum of the input tensor's elements across a specified axis or a list of specified axes.
+
+    Args:
+        x (torch.Tensor):input tensor
+        axis (int,list):  axis along which the reduction will be performed
+        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
+        **kwargs ():
+
+    Returns:
+
+
+    Exsample:
+    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+    >>> print(reduce_min(data, 0).cpu())
+    tensor([[ 5.,  1.],
+            [20.,  2.]])
+    >>> print(reduce_min(data, axis=0).cpu())
+    tensor([[ 5.,  1.],
+            [20.,  2.]])
+    >>> print(reduce_min(data, axis=[0,2]).cpu())
+    tensor([1., 2.])
+
+        '''
+    axis = kwargs.get('dim', axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+    if axis is None:
+        return x.min()
+    elif isinstance(axis, int):
+        arr, idx = x.min(dim=axis, keepdim=keepdims)
+        return arr
+    elif isinstance(axis, list):
+        axis = sorted(axis)
+        axis.reverse()
+        for a in axis:
+            arr, idx = x.min(dim=a, keepdim=keepdims)
+            x = arr
+        return x
+
+
+def reduce_logsumexp(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    '''
+
+     Args:
+         x ():
+         axis ():
+         keepdims ():
+
+     Returns:
+     Examples
+     >>> x = to_tensor([[0., 0., 0.], [0., 0., 0.]])
+     >>> reduce_logsumexp(x)
+     tensor(1.7918)
+     >>> reduce_logsumexp(x, 0)
+     tensor([0.6931, 0.6931, 0.6931])
+     >>> reduce_logsumexp(x, [0, 1])
+     tensor(1.7918)
+     '''
+    if axis is None:
+        return log(reduce_sum(exp(x)))
     else:
-        return torch.round(x)
+        return log(reduce_sum(exp(x),axis=axis,keepdims=keepdims))
 
-def sqrt(x:torch.Tensor):
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    return x.sqrt()
-
-def square(x:torch.Tensor):
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    return x**2
-
-def abs(x:torch.Tensor):
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    return x.abs()
-
-def pow(x:torch.Tensor,y):
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    return x.pow(y)
-
-def log(x:torch.Tensor):
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    return x.log()
-
-def exp(x:torch.Tensor):
-    if not is_tensor(x):
-        x=to_tensor(x,dtype=torch.float32)
-    return x.exp()
+def reduce_prod(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
+    axis = kwargs.get('dim', axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+    if isinstance(axis, int):
+        arr, idx = x.prod(dim=axis, keepdim=keepdims)
+        return arr
+    elif isinstance(axis, list):
+        axis = sorted(axis)
+        axis.reverse()
+        for a in axis:
+            arr, idx = x.prod(dim=a, keepdim=keepdims)
+            x = arr
+        return x
 
 
-def clip(x:torch.Tensor,min=-np.inf,max=np.inf):
-    return x.clamp(min,max)
+
+#reduce_log_sum_exp
+#reduce_prod
+#reduce_l1
+#reduce_l2
+#reduce_sum_square
+
+mean=reduce_mean
+sum=reduce_sum
+max=reduce_max
+min=reduce_min
+
 
 
 
@@ -572,9 +1012,6 @@ def sigmoid(x):
     return torch.sigmoid(x)
 
 
-def tanh(x):
-    return torch.tanh(x)
-
 
 '''swish activation function 
 '''
@@ -593,8 +1030,6 @@ def hard_swish(x, inplace=False):
 def hard_tanh(x):
     return torch.clamp(x, -1, 1)
 
-
-
 def selu(x):
     '''
     selu activation function
@@ -611,8 +1046,8 @@ def selu(x):
 
     Returns:The output tensor has the same shape as ``x``
     Example:
-        >>> selu([[-1, -0.5, 0, 1, 2]])
-        tensor([[-1.111331, -0.691758,  0.      ,  1.050701,  2.101402]])
+        >>> selu(to_tensor([[-1, -0.5, 0, 1, 2]]))
+        tensor([[-1.1113, -0.6918,  0.0000,  1.0507,  2.1014]])
     '''
     return torch.selu(x)
 
@@ -667,11 +1102,11 @@ def softmax(x,axis=1):
     softmax will be applied to all axes.
 
     Args:
-        x: numpy array or any :class:`~cntk.ops.functions.Function` that outputs a tensor
-        axis (int or :class:`~cntk.axis.Axis`): axis along which the softmax operation will be performed
+        x: input tensor
+        axis (int) : axis along which the softmax operation will be performed
 
     Returns:
-        :class:`~cntk.ops.functions.Function`
+        :output tensor
 
     Example:
     >>> softmax(to_tensor([[1, 1, 2, 3]]))
@@ -690,6 +1125,7 @@ def softmax(x,axis=1):
         return  x.exp().true_divide(x.exp().sum().clamp(min=epsilon()))
     return torch.softmax(x.float(), dim=axis)
 
+
 def log_softmax(x,axis=1):
     '''
     Computes the logsoftmax normalized values of x. That is, y = x - log(reduce_sum(exp(x), axis))
@@ -703,19 +1139,9 @@ def log_softmax(x,axis=1):
     Returns:
         :output tensor
     '''
-    return x - log(reduce_sum(exp(x), axis))
+    return x -reduce_logsumexp(x)
 
-def log_sum_exp(x:torch.Tensor,axis=1,keepdims=False)-> torch.Tensor:
-    """Activation function for computing log_sum_exp while determining
-    This will be used to determine unaveraged confidence loss across
-    all examples in a batch.
-    Args:
-        keepdims ():
-        axis ():
-        x : input tensor
-    """
-    x_max = x.data.max()
-    return torch.log(torch.sum(torch.exp(x-x_max), dim=axis, keepdim=keepdims)) + x_max
+
 
 
 
@@ -726,179 +1152,6 @@ def bert_gelu(x):
 def gpt_gelu(x):
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
-
-############################
-## reduce operation
-###########################
-
-def reduce_mean(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
-    '''
-    Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
-
-    Args:
-        x (torch.Tensor):input tensor
-        axis (int,list):  axis along which the reduction will be performed
-        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
-        **kwargs ():
-
-    Returns:
-
-
-    Exsample:
-    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-    >>> print(reduce_mean(data, 0).cpu())
-    tensor([[30.,  1.],
-            [40.,  2.]])
-    >>> print(reduce_mean(data, axis=0).cpu())
-    tensor([[30.,  1.],
-            [40.,  2.]])
-    >>> print(reduce_mean(data, axis=[0,2]).cpu())
-    tensor([15.5000, 21.0000])
-
-
-
-
-
-    '''
-    axis=kwargs.get('dim',axis)
-    keepdims = kwargs.get('keepdim', keepdims)
-    if isinstance(axis,int):
-        return x.mean(dim=axis,keepdim=keepdims)
-    elif isinstance(axis, list)  :
-        axis=sorted(axis)
-        axis.reverse()
-        for a in axis:
-            x=x.mean(dim=a,keepdim=keepdims)
-        return x
-
-def reduce_sum(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
-    '''
-        Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
-
-    Args:
-        x (torch.Tensor):input tensor
-        axis (int,list):  axis along which the reduction will be performed
-        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
-        **kwargs ():
-
-    Returns:
-
-
-    Exsample:
-    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-    >>> print(reduce_sum(data, 0).cpu())
-    tensor([[ 90.,   3.],
-            [120.,   6.]])
-    >>> print(reduce_sum(data, axis=0).cpu())
-    tensor([[ 90.,   3.],
-            [120.,   6.]])
-    >>> print(reduce_sum(data, axis=[0,2]).cpu())
-    tensor([ 93., 126.])
-        '''
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
-    if isinstance(axis, int):
-        return x.sum(dim=axis, keepdim=keepdims)
-    elif isinstance(axis, list):
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            x = x.sum(dim=a, keepdim=keepdims)
-        return x
-
-def reduce_max(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
-    '''
-        Computes the maximum of the input tensor's elements across a specified axis or a list of specified axes.
-
-        Args:
-            x (torch.Tensor):input tensor
-            axis (int,list):  axis along which the reduction will be performed
-            keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
-            **kwargs ():
-
-        Returns:
-
-
-        Exsample:
-        >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-        >>> print(reduce_max(data, 0).cpu())
-        tensor([[55.,  1.],
-                [60.,  2.]])
-        >>> print(reduce_max(data, axis=0).cpu())
-        tensor([[55.,  1.],
-                [60.,  2.]])
-        >>> print(reduce_max(data, axis=[0,2]).cpu())
-        tensor([55., 60.])
-
-
-        '''
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
-    if isinstance(axis, int):
-        arr, idx = x.max(dim=axis, keepdim=keepdims)
-        return arr
-    elif isinstance(axis, list):
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            arr, idx = x.max(dim=a, keepdim=keepdims)
-            x = arr
-        return x
-
-def reduce_min(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
-    '''
-    Computes the minimum of the input tensor's elements across a specified axis or a list of specified axes.
-
-    Args:
-        x (torch.Tensor):input tensor
-        axis (int,list):  axis along which the reduction will be performed
-        keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
-        **kwargs ():
-
-    Returns:
-
-
-    Exsample:
-    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-    >>> print(reduce_min(data, 0).cpu())
-    tensor([[ 5.,  1.],
-            [20.,  2.]])
-    >>> print(reduce_min(data, axis=0).cpu())
-    tensor([[ 5.,  1.],
-            [20.,  2.]])
-    >>> print(reduce_min(data, axis=[0,2]).cpu())
-    tensor([1., 2.])
-
-        '''
-    axis = kwargs.get('dim', axis)
-    keepdims = kwargs.get('keepdim', keepdims)
-    if isinstance(axis, int):
-        arr, idx = x.min(dim=axis, keepdim=keepdims)
-        return arr
-    elif isinstance(axis, list):
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            arr, idx = x.min(dim=a, keepdim=keepdims)
-            x = arr
-        return x
-
-#reduce_log_sum_exp
-#reduce_prod
-#reduce_l1
-#reduce_l2
-#reduce_sum_square
-
-mean=reduce_mean
-sum=reduce_sum
-max=reduce_max
-min=reduce_min
-
-
-
-############################
-## element-wise operation
-###########################
 
 
 ############################
@@ -929,22 +1182,151 @@ def squeeze(t:torch.Tensor,axis=0):
 def expand_dims(t:torch.Tensor,axis=0):
     return t.unsqueeze(axis)
 
+def depth_to_space(x:torch.Tensor,block_size=2):
+    '''
+    Rearranges elements in the input tensor from the depth dimension into spatial blocks.
+    The equivalent to Pixel-Shuffle
+
+    Args:
+        x (tensor): Input tensor, with dimensions CHW or NCHW
+        block_size (int):
+
+    Returns: resized tensor
+
+    Examples
+    >>> x = to_tensor(np.tile(np.array(np.reshape(range(8), (8, 1, 1)), dtype=np.float32), (1, 2, 3)))
+    >>> x
+    tensor([[[0., 0., 0.],
+             [0., 0., 0.]],
+    <BLANKLINE>
+            [[1., 1., 1.],
+             [1., 1., 1.]],
+    <BLANKLINE>
+            [[2., 2., 2.],
+             [2., 2., 2.]],
+    <BLANKLINE>
+            [[3., 3., 3.],
+             [3., 3., 3.]],
+    <BLANKLINE>
+            [[4., 4., 4.],
+             [4., 4., 4.]],
+    <BLANKLINE>
+            [[5., 5., 5.],
+             [5., 5., 5.]],
+    <BLANKLINE>
+            [[6., 6., 6.],
+             [6., 6., 6.]],
+    <BLANKLINE>
+            [[7., 7., 7.],
+             [7., 7., 7.]]])
+    >>> arr=depth_to_space(x,block_size=2)
+    >>> print(arr.shape)
+    torch.Size([2, 4, 6])
+    >>> arr
+    tensor([[[0., 1., 0., 1., 0., 1.],
+             [2., 3., 2., 3., 2., 3.],
+             [0., 1., 0., 1., 0., 1.],
+             [2., 3., 2., 3., 2., 3.]],
+    <BLANKLINE>
+            [[4., 5., 4., 5., 4., 5.],
+             [6., 7., 6., 7., 6., 7.],
+             [4., 5., 4., 5., 4., 5.],
+             [6., 7., 6., 7., 6., 7.]]])
+
+    '''
+    if ndim(x)  not in (3,4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    elif x.shape[-3]%(block_size*block_size)!=0:
+        raise ValueError('Input tensort channel must be divisible by square of block_size')
+    else:
+        orig_ndim=ndim(x)
+        if orig_ndim ==3:
+            x=expand_dims(x,0)
+        x=F.pixel_shuffle(x, block_size)
+        if orig_ndim == 3:
+            return x[0]
+        return x
+
+def space_to_depth(x:torch.Tensor,block_size=2):
+    '''
+    Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
+
+    This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing sub-pixel convolution that is part of models for image super-resolution .
+    It rearranges elements of an input tensor of shape (N, C, H, W) to a tensor of shape (N, C*b*b, H/b, W/b), where b is the block_size,
+    by rearranging non-overlapping spatial blocks of size block_size x block_size into the depth/channel dimension at each location.
+
+    Args:
+        x (tensor): Input tensor, with dimensions CHW or NCHW
+        block_size (int):
+
+    Returns: resized tensor
+    Examples
+    >>> arr=space_to_depth(to_tensor([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.]],[[4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.], [4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.]]]),block_size=2)
+    >>> arr
+    tensor([[[0., 0., 0.],
+             [0., 0., 0.]],
+    <BLANKLINE>
+            [[1., 1., 1.],
+             [1., 1., 1.]],
+    <BLANKLINE>
+            [[2., 2., 2.],
+             [2., 2., 2.]],
+    <BLANKLINE>
+            [[3., 3., 3.],
+             [3., 3., 3.]],
+    <BLANKLINE>
+            [[4., 4., 4.],
+             [4., 4., 4.]],
+    <BLANKLINE>
+            [[5., 5., 5.],
+             [5., 5., 5.]],
+    <BLANKLINE>
+            [[6., 6., 6.],
+             [6., 6., 6.]],
+    <BLANKLINE>
+            [[7., 7., 7.],
+             [7., 7., 7.]]])
+    >>> print(arr.shape)
+    torch.Size([8, 2, 3])
+    '''
+    if ndim(x)  not in (3,4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    elif x.shape[-2]%block_size!=0 or  x.shape[-1]%block_size!=0:
+        raise ValueError('Input tensort channel must be divisible by square of block_size')
+    else:
+        orig_ndim=ndim(x)
+        if orig_ndim ==3:
+            x=expand_dims(x,0)
+        orig_shape=list(int_shape(x))
+        x=reshape(x,(orig_shape[0],orig_shape[1],orig_shape[2]//block_size,block_size,orig_shape[3]//block_size,block_size))
+        x=permute(x,[0,1,3,5,2,4])
+        x=reshape(x,(orig_shape[0],orig_shape[1]*block_size*block_size,orig_shape[2]//block_size,orig_shape[3]//block_size))
+        if orig_ndim == 3:
+            return x[0]
+        return x
+
+
+
+
+
+
+
 
 ############################
 ## tensor generation
 ###########################
 
 def ones(shape,dtype=torch.float32,requires_grad=False):
-    return torch.ones(shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
+    return torch.ones(shape,dtype=dtype,requires_grad=requires_grad).to(_get_device())
 
 def ones_like(a,dtype=torch.float32,requires_grad=False):
-    return torch.ones(a.shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
+    return torch.ones(a.shape,dtype=dtype,requires_grad=requires_grad).to(_get_device())
 
 def zeros(shape,dtype=torch.float32,requires_grad=False):
-    return torch.zeros(shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
+    return torch.zeros(shape,dtype=dtype,requires_grad=requires_grad).to(_get_device())
 
 def zeros_like(a,dtype=torch.float32,requires_grad=False):
-    return torch.zeros(a.shape,dtype=dtype,requires_grad=requires_grad).to(get_device())
+    return torch.zeros(a.shape,dtype=dtype,requires_grad=requires_grad).to(_get_device())
 
 def eye_like(a,dtype=torch.float32,requires_grad=False):
     '''
@@ -968,7 +1350,7 @@ def eye_like(a,dtype=torch.float32,requires_grad=False):
 
     '''
     if a.ndim==2:
-        return torch.eye(a.shape[0],a.shape[1],dtype=dtype,requires_grad=requires_grad).to(get_device())
+        return torch.eye(a.shape[0],a.shape[1],dtype=dtype,requires_grad=requires_grad).to(_get_device())
     else:
         raise ValueError('input tensor must have exactly two axe.')
 
@@ -1008,7 +1390,7 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
       y: (int) second dim range.
 
     Returns:
-      (tensor) meshgrid, sized [x*y,2]
+      (tensor) meshgrid, sized [y,x,2]
 
     Example:
     >>> grid=meshgrid(3,2)
@@ -1029,7 +1411,8 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     torch.Size([3, 2, 2])
 
 
-    >>> meshgrid(3,2,normalized_coordinates=True)
+    >>> grid1=meshgrid(3,2,normalized_coordinates=True)
+    >>> grid1
     tensor([[[0.0000, 0.0000],
              [0.0000, 1.0000]],
     <BLANKLINE>
@@ -1038,15 +1421,16 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     <BLANKLINE>
             [[1.0000, 0.0000],
              [1.0000, 1.0000]]])
-
+    >>> grid1.shape
+    torch.Size([3, 2, 2])
     '''
-    xs = torch.linspace(0, int(x - 1), int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
-    ys = torch.linspace(0, int(y - 1), int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
+    xs = torch.linspace(0, int(x - 1), int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
+    ys = torch.linspace(0, int(y - 1), int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(0, 1, int(x), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
-        ys = torch.linspace(0, 1,int(y), device=get_device(), dtype=torch.float,requires_grad=requires_grad)
+        xs = torch.linspace(0, 1, int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
+        ys = torch.linspace(0, 1, int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
 
-    return torch.stack(torch.meshgrid([xs, ys]),-1).to(get_device())
+    return torch.stack(torch.meshgrid([xs, ys]),-1).to(_get_device())
 
 
 
@@ -1072,34 +1456,6 @@ def gram_matrix(input):
 def concate(x:List[torch.Tensor],axis=1):
     return torch.cat(x,dim=axis)
 
-
-
-
-def argmax(x:torch.Tensor,axis=1)-> torch.Tensor:
-    if len(x.shape)>axis:
-         _, idx = x.max(dim=axis)
-    else:
-        _, idx = x.max()
-    return idx
-def argmin(x:torch.Tensor,axis=1)-> torch.Tensor:
-    if len(x.shape)>axis:
-         _, idx = x.min(dim=axis)
-    else:
-        _, idx = x.min()
-    return idx
-
-
-
-def maximum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
-    if isinstance(other,torch.Tensor):
-        return torch.max(x,other)
-    elif isinstance(other,(int,float)):
-        return x.clamp(min=other)
-def minimum(x:torch.Tensor,other:(torch.Tensor,int,float))-> torch.Tensor:
-    if isinstance(other,torch.Tensor):
-        return torch.min(x,other)
-    elif isinstance(other,(int,float)):
-        return x.clamp(max=other)
 
 
 

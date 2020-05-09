@@ -12,7 +12,7 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework.ops import EagerTensor
 from trident.backend.common import _tensor_op,to_list
 
-__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_sum_exp','bert_gelu','gpt_gelu']
+__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','less','equal','greater','greater_equal','not_equal','less_equal']
 
 _context = []
 
@@ -150,20 +150,94 @@ def to_numpy(x) -> np.ndarray:
 
 
 def to_tensor(x, dtype=tf.float32,requires_grad=None) -> tf.Tensor:
+    '''
+     Convert input  to a tensor as possible
+    Args:
+        x (int,float,list,tuple,ndarray,tensor):
+        dtype :
+        requires_grad (bool): wheather need grade
+
+    Returns: output tensor
+    Examples:
+        >>> to_tensor(2)
+        <tf.Tensor: shape=(), dtype=int32, numpy=2>
+        >>> to_tensor([1.0,2.0,3.0],requires_grad=True)
+        <tf.Variable 'Variable:0' shape=(3,) dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        >>> to_tensor([1.0,2.0,3.0],requires_grad=False)
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        >>> to_tensor([1.0,2.0,3.0])
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        >>> to_tensor((1.0,2.0,3.0))
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        >>> to_tensor(np.arange(0,5))
+        <tf.Tensor: shape=(5,), dtype=float32, numpy=
+        array([0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00],
+        dtype=float32)>
+
+    '''
     if isinstance(x, int):
         return tf.constant(value=x,dtype=tf.int32)
     elif   isinstance(x, float):
         return tf.constant(value=x,dtype=tf.float32)
     else:
         if requires_grad == False:
-            x =tf.stop_gradient(ops.convert_to_tensor_v2(x, dtype=dtype))
+            x =tf.constant(ops.convert_to_tensor_v2(x, dtype=dtype))
         elif requires_grad == True:
-            x= ops.convert_to_tensor_v2(x, dtype=dtype)
+            x= tf.Variable(ops.convert_to_tensor_v2(x, dtype=dtype))
+
         else :
             x =ops.convert_to_tensor_v2(x, dtype=dtype)
         return x
 
+############################
+## tensor attribute
+###########################
 
+def ndim(x):
+    return x.shape.rank
+
+def int_shape(x):
+    '''
+
+    Args:
+        x : input tensor
+
+    Returns: tuple of integer as shape representation
+
+    Examples:
+    >>> int_shape(ones((3,3,7)))
+    [3, 3, 7]
+
+    '''
+    return x.get_shape().as_list()
+
+def is_sparse(x):
+    return isinstance(x, tf.SparseTensor)
+
+def cast(x, dtype):
+    if isinstance(dtype, str):
+        if 'float64' in dtype.lower() or 'double' in dtype.lower():
+            dtype=tf.float64
+        elif 'float16' in dtype.lower() or 'half' in dtype.lower():
+            dtype=tf.float16
+        elif 'float' in dtype.lower():
+            dtype=tf.float32
+        elif 'int64' in dtype.lower() or 'long' in dtype.lower():
+            dtype=tf.int64
+        elif 'int16' in dtype.lower() or 'short' in dtype.lower():
+            dtype=tf.int16
+        elif 'uint8' in dtype.lower() or 'byte' in dtype.lower():
+            dtype=tf.uint8
+        elif 'int8' in dtype.lower() or 'char' in dtype.lower():
+            dtype=tf.int8
+        elif 'int32' in dtype.lower() or 'int' in dtype.lower():
+            dtype=tf.int32
+        elif 'bool' in dtype.lower():
+            dtype=tf.bool
+    if isinstance(dtype,tf.dtypes):
+        return tf.cast(x,dtype)
+    else:
+        return x
 
 
 ############################
@@ -240,41 +314,145 @@ def any_abnormal_number(x):
     return any_nan(x) or any_inf(x)
 
 
-
-
 ############################
-## tensor attribute
+## compare operation
 ###########################
 
-def ndim(x):
-    return x.shape.rank
 
-def int_shape(x):
+def less(left:tf.Tensor, right:tf.Tensor):
     '''
+    Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
-        x : input tensor
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        Result is 1 if left < right else 0.
 
-    Returns: tuple of integer as shape representation
+    Example:
+   >>> less(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+   <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 0.0000e+00], dtype=float32)>
+   >>> less(to_tensor([-1,0,1]), 0)
+   <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 0.0000e+00], dtype=float32)>
+    '''
 
-    Examples:
-    >>> int_shape(ones((3,3,7)))
-    (3, 3, 7)
+    return tf.cast(tf.less(left,right),tf.float32)
+
+def equal(left:tf.Tensor, right:tf.Tensor):
+    '''
+    Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if values are equal 0 otherwise
+
+    Example:
+    >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
+    >>> equal(to_tensor([-1,0,1]), 1)
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
+    '''
+    return tf.cast(tf.equal(left,right),tf.float32)
+
+def greater(left:tf.Tensor, right:tf.Tensor):
+    '''
+    Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if left > right else 0.
+
+    Example:
+    >>> greater(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
+    >>> greater(to_tensor([-1,0,1]), 0)
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
+    '''
+    return tf.cast(tf.greater(left,right),tf.float32)
+
+def greater_equal(left:tf.Tensor, right:tf.Tensor):
+    '''
+    Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if left >= right else 0
+
+    Example:
+    >>> greater_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 1.0000e+00], dtype=float32)>
+    >>> greater_equal(to_tensor([-1,0,1]), 0)
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 1.0000e+00], dtype=float32)>
+    '''
+    return tf.cast(tf.greater_equal(left,right),tf.float32)
+
+def not_equal(left:tf.Tensor, right:tf.Tensor):
+    '''
+    Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+    Returns:
+        :Result is 1 if left != right else 0.
+
+    Example:
+    >>> not_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
+    >>> not_equal(to_tensor([-1,0,1]), 0)
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
+    '''
+    return tf.cast(tf.not_equal(left,right),tf.float32)
+
+def less_equal(left:tf.Tensor, right:tf.Tensor):
+    '''
+    Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
+
+    Args:
+        left: left side tensor
+        right: right side tensor
+
+    Returns:
+        :Result is 1 if left <= right else 0.
+    Example:
+    >>> less_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
+    >>> less_equal(to_tensor([-1,0,1]), 0)
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
 
     '''
-    return x.get_shape().as_list()
+    return tf.cast(tf.less_equal(left,right),tf.float32)
 
-def is_sparse(x):
-    return isinstance(x, tf.SparseTensor)
 
-def clip(x:tf.Tensor,min_value=-np.inf,max_value=np.inf):
-    return tf.clip_by_value(x,min,max)
+def argmax(x:tf.Tensor,axis=-1)-> tf.Tensor:
+    return tf.argmax(x,axis=axis)
+def argmin(x:tf.Tensor,axis=-1)-> tf.Tensor:
+    return tf.argmin(x,axis=axis)
+def argsort(x:tf.Tensor,axis=-1,descending=True)-> tf.Tensor:
+    return tf.argsort(x,axis=axis,descending=descending)
+
+def maximum(x:tf.Tensor,other:(tf.Tensor,int,float))-> tf.Tensor:
+    if isinstance(other,tf.Tensor):
+        return tf.maximum(x,other)
+    elif isinstance(other,(int,float)):
+        return clip(x,min_value=other)
+
+def minimum(x:tf.Tensor,other:(tf.Tensor,int,float))-> tf.Tensor:
+    if isinstance(other,tf.Tensor):
+        return tf.minimum(x,other)
+    elif isinstance(other,(int,float)):
+        return clip(x,max_value=other)
+
+
+
 
 ############################
 ## basic math operation
 ###########################
-
-
 
 def floor(x:tf.Tensor):
     return tf.math.floor(x)
@@ -295,18 +473,27 @@ def round(x:tf.Tensor,digit:int=0):
     <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
     array([[0.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00, 2.0000e+00]],
           dtype=float32)>
-    >>> round(to_tensor([[1,2,3,4,5]])/3,-2)
+    >>> round(to_tensor([[1,2,3,4,5]])/3,2)
     <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
     array([[3.3000e-01, 6.7000e-01, 1.0000e+00, 1.3300e+00, 1.6700e+00]],
+          dtype=float32)>
+    >>> round(to_tensor([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
+    <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
+    array([[0.0000e+00, 1.0000e+01, 1.0000e+01, 0.0000e+00, 1.0000e+01]],
           dtype=float32)>
 
     '''
     if digit!=0:
-        factor=float(math.pow(10,digit))
+        factor=float(math.pow(10,-1*digit))
         return tf.math.round(x/factor)*factor
     else:
         return tf.math.round(x)
 
+def add(x, y):
+    return tf.add(x,y)
+
+def subtract(x, y):
+    return tf.subtract(x,y)
 
 def dot(x, y):
     """Multiplies 2 tensors (and/or variables) and returns a *tensor*.
@@ -349,6 +536,15 @@ def dot(x, y):
         out = tf.matmul(x, y)
     return out
 
+def matmul(x,y,transpose_x=False,transpose_y=False):
+    return tf.matmul(x,y,transpose_a=transpose_x,transpose_b=transpose_y)
+
+
+def true_divide(x, y):
+    return tf.truediv(x,y)
+
+def pi():
+    return to_tensor(np.pi)
 
 def sqrt(x:tf.Tensor):
     return tf.math.sqrt(x)
@@ -371,6 +567,265 @@ def log(x:tf.Tensor):
 
 def exp(x:tf.Tensor):
     return tf.math.exp(x)
+
+def prod(x):
+    return tf.math.reduce_prod(x)
+
+def clip(x:tf.Tensor,min_value=-np.inf,max_value=np.inf):
+    return tf.clip_by_value(x,min,max)
+
+
+def sin(x:tf.Tensor):
+    return tf.math.sin(x)
+def cos(x:tf.Tensor):
+    return tf.math.cos(x)
+def tan(x:tf.Tensor):
+    return tf.math.tan(x)
+
+
+def asin(x:tf.Tensor):
+    return tf.math.asin(x)
+def acos(x:tf.Tensor):
+    return tf.math.acos(x)
+def atan(x:tf.Tensor):
+    return tf.math.atan(x)
+
+
+def sinh(x:tf.Tensor):
+    '''
+    Computes the element-wise sinh
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise sinh
+
+    Examples
+    >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[1.1752e+00, 5.2110e-01],
+           [-2.5261e-01, -8.2232e-01]], dtype=float32)>
+
+    '''
+    return tf.sinh(x)
+def cosh(x:tf.Tensor):
+    '''
+    Computes the element-wise cosh
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise cosh
+
+    Examples
+    >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[1.5431e+00, 1.1276e+00],
+           [1.0314e+00, 1.2947e+00]], dtype=float32)>
+    '''
+    return tf.cosh(x)
+def tanh(x:tf.Tensor):
+    '''
+    Computes the element-wise tanh
+    Args:
+        x (tensor):input tensor
+
+    Returns: element-wise tanh
+
+    Examples
+    >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+    tensor([[ 0.     ,  1.0472 ],
+       [ 1.82348,  2.41886]])
+    '''
+    return tf.tanh(x)
+
+
+
+
+
+############################
+## element-wise operation
+###########################
+def element_times(left, right):
+    '''
+    The output of this operation is the element-wise product of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise product of the two  input
+
+    Example:
+    >>> element_times(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([5.0000e-01, 2.5000e-01, 1.2500e-01, 0.0000e+00], dtype=float32)>
+    >>> element_times(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([1.0000e+01, 2.0000e+01, 3.0000e+01, 6.0000e+01], dtype=float32)>
+    >>> element_times(to_tensor([[5., 10.], [15., 30.]]), to_tensor([[1., 2.], [3.,1.]]))
+    <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
+    array([[5.0000e+00, 2.0000e+01],
+           [4.5000e+01, 3.0000e+01]], dtype=float32)>
+    '''
+    return left*right
+
+def element_max(left, right):
+    '''
+    The output of this operation is the element-wise product of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise product of the two  input
+
+    Example:
+    >>> element_max(to_tensor([1., 1., 0., -1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([1.0000e+00, 1.0000e+00, 1.2500e-01, 0.0000e+00], dtype=float32)>
+    >>> element_max(to_tensor([5., 10., 15., 30.]),to_tensor([20.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.0000e+01, 2.0000e+01, 2.0000e+01, 3.0000e+01], dtype=float32)>
+    >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([1.0000e+01, 1.0000e+01, 1.5000e+01, 3.0000e+01], dtype=float32)>
+    '''
+    return maximum(left,right)
+
+def element_min (left, right):
+    '''
+    The output of this operation is the element-wise product of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise product of the two  input
+
+    Example:
+    >>> element_min(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([5.0000e-01, 2.5000e-01, 1.2500e-01, 0.0000e+00], dtype=float32)>
+    >>> element_min(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.0000e+00, 2.0000e+00, 2.0000e+00, 2.0000e+00], dtype=float32)>
+    >>> element_min(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 1.0000e+00, 2.0000e+00], dtype=float32)>
+    '''
+    return minimum(left, right)
+
+def element_divide (left, right):
+    '''
+    The output of this operation is the element-wise divide of the two  input
+    tensors. It supports broadcasting.
+
+    Args:
+        right: right side tensor
+        left: left side tensor
+
+    Returns:
+        :the element-wise divide of the two  input
+
+    Example:
+    >>> element_divide(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.0000e+00, 4.0000e+00, 8.0000e+00, inf], dtype=float32)>
+    >>> element_divide(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.5000e+00, 5.0000e+00, 7.5000e+00, 1.5000e+01], dtype=float32)>
+    >>> element_divide(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
+    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([5.0000e+00, 5.0000e+00, 1.5000e+01, 1.5000e+01], dtype=float32)>
+    '''
+    return true_divide(left, right)
+
+
+def element_cosine_distance(v1, v2, axis=1):
+    normalize_a = tf.nn.l2_normalize(v1, axis)
+    normalize_b = tf.nn.l2_normalize(v2, axis)
+    distance = tf.matmul(normalize_a, normalize_b, transpose_b=True)
+    return distance
+
+def where(flag, value_if_true, value_if_false):
+    '''
+    return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
+    If ``flag`` != 0 ``value_if_true`` is returned, otherwise ``value_if_false``.
+    Behaves analogously to numpy.where(...).
+
+    Args:
+        flag: condition tensor
+        value_if_true: true branch tensor
+        value_if_false: false branch tensor
+    Returns:
+        :conditional selection
+
+    Example:
+    >>> x=to_tensor([0.1, 0.9, 0.8, 0.4, 0.5])
+    >>> where(x>0.5, x, zeros_like(x))
+    <tf.Tensor: shape=(5,), dtype=float32, numpy=
+    array([0.0000e+00, 9.0000e-01, 8.0000e-01, 0.0000e+00, 0.0000e+00],
+          dtype=float32)>
+    '''
+    return tf.where(flag, value_if_true, value_if_false)
+
+
+
+
+
+
+############################
+## reduce operation
+###########################
+
+def reduce_mean(x:tf.Tensor,axis=None,keepdims=False):
+    return tf.math.reduce_mean(x,axis=axis,keepdims=keepdims)
+
+def reduce_sum(x:tf.Tensor,axis=None,keepdims=False):
+    return tf.math.reduce_sum(x,axis=axis,keepdims=keepdims)
+
+def reduce_max(x:tf.Tensor,axis=None,keepdims=False):
+    return tf.math.reduce_max(x,axis=axis, keepdims=keepdims)
+
+def reduce_min(x:tf.Tensor,axis=None,keepdims=False):
+    return tf.math.reduce_min(x,axis=axis,keepdims=keepdims)
+
+def reduce_logsumexp(x:tf.Tensor,axis=None,keepdims=False):
+    '''
+
+    Args:
+        x ():
+        axis ():
+        keepdims ():
+
+    Returns:
+    Examples
+    >>> x = to_tensor(np.array([[0., 0., 0.], [0., 0., 0.]]))
+    >>> reduce_logsumexp(x)
+    <tf.Tensor: shape=(), dtype=float32, numpy=1.7917595>
+    >>> reduce_logsumexp(x, 0)
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([6.9315e-01, 6.9315e-01, 6.9315e-01], dtype=float32)>
+    >>> reduce_logsumexp(x, [0, 1])
+    <tf.Tensor: shape=(), dtype=float32, numpy=1.7917595>
+    '''
+    return tf.math.reduce_logsumexp(x,axis=axis,keepdims=keepdims)
+
+def reduce_prod(x:tf.Tensor,axis=None,keepdims=False):
+    return tf.math.reduce_prod(x,axis=axis,keepdims=keepdims)
+
+
+
+
+
+#reduce_l1
+#reduce_l2
+#reduce_sum_square
+
+mean=reduce_mean
+sum=reduce_sum
+max=reduce_max
+min=reduce_min
+
+
+
+
+
+
+
 
 
 
@@ -473,15 +928,17 @@ def log_log(x):
 def softmax(x,axis=-1):
     return tf.nn.softmax(x,axis=axis)
 
-def log_sum_exp(x):
+def log_softmax(x,axis=-1,keepdims=False):
     """Activation function for computing log_sum_exp while determining
     This will be used to determine unaveraged confidence loss across
     all examples in a batch.
     Args:
+        keepdims ():
+        axis ():
         x : input tensor
     """
-    x_max = x.data.max()
-    return log(reduce_sum(exp(x-x_max), 1, keepdims=True)) + x_max
+
+    return x-reduce_logsumexp(x,axis=axis,keepdims=True)
 
 
 def mish(x):
@@ -505,40 +962,6 @@ def gpt_gelu(x):
     return 0.5 * x * (1 + tf.math.tanh(tf.math.sqrt(2 /np.pi) * (x + 0.044715 * tf.math.pow(x, 3))))
 
 
-
-
-
-
-
-
-
-
-
-############################
-## reduce operation
-###########################
-
-def reduce_mean(x:tf.Tensor,axis=None,keepdims=False):
-    return tf.math.reduce_mean(x,axis=axis,keepdims=keepdims)
-
-def reduce_sum(x:tf.Tensor,axis=None,keepdims=False):
-    return tf.math.reduce_sum(x,axis=axis,keepdims=keepdims)
-
-def reduce_max(x:tf.Tensor,axis=None,keepdims=False):
-    return tf.math.reduce_max(x,axis=axis, keepdims=keepdims)
-
-def reduce_min(x:tf.Tensor,axis=None,keepdims=False):
-    return tf.math.reduce_min(x,axis=axis,keepdims=keepdims)
-
-
-############################
-## element-wise operation
-###########################
-def element_cosine_distance(v1, v2, axis=1):
-    normalize_a = tf.nn.l2_normalize(v1, axis)
-    normalize_b = tf.nn.l2_normalize(v2, axis)
-    distance = tf.matmul(normalize_a, normalize_b, transpose_b=True)
-    return distance
 
 
 
@@ -571,6 +994,123 @@ def transpose(x:tf.Tensor,pattern=None)->tf.Tensor:
 def permute(x:tf.Tensor,pattern=None)->tf.Tensor:
     return tf.transpose(x,pattern)
 
+def depth_to_space(x:tf.Tensor,block_size=2):
+    '''
+    Rearranges elements in the input tensor from the depth dimension into spatial blocks.
+    The equivalent to Pixel-Shuffle
+    Args:
+        x (tensor): Input tensor, with dimensions CHW or NCHW
+        block_size (int):
+
+    Returns: resized tensor
+
+    Examples
+    >>> x = to_tensor(np.tile(np.array(np.reshape(range(8), (8,1,1)), dtype=np.float32), (1, 2, 3)).transpose([1,2,0]))
+    >>> x
+    <tf.Tensor: shape=(2, 3, 8), dtype=float32, numpy=
+    array([[[0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00]],
+    <BLANKLINE>
+           [[0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00]]], dtype=float32)>
+
+
+    >>> arr=depth_to_space(x,block_size=2)
+    >>> print(arr.shape)
+    (4, 6, 2)
+    >>> arr
+    <tf.Tensor: shape=(2, 4, 6), dtype=float32, numpy=
+    array([[[0.0000e+00, 2.0000e+00, 0.0000e+00, 2.0000e+00, 0.0000e+00,
+             2.0000e+00],
+            [4.0000e+00, 6.0000e+00, 4.0000e+00, 6.0000e+00, 4.0000e+00,
+             6.0000e+00],
+            [0.0000e+00, 2.0000e+00, 0.0000e+00, 2.0000e+00, 0.0000e+00,
+             2.0000e+00],
+            [4.0000e+00, 6.0000e+00, 4.0000e+00, 6.0000e+00, 4.0000e+00,
+             6.0000e+00]],
+    <BLANKLINE>
+           [[1.0000e+00, 3.0000e+00, 1.0000e+00, 3.0000e+00, 1.0000e+00,
+             3.0000e+00],
+            [5.0000e+00, 7.0000e+00, 5.0000e+00, 7.0000e+00, 5.0000e+00,
+             7.0000e+00],
+            [1.0000e+00, 3.0000e+00, 1.0000e+00, 3.0000e+00, 1.0000e+00,
+             3.0000e+00],
+            [5.0000e+00, 7.0000e+00, 5.0000e+00, 7.0000e+00, 5.0000e+00,
+             7.0000e+00]]], dtype=float32)>
+    '''
+    if ndim(x)  not in (3,4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    elif x.shape[-1]%(block_size*block_size)!=0:
+        raise ValueError('Input tensort channel must be divisible by square of block_size')
+    else:
+        orig_ndim=ndim(x)
+        if orig_ndim ==3:
+            x=expand_dims(x,0)
+        x=tf.nn.depth_to_space(x,block_size=block_size,data_format='NHWC')
+        if orig_ndim == 3:
+            return x[0]
+        return x
+
+
+
+def space_to_depth(x:tf.Tensor,block_size=2):
+    '''
+        Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
+
+        This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing
+        sub-pixel convolution that is part of models for image super-resolution .
+        It rearranges elements of an input tensor of shape (N, C, H, W) to a tensor of shape (N, C*b*b, H/b, W/b),
+        where b is the block_size,
+        by rearranging non-overlapping spatial blocks of size block_size x block_size into the depth/channel
+        dimension at each location.
+
+        Args:
+            x (tensor): Input tensor, with dimensions CHW or NCHW
+            block_size (int):
+
+        Returns: resized tensor
+        Examples
+        >>> arr=space_to_depth( to_tensor([[[0.,1. ],[2., 3.],[0.,1. ],[2., 3.],[0.,1. ],[2., 3.]],[[4., 5.],[6., 7.],[4., 5.],[6., 7.],[4., 5.],[6., 7.]],[[0.,1. ],[2., 3.],[0.,1. ],[2., 3.],[0.,1. ],[2., 3.]],[[4., 5.],[6., 7.],[4., 5.],[6., 7.],[4., 5.],[6., 7.]]]),block_size=2)
+        >>> arr
+        <tf.Tensor: shape=(2, 3, 8), dtype=float32, numpy=
+        array([[[0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00]],
+        <BLANKLINE>
+           [[0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00],
+            [0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
+             5.0000e+00, 6.0000e+00, 7.0000e+00]]], dtype=float32)>
+        >>> print(arr.shape)
+        (2, 3, 8)
+        '''
+    if ndim(x)  not in (3,4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    elif x.shape[-2]%block_size!=0 or  x.shape[-3]%block_size!=0:
+        raise ValueError('Input tensort channel must be divisible by square of block_size')
+    else:
+        orig_ndim=ndim(x)
+        if orig_ndim ==3:
+            x=expand_dims(x,0)
+        orig_shape=list(int_shape(x))
+        x= tf.nn.space_to_depth(x,block_size=block_size,data_format='NHWC')
+        if orig_ndim==3:
+            return x[0]
+        else:
+            return x
 
 
 
@@ -605,43 +1145,59 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
       y: (int) second dim range.
 
     Returns:
-      (tensor) meshgrid, sized [x,y,2]
+      (tensor) meshgrid, sized [y,x,2]
 
     Example:
     >>> grid=meshgrid(3,2)
     >>> grid
-    <tf.Tensor: shape=(2, 3, 2), dtype=float32, numpy=
+    <tf.Tensor: shape=(3, 2, 2), dtype=float32, numpy=
     array([[[0.0000e+00, 0.0000e+00],
-            [1.0000e+00, 0.0000e+00],
-            [2.0000e+00, 0.0000e+00]],
+            [0.0000e+00, 1.0000e+00]],
     <BLANKLINE>
-           [[0.0000e+00, 1.0000e+00],
-            [1.0000e+00, 1.0000e+00],
+           [[1.0000e+00, 0.0000e+00],
+            [1.0000e+00, 1.0000e+00]],
+    <BLANKLINE>
+           [[2.0000e+00, 0.0000e+00],
             [2.0000e+00, 1.0000e+00]]], dtype=float32)>
     >>> print(grid[0,0,:])
-     tensor([0., 0.])  tf.Tensor([0.0000e+00 0.0000e+00], shape=(2,), dtype=float32)
+    tf.Tensor([0.0000e+00 0.0000e+00], shape=(2,), dtype=float32)
     >>> print(grid[:,0,0])
-    tensor([0., 1., 2.]) tf.Tensor([0.0000e+00 0.0000e+00], shape=(2,), dtype=float32)
+    tf.Tensor([0.0000e+00 1.0000e+00 2.0000e+00], shape=(3,), dtype=float32)
     >>> print(grid.shape)
-    torch.Size([3, 2, 2])
-    >>> print(grid.shape)
-    torch.Size([3, 2, 2])
+    (3, 2, 2)
+    >>> x = to_tensor([1, 2, 3])
+    >>> y = to_tensor([4, 5, 6])
+    >>> grid_x, grid_y = tf.meshgrid(x, y)
+    >>> grid_x
+    <tf.Tensor: shape=(3, 3), dtype=float32, numpy=
+    array([[1.0000e+00, 2.0000e+00, 3.0000e+00],
+           [1.0000e+00, 2.0000e+00, 3.0000e+00],
+           [1.0000e+00, 2.0000e+00, 3.0000e+00]], dtype=float32)>
 
+    >>> grid_y
+    <tf.Tensor: shape=(3, 3), dtype=float32, numpy=
+    array([[4.0000e+00, 4.0000e+00, 4.0000e+00],
+           [5.0000e+00, 5.0000e+00, 5.0000e+00],
+           [6.0000e+00, 6.0000e+00, 6.0000e+00]], dtype=float32)>
     >>> meshgrid(3,2,normalized_coordinates=True)
-    tensor([[[0.0000, 0.0000],
-             [0.0000, 1.0000]],
+    <tf.Tensor: shape=(3, 2, 2), dtype=float32, numpy=
+    array([[[0.0000e+00, 0.0000e+00],
+            [0.0000e+00, 1.0000e+00]],
     <BLANKLINE>
-            [[0.5000, 0.0000],
-             [0.5000, 1.0000]],
+           [[5.0000e-01, 0.0000e+00],
+            [5.0000e-01, 1.0000e+00]],
     <BLANKLINE>
-            [[1.0000, 0.0000],
-             [1.0000, 1.0000]]])
+           [[1.0000e+00, 0.0000e+00],
+            [1.0000e+00, 1.0000e+00]]], dtype=float32)>
 
     '''
-    grid_list = tf.meshgrid(np.arange(0, x), np.arange(0, y))
 
-    return tf.cast(tf.stack([grid_list[0], grid_list[1]], -1), tf.float32)
+    grid_list = tf.meshgrid(np.arange(0, x), np.arange(0, y))
+    if normalized_coordinates==True:
+        grid_list = tf.meshgrid(np.linspace(0, 1, int(x)),np.linspace(0, 1, int(y)))
+
+    return transpose(tf.cast(tf.stack(grid_list, -1), tf.float32),[1,0,2])
 
 
 def concate(x:List[tf.Tensor],axis=1):
-    return tf.concat(x,axis=axis)
+    return tf.concat(concat_dim=axis,values=x)

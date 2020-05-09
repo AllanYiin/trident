@@ -1,3 +1,6 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 import six
 from .load_backend import get_backend, get_image_backend, PrintException, if_else
 from .load_backend import get_session, get_trident_dir, epsilon, set_epsilon, floatx, set_floatx, camel2snake, \
@@ -12,8 +15,8 @@ from ..data.image_common import *
 from ..misc import *
 
 if get_backend()=='pytorch':
-    from .pytorch_backend import *
-    from .pytorch_ops import *
+    from trident.backend.pytorch_backend import *
+    from trident.backend.pytorch_ops import *
     from ..layers.pytorch_activations import *
     from ..layers.pytorch_layers import *
     from ..layers.pytorch_pooling import *
@@ -29,22 +32,10 @@ if get_backend()=='pytorch':
     from ..data.pytorch_datasets import *
 
 
-elif get_backend()=='cntk':
-    from .cntk_backend import *
-    from ..layers.cntk_activations import *
-    from ..layers.cntk_normalizations import *
-    from ..layers.cntk_layers import *
-    from ..layers.cntk_blocks import *
-    from ..optims.cntk_optimizers import  *
-    from ..optims.cntk_trainer import *
-    from ..optims.cntk_losses import *
-    from ..optims.cntk_metrics import *
-    from ..optims.cntk_constraints import *
-    from ..optims.cntk_regularizers import *
-
 elif get_backend()=='tensorflow':
-    from .tensorflow_backend import *
-    from .tensorflow_ops import *
+    from trident.backend.tensorflow_backend import *
+    from trident.backend.tensorflow_ops import *
+    from trident.backend.tensorflow_serialization import *
     from ..layers.tensorflow_activations import *
 
     from ..layers.tensorflow_layers import *

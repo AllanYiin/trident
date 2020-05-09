@@ -1,5 +1,6 @@
 from __future__ import absolute_import
-
+from __future__ import division
+from __future__ import print_function
 import sys
 from importlib import reload
 from sys import stderr
@@ -14,12 +15,12 @@ if sys.getdefaultencoding() != defaultencoding:
 __version__ = '0.5.4'
 stderr.write('trident {0}\n'.format(__version__))
 
-from . import backend
-from .backend import *
-from . import models
-from . import misc
-from . import callbacks
-from . import data
+from trident import backend
+from trident.backend import *
+from trident import models
+from trident import misc
+from trident import callbacks
+from trident import data
 import threading
 
 

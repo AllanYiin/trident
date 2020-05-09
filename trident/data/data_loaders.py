@@ -126,11 +126,11 @@ def load_mnist(dataset_name='mnist', **kwargs):
     """Load MNIST data from `path`"""
     trainData = None
     testData = None
-    for kind in ['train', 'test']:
+    for kind in ['train', 'tests']:
         labels_file = '{0}-labels-idx1-ubyte.gz'.format(
-            't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'test' else kind)
+            't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'tests' else kind)
         images_file = '{0}-images-idx3-ubyte.gz'.format(
-            't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'test' else kind)
+            't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'tests' else kind)
         # if dataset_name == 'emnist' :
         #     labels_file='emnist-balanced-'+labels_file
         #     images_file = 'emnist-balanced-' + images_file
@@ -198,7 +198,7 @@ def load_cifar(dataset_name='cifar10'):
     filelist = [f for f in os.listdir(extract_path) if os.path.isfile(os.path.join(extract_path, f))]
 
     data, labels = open_pickle(os.path.join(extract_path, 'train'), 'data', 'fine_labels')
-    testdata, testlabels = open_pickle(os.path.join(extract_path, 'test'), 'data', 'fine_labels')
+    testdata, testlabels = open_pickle(os.path.join(extract_path, 'tests'), 'data', 'fine_labels')
     data = data.reshape(data.shape[0], 32, 32, 3).astype(_session.floatx)
     testdata = testdata.reshape(testdata.shape[0], 32, 32, 3).astype(_session.floatx)
 
@@ -362,7 +362,7 @@ def load_stanford_cars(dataset_name='cars', kind='train', is_flatten=None, is_on
     download_file(train_url, dirname, train_url.split('/')[-1], dataset_name + '_images_{0}'.format('train'))
     tar_file_path = os.path.join(dirname, train_url.split('/')[-1])
 
-    download_file(test_url, dirname, test_url.split('/')[-1], dataset_name + '_images_{0}'.format('test'))
+    download_file(test_url, dirname, test_url.split('/')[-1], dataset_name + '_images_{0}'.format('tests'))
     test_imgs_path = os.path.join(dirname, test_url.split('/')[-1])
 
     download_file(label_url, dirname, label_url.split('/')[-1], dataset_name + '_labels_{0}'.format(kind))
@@ -376,7 +376,7 @@ def load_stanford_cars(dataset_name='cars', kind='train', is_flatten=None, is_on
     cars_meta = read_mat(os.path.join(extract_path, 'cars_meta.mat'))['class_names'][0]  # size 196
 
     cars_annos = read_mat(os.path.join(extract_path, 'cars_train_annos.mat'))['annotations'][0]
-    if kind == 'test':
+    if kind == 'tests':
         cars_annos = read_mat(os.path.join(extract_path, 'cars_test_annos.mat'))['annotations'][0]
 
     images_path = []
@@ -454,7 +454,7 @@ def load_examples_data(dataset_name):
         dataset = load_folder_images(dataset_name, os.path.join(dirname, 'train'), folder_as_label=True,
                                      expect_data_type=ExpectDataType.gray)
 
-        dataset_test = load_folder_images(dataset_name, os.path.join(dirname, 'test'), folder_as_label=True,
+        dataset_test = load_folder_images(dataset_name, os.path.join(dirname, 'tests'), folder_as_label=True,
                                           expect_data_type=ExpectDataType.gray)
 
         dataset.testdata = dataset_test.traindata
@@ -484,7 +484,7 @@ def load_examples_data(dataset_name):
                                  expect_data_type=ExpectDataType.rgb, get_image_mode=GetImageMode.processed)
         testlabel = LabelDataset(testData[1].tolist())
         test_iter = Iterator(data=testarray, label=testlabel)
-        print('training images: {0}  test images:{1}'.format(len(trainarray), len(testarray)))
+        print('training images: {0}  tests images:{1}'.format(len(trainarray), len(testarray)))
 
         dataset = DataProviderV2(dataset_name, traindata=train_iter, testdata=test_iter)
         dataset.binding_class_names(['drawing', 'hentai', 'neutral', 'porn', 'sexy'], 'en-us')

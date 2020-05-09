@@ -44,8 +44,8 @@ class DataProvider(object):
 
         if scenario is None:
             scenario= 'train'
-        elif scenario not in ['training','testing','validation','train','val','test','raw']:
-            raise ValueError('Only training,testing,validation,val,test,raw is valid senario')
+        elif scenario not in ['training','testing','validation','train','val','tests','raw']:
+            raise ValueError('Only training,testing,validation,val,tests,raw is valid senario')
         self._current_scenario=scenario
         if data is not None and hasattr(data, '__len__'):
             self.data[self._current_scenario]=np.array(data)
@@ -123,8 +123,8 @@ class DataProvider(object):
             self._current_scenario= 'train'
         elif 'raw' in self.data and len(self.data['raw'])>0:
             self._current_scenario= 'raw'
-        elif 'test' in self.data and len(self.data['test'])>0:
-            self._current_scenario= 'test'
+        elif 'tests' in self.data and len(self.data['tests'])>0:
+            self._current_scenario= 'tests'
 
     def __getitem__(self, index:int):
         if self.tot_records == 0:
@@ -235,8 +235,8 @@ class DataProvider(object):
     def mapping(self,data,labels=None,masks=None,scenario=None):
         if scenario is None:
             scenario= 'train'
-        elif scenario not in ['training','testing','validation','train','val','test','raw']:
-            raise ValueError('Only training,testing,validation,val,test,raw is valid senario')
+        elif scenario not in ['training','testing','validation','train','val','tests','raw']:
+            raise ValueError('Only training,testing,validation,val,tests,raw is valid senario')
         self._current_scenario=scenario
         if data is not None and hasattr(data, '__len__'):
             self.data[scenario]=data
@@ -348,7 +348,7 @@ class DataProviderV2(object):
 
     @property
     def signature(self):
-        if self.scenario == 'test' and self.testdata is not None:
+        if self.scenario == 'tests' and self.testdata is not None:
             return self.testdata.signature
         elif self.traindata is not None:
             return self.traindata.signature
@@ -356,7 +356,7 @@ class DataProviderV2(object):
             return None
 
     def update_signature(self,arg_names):
-        if self.scenario == 'test' and self.testdata is not None:
+        if self.scenario == 'tests' and self.testdata is not None:
            self.testdata.update_signature(arg_names)
            print(self.testdata.signature)
         elif self.traindata is not None:
@@ -369,7 +369,7 @@ class DataProviderV2(object):
 
     @property
     def batch_sampler(self):
-        if self.scenario=='test' and self.testdata is not None:
+        if self.scenario=='tests' and self.testdata is not None:
             return self.testdata.batch_sampler
         elif self.traindata is not None:
             return self.traindata.batch_sampler
@@ -391,7 +391,7 @@ class DataProviderV2(object):
 
     @property
     def palette(self):
-        if self.scenario=='test' and self.testdata is not None:
+        if self.scenario=='tests' and self.testdata is not None:
             return self.testdata.palette
         elif self.traindata is not None:
             return self.traindata.palette
@@ -514,13 +514,13 @@ class DataProviderV2(object):
         return self.__next__()
 
     def __iter__(self):
-        if self.scenario=='test' and self.testdata is not None:
+        if self.scenario=='tests' and self.testdata is not None:
             return self.testdata._sample_iter
         else:
             return self.traindata._sample_iter
 
     def __len__(self):
-        if self.scenario == 'test' and self.testdata is not None:
+        if self.scenario == 'tests' and self.testdata is not None:
             return self.testdata.__len__()
         elif self.traindata is not None:
             return self.traindata.__len__()
@@ -528,7 +528,7 @@ class DataProviderV2(object):
             return 0
 
     def next(self):
-        if self.scenario == 'test' and self.testdata is not None:
+        if self.scenario == 'tests' and self.testdata is not None:
             result = self.testdata.next()
             return result
         else:
@@ -536,7 +536,7 @@ class DataProviderV2(object):
             return result
 
     def __next__(self):
-        if self.scenario == 'test' and self.testdata is not None:
+        if self.scenario == 'tests' and self.testdata is not None:
             return next(self.testdata)
         else:
             return next(self.traindata)

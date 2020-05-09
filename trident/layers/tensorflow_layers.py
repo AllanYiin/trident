@@ -986,7 +986,7 @@ class Upsampling2d(Layer):
             new_shape[1] = int(new_shape[1] * self.scale_factor[1])
         new_shape=to_tensor(new_shape,dtype=tf.int32)
         if self.mode == 'pixel_shuffle':
-            return tf.nn.depth_to_space(x,int(self.scale_factor[0]))
+            return depth_to_space(x,int(self.scale_factor[0]))
         elif self.mode == 'nearest':
             return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
         elif self.mode == 'bilinear':

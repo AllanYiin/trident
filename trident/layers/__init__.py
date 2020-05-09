@@ -14,9 +14,4 @@ elif get_backend()=='tensorflow':
     from . import tensorflow_blocks as blocks
     from . import tensorflow_normalizations as normalizations
     from . import tensorflow_pooling as pooling
-elif get_backend()=='cntk':
-    from . import cntk_activations as activations
-    from . import cntk_layers as layers
-    from . import cntk_blocks as blocks
-    from . import cntk_normalizations as normalizations
-    #from . import cntk_pooling as pooling
+

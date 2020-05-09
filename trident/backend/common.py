@@ -1,9 +1,7 @@
-import itertools
-
-import six
 import collections
 import datetime
 import inspect
+import itertools
 import json
 import linecache
 import math
@@ -24,6 +22,7 @@ from pydoc import locate
 from typing import List, Set, Tuple, Dict
 
 import numpy as np
+import six
 
 __all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'set_epsilon', 'floatx', 'set_floatx','check_keys',
            'Signature', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list','normalize_padding', 'addindent', 'format_time',
@@ -33,7 +32,7 @@ __all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'set_ep
            'DataRole',
 
            'ExpectDataType', 'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
-           'DataSpec', 'get_argument_maps', 'get_args_spec', 'get_gpu_memory_map']
+           'DataSpec',  'get_args_spec', 'get_gpu_memory_map']
 
 
 def sanitize_path(path):
@@ -100,7 +99,6 @@ from enum import Enum, unique
 
 @unique
 class Backend(Enum):
-    cntk = 'cntk'
     pytorch = 'pytorch'
     tensorflow = 'tensorflow'
 
@@ -599,8 +597,7 @@ def get_python_function_arguments(f):
     # in args"
     if defaults:
         arg_names = arg_names[:-len(
-            defaults)]  # we allow Function(functions with default arguments), but those args will always have   #
-        # default values since CNTK Functions do not support this
+            defaults)]
     return (arg_names, annotations)
 
 
@@ -744,34 +741,6 @@ class GetImageMode(Enum):
     expect = 'expect'
     processed = 'processed'
 
-
-def get_argument_maps(default_map, func):
-    r"""Extracts the signature of the `func`. Then it returns the list of arguments that
-    are present in the object and need to be mapped and passed to the `func` when calling it.
-    Args:
-        default_map (dict): The keys of this dictionary override the function signature.
-        func (function): Function whose argument map is to be generated.
-    Returns:
-        List of arguments that need to be fed into the function. It contains all the positional
-        arguments and keyword arguments that are stored in the object. If any of the required
-        arguments are not present an error is thrown.
-    """
-    sig = signature(func)
-    arg_map = {}
-    for sig_param in sig.parameters.values():
-        arg = sig_param.name
-        arg_name = arg
-        if arg in default_map:
-            arg_name = default_map[arg]
-        if sig_param.default is not _empty:
-            if arg_name in self.__dict__:
-                arg_map.update({arg: arg_name})
-        else:
-            if arg_name not in self.__dict__ and arg != "kwargs" and arg != "args":
-                raise Exception("Argument : {} not present.".format(arg_name))
-            else:
-                arg_map.update({arg: arg_name})
-    return arg_map
 
 
 class _empty:
