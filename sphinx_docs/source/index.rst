@@ -16,6 +16,11 @@ Welcome to trident's documentation!
    :alt: alternate text
    :align: left
 
+#.  *Classify cancer using simulated data (Logistic Regression)*
+     Quick Start:`Logistic Regression <quickstart.html>`_ with NumPy (:tridenttw:`source <quickstart>`)
+
+
+
 Indices and tables
 ==================
 

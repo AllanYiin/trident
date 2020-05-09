@@ -886,12 +886,6 @@ def _load(zip_file, map_location, pickle_module, **pickle_load_args):
     return result
 
 
-def _is_torchscript_zip(zip_file):
-    for file_name in zip_file.get_all_records():
-        parts = file_name.split(os.sep)
-        if len(parts) > 1 and parts[1] == 'constants.pkl':
-            return True
-    return False
 
 
 

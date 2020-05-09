@@ -601,7 +601,7 @@ def map_function_arguments(params, params_dict, *args, **kwargs):
     Accepted are both positional and keyword arguments.
     This mimics Python's argument interpretation, except that keyword arguments are not optional.
     This does not require the arguments to be Variables or Functions. It is also called by train_minibatch() and
-    @Signature.
+
     '''
     # start with positional arguments
     arg_map = dict(zip(params, args))

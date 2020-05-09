@@ -22,6 +22,12 @@ names = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fnam
 
 if  'Microsoft YaHei' in names:
     matplotlib.rc('font', family='Microsoft YaHei')
+else:
+    for name in names:
+        if 'heiti' in name.lower():
+            matplotlib.rc('font', family=name)
+            break
+
 
 
 import PIL
@@ -36,7 +42,7 @@ from ..backend.common import get_time_suffix,make_dir_if_need
 from ..data.image_common import *
 
 
-__all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram','generate_palette','plot_bbox']
+__all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram','generate_palette','plot_bbox','plot_3d_histogram','plot_centerloss']
 
 
 def generate_palette(num_classes):
@@ -210,9 +216,9 @@ default_bins.extend(np.arange(-0.0002, 0.0002, 0.00002).tolist())
 default_bins = sorted(list(set(default_bins)))
 
 
-def steps_histogram(grads, weights, sample_collected=None, bins=None, size=(18, 8), inteval=1, title='', save_path=None,
-                    imshow=False):
+def plot_3d_histogram(ax,grads,sample_collected=None, bins=None, inteval=1, title=''):
     global default_bins
+    from mpl_toolkits.mplot3d import Axes3D
     if bins is None:
         bins = default_bins
 
@@ -222,10 +228,8 @@ def steps_histogram(grads, weights, sample_collected=None, bins=None, size=(18, 
         sample = np.arange(len(sample_collected))
         collected_samples = sample[sample_collected == 1]
 
-    plt.ion()
-    fig = plt.figure(figsize=size)
-    fig.patch.set_facecolor('white')
-    ax = fig.add_subplot(1, 2, 1, projection='3d')
+
+
     # ax = fig.gca(projection='3d')
     # Make verts a list, verts[i] will be a list of (x,y) pairs defining polygon i
     verts = []
@@ -236,6 +240,7 @@ def steps_histogram(grads, weights, sample_collected=None, bins=None, size=(18, 
 
     new_zs = []
     max_frequency = 0
+
     for i in range(len(grads)):
         if i % inteval == 0:
             a, b = np.histogram(grads[i].reshape([-1]), bins)
@@ -256,39 +261,92 @@ def steps_histogram(grads, weights, sample_collected=None, bins=None, size=(18, 
     ax.set_zlim(0, int(max_frequency * 1.1))
     plt.title(title + ' Gradients Histogram')
 
-    ax = fig.add_subplot(1, 2, 2, projection='3d')
 
-    bins = [b * 10 for b in bins]
 
-    # Make verts a list, verts[i] will be a list of (x,y) pairs defining polygon i
-    verts = []
-    # The ith polygon will appear on the plane y = zs[i]
-    zs = np.arange(len(grads))
-    if len(collected_samples) == len(grads):
-        zs = collected_samples
+def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=(18, 8), inteval=1, title='', save_path=None,
+                    imshow=False):
+    global default_bins
+    from mpl_toolkits.mplot3d import Axes3D
+    if bins is None:
+        bins = default_bins
 
-    new_zs = []
-    max_frequency = 0
-    for i in range(len(weights)):
-        if i % inteval == 0:
-            a, b = np.histogram(weights[i].reshape([-1]), bins)
+    collected_samples = []
+    if sample_collected is not None and len(sample_collected) > 0:
+        sample_collected = np.array(sample_collected)
+        sample = np.arange(len(sample_collected))
+        collected_samples = sample[sample_collected == 1]
+
+    plt.ion()
+    fig = plt.figure(figsize=size)
+    fig.patch.set_facecolor('white')
+
+    if grads is not None:
+        ax = fig.add_subplot(1, 2, 1, projection='3d') if grads is not None and weights is not None else fig.add_subplot(1, 1, 1, projection='3d')
+
+        # ax = fig.gca(projection='3d')
+        # Make verts a list, verts[i] will be a list of (x,y) pairs defining polygon i
+        verts = []
+        # The ith polygon will appear on the plane y = zs[i]
+        zs = np.arange(len(grads))
+        if len(collected_samples) == len(grads):
+            zs = collected_samples
+
+        new_zs = []
+        max_frequency = 0
+
+        for i in range(len(grads)):
+            a, b = np.histogram(grads[i].reshape([-1]), bins)
             ys = a
-            xs = b[:-1] + 0.001
+            xs = b[:-1]
             new_zs.append(zs[i])
             max_frequency = max(np.max(a), max_frequency)
             verts.append(polygon_under_graph(xs, ys))
 
-    poly = PolyCollection(verts, facecolors=['r', 'g', 'b', 'y'], alpha=.4)
-    ax.add_collection3d(poly, zs=new_zs, zdir='y')
-    override = {'fontsize': 'small', 'verticalalignment': 'top', 'horizontalalignment': 'center'}
-    ax.set_xlabel('weights', override)
-    ax.set_ylabel('steps', override)
-    ax.set_zlabel('frequency', override)
+        poly = PolyCollection(verts, facecolors=['r', 'g', 'b', 'y'], alpha=.4)
+        ax.add_collection3d(poly, zs=new_zs, zdir='y')
+        override = {'fontsize': 'small', 'verticalalignment': 'top', 'horizontalalignment': 'center'}
+        ax.set_xlabel('gradients', override)
+        ax.set_ylabel('steps', override)
+        ax.set_zlabel('frequency', override)
+        ax.set_xlim(min(bins), max(bins))
+        ax.set_ylim(0, int(max(new_zs)))
+        ax.set_zlim(0, int(max_frequency * 1.1))
+        plt.title(title + ' Gradients Histogram')
 
-    ax.set_xlim(min(bins), max(bins))
-    ax.set_ylim(0, int(max(new_zs)))
-    ax.set_zlim(0, int(max_frequency * 1.1))
-    plt.title('Weights Histogram')
+    if weights is not None:
+        ax = fig.add_subplot(1, 2, 2, projection='3d') if grads is not None else fig.add_subplot(1, 1, 1, projection='3d')
+
+        bins = [b * 10 for b in bins]
+
+        # Make verts a list, verts[i] will be a list of (x,y) pairs defining polygon i
+        verts = []
+        # The ith polygon will appear on the plane y = zs[i]
+        zs = np.arange(len(weights))
+        if len(collected_samples) == len(weights):
+            zs = collected_samples
+
+        new_zs = []
+        max_frequency = 0
+        for i in range(len(weights)):
+            if i % inteval == 0:
+                a, b = np.histogram(weights[i].reshape([-1]), bins)
+                ys = a
+                xs = b[:-1] + 0.001
+                new_zs.append(zs[i])
+                max_frequency = max(np.max(a), max_frequency)
+                verts.append(polygon_under_graph(xs, ys))
+
+        poly = PolyCollection(verts, facecolors=['r', 'g', 'b', 'y'], alpha=.4)
+        ax.add_collection3d(poly, zs=new_zs, zdir='y')
+        override = {'fontsize': 'small', 'verticalalignment': 'top', 'horizontalalignment': 'center'}
+        ax.set_xlabel('weights', override)
+        ax.set_ylabel('steps', override)
+        ax.set_zlabel('frequency', override)
+
+        ax.set_xlim(min(bins), max(bins))
+        ax.set_ylim(0, int(max(new_zs)))
+        ax.set_zlim(0, int(max_frequency * 1.1))
+        plt.title('Weights Histogram')
 
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
@@ -301,17 +359,14 @@ def steps_histogram(grads, weights, sample_collected=None, bins=None, size=(18, 
             plt.show(block=False)
 
 
-def centerloss_plot(feat, labels):
-    plt.ion()
+def plot_centerloss(plt,feat, labels,num_class=10,title=''):
     c = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#990000', '#999900', '#009900', '#009999']
-    plt.clf()
-    for i in range(10):
+    for i in range(num_class):
         plt.plot(feat[labels == i, 0], feat[labels == i, 1], '.', c=c[i])
-    plt.legend(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], loc='upper right')
-    plt.xlim(xmin=-8, xmax=8)
-    plt.ylim(ymin=-8, ymax=8)
-    plt.draw()
-    plt.pause(0.001)
+    plt.legend(range(num_class), loc='upper right')
+    plt.xlim(xmin=feat[:, 0].min(), xmax=feat[:, 0].max())
+    plt.ylim(ymin=feat[:, 1].min(), ymax=feat[:, 1].max())
+    plt.title(title+' center loss')
 
 
 def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, title="Confusion matrix", fname=None,

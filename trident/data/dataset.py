@@ -18,7 +18,7 @@ import numpy as np
 from skimage import color
 
 from .bbox_common import xywh2xyxy, xyxy2xywh
-from .image_common import gray_scale, image2array, mask2array, image_backend_adaptive, reverse_image_backend_adaptive, \
+from .image_common import gray_scale, image2array, mask2array, image_backend_adaption, reverse_image_backend_adaption, \
     unnormalize, array2image, ExpectDataType, GetImageMode
 from .label_common import label_backend_adaptive
 from .mask_common import mask_backend_adaptive, color2label

@@ -17,7 +17,7 @@ from skimage import morphology
 from skimage import transform, exposure
 from skimage.filters import *
 
-from ..backend.common import *
+from trident.backend.common import *
 
 _session=get_session()
 _backend=_session.backend

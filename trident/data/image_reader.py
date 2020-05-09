@@ -9,7 +9,7 @@ except ImportError:
 import threading
 import time
 
-from ..misc.ipython_utils import is_in_ipython, is_in_colab
+from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 
 if is_in_ipython():
     from IPython import display

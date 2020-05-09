@@ -13,6 +13,7 @@
 import os
 import sys
 import trident
+import re
 #sys.path.insert(0, os.path.abspath('C:/Users/Allan/PycharmProjects/DeepTrident/trident'))
 
 # -- Project information -----------------------------------------------------
@@ -33,6 +34,7 @@ release = '5.5.0'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.viewcode',
+    'sphinx.ext.extlinks',
     'sphinx.ext.napoleon',
     'nbsphinx',
     'recommonmark',
@@ -41,7 +43,10 @@ extensions = [
 
 # Suppress warnings
 suppress_warnings = ['image.nonlocal_uri']
+# Define source suffix
+source_suffix = ['.rst', '.ipynb','.md']
 
+master_doc = 'index'
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
@@ -59,6 +64,21 @@ autodoc_mock_imports = [
 napoleon_google_docstring = True
 napoleon_numpy_docstring = False
 
+add_module_names = False
+
+# Linkcheck builder options
+
+
+source_prefix = 'https://github.com/AllanYiin/trident'
+
+
+
+# sphinx.ext.extlinks options
+extlinks = {
+    'tridenttw': (source_prefix + '/docs/zh-tw/%s.md', ''),
+    'tridentcn': (source_prefix + '/docs/zh-cn/%s.md', ''),
+    'tridenten': (source_prefix + '/docs/en-us/%s.md', '')
+}
 
 # -- Options for HTML output -------------------------------------------------
 

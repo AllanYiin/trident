@@ -21,7 +21,7 @@ PACKAGES = find_packages(exclude=EXCLUDE_FROM_PACKAGES)
 
 
 setup(name=NAME,
-      version='0.5.1',
+      version='0.5.4',
       description='Multiverse for Deep Learning Developers without Pitfall',
       long_description=long_description,
       long_description_content_type="text/markdown",

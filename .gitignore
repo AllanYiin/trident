@@ -10,7 +10,7 @@ __pycache__/
 
 # Distribution / packaging
 .Python
-build/
+build/lib
 develop-eggs/
 dist/
 downloads/
@@ -224,7 +224,7 @@ fabric.properties
 # Android studio 3.1+ serialized cache file
 .idea/caches/build_file_checksums.ser
 
-.github/
+
 .idea/.gitignore
 .idea/DeepTrident.iml
 .idea/codeStyles/
@@ -234,7 +234,7 @@ fabric.properties
 .idea/modules.xml
 .idea/other.xml
 .idea/vcs.xml
-.travis/
+
 trident/experiments/tfe_layers.py
 .idea/.name
 .idea/Trident.iml

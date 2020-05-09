@@ -42,7 +42,6 @@ trident/data/tensorflow_datasets.py
 trident/data/text_common.py
 trident/data/utils.py
 trident/layers/__init__.py
-trident/layers/layer_utils.py
 trident/layers/pytorch_activations.py
 trident/layers/pytorch_blocks.py
 trident/layers/pytorch_layers.py

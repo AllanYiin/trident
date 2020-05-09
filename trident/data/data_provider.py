@@ -15,11 +15,11 @@ try:
     from urllib.request import urlretrieve
 except ImportError:
     from six.moves.urllib.request import urlretrieve
-from ..backend.common import *
-from .image_common import *
-from .label_common import *
-from .samplers import *
-from .dataset import *
+from trident.backend.common import *
+from trident.data.image_common import *
+from trident.data.label_common import *
+from trident.data.samplers import *
+from trident.data.dataset import *
 _session =get_session()
 _trident_dir=get_trident_dir()
 _locale = locale.getdefaultlocale()[0].lower()
@@ -44,8 +44,8 @@ class DataProvider(object):
 
         if scenario is None:
             scenario= 'train'
-        elif scenario not in ['training','testing','validation','train','val','tests','raw']:
-            raise ValueError('Only training,testing,validation,val,tests,raw is valid senario')
+        elif scenario not in ['training','testing','validation','train','val','test','raw']:
+            raise ValueError('Only training,testing,validation,val,test,raw is valid senario')
         self._current_scenario=scenario
         if data is not None and hasattr(data, '__len__'):
             self.data[self._current_scenario]=np.array(data)
@@ -123,8 +123,8 @@ class DataProvider(object):
             self._current_scenario= 'train'
         elif 'raw' in self.data and len(self.data['raw'])>0:
             self._current_scenario= 'raw'
-        elif 'tests' in self.data and len(self.data['tests'])>0:
-            self._current_scenario= 'tests'
+        elif 'test' in self.data and len(self.data['test'])>0:
+            self._current_scenario= 'test'
 
     def __getitem__(self, index:int):
         if self.tot_records == 0:
@@ -206,12 +206,12 @@ class DataProvider(object):
             img_data=image2array(img_data)
 
         if len(self.image_transform_funcs)==0:
-            return image_backend_adaptive(img_data)
+            return image_backend_adaption(img_data)
         if isinstance(img_data,np.ndarray):
             #if img_data.ndim>=2:
             for fc in self.image_transform_funcs:
                 img_data=fc(img_data)
-            img_data=image_backend_adaptive(img_data)
+            img_data=image_backend_adaption(img_data)
             if img_data.dtype!=np.float32:
                 raise ValueError('')
             return img_data
@@ -235,8 +235,8 @@ class DataProvider(object):
     def mapping(self,data,labels=None,masks=None,scenario=None):
         if scenario is None:
             scenario= 'train'
-        elif scenario not in ['training','testing','validation','train','val','tests','raw']:
-            raise ValueError('Only training,testing,validation,val,tests,raw is valid senario')
+        elif scenario not in ['training','testing','validation','train','val','test','raw']:
+            raise ValueError('Only training,testing,validation,val,test,raw is valid senario')
         self._current_scenario=scenario
         if data is not None and hasattr(data, '__len__'):
             self.data[scenario]=data
@@ -348,7 +348,7 @@ class DataProviderV2(object):
 
     @property
     def signature(self):
-        if self.scenario == 'tests' and self.testdata is not None:
+        if self.scenario == 'test' and self.testdata is not None:
             return self.testdata.signature
         elif self.traindata is not None:
             return self.traindata.signature
@@ -356,7 +356,7 @@ class DataProviderV2(object):
             return None
 
     def update_signature(self,arg_names):
-        if self.scenario == 'tests' and self.testdata is not None:
+        if self.scenario == 'test' and self.testdata is not None:
            self.testdata.update_signature(arg_names)
            print(self.testdata.signature)
         elif self.traindata is not None:
@@ -369,7 +369,7 @@ class DataProviderV2(object):
 
     @property
     def batch_sampler(self):
-        if self.scenario=='tests' and self.testdata is not None:
+        if self.scenario=='test' and self.testdata is not None:
             return self.testdata.batch_sampler
         elif self.traindata is not None:
             return self.traindata.batch_sampler
@@ -391,7 +391,7 @@ class DataProviderV2(object):
 
     @property
     def palette(self):
-        if self.scenario=='tests' and self.testdata is not None:
+        if self.scenario=='test' and self.testdata is not None:
             return self.testdata.palette
         elif self.traindata is not None:
             return self.traindata.palette
@@ -418,13 +418,13 @@ class DataProviderV2(object):
         if img_data.ndim==4:
             return [self.image_transform(im) for im in img_data]
         if len(self.image_transform_funcs) == 0:
-            return image_backend_adaptive(img_data)
+            return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.image_transform_funcs:
                 if not fc.__qualname__.startswith('random_') or  'crop' in fc.__qualname__  or  'rescale' in fc.__qualname__  or  (fc.__qualname__.startswith('random_') and random.randint(0,10)%2==0):
                     img_data = fc(img_data)
 
-            img_data = image_backend_adaptive(img_data)
+            img_data = image_backend_adaption(img_data)
 
             return img_data
         else:
@@ -434,7 +434,7 @@ class DataProviderV2(object):
     @property
     def reverse_image_transform_funcs(self):
         return_list=[]
-        return_list.append(reverse_image_backend_adaptive)
+        return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.image_transform_funcs)):
             fn=self.image_transform_funcs[-1-i]
             if fn.__qualname__=='normalize.<locals>.img_op':
@@ -444,12 +444,12 @@ class DataProviderV2(object):
 
     def reverse_image_transform(self, img_data:np.ndarray):
         if len(self.reverse_image_transform_funcs) == 0:
-            return reverse_image_backend_adaptive(img_data)
+            return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 img_data = fc(img_data)
-            img_data = reverse_image_backend_adaptive(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
 
         return img_data
 
@@ -485,12 +485,12 @@ class DataProviderV2(object):
         if img_data.ndim==4:
             return [self.image_transform(im) for im in img_data]
         if len(self.image_transform_funcs) == 0:
-            return image_backend_adaptive(img_data)
+            return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.image_transform_funcs:
                 if fc.__qualname__.startswith('random_') and random.randint(10)%2==0:
                     img_data = fc(img_data)
-            img_data = image_backend_adaptive(img_data)
+            img_data = image_backend_adaption(img_data)
 
             return img_data
         else:
@@ -514,13 +514,13 @@ class DataProviderV2(object):
         return self.__next__()
 
     def __iter__(self):
-        if self.scenario=='tests' and self.testdata is not None:
+        if self.scenario=='test' and self.testdata is not None:
             return self.testdata._sample_iter
         else:
             return self.traindata._sample_iter
 
     def __len__(self):
-        if self.scenario == 'tests' and self.testdata is not None:
+        if self.scenario == 'test' and self.testdata is not None:
             return self.testdata.__len__()
         elif self.traindata is not None:
             return self.traindata.__len__()
@@ -528,7 +528,7 @@ class DataProviderV2(object):
             return 0
 
     def next(self):
-        if self.scenario == 'tests' and self.testdata is not None:
+        if self.scenario == 'test' and self.testdata is not None:
             result = self.testdata.next()
             return result
         else:
@@ -536,7 +536,7 @@ class DataProviderV2(object):
             return result
 
     def __next__(self):
-        if self.scenario == 'tests' and self.testdata is not None:
+        if self.scenario == 'test' and self.testdata is not None:
             return next(self.testdata)
         else:
             return next(self.traindata)

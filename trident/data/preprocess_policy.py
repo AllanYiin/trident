@@ -8,7 +8,7 @@ import random
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 
-from .image_common import image_backend_adaptive
+from trident.data.image_common import image_backend_adaption
 
 __all__ = ['PreprocessPolicy', 'PreprocessPolicyItem']
 

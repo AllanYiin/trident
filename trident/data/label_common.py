@@ -10,8 +10,8 @@ import re
 import numpy as np
 import six
 
-from ..backend.common import *
-from ..backend.load_backend import *
+from trident.backend.common import *
+from trident.backend.load_backend import *
 
 __all__ = ['label_backend_adaptive','get_onehot','check_is_onehot']
 
