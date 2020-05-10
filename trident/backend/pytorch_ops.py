@@ -1161,7 +1161,7 @@ def reshape(x,shape=None)-> torch.Tensor:
     if shape is None:
         return x
     elif isinstance(shape,list):
-        return torch.reshape(x,shape)
+        return torch.reshape(x,to_list(shape))
     elif isinstance(shape,tuple):
         shape=to_list(shape)
         return torch.reshape(x,shape)
@@ -1396,7 +1396,7 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
 
     Example:
     >>> grid=meshgrid(3,2)
-    >>> grid
+    >>> grid.cpu()
     tensor([[[0., 0.],
              [0., 1.]],
     <BLANKLINE>
@@ -1405,16 +1405,16 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     <BLANKLINE>
             [[2., 0.],
              [2., 1.]]])
-    >>> print(grid[0,0,:])
-    [0.0000e+00, 1.0000e+00]
-    >>> print(grid[:,0,0])
-    [0.0000e+00, 1.0000e+00]
+    >>> print(grid[0,0,:].cpu())
+     tensor([0., 0.])
+    >>> print(grid[:,0,0].cpu())
+    tensor([0., 1., 2.])
     >>> print(grid.shape)
     torch.Size([3, 2, 2])
 
 
     >>> grid1=meshgrid(3,2,normalized_coordinates=True)
-    >>> grid1
+    >>> grid1.cpu()
     tensor([[[0.0000, 0.0000],
              [0.0000, 1.0000]],
     <BLANKLINE>
@@ -1432,7 +1432,7 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
         xs = torch.linspace(0, 1, int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
         ys = torch.linspace(0, 1, int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
 
-    return torch.stack(torch.meshgrid([xs, ys]),-1).to(_get_device())
+    return torch.stack(torch.meshgrid([ys, xs]),-1).to(_get_device())
 
 
 
