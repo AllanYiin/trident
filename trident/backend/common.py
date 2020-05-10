@@ -24,15 +24,15 @@ from typing import List, Set, Tuple, Dict
 import numpy as np
 import six
 
-__all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'set_epsilon', 'floatx', 'set_floatx','check_keys',
-           'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
+__all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'set_epsilon', 'floatx', 'set_floatx',
+           'check_keys', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
            'OrderedDict', 'get_python_function_arguments', 'map_function_arguments', 'ClassfierType', 'PaddingMode',
            'DataRole',
 
            'ExpectDataType', 'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
-           'DataSpec',  'get_args_spec', 'get_gpu_memory_map']
+           'DataSpec', 'get_args_spec', 'get_gpu_memory_map']
 
 
 def sanitize_path(path):
@@ -225,7 +225,9 @@ def to_list(x):
     Args:
         x ():
 
-    Returns: a list
+    Returns:
+        a list
+
     Examples:
         >>> np.arange(16).reshape((4,2,2)).tolist()
         [[[0, 1], [2, 3]], [[4, 5], [6, 7]], [[8, 9], [10, 11]], [[12, 13], [14, 15]]]
@@ -243,6 +245,7 @@ def to_list(x):
         [5]
         >>> to_list({'x':3,'y':5})
         [('x', 3), ('y', 5)]
+
     '''
     if x is None:
         return None
@@ -274,6 +277,17 @@ def to_list(x):
 
 
 def if_else(a, b):
+    '''
+    Syntax suggar for None replacement
+
+    Args:
+        a (obj):
+        b (obj):
+
+    Returns:
+        None replacement
+
+    '''
     if a is None:
         return b
     else:
@@ -282,25 +296,28 @@ def if_else(a, b):
 
 def unpack_singleton(x):
     '''
-    Gets the first element if the iterable has only one value. Otherwise return the iterable.But would not split a tensor.
+    Gets the first element if the iterable has only one value. Otherwise return the iterable.But would not split a
+    tensor.
 
     Args:
         x (iterable, except tensor and array):
 
-    Returns:  The same iterable or the first element.
+    Returns:
+        The same iterable or the first element.
 
     Examples
-    >>> unpack_singleton(10, )
-    10
-    >>> unpack_singleton([0] )
-    0
-    >>> unpack_singleton(np.ones((2,5), dtype=np.int32))
-    array([[1, 1, 1, 1, 1],
-           [1, 1, 1, 1, 1]])
-    >>> unpack_singleton({'x':3,'y':5})
-    {'x': 3, 'y': 5}
+        >>> unpack_singleton(10, )
+        10
+        >>> unpack_singleton([0] )
+        0
+        >>> unpack_singleton(np.ones((2,5), dtype=np.int32))
+        array([[1, 1, 1, 1, 1],
+               [1, 1, 1, 1, 1]])
+        >>> unpack_singleton({'x':3,'y':5})
+        {'x': 3, 'y': 5}
+
     '''
-    if x is None :
+    if x is None:
         return None
     elif 'tensor' in x.__class__.__name__.lower() or isinstance(x, np.ndarray):
         return x
@@ -311,7 +328,8 @@ def unpack_singleton(x):
 
 def enforce_singleton(x):
     '''
-    Enforce only first element can pass if input is a a tuple or a list. It always use for singleton check if the function only accept one input.
+    Enforce only first element can pass if input is a a tuple or a list. It always use for singleton check if the
+    function only accept one input.
     Args:
         x ():
 
@@ -326,15 +344,13 @@ def enforce_singleton(x):
     return x
 
 
-
-
-
 def check_for_unexpected_keys(name, input_dict, expected_values):
     unknown = set(input_dict.keys()).difference(expected_values)
     if unknown:
         raise ValueError(
             'Unknown entries in {} dictionary: {}. Only expected following keys: {}'.format(name, list(unknown),
                                                                                             expected_values))
+
 
 def check_keys(model, pretrained_state_dict):
     ckpt_keys = set(pretrained_state_dict.keys())
@@ -401,36 +417,52 @@ def get_time_suffix():
     return prefix
 
 
-def get_function(fn_or_name, module_paths=None):
-    if callable(fn_or_name):
-        return fn_or_name
-    fn = locate(fn_or_name)
+def get_function(fn_name, module_paths=None):
+    '''
+    Returns the class based on class name.
+    Args:
+        fn_name (str): Name or full path to the class.
+        module_paths (list): Paths to candidate modules to search for the
+            class. This is used if the class cannot be located solely based on
+            ``class_name``. The first module in the list that contains the class
+            is used.
+
+    Returns:
+        The target class.
+    Raises:
+            ValueError: If class is not found based on :attr:`class_name` and
+                :attr:`module_paths`.
+
+    '''
+    if callable(fn_name):
+        return fn_name
+    fn = locate(fn_name)
     if (fn is None) and (module_paths is not None):
         for module_path in module_paths:
             fn = locate('.'.join([module_path, fn_or_name]))
             if fn is not None:
                 break
     if fn is None:
-        raise ValueError("Method not found in {}: {}".format(module_paths, fn_or_name))
+        raise ValueError("Method not found in {}: {}".format(module_paths, fn_name))
     return fn  # type: ignore
 
 
 def get_class(class_name, module_paths=None):
-    r"""Returns the class based on class name.
+    '''
+    Returns the class based on class name.
     Args:
         class_name (str): Name or full path to the class.
         module_paths (list): Paths to candidate modules to search for the
             class. This is used if the class cannot be located solely based on
             ``class_name``. The first module in the list that contains the class
             is used.
+
     Returns:
         The target class.
-
     Raises:
-        ValueError: If class is not found based on :attr:`class_name` and
-            :attr:`module_paths`.
-
-    """
+            ValueError: If class is not found based on :attr:`class_name` and
+                :attr:`module_paths`.
+    '''
     class_ = locate(class_name)
     if (class_ is None) and (module_paths is not None):
         for module_path in module_paths:
@@ -589,8 +621,7 @@ def get_python_function_arguments(f):
     defaults = param_specs.defaults  # "if this tuple has n elements, they correspond to the last n elements listed
     # in args"
     if defaults:
-        arg_names = arg_names[:-len(
-            defaults)]
+        arg_names = arg_names[:-len(defaults)]
     return (arg_names, annotations)
 
 
@@ -735,7 +766,6 @@ class GetImageMode(Enum):
     processed = 'processed'
 
 
-
 class _empty:
     """Marker object for Signature.empty and Parameter.empty."""
 
@@ -822,21 +852,19 @@ def format_arg_spec(v, is_output=False):
     return s + str(v._type)
 
 
-
 def update_signature(fn: callable, args: list):
     sig = signature(fn)
     sig = sig.replace(tuple(sig.parameters.values())[1:])
 
 
 def get_gpu_memory_map():
-    """Get the current gpu usage.
+    '''
 
-    Returns
-    -------
-    usage: dict
+    Returns:
+        usage: dict
         Keys are device ids as integers.
         Values are memory usage as integers in MB.
-    """
+    '''
     pathes = [p for p in os.environ['path'].split(';') if 'NVIDIA' in p and 'Corporation' in p]
     nv_path = 'C:/Program Files/NVIDIA Corporation/'
     sp = subprocess.Popen(['{0}/NVSMI/nvidia-smi'.format(nv_path), '-q'], encoding='utf-8-sig', stdout=subprocess.PIPE,
@@ -856,59 +884,3 @@ def get_gpu_memory_map():
         except:
             pass
     return gpu_memory_map
-
-
-class _tensor_op(collections.MutableMapping):
-    """Tensor manuplation utilities
-    """
-
-    def __init__(self, *args, **kwargs):
-        self.__dict__.update(*args, **kwargs)
-
-    def __setitem__(self, key, value):
-        self.__dict__[key] = value
-
-    def __getitem__(self, key):
-        return self.__dict__[key]
-
-    def __delitem__(self, key):
-        del self.__dict__[key]
-
-    # noinspection PyUnusedLocal,PyUnusedLocal
-    def __getattr__(self, key):
-        return None
-
-    def __iter__(self):
-        return iter(self.__dict__)
-
-    def __len__(self):
-        return len(self.__dict__)
-
-    def __str__(self):
-        return str(self.__dict__)
-
-    def __repr__(self):
-        return self.__dict__.__repr__()
-
-    def __add__(self, other):
-        """Overloads `+` operator.
-        It does NOT overwrite the existing item.
-        """
-
-        res = _tensor_op(self.__dict__)
-        for k, v in six.iteritems(other):
-            if k not in res.__dict__ or res.__dict__[k] is None:
-                res.__dict__[k] = v
-        return res
-
-    def __mul__(self, other):
-        r"""Overloads `*` operator.
-        It overwrites the existing item.
-
-
-        ```
-        """
-        res = _tensor_op(self.__dict__)
-        for k, v in six.iteritems(other):
-            res.__dict__[k] = v
-        return res

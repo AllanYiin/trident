@@ -7,9 +7,9 @@ import pickle
 import numpy as np
 
 from trident.data.data_provider import *
-from trident.data..dataset import *
-from trident.data..mask_common import *
-from trident.data..utils import *
+from trident.data.dataset import *
+from trident.data.mask_common import *
+from trident.data.utils import *
 from trident.backend.common import floatx
 from trident.misc.ipython_utils import *
 

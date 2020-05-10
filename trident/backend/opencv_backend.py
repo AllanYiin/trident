@@ -76,13 +76,12 @@ def save_mask(arr, file_path):
 
 def image2array(img):
     '''
-
     Parameters
-    ----------
-    img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
+        img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
 
-    Returns ndarray  (HWC / RGB)
-    -------
+    Returns
+        ndarray  (HWC / RGB)
+
 
     '''
     if isinstance(img,str):
@@ -109,13 +108,12 @@ def image2array(img):
     return arr
 def array2image(arr:np.ndarray):
     '''
-
     Parameters
-    ----------
-    arr  ndarry  : array need to convert back to image
+        arr  ndarry  : array need to convert back to image
 
-    Returns   pillow image
-    -------
+    Returns
+        pillow image
+
 
     '''
     # confirm back to numpy
@@ -143,13 +141,10 @@ def array2image(arr:np.ndarray):
 
 def mask2array(img):
     '''
-
-    Parameters
-    ----------
-    img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
-
-    Returns ndarray  (HW / single channel)
-    -------
+    Args
+        img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
+    Returns
+        ndarray  (HW / single channel)
 
     '''
     arr = None
@@ -171,25 +166,11 @@ def mask2array(img):
 
 def array2mask(arr:np.ndarray):
     '''
+    Args
+        arr  ndarry  : array need to convert back to image
 
-    Parameters
-    ----------
-    arr  ndarry  : array need to convert back to image
-
-    Returns   pillow image
-    -------
-
-    '''
-    # confirm back to numpy
-    '''
-
-    Parameters
-    ----------
-    img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
-
-    Returns ndarray  (HWC / RGB)
-    -------
-
+    Returns
+        pillow image
     '''
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))

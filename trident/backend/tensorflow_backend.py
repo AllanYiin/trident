@@ -6,6 +6,7 @@ import threading
 import inspect
 import itertools
 import random
+import math
 import sys
 import uuid
 from collections import defaultdict,namedtuple
@@ -15,7 +16,7 @@ from typing import List
 import weakref
 import numpy as np
 import tensorflow as tf
-
+from distutils.version import LooseVersion
 from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
 from tensorflow.python.module import module
@@ -40,7 +41,11 @@ def get_device():
 version = tf.version
 sys.stdout.write('Tensorflow version:{0}.\n'.format(version.VERSION))
 
-if version.VERSION < '2.2.0-rc0':
+
+tf_version=LooseVersion(version.VERSION)
+base_version=LooseVersion('2.2.0-rc0')
+
+if tf_version <base_version:
     raise ValueError('Not support Tensorflow below 2.2.0-rc0\n')
 
 sys.stdout.write('use device:{0}.\n'.format(get_device()))

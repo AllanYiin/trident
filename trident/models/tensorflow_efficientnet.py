@@ -2,28 +2,18 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import inspect
 import math
 import os
-import uuid
-from collections import *
-from collections import deque
-from copy import copy, deepcopy
-from functools import partial
-from itertools import repeat
-
-import numpy as np
-import tensorflow as tf
+from copy import deepcopy
 
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
 from trident.data.image_common import *
-from trident.data.utils import download_model_from_google_drive,download_file_from_google_drive,unpickle
-from trident.layers.tensorflow_activations import get_activation, Identity, Relu
+from trident.data.utils import download_model_from_google_drive, unpickle
+from trident.layers.tensorflow_activations import Identity
 from trident.layers.tensorflow_blocks import *
 from trident.layers.tensorflow_layers import *
-from trident.layers.tensorflow_normalizations import get_normalization, BatchNorm
-from trident.layers.tensorflow_pooling import get_pooling, GlobalAvgPool2d, MaxPool2d
+from trident.layers.tensorflow_pooling import GlobalAvgPool2d
 from trident.optims.tensorflow_trainer import *
 
 __all__ = ['efficient_block','EfficientNet','EfficientNetB0','EfficientNetB1','EfficientNetB2','EfficientNetB3','EfficientNetB4','EfficientNetB5','EfficientNetB6','EfficientNetB7']
@@ -97,9 +87,12 @@ if not os.path.exists(dirname):
 
 
 def efficientnet_params(model_name):
-    """ Map EfficientNet model name to parameter coefficients. """
+    '''Map EfficientNet model name to parameter coefficients.
+
+    'Coefficients:
+        width,depth,res,dropout
+    '''
     params_dict = {
-        # Coefficients:   width,depth,res,dropout
         'efficientnet-b0': (1.0, 1.0, 224, 0.2),
         'efficientnet-b1': (1.0, 1.1, 240, 0.2),
         'efficientnet-b2': (1.1, 1.2, 260, 0.3),
@@ -121,51 +114,51 @@ def EfficientNet(width_coefficient,
                  model_name='efficientnet',
                  include_top=True,
                  num_classes=1000,**kwargs):
-    """Instantiates the EfficientNet architecture using given scaling coefficients.
+    '''Instantiates the EfficientNet architecture using given scaling coefficients.
         Optionally loads weights pre-trained on ImageNet.
         Note that the data format convention used by the model is
         the one specified in your Keras config at `~/.keras/keras.json`.
-        # Arguments
-            width_coefficient: float, scaling coefficient for network width.
-            depth_coefficient: float, scaling coefficient for network depth.
-            default_size: integer, default input image size.
-            dropout_rate: float, dropout rate before final classifier layer.
-            drop_connect_rate: float, dropout rate at skip connections.
-            depth_divisor: integer, a unit of network width.
-            activation_fn: activation function.
-            blocks_args: list of dicts, parameters to construct block modules.
-            model_name: string, model name.
-            include_top: whether to include the fully-connected
-                layer at the top of the network.
-            weights: one of `None` (random initialization),
-                  'imagenet' (pre-training on ImageNet),
-                  or the path to the weights file to be loaded.
-            input_tensor: optional Keras tensor
-                (i.e. output of `layers.Input()`)
-                to use as image input for the model.
-            input_shape: optional shape tuple, only to be specified
-                if `include_top` is False.
-                It should have exactly 3 inputs channels.
-            pooling: optional pooling mode for feature extraction
-                when `include_top` is `False`.
-                - `None` means that the output of the model will be
-                    the 4D tensor output of the
-                    last convolutional layer.
-                - `avg` means that global average pooling
-                    will be applied to the output of the
-                    last convolutional layer, and thus
-                    the output of the model will be a 2D tensor.
-                - `max` means that global max pooling will
-                    be applied.
-            classes: optional number of classes to classify images
-                into, only to be specified if `include_top` is True, and
-                if no `weights` argument is specified.
-        # Returns
-            A Keras model instance.
-        # Raises
-            ValueError: in case of invalid argument for `weights`,
-                or invalid input shape.
-        """
+    Args
+        width_coefficient: float, scaling coefficient for network width.
+        depth_coefficient: float, scaling coefficient for network depth.
+        default_size: integer, default input image size.
+        dropout_rate: float, dropout rate before final classifier layer.
+        drop_connect_rate: float, dropout rate at skip connections.
+        depth_divisor: integer, a unit of network width.
+        activation_fn: activation function.
+        blocks_args: list of dicts, parameters to construct block modules.
+        model_name: string, model name.
+        include_top: whether to include the fully-connected
+            layer at the top of the network.
+        weights: one of `None` (random initialization),
+              'imagenet' (pre-training on ImageNet),
+              or the path to the weights file to be loaded.
+        input_tensor: optional Keras tensor
+            (i.e. output of `layers.Input()`)
+            to use as image input for the model.
+        input_shape: optional shape tuple, only to be specified
+            if `include_top` is False.
+            It should have exactly 3 inputs channels.
+        pooling: optional pooling mode for feature extraction
+            when `include_top` is `False`.
+            - `None` means that the output of the model will be
+                the 4D tensor output of the
+                last convolutional layer.
+            - `avg` means that global average pooling
+                will be applied to the output of the
+                last convolutional layer, and thus
+                the output of the model will be a 2D tensor.
+            - `max` means that global max pooling will
+                be applied.
+        classes: optional number of classes to classify images
+            into, only to be specified if `include_top` is True, and
+            if no `weights` argument is specified.
+    Returns
+        A Keras model instance.
+    Raises
+        ValueError: in case of invalid argument for `weights`,
+            or invalid input shape.
+    '''
     default_block_args=deepcopy(DEFAULT_BLOCKS_ARGS)
     def round_filters(filters, divisor=depth_divisor):
         """Round number of filters based on depth multiplier."""
@@ -215,7 +208,6 @@ def EfficientNet(width_coefficient,
         labels = [l.rstrip() for l in f]
         model.class_names=labels
     model.preprocess_flow=[resize((default_size[2],default_size[1]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
-    #model.summary()
     return model
 
 

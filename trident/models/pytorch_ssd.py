@@ -54,7 +54,7 @@ def intersect(box_a, box_b):
 
 
 def jaccard(box_a, box_b):
-    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
+    '''Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
     is simply the intersection over union of two boxes.  Here we operate on
     ground truth boxes and default boxes.
     E.g.:
@@ -64,7 +64,7 @@ def jaccard(box_a, box_b):
         box_b: (tensor) Prior boxes from priorbox layers, Shape: [num_priors,4]
     Return:
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
-    """
+    '''
     inter = intersect(box_a, box_b)
     area_a = ((box_a[:, 2] - box_a[:, 0]) * (box_a[:, 3] - box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
     area_b = ((box_b[:, 2] - box_b[:, 0]) * (box_b[:, 3] - box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
@@ -73,11 +73,11 @@ def jaccard(box_a, box_b):
 
 
 def match(truths, priors, variances, labels, threshold=0.3):
-    """Match each prior box with the ground truth box of the highest jaccard
+    '''Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
     Args:
-        threshold: (float) The overlap threshold used when mathing boxes.
+
         truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].
         priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].
         variances: (tensor) Variances corresponding to each prior coord,
@@ -86,9 +86,11 @@ def match(truths, priors, variances, labels, threshold=0.3):
         loc_t: (tensor) Tensor to be filled w/ endcoded location targets.
         conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.
         idx: (int) current batch index
+        threshold: (float) The overlap threshold used when mathing boxes.
+
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
-    """
+    '''
     # jaccard index
     priors2 = priors.clone()
     num_priors = len(priors)
@@ -125,7 +127,7 @@ def match(truths, priors, variances, labels, threshold=0.3):
 
 
 def encode(matched, priors, variances):
-    """Encode is the process let groundtruth convert to prior
+    '''Encode is the process let groundtruth convert to prior
     we have matched (based on jaccard overlap) with the prior boxes.
     Args:
         matched: (tensor) Coords of ground truth for each prior in xyxy
@@ -135,7 +137,7 @@ def encode(matched, priors, variances):
         variances: (list[float]) Variances of priorboxes
     Return:
         encoded boxes and landmarks (tensor), Shape: [num_priors, 14]
-    """
+    '''
 
     # dist b/t match center and prior's center
     priors = priors.clone()
@@ -159,7 +161,7 @@ def encode(matched, priors, variances):
 
 # Adapted from https://github.com/Hakuyume/chainer-ssd
 def decode(loc, priors, variances):
-    """Decode locations from predictions using priors to undo
+    '''Decode locations from predictions using priors to undo
     the encoding we did for offset regression at train time.
     Args:
         loc (tensor): location predictions for loc layers,
@@ -169,7 +171,7 @@ def decode(loc, priors, variances):
         variances: (list[float]) Variances of priorboxes
     Return:
         decoded bounding box predictions
-    """
+    '''
     boxes = torch.cat([priors.unsqueeze(0)[:, :, 0:2] + loc[:, :, 0:2] * variances[0] * priors.unsqueeze(0)[:, :, 2:4],
                        priors.unsqueeze(0)[:, :, 2:4] * torch.exp(loc[:, :, 2:4] * variances[1])], -1)
     boxes[:, :, 0:2] -= boxes[:, :, 2:4] / 2

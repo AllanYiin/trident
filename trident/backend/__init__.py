@@ -5,8 +5,7 @@ import six
 from trident.backend.load_backend import get_backend, get_image_backend, PrintException, if_else
 from trident.backend.load_backend import get_session, get_trident_dir, epsilon, set_epsilon, floatx, set_floatx, camel2snake, \
     snake2camel, addindent, format_time, get_time_suffix, get_function, get_class, get_terminal_size, gcd, \
-    get_divisors, \
-    isprime, next_prime, prev_prime, nearest_prime
+    get_divisors, isprime, next_prime, prev_prime, nearest_prime
 from trident.backend.load_backend import to_tensor, to_numpy, to_list, Sequential, Layer
 from trident.callbacks import *
 from trident.data import *
@@ -57,7 +56,7 @@ from trident.optims.trainers import *
 
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import *
-from .iteration_tools import *
+from trident.backend.iteration_tools import *
 from trident.callbacks  import *
 
 

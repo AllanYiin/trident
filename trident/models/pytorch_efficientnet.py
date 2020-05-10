@@ -131,7 +131,7 @@ def EfficientNet(width_coefficient,
         Optionally loads weights pre-trained on ImageNet.
         Note that the data format convention used by the model is
         the one specified in your Keras config at `~/.keras/keras.json`.
-        # Arguments
+        Args
             width_coefficient: float, scaling coefficient for network width.
             depth_coefficient: float, scaling coefficient for network depth.
             default_size: integer, default input image size.
@@ -166,9 +166,9 @@ def EfficientNet(width_coefficient,
             classes: optional number of classes to classify images
                 into, only to be specified if `include_top` is True, and
                 if no `weights` argument is specified.
-        # Returns
+        Returns
             A Keras model instance.
-        # Raises
+        Raises
             ValueError: in case of invalid argument for `weights`,
                 or invalid input shape.
         """

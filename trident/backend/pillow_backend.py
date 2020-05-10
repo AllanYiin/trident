@@ -139,13 +139,12 @@ def image2array(img):
 
 def array2image(arr:np.ndarray):
     '''
+    Args
+        arr  (ndarry)  : array need to convert back to image
 
-    Parameters
-    ----------
-    arr  ndarry  : array need to convert back to image
+    Returns
+        pillow image
 
-    Returns   pillow image
-    -------
 
     '''
     # confirm back to numpy
@@ -177,12 +176,12 @@ def array2image(arr:np.ndarray):
 def mask2array(img):
     '''
 
-    Parameters
-    ----------
-    img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
+    Args
+        img  (string), pillow image or numpy.ndarray): Image to be converted to ndarray.
 
-    Returns ndarray  (HW / single channel)
-    -------
+    Returns
+        ndarray  (HW / single channel)
+
 
     '''
     if isinstance(img,str):
@@ -211,12 +210,12 @@ def mask2array(img):
 def array2mask(arr:np.ndarray):
     '''
 
-    Parameters
-    ----------
-    arr  ndarry  : array need to convert back to image
+    Args
+        arr  ndarry  : array need to convert back to image
 
-    Returns   pillow image
-    -------
+    Returns
+        pillow image
+
 
     '''
     # confirm back to numpy

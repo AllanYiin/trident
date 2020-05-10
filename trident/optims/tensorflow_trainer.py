@@ -565,11 +565,11 @@ class Model(ModelBase):
 
             if self.training_context['stop_update'] == 0:
 
-                self.optimizer.apply_gradients(zip(cal_grads, vars))
+                self.optimizer.apply_gradients(zip(cal_grads, vars), )
 
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
-                    self.optimizer.apply_gradients(zip(cal_grads, vars))
+                    self.optimizer.apply_gradients(zip(cal_grads, vars), )
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 

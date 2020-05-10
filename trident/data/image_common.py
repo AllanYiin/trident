@@ -22,7 +22,7 @@ from skimage.filters import *
 
 from trident.backend.common import *
 
-__all__ = ['transform','read_image', 'read_mask', 'save_image', 'save_mask', 'image2array', 'array2image', 'mask2array',
+__all__ = ['transform_func','read_image', 'read_mask', 'save_image', 'save_mask', 'image2array', 'array2image', 'mask2array',
            'array2mask', 'list_pictures', 'normalize', 'unnormalize', 'channel_reverse', 'blur', 'random_blur',
            'random_crop', 'resize', 'rescale', 'downsample_then_upsample', 'add_noise', 'gray_scale', 'to_rgb',
            'to_bgr', 'auto_level', 'random_invert_color', 'image_backend_adaption', 'reverse_image_backend_adaption',
@@ -50,7 +50,7 @@ mask2array = mask2array
 array2mask = array2mask
 
 
-def transform(func):
+def transform_func(func):
     '''
 
     Args:
@@ -715,17 +715,6 @@ def image_backend_adaption(image):
             image = np.transpose(image, [2, 0, 1]).astype(np.float32)
         elif image.ndim==4:
             image = np.transpose(image, [0, 3, 1, 2]).astype(np.float32)
-
-    if _session.backend == 'tensorflow' and image.ndim in (3, 4):
-        image = image.astype(np.float32)
-    elif _session.backend in ['pytorch', 'cntk'] and image.ndim == 3:
-        image = np.transpose(image, [2, 0, 1]).astype(np.float32)
-    elif _session.backend in ['pytorch', 'cntk'] and image.ndim == 4:
-        image = np.transpose(image, [0, 3, 1, 2]).astype(np.float32)
-    elif isinstance(image, np.ndarray):
-        return image.astype(np.float32)
-    elif isinstance(image, list):
-        return np.array(image).astype(np.float32)
     return image
 
 

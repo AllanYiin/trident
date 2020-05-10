@@ -21,8 +21,7 @@ import torch.utils.hooks as hooks
 from torch.autograd import Variable
 from torch.optim.optimizer import Optimizer
 
-from trident.backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
-    snake2camel, camel2snake
+from trident.backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, snake2camel, camel2snake
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.backend.optimizer import OptimizerBase

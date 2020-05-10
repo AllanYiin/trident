@@ -99,11 +99,11 @@ def DenseNet(blocks,
              num_classes=1000,
              name='',
              **kwargs):
-    """Instantiates the DenseNet architecture.
-    Optionally loads weights pre-trained on ImageNet.
-    Note that the data format convention used by the model is
-    the one specified in your Keras config at `~/.keras/keras.json`.
-    # Arguments
+    '''Instantiates the DenseNet architecture.
+        Optionally loads weights pre-trained on ImageNet.
+        Note that the data format convention used by the model is
+        the one specified in your Keras config at `~/.keras/keras.json`.
+    Args
         blocks: numbers of building blocks for the four dense layers.
         include_top: whether to include the fully-connected
             layer at the top of the network.
@@ -134,14 +134,12 @@ def DenseNet(blocks,
         classes: optional number of classes to classify images
             into, only to be specified if `include_top` is True, and
             if no `weights` argument is specified.
-    # Returns
+    Returns
         A Keras model instance.
-    # Raises
+    Raises
         ValueError: in case of invalid argument for `weights`,
             or invalid input shape.
-    """
-
-
+    '''
     densenet=Sequential()
     densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
     densenet.add_module('maxpool', (MaxPool2d((3, 3), strides=2, auto_pad=True, padding_mode='zero')))

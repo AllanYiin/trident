@@ -10,95 +10,95 @@ import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.eager import context
 from tensorflow.python.framework.ops import EagerTensor
-from trident.backend.common import _tensor_op,to_list
+from trident.backend.common import to_list
 
-__all__ = ['to_numpy', 'to_tensor','is_tensor','element_cosine_distance','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','is_sparse','ndim','is_sparse','int_shape','dot','clip','reduce_mean','reduce_max','reduce_min','reduce_sum','sqrt','square','abs','exp','log','pow','round','ceil','floor','concate','reshape','transpose','permute','squeeze','expand_dims','ones','ones_like','zeros','zeros_like','meshgrid','identity','sigmoid','tanh','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','bert_gelu','gpt_gelu','less','equal','greater','greater_equal','not_equal','less_equal','reshape','permute','transpose','squeeze','expand_dims','concate','stack','gram_matrix','shuffle','random_choice',]
+__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid','reshape','permute','transpose','squeeze','expand_dims','concate','stack','gram_matrix','shuffle','random_choice']
 
-_context = []
+# _context = []
+#
+#
+# #@contextmanager
+# def tensor_context(**kwargs):
+#     r"""Context helper for computational graph building.
+#     Makes all elements within the with Block share the parameters.
+#     For example, in the following example, the default value of parameter `bn` will be set to True
+#     in the all layers within the with block.
+#     ```
+#     with tf.sg_context(bn=True):
+#         ...
+#         ...
+#     ```
+#     Args:
+#       **kwargs:
+#         in_dim: An integer. The size of input dimension, which is set to the last one by default.
+#         dim: An integer. The size of output dimension. Has the same value as in_dim by default.
+#         bn: Boolean. If True, batch normalization is applied.
+#         ln: Boolean. If True, layer normalization is applied.
+#         dout: A float of range [0, 100). A dropout rate. Default is 0..
+#         bias: Boolean. If True (Default), biases are added.
+#         name: A name for the layer. By default, the function name is assigned.
+#         act: A name of activation function. e.g., `sigmoid`, `tanh`, etc.
+#         reuse: `True` or `None`; if `True`, we go into reuse mode for this `layer` scope
+#           as well as all sub-scopes; if `None`, we just inherit the parent scope reuse.
+#     Returns:
+#       None
+#     """
+#     global _context
+#
+#     # set options when enter
+#     context_now =_tensor_op(kwargs)
+#     _context += [context_now]
+#
+#     # if named context
+#     if context_now.name:
+#         context_now.scope_name = context_now.name
+#         context_now.name = None
+#         with tf.variable_scope(context_now.scope_name):
+#             yield
+#     else:
+#         yield
+#
+#     # clear options when exit
+#     del _context[-1]
 
-
-@contextmanager
-def tensor_context(**kwargs):
-    r"""Context helper for computational graph building.
-    Makes all elements within the with Block share the parameters.
-    For example, in the following example, the default value of parameter `bn` will be set to True
-    in the all layers within the with block.
-    ```
-    with tf.sg_context(bn=True):
-        ...
-        ...
-    ```
-    Args:
-      **kwargs:
-        in_dim: An integer. The size of input dimension, which is set to the last one by default.
-        dim: An integer. The size of output dimension. Has the same value as in_dim by default.
-        bn: Boolean. If True, batch normalization is applied.
-        ln: Boolean. If True, layer normalization is applied.
-        dout: A float of range [0, 100). A dropout rate. Default is 0..
-        bias: Boolean. If True (Default), biases are added.
-        name: A name for the layer. By default, the function name is assigned.
-        act: A name of activation function. e.g., `sigmoid`, `tanh`, etc.
-        reuse: `True` or `None`; if `True`, we go into reuse mode for this `layer` scope
-          as well as all sub-scopes; if `None`, we just inherit the parent scope reuse.
-    Returns:
-      None
-    """
-    global _context
-
-    # set options when enter
-    context_now =_tensor_op(kwargs)
-    _context += [context_now]
-
-    # if named context
-    if context_now.name:
-        context_now.scope_name = context_now.name
-        context_now.name = None
-        with tf.variable_scope(context_now.scope_name):
-            yield
-    else:
-        yield
-
-    # clear options when exit
-    del _context[-1]
-
-
-def get_op_context():
-    r"""Get current context information
-    Returns:
-      tf.sg_opt class object which contains all context information
-    """
-
-    global _context
-
-    # merge current context
-    res = _tensor_op()
-    for c in _context:
-        res += c
-
-    return res
-
-
-
-def tensor_op(func):
-    r""" Decorates a function `func` so that it can process a tensor operation.
-    Tensor operation can be declare in a chainable behavior.
-    Args:
-        func: function to decorate
-    Returns:
-      A  tensor operation function.
-    """
-    @wraps(func)
-    def wrapper(tensor, **kwargs):
-        # call sugar function
-        out = func(tensor, _tensor_op(kwargs))
-        # save node info for reuse
-        out._op = _tensor_op(func=func, arg=_tensor_op(kwargs)+get_op_context(), prev=tensor)
-        # inject reuse function
-        #out.sg_reuse = types.MethodType(sg_reuse, out)
-        return out
-
-    return wrapper
-
+#
+# def get_op_context():
+#     r"""Get current context information
+#     Returns:
+#       tf.sg_opt class object which contains all context information
+#     """
+#
+#     global _context
+#
+#     # merge current context
+#     res = _tensor_op()
+#     for c in _context:
+#         res += c
+#
+#     return res
+#
+#
+#
+# def tensor_op(func):
+#     r""" Decorates a function `func` so that it can process a tensor operation.
+#     Tensor operation can be declare in a chainable behavior.
+#     Args:
+#         func: function to decorate
+#     Returns:
+#       A  tensor operation function.
+#     """
+#     @wraps(func)
+#     def wrapper(tensor, **kwargs):
+#         # call sugar function
+#         out = func(tensor, _tensor_op(kwargs))
+#         # save node info for reuse
+#         out._op = _tensor_op(func=func, arg=_tensor_op(kwargs)+get_op_context(), prev=tensor)
+#         # inject reuse function
+#         #out.sg_reuse = types.MethodType(sg_reuse, out)
+#         return out
+#
+#     return wrapper
+#
 
 
 def is_tensor(x):
@@ -972,8 +972,10 @@ def gpt_gelu(x):
 def reshape(x:tf.Tensor,shape=None)->tf.Tensor:
     if shape is None:
         return x
-    elif isinstance(shape,(list,tuple,tf.TensorShape)):
-        return tf.reshape(x,shape)
+    elif isinstance(shape,tf.TensorShape):
+        return tf.reshape(x,shape.as_list())
+    elif isinstance(shape,(list,tuple)):
+        return tf.reshape(x,to_list(shape))
     else:
         shape=to_list(shape)
         return tf.reshape(x,shape)
@@ -989,12 +991,53 @@ def expand_dims(x:tf.Tensor,axis=None):
     return tf.expand_dims(x,axis=axis)
 
 
-def transpose(x:tf.Tensor,pattern=None)->tf.Tensor:
-    return tf.transpose(x,pattern)
+def transpose(x:tf.Tensor,perm=None)->tf.Tensor:
+    '''
+    Transposes a. Permutes the dimensions according to perm.
+    The returned tensor's dimension i will correspond to the input dimension perm[i]. If perm is not given, it is set to (n-1...0), where n is the rank of the input tensor. Hence by default, this operation performs a regular matrix transpose on 2-D input Tensors.
+
+    Example:
+        >>> transpose(to_tensor( [[1 ,2 ,3],[4 ,5 ,6]]))
+        <tf.Tensor: shape=(3, 2), dtype=float32, numpy=
+         array([[1.0000e+00, 4.0000e+00],
+           [2.0000e+00, 5.0000e+00],
+           [3.0000e+00, 6.0000e+00]], dtype=float32)>
+        >>> transpose(to_tensor( [[1 ,2 ,3],[4 ,5 ,6]]),perm = to_tensor([1, 0],dtype=tf.int32))
+        <tf.Tensor: shape=(3, 2), dtype=float32, numpy=
+         array([[1.0000e+00, 4.0000e+00],
+           [2.0000e+00, 5.0000e+00],
+           [3.0000e+00, 6.0000e+00]], dtype=float32)>
+        >>> x1=to_tensor([[[1 ,2 ,3],[4 ,5 ,6]], [[7 ,8 ,9], [10,11,12]]])
+        >>> transpose(x1, perm=to_tensor([0, 2, 1],dtype=tf.int32))
+        <tf.Tensor: shape=(2, 3, 2), dtype=float32, numpy=
+        array([[[1.0000e+00, 4.0000e+00],
+            [2.0000e+00, 5.0000e+00],
+            [3.0000e+00, 6.0000e+00]],
+        <BLANKLINE>
+           [[7.0000e+00, 1.0000e+01],
+            [8.0000e+00, 1.1000e+01],
+            [9.0000e+00, 1.2000e+01]]], dtype=float32)>
+
+    Args:
+        x: A Tensor.
+        perm: A permutation of the dimensions of ax
+
+    Returns:
+        A transposed Tensor.
+    '''
+    if isinstance(perm,(list,tuple)):
+        return tf.transpose(x, to_tensor(perm,dtype=tf.int32))
+    elif perm is None:
+        return tf.transpose(x)
+    return tf.transpose(x,to_tensor(perm,dtype=tf.int32))
 
 
-def permute(x:tf.Tensor,pattern=None)->tf.Tensor:
-    return tf.transpose(x,pattern)
+def permute(x:tf.Tensor,perm=None)->tf.Tensor:
+    if isinstance(perm,(list,tuple)):
+        return tf.transpose(x, to_tensor(perm,dtype=tf.int32))
+    elif perm is None:
+        return tf.transpose(x)
+    return tf.transpose(x,to_tensor(perm,dtype=tf.int32))
 
 def depth_to_space(x:tf.Tensor,block_size=2):
     '''

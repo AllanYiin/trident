@@ -1,4 +1,3 @@
-
 import numpy as np
 from trident.backend.common import *
 
@@ -9,12 +8,12 @@ if _backend == 'pytorch':
     import torch.nn as nn
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
-    from trident.optims.pytorch_optimizers import *
+
 elif _backend == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
-    from trident.optims.tensorflow_optimizers import *
+
 
 
 

@@ -1,46 +1,44 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import itertools
+
 import copy
-import inspect
+import itertools
 import logging
 import operator
-import os
 import random
-import re
-import gc
 import sys
 import uuid
-import warnings
 from collections import defaultdict
-from collections import deque
-from copy import copy, deepcopy
-from functools import partial, wraps, update_wrapper
+from copy import copy
+from functools import update_wrapper
 from itertools import islice
-
-
-import numpy as np
-import six
-import torch
+from distutils.version import LooseVersion
 import torch.nn as nn
-from torch.nn.parameter import Parameter
 import torch.onnx
-import torchvision
 from torch._six import container_abcs
+from torch.nn.parameter import Parameter
 
-from trident.backend.common import to_list, addindent, camel2snake, snake2camel, unpack_singleton, enforce_singleton, OrderedDict, get_signature,get_session,set_session
+from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList', 'Input', 'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
+__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList',  'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
-if version<'1.2.0':
+
+
+pt_version=LooseVersion(version)
+base_version=LooseVersion('1.2.0')
+
+if pt_version <base_version:
     raise ValueError('Not support Pytorch below 1.2' )
 
 
 def get_device():
+    _device=get_session().device
+    if _device is None:
+        set_device("cuda" if torch.cuda.is_available() else "cpu")
     return get_session().device
 
 
@@ -65,9 +63,6 @@ def set_device(device='cpu'):
         print(e)
 
 
-_device =get_device()
-if _device is None:
-    set_device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 if torch.cuda.is_available() and get_device()=='cuda' :
@@ -80,7 +75,7 @@ if torch.cuda.is_available() and get_device()=='cuda' :
 def load(path):
     item=torch.load(path)
     if isinstance(item,nn.Module):
-        item.to(_device)
+        item.to(get_device())
     return item
 
 def save(obj,path,is_compressed=False):
@@ -88,11 +83,8 @@ def save(obj,path,is_compressed=False):
     return True
 
 
-
-import sys
-
 from functools import partial
-from typing import List, IO, Union, Tuple, Type, Callable
+from typing import List
 
 
 def reset_name(module:nn.Module, prefix_dict=None):
@@ -215,17 +207,16 @@ class Layer(nn.Module):
         pass  #pass if no need shape infer
 
     def compute_output_shape(self, input_shape):
-        """Computes the output shape of the layer.
-        Assumes that the layer will be built
-        to match that input shape provided.
-        # Arguments
+        '''
+        Computes the output shape of the layer.Assumes that the layer will be builtto match that input shape provided.
+        Args
             input_shape: Shape tuple (tuple of integers)
                 or list of shape tuples (one per output tensor of the layer).
                 Shape tuples can include None for free dimensions,
                 instead of an integer.
-        # Returns
+        Returns
             An output shape tuple.
-        """
+        '''
         if not self._built:
             self.input_shape=input_shape
         return self.output_shape
@@ -234,31 +225,33 @@ class Layer(nn.Module):
 
     @property
     def trainable_weights(self) -> List[nn.Parameter]:
-        r"""The list of trainable variables (parameters) of the module.
+        '''The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
-        .. note::
+        Notes:
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
-        """
+        '''
         return [x for x in self.parameters() if x.requires_grad]
 
     @property
     def non_trainable_weights(self) -> List[nn.Parameter]:
-        r"""The list of trainable variables (parameters) of the module.
-        Parameters of this module and all its submodules are included.
-        .. note::
+        '''
+        The list of trainable variables (parameters) of the module.Parameters of this module and all its submodules are included.
+        Notes:
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
-        """
+        '''
         return [x for x in self.parameters() if x.requires_grad==False]
 
     @property
     def weights(self):
+        '''The list of all variables (parameters) of the module.Parameters of this module and all its submodules are included.'''
         return list(self.parameters())
 
     def get_weights(self):
+        '''The list of all numpy variables ndarray equivelent of the module.Parameters of this module and all its submodules are included.'''
         return [p.numpy() for p in list(self.parameters())]
 
     def set_weights(self, weights):
@@ -329,39 +322,13 @@ class Layer(nn.Module):
 
     @property
     def input_shape(self):
+        '''Shape of input tensor',not including the batch axis.'''
         return self._input_shape
-    #
-    # @property
-    # def input_spec(self):
-    #     return self._input_spec
-    #
-    # @input_spec.setter
-    # def input_spec(self, value):
-    #     for v in nest.flatten(value):
-    #         if v is not None and not isinstance(v, InputSpec):
-    #             raise TypeError('Layer input_spec must be an instance of InputSpec. '
-    #                             'Got: {}'.format(v))
-    #     self._input_spec = value
-
-    # @property
-    # def input(self):
-    #     """Retrieves the input tensor(s) of a layer.
-    #     Only applicable if the layer has exactly one input,
-    #     i.e. if it is connected to one incoming layer.
-    #     Returns:
-    #         Input tensor or list of input tensors.
-    #     Raises:
-    #       RuntimeError: If called in Eager mode.
-    #       AttributeError: If no inbound nodes are found.
-    #     """
-    #     return self._input_tensors
-
-
-
 
 
     @input_shape.setter
     def input_shape(self, value):
+        ''' Setting the input_shape, means the layer get shape information and start to do the shape inferrence '''
         if isinstance(value, (list,tuple)) and len(value)>0:
             if isinstance(value[0], torch.Size):
                 value=to_tensor(to_numpy(list(value[0]))).int()
@@ -607,21 +574,6 @@ class Layer(nn.Module):
 
 
 
-class Input(Layer):
-    def __init__(self, input_shape: (list, tuple,int) = None,name=''):
-        super().__init__()
-        self.name=name
-        if isinstance(input_shape,int):
-            input_shape=input_shape,
-        self.input_shape=tuple(input_shape)
-        self._built=True
-
-
-    def forward(self, x):
-        if x is None:
-            return torch.rand(2,*self.input_shape)
-        else:
-            return x
 
 
 class Sequential(Layer):
@@ -664,6 +616,14 @@ class Sequential(Layer):
         self.to(self.device)
 
     def build(self, input_shape):
+        '''
+
+        Args:
+            input_shape (torch.Size, tensor, list(int), tuple(int)): The input_shape information, not including batch axis.
+
+        Returns:
+
+        '''
         if self._built==False and len(self._modules)>0:
             self.__getitem__(0).input_shape=self.input_shape
             self._built=True
@@ -701,8 +661,6 @@ class Sequential(Layer):
 
     def sync_build(self):
         input_shape=None
-        if self[:1] is Input:
-            input_shape=self[:1].input_shape
         if input_shape is not None:
             input_shape = list(input_shape)
             input_shape.insert(0, 2)

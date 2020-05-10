@@ -577,7 +577,7 @@ class Conv1d(_ConvNd):
 
 
     def conv1d_forward(self, x):
-        x = F.pad(x, self.padding,mode='constant' if self.padding_mode=='zero' else self.padding_mode)
+        x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
     def forward(self, *x):
@@ -691,6 +691,7 @@ class Conv2d(_ConvNd):
 
         if isinstance(padding, str) and auto_pad==False:
             auto_pad = (padding.lower() == 'same')
+            padding=None
         elif isinstance(padding, int) and padding>0:
             padding = _pair(padding)
             auto_pad = False

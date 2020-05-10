@@ -12,6 +12,7 @@ import sys
 import time
 import uuid
 from functools import partial
+from typing import List, Tuple
 
 import numpy as np
 import torch
@@ -92,15 +93,19 @@ class Model(ModelBase):
                 input_name = 'input_{0}'.format(len(self.inputs))
                 self.inputs[input_name] = input_shape
         elif isinstance(inputs, (tuple, list)):
-            for inp in inputs:
-                if isinstance(inp, Input):
-                    input_name = inp.name if inp.name != '' else 'input_{0}'.format(len(self.inputs))
-                    self.inputs[input_name] = to_numpy(inp.input_shape).tolist()
+            for m in range(len(inputs)):
+                inp=inputs[m]
+                if is_tensor(inp):
+                    input_name = 'input_{0}'.format(m)
+                    self.inputs[input_name] = list(int_shape(inp))[1:]
         elif isinstance(inputs, dict):
             for k, v in inputs.items():
-                if isinstance(v, Input):
-                    self.inputs[k] = to_numpy(v.input_shape).tolist()
+                if is_tensor(v):
+                    self.inputs[k] =  list(int_shape(v))[1:]
+        elif is_tensor(inputs):
+            self.inputs['input'] = list(int_shape(inputs))[1:]
 
+        #single model
         if isinstance(output, (Layer, nn.Module)):
             #update notes
             output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules())if isinstance(mod,Layer)])
@@ -128,46 +133,32 @@ class Model(ModelBase):
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = to_list(out[i].size())[1:]
                         self._targets['target_{0}'.format(i)] = to_list(out[i].size())[1:]
-
-
-
-
-            # def _init_weghts(m: Layer):
-            #     if isinstance(m, (Conv2d, DepthwiseConv2d)):
-            #         if m.weight is not None:
-            #             nn.init.kaiming_normal_(m.weight, a=0.02)
-            #         else:
-            #             print('')
-            #
-            # self._model.apply(_init_weghts)
-
-
-
             self.signature = get_signature(self._model.forward)
-        elif isinstance(output, (list, tuple)):
+        elif isinstance(output, (List[nn.Module],Tuple[nn.Module])):
             output_list = []
+            model_list = []
+            dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device()) if not is_tensor(inputs) else inputs.to(get_device())
             for op in output:
                 if isinstance(op, (Layer, nn.Module)):
-                    output_list.append(op)
-            dummay_input = to_tensor(np.random.standard_normal((2,)+tuple(input_shape)).astype(np.float32)).to(get_device())
-            model = Combine(output_list)
-            outs = model(dummay_input)
+                    out=op(dummay_input)
+                    model_list.append(op)
+                    output_list.extend(*out)
+            model = Combine(model_list)
             self._model = model
             self.name = model.name
-            for i in range(len(outs)):
-                self._outputs['output_{0}'.format(i)] = to_list(outs[i].size())[1:]
-                self._targets['target_{0}'.format(i)] = to_list(outs[i].size())[1:]
+            for i in range(len(output_list)):
+                self._outputs['output_{0}'.format(i)] = list(int_shape(output_list[i]))[1:]
+                self._targets['target_{0}'.format(i)] = list(int_shape(output_list[i]))[1:]
             self.signature = get_signature(self._model.forward)
         elif isinstance(output,(np.ndarray,torch.Tensor)):
+            #style transfer , or adversarial attack
             self._model =to_tensor(output,requires_grad=True)
-
-            self._outputs['output'] = to_list(self._model.size())[1:]
-            self._targets['target'] = to_list(self._model.size())[1:]
+            self._outputs['output'] = list(int_shape(self._model))[1:]
+            self._targets['target'] = list(int_shape(self._model))[1:]
             self.signature = OrderedDict()
-            self.signature['x']=to_list(self._model.size())[1:]
+            self.signature['x']=list(int_shape(self._model))[1:]
         else:
             raise ValueError('Invalid output')
-
 
 
         self.training_context['current_model'] = self._model
@@ -177,29 +168,8 @@ class Model(ModelBase):
 
     @property
     def outputs(self):
-        if self._model is not None and  isinstance(self._model, torch.Tensor):
-            return self._outputs
-        elif self._model is None or not self._model.built:
-            return None
-        elif len(self._outputs) == 1:
-            self._outputs[self._outputs.key_list[0]] = self._model.output_shape.item() if self._model.output_shape.ndim == 0 else to_list(self._model.output_shape)
-            self._targets[self._targets.key_list[0]] = self._model.output_shape.item() if self._model.output_shape.ndim == 0 else to_list(self._model.output_shape)
+        return self._outputs
 
-            return self._outputs
-        elif len(self._outputs) > 1:
-            dummay_input = to_tensor(np.random.standard_normal((2,) + tuple(self.inputs.value_list[0])).astype(np.float32)).to(self._model.device)
-            outs = self._model(dummay_input)
-            if len(self._outputs) == len(outs):
-                for i in range(len(outs)):
-                    self._outputs[self._outputs.key_list[i]] = to_list(outs[i].size())[1:]
-                    self._targets[self._targets.key_list[i]] = to_list(outs[i].size())[1:]
-            else:
-                for i in range(len(outs)):
-                    self._outputs['output_{0}'.format(i)] = to_list(outs[i].size())[1:]
-                    self._targets['target_{0}'.format(i)] = to_list(outs[i].size())[1:]
-            return self._outputs
-        else:
-            return self._outputs
 
     @property
     def device(self):
@@ -746,21 +716,19 @@ class Model(ModelBase):
 
             import torch.onnx
             self._model.eval()
-            dummy_input = torch.randn(1, *self._model.input_shape.tolist(), device=get_device())
+            dummy_input = torch.randn(1, *to_list(self._model.input_shape), device=get_device(),requires_grad=True)
             file, ext = os.path.splitext(file_path)
             if ext is None or ext != '.onnx':
                 file_path = os.path.join(file, '.onnx')
             self._model.to(get_device())
             outputs = self._model(dummy_input)
-            if isinstance(outputs, torch.Tensor):
-                outputs = (outputs,)
-            output_names = ['output_{0}'.format(i) for i in range(len(outputs))]
-            if dynamic_axes is None:
-                dynamic_axes = {}
-                for inp in self.inputs.key_list:
-                    dynamic_axes[inp] = {0: 'batch_size'}
-                for out in output_names:
-                    dynamic_axes[out] = {0: 'batch_size'}
+
+            # if dynamic_axes is None:
+            #     dynamic_axes = {}
+            #     for inp in self.inputs.key_list:
+            #         dynamic_axes[inp] = {0: 'batch_size'}
+            #     for out in output_names:
+            #         dynamic_axes[out] = {0: 'batch_size'}
             torch.onnx.export(self._model,  # model being run
                               dummy_input,  # model input (or a tuple for multiple inputs)
                               save_path,  # where to save the model (can be a file or file-like object)
@@ -768,8 +736,9 @@ class Model(ModelBase):
                               opset_version=10,  # the ONNX version to export the model to
                               do_constant_folding=True,  # whether to execute constant folding for optimization
                               input_names=self.inputs.key_list,  # the model's input names
-                              output_names=output_names,  # the model's output names
-                              dynamic_axes=dynamic_axes)
+                              output_names=self.outputs.key_list,  # the model's output names
+                              dynamic_axes= {self.inputs.key_list[0] : {0 : 'batch_size'},    # variable lenght axes
+                                self.outputs.key_list[0]: {0 : 'batch_size'}})
             self._model.train()
             shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
         else:

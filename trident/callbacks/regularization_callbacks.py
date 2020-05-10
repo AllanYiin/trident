@@ -20,7 +20,7 @@ if get_backend()=='pytorch':
     from trident.optims.pytorch_losses import CrossEntropyLoss
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import  to_numpy,to_tensor
-
+    from trident.optims.tensorflow_losses import CrossEntropyLoss
 
 
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']

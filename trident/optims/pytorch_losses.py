@@ -89,7 +89,7 @@ class _ClassificationLoss(Layer):
                 target=target*(torch.Tensor(target.size()).uniform_(0.9,1).to(output.device))
 
         #check is logit
-        if  self.from_logits==True or  (0<=output<=1).all() and np.abs(output.sum(self.axis)-1).mean()<1e-4:
+        if  self.from_logits!= False and (all(0<=output<=1) and float(abs(reduce_sum(output.sum,self.axis)-1).mean())<1e-4):
             self.from_logits=True
         else:
             # avoid numerical instability with epsilon clipping

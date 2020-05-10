@@ -7,8 +7,7 @@ from typing import Iterable, Sized, Union, Callable, Sequence, Any, Tuple
 import numpy as np
 
 
-#__all__ = ['join','recursive_conditional_map','pam','zip_equal','head_tail','peek','lmap','dmap','zdict']
-
+# __all__ = ['join','recursive_conditional_map','pam','zip_equal','head_tail','peek','lmap','dmap','zdict']
 
 
 def join(values):
@@ -25,9 +24,8 @@ def pam(functions: Iterable[Callable], *args, **kwargs):
     Inverse of `map`. Apply a sequence of callables to fixed arguments.
 
     Examples
-    --------
-    >>> list(pam([np.sqrt, np.square, np.cbrt], 64))
-    [8, 4096, 4]
+        >>> list(pam([np.sqrt, np.square, np.cbrt], 64))
+        [8, 4096, 4]
     """
     for f in functions:
         yield f(*args, **kwargs)
@@ -38,12 +36,11 @@ def zip_equal(*args: Union[Sized, Iterable]) -> Iterable[Tuple]:
     zip over the given iterables, but enforce that all of them exhaust simultaneously.
 
     Examples
-    --------
-    >>> zip_equal([1, 2, 3], [4, 5, 6]) # ok
-    >>> zip_equal([1, 2, 3], [4, 5, 6, 7]) # raises ValueError
-    # ValueError is raised even if the lengths are not known
-    >>> zip_equal([1, 2, 3], map(np.sqrt, [4, 5, 6])) # ok
-    >>> zip_equal([1, 2, 3], map(np.sqrt, [4, 5, 6, 7])) # raises ValueError
+        >>> zip_equal([1, 2, 3], [4, 5, 6]) # ok
+        >>> zip_equal([1, 2, 3], [4, 5, 6, 7]) # raises ValueError
+        # ValueError is raised even if the lengths are not known
+        >>> zip_equal([1, 2, 3], map(np.sqrt, [4, 5, 6])) # ok
+        >>> zip_equal([1, 2, 3], map(np.sqrt, [4, 5, 6, 7])) # raises ValueError
     """
     if not args:
         return
@@ -80,10 +77,9 @@ def head_tail(iterable: Iterable) -> Tuple[Any, Iterable]:
     Split the ``iterable`` into the first and the rest of the elements.
 
     Examples
-    --------
-    >>> head, tail = head_tail(map(np.square, [1, 2, 3]))
-    >>> head, list(tail)
-    1, [4, 9]
+        >>> head, tail = head_tail(map(np.square, [1, 2, 3]))
+        >>> head, list(tail)
+        1, [4, 9]
     """
     iterable = iter(iterable)
     return next(iterable), iterable
@@ -94,16 +90,13 @@ def peek(iterable: Iterable) -> Tuple[Any, Iterable]:
     Return the first element from ``iterable`` and the whole iterable.
 
     Notes
-    -----
-    The incoming ``iterable`` might be mutated, use the returned iterable instead.
+        The incoming ``iterable`` might be mutated, use the returned iterable instead.
 
     Examples
-    --------
-    >>> original_iterable = map(np.square, [1, 2, 3])
-    >>> head, iterable = peek(original_iterable)
-    >>> head, list(iterable)
-    1, [1, 4, 9]
-    # list(original_iterable) would return [4, 9]
+        >>> original_iterable = map(np.square, [1, 2, 3])
+        >>> head, iterable = peek(original_iterable)
+        >>> head, list(iterable)
+        (1, [1, 4, 9])
     """
     head, tail = head_tail(iterable)
     return head, chain([head], tail)
@@ -120,9 +113,8 @@ def dmap(func: Callable, dictionary: dict, *args, **kwargs):
     ``args`` and ``kwargs`` are passed as additional arguments.
 
     Examples
-    --------
-    >>> dmap(np.square, {'a': 1, 'b': 2})
-    {'a': 1, 'b': 4}
+        >>> dmap(np.square, {'a': 1, 'b': 2})
+        {'a': 1, 'b': 4}
     """
     return {k: func(v, *args, **kwargs) for k, v in dictionary.items()}
 
@@ -144,13 +136,12 @@ def flatten(iterable: Iterable, iterable_types: Union[tuple, type] = None) -> li
     Recursively flattens an ``iterable`` as long as it is an instance of ``iterable_types``.
 
     Examples
-    --------
-    >>> flatten([1, [2, 3], [[4]]])
-    [1, 2, 3, 4]
-    >>> flatten([1, (2, 3), [[4]]])
-    [1, (2, 3), 4]
-    >>> flatten([1, (2, 3), [[4]]], iterable_types=(list, tuple))
-    [1, 2, 3, 4]
+        >>> flatten([1, [2, 3], [[4]]])
+        [1, 2, 3, 4]
+        >>> flatten([1, (2, 3), [[4]]])
+        [1, (2, 3), 4]
+        >>> flatten([1, (2, 3), [[4]]], iterable_types=(list, tuple))
+        [1, 2, 3, 4]
     """
     if iterable_types is None:
         iterable_types = type(iterable)
@@ -181,12 +172,11 @@ def make_chunks(iterable: Iterable, chunk_size: int, incomplete: bool = True):
     """
     Group ``iterable`` into chunks of size ``chunk_size``.
 
-    Parameters
-    ----------
-    iterable
-    chunk_size
-    incomplete
-        whether to yield the last chunk in case it has a smaller size.
+    Args
+        iterable
+        chunk_size
+        incomplete
+            whether to yield the last chunk in case it has a smaller size.
     """
     chunk = []
     for value in iterable:
@@ -202,16 +192,14 @@ def make_chunks(iterable: Iterable, chunk_size: int, incomplete: bool = True):
 def collect(func: Callable):
     """
     Make a function that returns a list from a function that returns an iterator.
-
     Examples
-    --------
-    >>> @collect
-    >>> def squares(n):
-    >>>     for i in range(n):
-    >>>         yield i ** 2
-    >>>
-    >>> squares(3)
-    [1, 4, 9]
+        >>> @collect
+        >>> def squares(n):
+        >>>     for i in range(n):
+        >>>         yield i ** 2
+        >>>
+        >>> squares(3)
+        [1, 4, 9]
     """
 
     @wraps(func)

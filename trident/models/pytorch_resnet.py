@@ -91,7 +91,7 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
     Optionally loads weights pre-trained on ImageNet.
     Note that the data format convention used by the model is
     the one specified in your Keras config at `~/.keras/keras.json`.
-    # Arguments
+    Args
         stack_fn: a function that returns output tensor for the
             stacked residual blocks.
         preact: whether to use pre-activation or not
@@ -126,23 +126,12 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
         classes: optional number of classes to classify images
             into, only to be specified if `include_top` is True, and
             if no `weights` argument is specified.
-    # Returns
+    Returns
         A Keras model instance.
-    # Raises
+    Raises
         ValueError: in case of invalid argument for `weights`,
             or invalid input shape.
     """
-
-
-    # if not (weights in {'imagenet', None} or os.path.exists(weights)):
-    #     raise ValueError('The `weights` argument should be either '
-    #                      '`None` (random initialization), `imagenet` '
-    #                      '(pre-training on ImageNet), '
-    #                      'or the path to the weights file to be loaded.')
-    #
-    # if weights == 'imagenet' and include_top and classes != 1000:
-    #     raise ValueError('If using `weights` as `"imagenet"` with `include_top`'
-    #                      ' as true, `classes` should be 1000')
 
     def _make_layer(block, num_filters, blocklayers, strides=1, dilate=False,use_bias=use_bias,layer_name=''):
         conv_shortcut=False

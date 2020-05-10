@@ -51,12 +51,14 @@ def to_numpy(x) -> np.ndarray:
 def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
     ''''
      Convert input  to a tensor as possible
+
     Args:
         x (int,float,list,tuple,ndarray,tensor):
         dtype :
         requires_grad (bool): wheather need grade
 
     Returns: output tensor
+
     Examples:
         >>> to_tensor(2)
         tensor(2, dtype=torch.int32)
@@ -253,6 +255,7 @@ def less(left:torch.Tensor, right:torch.Tensor):
    tensor([1., 0., 0.])
    >>> less(to_tensor([-1,0,1]), 0)
    tensor([1., 0., 0.])
+
     '''
 
     return left.lt(right).float()
@@ -420,6 +423,7 @@ def round(x:(torch.Tensor,float),digit:int=0):
         digit ():
 
     Returns:
+
     Examples;
     >>> round(to_tensor([[1,2,3,4,5]])/3,0)
     tensor([[0., 1., 1., 1., 2.]])
@@ -481,9 +485,10 @@ def sin(x:torch.Tensor):
     Returns: element-wise sine
 
     Examples
-    >>> sin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[ 0.8415,  0.4794],
-            [-0.2474, -0.6816]])
+        >>> sin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[ 0.8415,  0.4794],
+                [-0.2474, -0.6816]])
+
     '''
     return torch.sin(x.float())
 def cos(x:torch.Tensor):
@@ -495,23 +500,26 @@ def cos(x:torch.Tensor):
     Returns: element-wise cosine
 
     Examples
-    >>> cos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[0.5403, 0.8776],
-            [0.9689, 0.7317]])
+        >>> cos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[0.5403, 0.8776],
+                [0.9689, 0.7317]])
+
     '''
     return torch.cos(x.float())
 def tan(x:torch.Tensor):
     '''
     Computes the element-wise tan
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise tan
 
     Examples
-    >>> tan(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[ 1.5574,  0.5463],
-            [-0.2553, -0.9316]])
+        >>> tan(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[ 1.5574,  0.5463],
+                [-0.2553, -0.9316]])
+
     '''
     return torch.tan(x.float())
 
@@ -519,42 +527,48 @@ def tan(x:torch.Tensor):
 def asin(x:torch.Tensor):
     '''
     Computes the element-wise arcsin (inverse sine)
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise arcsin
 
     Examples
-    >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[ 1.5708,  0.5236],
-            [-0.2527, -0.8481]])
+        >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[ 1.5708,  0.5236],
+                [-0.2527, -0.8481]])
+
     '''
     return torch.asin(x.float())
 def acos(x:torch.Tensor):
     '''
     Computes the element-wise arccos (inverse cosine)
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise arccos
 
     Examples
-    >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[0.0000, 1.0472],
-            [1.8235, 2.4189]])
+        >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[0.0000, 1.0472],
+                [1.8235, 2.4189]])
+
     '''
     return torch.acos(x.float())
 def atan(x:torch.Tensor):
     '''
     Computes the element-wise arctan (inverse tan)
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise arccos
 
     Examples
-    >>> atan(to_tensor([-1, 0, 1])).cpu()
-    tensor([-0.7854,  0.0000,  0.7854])
+        >>> atan(to_tensor([-1, 0, 1])).cpu()
+        tensor([-0.7854,  0.0000,  0.7854])
+
     '''
     return torch.atan(x.float())
 
@@ -562,43 +576,49 @@ def atan(x:torch.Tensor):
 def sinh(x:torch.Tensor):
     '''
     Computes the element-wise sinh
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise sinh
 
     Examples
-    >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[ 1.1752,  0.5211],
-            [-0.2526, -0.8223]])
+        >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[ 1.1752,  0.5211],
+                [-0.2526, -0.8223]])
+
     '''
     return torch.sinh(x.float())
 def cosh(x:torch.Tensor):
     '''
     Computes the element-wise cosh
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise cosh
 
     Examples
-    >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[1.5431, 1.1276],
-            [1.0314, 1.2947]])
+        >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[1.5431, 1.1276],
+                [1.0314, 1.2947]])
+
     '''
     return torch.cosh(x.float())
 def tanh(x:torch.Tensor):
     '''
     Computes the element-wise tanh
+
     Args:
         x (tensor):input tensor
 
     Returns: element-wise tanh
 
     Examples
-    >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-    tensor([[ 0.7616,  0.4621],
-            [-0.2449, -0.6351]])
+        >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        tensor([[ 0.7616,  0.4621],
+                [-0.2449, -0.6351]])
+
     '''
     return torch.tanh(x.float())
 

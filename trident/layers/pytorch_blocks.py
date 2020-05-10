@@ -9,7 +9,7 @@ from collections import *
 from collections import deque
 from copy import copy, deepcopy
 from functools import partial
-from itertools import repeat,chain
+from itertools import repeat, chain
 import numpy as np
 import torch
 import torch.nn as nn
@@ -23,11 +23,11 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, SpectralNorm
 from trident.layers.pytorch_pooling import *
 from trident.backend.common import *
-from trident.backend.pytorch_backend import  Layer, Sequential
+from trident.backend.pytorch_backend import Layer, Sequential
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'GcdConv2d_Block',
-           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite','For']
+           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite', 'For']
 
 _session = get_session()
 
@@ -50,9 +50,9 @@ _quadruple = _ntuple(4)
 
 
 class Conv1d_Block(Layer):
-    def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
-                 activation=None, normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False,
-                 noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, **kwargs):
+    def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+                 normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
+                 dropout_rate=0, name=None, depth_multiplier=None, **kwargs):
         super(Conv1d_Block, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.num_filters = num_filters
@@ -63,7 +63,8 @@ class Conv1d_Block(Layer):
         # if self.auto_pad == False:
         #     self.padding = 0
         # else:
-        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else self.kernel_size-2
+        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else
+        #     self.kernel_size-2
 
         self.use_bias = use_bias
         self.dilation = dilation
@@ -120,7 +121,8 @@ class Conv1d_Block(Layer):
 class Conv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 keep_output=False, **kwargs):
         super(Conv2d_Block, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.num_filters = num_filters
@@ -138,12 +140,13 @@ class Conv2d_Block(Layer):
         elif isinstance(padding, tuple):
             auto_pad = False
             pass
-        self.auto_pad=auto_pad
-        self.padding=padding
+        self.auto_pad = auto_pad
+        self.padding = padding
         # if self.auto_pad == False:
         #     self.padding = 0
         # else:
-        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else self.kernel_size-2
+        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else
+        #     self.kernel_size-2
 
         self.use_bias = use_bias
         self.dilation = dilation
@@ -156,19 +159,19 @@ class Conv2d_Block(Layer):
         self.depth_multiplier = depth_multiplier
         self.keep_output = keep_output
 
-        norm=get_normalization(normalization)
+        norm = get_normalization(normalization)
         self.use_spectral = use_spectral
-        if isinstance(norm,SpectralNorm):
-            self.use_spectral=True
-            norm=None
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
 
-
-        self.add_module('conv',Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                          auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                          depth_multiplier=self.depth_multiplier,padding=self.padding, **kwargs).to(self.device))
+        self.add_module('conv', Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                       auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                                       use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                                       depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(
+            self.device))
         if self.use_spectral:
-            self.conv=SpectralNorm(self.conv)
+            self.conv = SpectralNorm(self.conv)
 
         self.norm = norm
         self.activation = get_activation(activation)
@@ -179,12 +182,12 @@ class Conv2d_Block(Layer):
             self.conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
-                self.norm=None
+                self.norm = None
 
             # if self.norm is not None:
             #     self.norm.input_shape = self.conv.output_shape
             self.to(self.device)
-            self._built=True
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -196,7 +199,7 @@ class Conv2d_Block(Layer):
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
-        if self.training and self.dropout_rate > 0 :
+        if self.training and self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
@@ -213,7 +216,8 @@ class Conv2d_Block(Layer):
 class TransConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 keep_output=False, **kwargs):
         super(TransConv2d_Block, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.num_filters = num_filters
@@ -228,20 +232,20 @@ class TransConv2d_Block(Layer):
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
         self.conv = None
-        self.use_spectral=use_spectral
+        self.use_spectral = use_spectral
         self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
         self.depth_multiplier = depth_multiplier
         self.keep_output = keep_output
-        self._name=name
+        self._name = name
 
     def build(self, input_shape):
         if self._built == False or self.conv is None:
             conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                                    auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                                    use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
-                                    depth_multiplier=self.depth_multiplier).to(self.device)
+                               auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
+                               depth_multiplier=self.depth_multiplier).to(self.device)
             conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(conv)
@@ -249,7 +253,6 @@ class TransConv2d_Block(Layer):
                 self.conv = conv
             self.to(self.device)
             self._built = True
-
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -279,8 +282,8 @@ class TransConv2d_Block(Layer):
 
 class DepthwiseConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
-                 activation=None, normalization=None, use_spectral=False,use_bias=False, dilation=1, add_noise=False,
-                 noise_intensity=0.005, dropout_rate=0, name=None,keep_output=False, **kwargs):
+                 activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, add_noise=False,
+                 noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
         super(DepthwiseConv2d_Block, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
@@ -292,7 +295,8 @@ class DepthwiseConv2d_Block(Layer):
         # if self.auto_pad == False:
         #     self.padding = 0
         # else:
-        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else self.kernel_size-2
+        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else
+        #     self.kernel_size-2
 
         self.use_bias = use_bias
         self.dilation = dilation
@@ -300,9 +304,9 @@ class DepthwiseConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv =None
+        self.conv = None
         self.norm = get_normalization(normalization)
-        self.use_spectral=use_spectral
+        self.use_spectral = use_spectral
         self.activation = get_activation(activation)
         self.droupout = None
         self.keep_output = keep_output
@@ -310,9 +314,10 @@ class DepthwiseConv2d_Block(Layer):
 
     def build(self, input_shape):
         if self._built == False or self.conv is None:
-            conv=DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
-                            auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                            use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(self.device)
+            conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                                   strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                                   activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(
+                self.device)
             conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(conv)
@@ -348,11 +353,11 @@ class DepthwiseConv2d_Block(Layer):
 class SeparableConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,keep_output=False, **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
         super(SeparableConv2d_Block, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
-        self.num_filters=kwargs.get('num_filters')
+        self.num_filters = kwargs.get('num_filters')
         self.strides = strides
         self.auto_pad = auto_pad
         self.padding = 0
@@ -360,7 +365,8 @@ class SeparableConv2d_Block(Layer):
         # if self.auto_pad == False:
         #     self.padding = 0
         # else:
-        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else self.kernel_size-2
+        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else
+        #     self.kernel_size-2
 
         self.use_bias = use_bias
         self.dilation = dilation
@@ -375,12 +381,13 @@ class SeparableConv2d_Block(Layer):
         self.activation = get_activation(activation)
 
         self.depth_multiplier = depth_multiplier
-        self.keep_output=keep_output
+        self.keep_output = keep_output
         self._name = name
 
     def build(self, input_shape):
         if self._built == False:
-            self.num_filters=self.input_filters*self.depth_multiplier if self.num_filters is None else self.num_filters
+            self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else \
+                self.num_filters
             conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
                                    strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
                                    activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
@@ -397,7 +404,7 @@ class SeparableConv2d_Block(Layer):
             if self.norm is not None:
                 self.norm.input_shape = self.conv.output_shape
             self.to(self.device)
-            self._built =True
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -425,16 +432,17 @@ class SeparableConv2d_Block(Layer):
 
 
 class GcdConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero', divisor_rank=0, activation=None,
-                 normalization=None, use_spectral=False, use_bias=False,  dilation=1, groups=1, add_noise=False,
-                 noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, **kwargs ):
+    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+                 divisor_rank=0, activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1,
+                 groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 **kwargs):
         super(GcdConv2d_Block, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = _pair(strides)
         self.auto_pad = auto_pad
-        self.padding_mode=padding_mode
-        self.use_spectral=use_spectral
+        self.padding_mode = padding_mode
+        self.use_spectral = use_spectral
         self.use_bias = use_bias
 
         self.dilation = dilation
@@ -459,7 +467,7 @@ class GcdConv2d_Block(Layer):
 
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(conv)
-                self.norm=None
+                self.norm = None
             else:
                 self.conv = conv
 
@@ -491,9 +499,6 @@ class GcdConv2d_Block(Layer):
              ', stride={stride}')
 
         return s.format(**self.__dict__)
-
-
-
 
 
 def For(what_range, constructor):
@@ -532,7 +537,7 @@ def For(what_range, constructor):
         if takes_arg:
             return constructor(i)  # takes an arg: pass it
         else:
-            return constructor()   # takes no arg: call without, that's fine too
+            return constructor()  # takes no arg: call without, that's fine too
 
     layers = [call(i) for i in what_range]
     return Sequential(layers)
@@ -585,7 +590,8 @@ class Highway(Layer):
 
 
 class Classifier1d(Layer):
-    def __init__(self, num_classes=10, is_multilable=False, classifier_type='dense',name=None,keep_output=False, **kwargs):
+    def __init__(self, num_classes=10, is_multilable=False, classifier_type='dense', name=None, keep_output=False,
+                 **kwargs):
         super(Classifier1d, self).__init__(name=name)
         self.classifier_type = classifier_type
         self.num_classes = num_classes
@@ -593,8 +599,8 @@ class Classifier1d(Layer):
         self.dense = None
         self.global_avgpool = None
         self.conv1x1 = None
-        self._name=name
-        self.keep_output=keep_output
+        self._name = name
+        self.keep_output = keep_output
 
     def build(self, input_shape):
         if self._built == False or self.conv1x1 is None:
@@ -633,7 +639,8 @@ class Classifier1d(Layer):
 
 
 class ShortCut2d(Layer):
-    def __init__(self, *args, axis=1,branch_from=None,activation=None, mode='add', name=None, keep_output=False,**kwargs):
+    def __init__(self, *args, axis=1, branch_from=None, activation=None, mode='add', name=None, keep_output=False,
+                 **kwargs):
         """
 
         Parameters
@@ -644,14 +651,15 @@ class ShortCut2d(Layer):
         self.activation = get_activation(activation)
         self.has_identity = False
         self.mode = mode
-        self.axis=axis
-        self.branch_from=branch_from
-        self.branch_from_uuid=None
-        self.keep_output=keep_output
+        self.axis = axis
+        self.branch_from = branch_from
+        self.branch_from_uuid = None
+
+        self.keep_output = keep_output
 
         for i in range(len(args)):
             arg = args[i]
-            if isinstance(arg, (Layer,torch.Tensor, list, dict)):
+            if isinstance(arg, (Layer, torch.Tensor, list, dict)):
                 if isinstance(arg, list):
                     arg = Sequential(*arg)
                 elif isinstance(arg, OrderedDict) and len(args) == 1:
@@ -662,31 +670,32 @@ class ShortCut2d(Layer):
                         else:
                             self.add_module(k, v)
                 elif isinstance(arg, dict) and len(args) == 1:
-                    keys=sorted(list(arg.keys()))
+                    keys = sorted(list(arg.keys()))
                     for k in keys:
-                        v=arg[k]
+                        v = arg[k]
                         if isinstance(v, Identity):
                             self.has_identity = True
                             self.add_module('Identity', v)
                         else:
                             self.add_module(str(k), v)
-                elif isinstance(arg,  (dict,OrderedDict)) and len(args) > 1:
+                elif isinstance(arg, (dict, OrderedDict)) and len(args) > 1:
                     raise ValueError('more than one dict argument is not support.')
 
                 elif isinstance(arg, Identity):
                     self.has_identity = True
                     self.add_module('Identity', arg)
                 elif isinstance(arg, nn.Module):
-                    if len(arg.name)>0 and arg.name!=arg.default_name:
+                    if len(arg.name) > 0 and arg.name != arg.default_name:
                         self.add_module(arg.name, arg)
                     else:
                         self.add_module('branch{0}'.format(i + 1), arg)
                 else:
                     raise ValueError('{0} is not support.'.format(arg.__class__.__name))
-        if len(self._modules) == 1 and self.has_identity == False and self.branch_from is None and mode!='concate':
+        if len(self._modules) == 1 and self.has_identity == False and self.branch_from is None and mode != 'concate':
             self.has_identity = True
             self.add_module('Identity', Identity())
         self.to(self.device)
+
     def build(self, input_shape):
         if self._built == False:
             if self.branch_from is not None:
@@ -694,24 +703,26 @@ class ShortCut2d(Layer):
                     if v.name == self.branch_from:
                         v.keep_output = True
                         self.branch_from_uuid = k
+                        self.register_buffer('branch_from_tensor', v._output_tensor)
                         print('get {0} output info...'.format(self.branch_from))
                         break
                 if self.branch_from_uuid is None:
                     raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
             self._built = True
+
     def forward(self, *x):
         x = enforce_singleton(x)
         current = None
         concate_list = []
 
         for k, v in self._modules.items():
-            new_item=v(x) if not isinstance(v, Identity) else x
+            new_item = v(x) if not isinstance(v, Identity) else x
             if current is None:
                 current = new_item
                 concate_list.append(current)
             else:
                 if self.mode == 'add':
-                    current = current +new_item
+                    current = current + new_item
                 elif self.mode == 'dot':
                     current = current * new_item
                 elif self.mode == 'concate':
@@ -719,19 +730,21 @@ class ShortCut2d(Layer):
                 else:
                     raise ValueError('Not valid shortcut mode')
 
-        if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
-            new_item=self.nodes.get(self.branch_from_uuid).output
+        if hasattr(self,
+                   'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
+            self.branch_from_tensor = self.nodes.get(self.branch_from_uuid)._output_tensor
+
             if self.mode == 'add':
-                current = current + new_item
+                current = current + self.branch_from_tensor
             elif self.mode == 'dot':
-                current = current * new_item
+                current = current * self.branch_from_tensor
             elif self.mode == 'concate':
-                concate_list.append(new_item)
+                concate_list.append(self.branch_from_tensor)
 
         if self.mode == 'concate':
             x = concate(concate_list, axis=self.axis)
         else:
-            x=current
+            x = current
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -805,9 +818,11 @@ class SqueezeExcite(Layer):
         self.use_bias = use_bias
 
     def build(self, input_shape):
-        if self._built == False :
-            self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None,use_bias=self.use_bias, name=self.name + '_squeeze')
-            self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
+        if self._built == False:
+            self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None,
+                                  use_bias=self.use_bias, name=self.name + '_squeeze')
+            self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None,
+                                 use_bias=self.use_bias, name=self.name + '_excite')
             self.to(self.device)
             self._built = True
 
