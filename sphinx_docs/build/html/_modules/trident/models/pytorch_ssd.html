@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    
+    <title>trident.models.pytorch_ssd &#8212; trident 5.5.0 documentation</title>
+
+    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+  </head>
+<body>
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header mdl-layout--fixed-drawer"><header class="mdl-layout__header mdl-layout__header--waterfall ">
+    <div class="mdl-layout__header-row">
+        
+        <!-- Title -->
+        <span class="mdl-layout-title">
+            <a class="brand" href="../../../index.html">
+                trident
+            </a>
+        </span>
+        
+        <nav class="mdl-navigation breadcrumb">
+            <a class="mdl-navigation__link" href="../../index.html">Module code</a><i class="material-icons">navigate_next</i>
+            <a class="mdl-navigation__link is-active">trident.models.pytorch_ssd</a>
+        </nav>
+        <div class="mdl-layout-spacer"></div>
+        <nav class="mdl-navigation">
+        
+<form class="form-inline pull-sm-right" action="../../../search.html" method="get">
+      <div class="mdl-textfield mdl-js-textfield mdl-textfield--expandable mdl-textfield--floating-label mdl-textfield--align-right">
+        <label id="quick-search-icon" class="mdl-button mdl-js-button mdl-button--icon"  for="waterfall-exp">
+            <i class="material-icons">search</i>
+        </label>
+        <div class="mdl-textfield__expandable-holder">
+          <input class="mdl-textfield__input" type="text" name="q"  id="waterfall-exp" placeholder="Search" />
+          <input type="hidden" name="check_keywords" value="yes" />
+          <input type="hidden" name="area" value="default" />
+        </div>
+      </div>
+      <div class="mdl-tooltip" data-mdl-for="quick-search-icon">
+      Quick search
+      </div>
+</form>
+        
+        </nav>
+    </div>
+    <div class="mdl-layout__header-row header-links">
+      <div class="mdl-layout-spacer"></div>
+      <nav class="mdl-navigation">
+          <a  class="mdl-navigation__link" href="../../../index.html">
+                  <i class="material-icons navigation-link-icon">home</i>
+                  Home
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  <i class="material-icons navigation-link-icon">launch</i>
+                  ExternalLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  
+                  NoIconLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="https://github.com/AllanYiin/trident">
+                  <i class="material-icons navigation-link-icon">link</i>
+                  GitHub
+              </a>
+      </nav>
+    </div>
+</header><header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+        <main class="mdl-layout__content" tabIndex="0">
+<header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+
+    <div class="document">
+        <div class="page-content">
+        
+  <h1>Source code for trident.models.pytorch_ssd</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">product</span> <span class="k">as</span> <span class="n">product</span>
+<span class="kn">import</span> <span class="nn">cv2</span>
+<span class="kn">from</span> <span class="nn">trident.data.dataset</span> <span class="k">import</span> <span class="n">BboxDataset</span>
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">to_numpy</span><span class="p">,</span> <span class="n">to_tensor</span><span class="p">,</span> <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_ops</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.bbox_common</span> <span class="k">import</span> <span class="n">xywh2xyxy</span><span class="p">,</span> <span class="n">xyxy2xywh</span><span class="p">,</span><span class="n">bbox_giou</span><span class="p">,</span><span class="n">bbox_giou_numpy</span>
+<span class="kn">from</span> <span class="nn">trident.data.image_common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.utils</span> <span class="k">import</span> <span class="n">download_model_from_google_drive</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_activations</span> <span class="k">import</span> <span class="n">get_activation</span><span class="p">,</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">Relu</span><span class="p">,</span> <span class="n">softmax</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_blocks</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_layers</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_normalizations</span> <span class="k">import</span> <span class="n">get_normalization</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_pooling</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.optims.pytorch_trainer</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.optims.pytorch_losses</span> <span class="k">import</span> <span class="o">*</span>
+
+<span class="n">image_size</span> <span class="o">=</span> <span class="p">[</span><span class="mi">640</span><span class="p">,</span> <span class="mi">480</span><span class="p">]</span>
+<span class="n">cfg</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;min_sizes&#39;</span><span class="p">:</span> <span class="p">[[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">24</span><span class="p">],</span> <span class="p">[</span><span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">],</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">96</span><span class="p">],</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">256</span><span class="p">]],</span> <span class="s1">&#39;steps&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">8</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">32</span><span class="p">,</span> <span class="mi">64</span><span class="p">],</span>
+       <span class="s1">&#39;variance&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">],</span> <span class="s1">&#39;clip&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="p">}</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;Ssd&#39;</span><span class="p">,</span> <span class="s1">&#39;encode&#39;</span><span class="p">,</span> <span class="s1">&#39;decode&#39;</span><span class="p">,</span> <span class="s1">&#39;SsdBboxDataset&#39;</span><span class="p">,</span> <span class="s1">&#39;SsdBboxDatasetV2&#39;</span><span class="p">,</span> <span class="s1">&#39;SsdDetectionModel&#39;</span><span class="p">,</span> <span class="s1">&#39;MultiBoxLoss&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;MultiBoxLossV2&#39;</span><span class="p">,</span><span class="s1">&#39;IouLoss&#39;</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">intersect</span><span class="p">(</span><span class="n">box_a</span><span class="p">,</span> <span class="n">box_b</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot; We resize both tensors to [A,B,2] without new malloc:</span>
+<span class="sd">    [A,2] -&gt; [A,1,2] -&gt; [A,B,2]</span>
+<span class="sd">    [B,2] -&gt; [1,B,2] -&gt; [A,B,2]</span>
+<span class="sd">    Then we compute the area of intersect between box_a and box_b.</span>
+<span class="sd">    Args:</span>
+<span class="sd">      box_a: (tensor) bounding boxes, Shape: [A,4].</span>
+<span class="sd">      box_b: (tensor) bounding boxes, Shape: [B,4].</span>
+<span class="sd">    Return:</span>
+<span class="sd">      (tensor) intersection area, Shape: [A,B].</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">box_a</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">B</span> <span class="o">=</span> <span class="n">box_b</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">max_xy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">box_a</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">box_b</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+    <span class="n">min_xy</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">box_a</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">box_b</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+    <span class="n">inter</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">((</span><span class="n">max_xy</span> <span class="o">-</span> <span class="n">min_xy</span><span class="p">),</span> <span class="nb">min</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">inter</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">inter</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">1</span><span class="p">]</span>
+
+
+<span class="k">def</span> <span class="nf">jaccard</span><span class="p">(</span><span class="n">box_a</span><span class="p">,</span> <span class="n">box_b</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Compute the jaccard overlap of two sets of boxes.  The jaccard overlap</span>
+<span class="sd">    is simply the intersection over union of two boxes.  Here we operate on</span>
+<span class="sd">    ground truth boxes and default boxes.</span>
+<span class="sd">    E.g.:</span>
+<span class="sd">        A ∩ B / A ∪ B = A ∩ B / (area(A) + area(B) - A ∩ B)</span>
+<span class="sd">    Args:</span>
+<span class="sd">        box_a: (tensor) Ground truth bounding boxes, Shape: [num_objects,4]</span>
+<span class="sd">        box_b: (tensor) Prior boxes from priorbox layers, Shape: [num_priors,4]</span>
+<span class="sd">    Return:</span>
+<span class="sd">        jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">inter</span> <span class="o">=</span> <span class="n">intersect</span><span class="p">(</span><span class="n">box_a</span><span class="p">,</span> <span class="n">box_b</span><span class="p">)</span>
+    <span class="n">area_a</span> <span class="o">=</span> <span class="p">((</span><span class="n">box_a</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">box_a</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">box_a</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">box_a</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">inter</span><span class="p">)</span>  <span class="c1"># [A,B]</span>
+    <span class="n">area_b</span> <span class="o">=</span> <span class="p">((</span><span class="n">box_b</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">box_b</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">*</span> <span class="p">(</span><span class="n">box_b</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">-</span> <span class="n">box_b</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]))</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">expand_as</span><span class="p">(</span><span class="n">inter</span><span class="p">)</span>  <span class="c1"># [A,B]</span>
+    <span class="n">union</span> <span class="o">=</span> <span class="n">area_a</span> <span class="o">+</span> <span class="n">area_b</span> <span class="o">-</span> <span class="n">inter</span>
+    <span class="k">return</span> <span class="n">inter</span> <span class="o">/</span> <span class="n">union</span>  <span class="c1"># [A,B]</span>
+
+
+<span class="k">def</span> <span class="nf">match</span><span class="p">(</span><span class="n">truths</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">variances</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.3</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Match each prior box with the ground truth box of the highest jaccard</span>
+<span class="sd">    overlap, encode the bounding boxes, then return the matched indices</span>
+<span class="sd">    corresponding to both confidence and location preds.</span>
+<span class="sd">    Args:</span>
+
+<span class="sd">        truths: (tensor) Ground truth boxes, Shape: [num_obj, num_priors].</span>
+<span class="sd">        priors: (tensor) Prior boxes from priorbox layers, Shape: [n_priors,4].</span>
+<span class="sd">        variances: (tensor) Variances corresponding to each prior coord,</span>
+<span class="sd">            Shape: [num_priors, 4].</span>
+<span class="sd">        labels: (tensor) All the class labels for the image, Shape: [num_obj].</span>
+<span class="sd">        loc_t: (tensor) Tensor to be filled w/ endcoded location targets.</span>
+<span class="sd">        conf_t: (tensor) Tensor to be filled w/ matched indices for conf preds.</span>
+<span class="sd">        idx: (int) current batch index</span>
+<span class="sd">        threshold: (float) The overlap threshold used when mathing boxes.</span>
+
+<span class="sd">    Return:</span>
+<span class="sd">        The matched indices corresponding to 1)location and 2)confidence preds.</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="c1"># jaccard index</span>
+    <span class="n">priors2</span> <span class="o">=</span> <span class="n">priors</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">num_priors</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">priors</span><span class="p">)</span>
+    <span class="n">overlaps</span> <span class="o">=</span> <span class="n">jaccard</span><span class="p">(</span><span class="n">truths</span><span class="p">,</span> <span class="n">xywh2xyxy</span><span class="p">(</span><span class="n">priors</span><span class="o">.</span><span class="n">clone</span><span class="p">()))</span>
+    <span class="c1"># (Bipartite Matching)</span>
+    <span class="c1"># [1,num_objects] best prior for each ground truth</span>
+    <span class="n">best_prior_overlap</span><span class="p">,</span> <span class="n">best_prior_idx</span> <span class="o">=</span> <span class="n">overlaps</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+    <span class="c1"># ignore hard gt</span>
+    <span class="n">valid_gt_idx</span> <span class="o">=</span> <span class="n">best_prior_overlap</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mf">0.2</span>
+    <span class="n">best_prior_idx_filter</span> <span class="o">=</span> <span class="n">best_prior_idx</span><span class="p">[</span><span class="n">valid_gt_idx</span><span class="p">,</span> <span class="p">:]</span>
+    <span class="k">if</span> <span class="n">best_prior_idx_filter</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_priors</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_priors</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+    <span class="c1"># [1,num_priors] best ground truth for each prior</span>
+    <span class="n">best_truth_overlap</span><span class="p">,</span> <span class="n">best_truth_idx</span> <span class="o">=</span> <span class="n">overlaps</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">best_truth_idx</span><span class="o">.</span><span class="n">squeeze_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">best_truth_overlap</span><span class="o">.</span><span class="n">squeeze_</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">best_prior_idx</span><span class="o">.</span><span class="n">squeeze_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">best_prior_idx_filter</span><span class="o">.</span><span class="n">squeeze_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">best_prior_overlap</span><span class="o">.</span><span class="n">squeeze_</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">best_truth_overlap</span><span class="o">.</span><span class="n">index_fill_</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">best_prior_idx_filter</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>  <span class="c1"># ensure best prior</span>
+    <span class="c1"># TODO refactor: index  best_prior_idx with long tensor</span>
+    <span class="c1"># ensure every gt matches with its prior of max overlap</span>
+    <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">best_prior_idx</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)):</span>
+        <span class="n">best_truth_idx</span><span class="p">[</span><span class="n">best_prior_idx</span><span class="p">[</span><span class="n">j</span><span class="p">]]</span> <span class="o">=</span> <span class="n">j</span>
+    <span class="n">matches</span> <span class="o">=</span> <span class="n">truths</span><span class="p">[</span><span class="n">best_truth_idx</span><span class="p">]</span>  <span class="c1"># Shape: [num_priors,14]</span>
+    <span class="n">conf</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">best_truth_idx</span><span class="p">]</span>  <span class="c1"># Shape: [num_priors]</span>
+
+    <span class="n">conf</span><span class="p">[</span><span class="n">best_truth_overlap</span> <span class="o">&lt;</span> <span class="n">threshold</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># label as background</span>
+
+    <span class="n">loc</span> <span class="o">=</span> <span class="n">encode</span><span class="p">(</span><span class="n">matches</span><span class="p">,</span> <span class="n">priors2</span><span class="p">,</span> <span class="n">variances</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">loc</span><span class="p">,</span> <span class="n">conf</span>
+
+
+<div class="viewcode-block" id="encode"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.encode">[docs]</a><span class="k">def</span> <span class="nf">encode</span><span class="p">(</span><span class="n">matched</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">variances</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Encode is the process let groundtruth convert to prior</span>
+<span class="sd">    we have matched (based on jaccard overlap) with the prior boxes.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        matched: (tensor) Coords of ground truth for each prior in xyxy</span>
+<span class="sd">            Shape: [num_priors, 4].</span>
+<span class="sd">        priors: (tensor) Prior boxes in center-offset form</span>
+<span class="sd">            Shape: [num_priors,4].</span>
+<span class="sd">        variances: (list[float]) Variances of priorboxes</span>
+<span class="sd">    Return:</span>
+<span class="sd">        encoded boxes and landmarks (tensor), Shape: [num_priors, 14]</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+
+    <span class="c1"># dist b/t match center and prior&#39;s center</span>
+    <span class="n">priors</span> <span class="o">=</span> <span class="n">priors</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+    <span class="n">g_cxcy</span> <span class="o">=</span> <span class="p">(</span><span class="n">matched</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">matched</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">])</span> <span class="o">/</span> <span class="mi">2</span> <span class="o">-</span> <span class="n">priors</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span>
+    <span class="c1"># encode variance</span>
+    <span class="n">g_cxcy</span> <span class="o">/=</span> <span class="p">(</span><span class="n">variances</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">priors</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">])</span>
+    <span class="c1"># match wh / prior wh</span>
+    <span class="n">g_wh</span> <span class="o">=</span> <span class="p">(</span><span class="n">matched</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">-</span> <span class="n">matched</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">])</span> <span class="o">/</span> <span class="n">priors</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+    <span class="n">g_wh</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">g_wh</span><span class="p">)</span> <span class="o">/</span> <span class="n">variances</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="c1"># # landmarks</span>
+    <span class="c1"># g_xy1 = (matched[:, 4:6] - priors[:, 0:2]) / (variances[0] * priors[:, 2:4])</span>
+    <span class="c1"># g_xy2 = (matched[:, 6:8] - priors[:, 0:2]) / (variances[0] * priors[:, 2:4])</span>
+    <span class="c1"># g_xy3 = (matched[:, 8:10] - priors[:, 0:2]) / (variances[0] * priors[:, 2:4])</span>
+    <span class="c1"># g_xy4 = (matched[:, 10:12] - priors[:, 0:2]) / (variances[0] * priors[:, 2:4])</span>
+    <span class="c1"># g_xy5 = (matched[:, 12:14] - priors[:, 0:2]) / (variances[0] * priors[:, 2:4])</span>
+
+    <span class="c1"># return target for loss</span>
+    <span class="k">return</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">g_cxcy</span><span class="p">,</span> <span class="n">g_wh</span><span class="p">],</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># [num_priors,14]</span></div>
+
+
+<span class="c1"># Adapted from https://github.com/Hakuyume/chainer-ssd</span>
+<div class="viewcode-block" id="decode"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.decode">[docs]</a><span class="k">def</span> <span class="nf">decode</span><span class="p">(</span><span class="n">loc</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">variances</span><span class="p">):</span>
+    <span class="sd">&#39;&#39;&#39;Decode locations from predictions using priors to undo</span>
+<span class="sd">    the encoding we did for offset regression at train time.</span>
+<span class="sd">    Args:</span>
+<span class="sd">        loc (tensor): location predictions for loc layers,</span>
+<span class="sd">            Shape: [num_priors,4]</span>
+<span class="sd">        priors (tensor): Prior boxes in center-offset form.</span>
+<span class="sd">            Shape: [num_priors,4].</span>
+<span class="sd">        variances: (list[float]) Variances of priorboxes</span>
+<span class="sd">    Return:</span>
+<span class="sd">        decoded bounding box predictions</span>
+<span class="sd">    &#39;&#39;&#39;</span>
+    <span class="n">boxes</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">([</span><span class="n">priors</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">loc</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">variances</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">priors</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+                       <span class="n">priors</span><span class="o">.</span><span class="n">unsqueeze</span><span class="p">(</span><span class="mi">0</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">*</span> <span class="n">torch</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">loc</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">*</span> <span class="n">variances</span><span class="p">[</span><span class="mi">1</span><span class="p">])],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">-=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">+=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">boxes</span></div>
+
+
+<div class="viewcode-block" id="SsdBboxDataset"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDataset">[docs]</a><span class="k">class</span> <span class="nc">SsdBboxDataset</span><span class="p">(</span><span class="n">BboxDataset</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">priors</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">center_variance</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">size_variance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+                 <span class="n">gt_overlap_tolerance</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">expect_data_type</span><span class="o">=</span><span class="n">ExpectDataType</span><span class="o">.</span><span class="n">absolute_bbox</span><span class="p">,</span> <span class="n">class_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">symbol</span><span class="o">=</span><span class="s1">&#39;bbox&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">boxes</span><span class="o">=</span><span class="n">boxes</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="n">image_size</span><span class="p">,</span> <span class="n">expect_data_type</span><span class="o">=</span><span class="n">expect_data_type</span><span class="p">,</span> <span class="n">class_names</span><span class="o">=</span><span class="n">class_names</span><span class="p">,</span>
+                         <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="n">priors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_transform_funcs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gt_overlap_tolerance</span> <span class="o">=</span> <span class="n">gt_overlap_tolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bbox_post_transform_funcs</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="SsdBboxDataset.binding_class_names"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDataset.binding_class_names">[docs]</a>    <span class="k">def</span> <span class="nf">binding_class_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">language</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">class_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">class_names</span><span class="p">,</span> <span class="s1">&#39;__len__&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">language</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">language</span> <span class="o">=</span> <span class="s1">&#39;en-us&#39;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="n">language</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">class_names</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__default_language__</span> <span class="o">=</span> <span class="n">language</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_lab2idx</span> <span class="o">=</span> <span class="p">{</span><span class="n">v</span><span class="p">:</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="n">language</span><span class="p">])}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_idx2lab</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="n">language</span><span class="p">])}</span></div>
+
+<div class="viewcode-block" id="SsdBboxDataset.bbox_transform"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDataset.bbox_transform">[docs]</a>    <span class="k">def</span> <span class="nf">bbox_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bbox</span><span class="p">):</span>
+        <span class="n">num_priors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">bbox</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">bbox</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_priors</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_priors</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bbox</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">height</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_size</span>
+            <span class="n">gt_label</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">gt_box</span> <span class="o">=</span> <span class="n">bbox</span>
+            <span class="k">if</span> <span class="n">bbox</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">gt_box</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">gt_label</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+            <span class="n">gt_box</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">/=</span> <span class="n">width</span>
+            <span class="n">gt_box</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">/=</span> <span class="n">height</span>
+
+            <span class="c1"># match priors (default boxes) and ground truth boxes</span>
+            <span class="k">if</span> <span class="n">gt_box</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">gt_box</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">truths</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">gt_box</span><span class="p">)</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+                <span class="n">labels</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">gt_label</span><span class="p">)</span><span class="o">.</span><span class="n">long</span><span class="p">()</span>
+                <span class="n">loc_t</span><span class="p">,</span> <span class="n">conf_t</span> <span class="o">=</span> <span class="n">match</span><span class="p">(</span><span class="n">truths</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">),</span> <span class="n">labels</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">gt_overlap_tolerance</span><span class="p">)</span>
+
+                <span class="k">return</span> <span class="n">to_numpy</span><span class="p">(</span><span class="n">loc_t</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">to_numpy</span><span class="p">(</span><span class="n">conf_t</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">num_priors</span><span class="p">,</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">num_priors</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="SsdBboxDatasetV2"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2">[docs]</a><span class="k">class</span> <span class="nc">SsdBboxDatasetV2</span><span class="p">(</span><span class="n">BboxDataset</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">priors</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">center_variance</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">size_variance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+                 <span class="n">gt_overlap_tolerance</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">expect_data_type</span><span class="o">=</span><span class="n">ExpectDataType</span><span class="o">.</span><span class="n">absolute_bbox</span><span class="p">,</span> <span class="n">class_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                 <span class="n">symbol</span><span class="o">=</span><span class="s1">&#39;bbox&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">boxes</span><span class="o">=</span><span class="n">boxes</span><span class="p">,</span> <span class="n">image_size</span><span class="o">=</span><span class="n">image_size</span><span class="p">,</span> <span class="n">expect_data_type</span><span class="o">=</span><span class="n">expect_data_type</span><span class="p">,</span> <span class="n">class_names</span><span class="o">=</span><span class="n">class_names</span><span class="p">,</span>
+                         <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="n">priors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span> <span class="o">=</span> <span class="n">center_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span> <span class="o">=</span> <span class="n">size_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">label_transform_funcs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gt_overlap_tolerance</span> <span class="o">=</span> <span class="n">gt_overlap_tolerance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bbox_post_transform_funcs</span> <span class="o">=</span> <span class="p">[]</span>
+
+<div class="viewcode-block" id="SsdBboxDatasetV2.area_of"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2.area_of">[docs]</a>    <span class="k">def</span> <span class="nf">area_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left_top</span><span class="p">,</span> <span class="n">right_bottom</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the areas of rectangles given two corners.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            left_top (N, 2): left top corner.</span>
+<span class="sd">            right_bottom (N, 2): right bottom corner.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            area (N): return the area.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">hw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">right_bottom</span> <span class="o">-</span> <span class="n">left_top</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">hw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">hw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SsdBboxDatasetV2.iou_of"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2.iou_of">[docs]</a>    <span class="k">def</span> <span class="nf">iou_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes0</span><span class="p">,</span> <span class="n">boxes1</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return intersection-over-union (Jaccard index) of boxes.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            boxes0 (N, 4): ground truth boxes.</span>
+<span class="sd">            boxes1 (N or 1, 4): predicted boxes.</span>
+<span class="sd">            eps: a small number to avoid 0 as denominator.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            iou (N): IoU values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">overlap_left_top</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">overlap_right_bottom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+
+        <span class="n">overlap_area</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">overlap_left_top</span><span class="p">,</span> <span class="n">overlap_right_bottom</span><span class="p">)</span>
+        <span class="n">area0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+        <span class="n">area1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+        <span class="k">return</span> <span class="n">overlap_area</span> <span class="o">/</span> <span class="p">(</span><span class="n">area0</span> <span class="o">+</span> <span class="n">area1</span> <span class="o">-</span> <span class="n">overlap_area</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SsdBboxDatasetV2.convert_boxes_to_locations"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2.convert_boxes_to_locations">[docs]</a>    <span class="k">def</span> <span class="nf">convert_boxes_to_locations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">center_form_boxes</span><span class="p">,</span> <span class="n">center_form_priors</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">center_form_priors</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">center_form_boxes</span><span class="o">.</span><span class="n">shape</span><span class="p">):</span>
+            <span class="n">center_form_priors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">center_form_priors</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([(</span><span class="n">center_form_boxes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">center_form_priors</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">])</span> <span class="o">/</span> <span class="n">center_form_priors</span><span class="p">[</span><span class="o">...</span><span class="p">,</span>
+                                                                                            <span class="mi">2</span><span class="p">:]</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span><span class="p">,</span>
+                               <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">center_form_boxes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:]</span> <span class="o">/</span> <span class="n">center_form_priors</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:],</span><span class="mf">1e-8</span><span class="p">,</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">))</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span><span class="p">],</span>
+                              <span class="n">axis</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">center_form_boxes</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SsdBboxDatasetV2.assign_priors"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2.assign_priors">[docs]</a>    <span class="k">def</span> <span class="nf">assign_priors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gt_boxes</span><span class="p">,</span> <span class="n">gt_labels</span><span class="p">,</span> <span class="n">center_form_priors</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="p">):</span>
+        <span class="c1"># &quot;&quot;&quot;Assign ground truth boxes and targets to priors.</span>
+        <span class="c1">#</span>
+        <span class="c1"># Args:</span>
+        <span class="c1">#     gt_boxes (num_targets, 4): ground truth boxes.</span>
+        <span class="c1">#     gt_labels (num_targets): labels of targets.</span>
+        <span class="c1">#     priors (num_priors, 4): corner form priors</span>
+        <span class="c1"># Returns:</span>
+        <span class="c1">#     boxes (num_priors, 4): real values for priors.</span>
+        <span class="c1">#     labels (num_priros): labels for priors.</span>
+        <span class="c1"># &quot;&quot;&quot;</span>
+        <span class="c1"># # size: num_priors x num_targets</span>
+        <span class="c1"># # if gt_boxes is not None :</span>
+        <span class="c1">#</span>
+        <span class="c1"># ious = self.iou_of(gt_boxes.unsqueeze(0), corner_form_priors.unsqueeze(1))</span>
+        <span class="c1"># # size: num_priors</span>
+        <span class="c1"># best_target_per_prior, best_target_per_prior_index = ious.max(1)</span>
+        <span class="c1"># # size: num_targets</span>
+        <span class="c1"># best_prior_per_target, best_prior_per_target_index = ious.max(0)</span>
+        <span class="c1">#</span>
+        <span class="c1"># for target_index, prior_index in enumerate(best_prior_per_target_index):</span>
+        <span class="c1">#     best_target_per_prior_index[prior_index] = target_index</span>
+        <span class="c1"># # 2.0 is used to make sure every target has a prior assigned</span>
+        <span class="c1"># best_target_per_prior.index_fill_(0, best_prior_per_target_index, 2)</span>
+        <span class="c1"># # size: num_priors</span>
+        <span class="c1"># labels = gt_labels[best_target_per_prior_index]</span>
+        <span class="c1"># labels[best_target_per_prior &lt; iou_threshold] = 0  # the backgournd id</span>
+        <span class="c1"># boxes = gt_boxes[best_target_per_prior_index]</span>
+        <span class="c1"># return boxes, labels</span>
+        <span class="n">corner_form_priors</span> <span class="o">=</span> <span class="n">xywh2xyxy</span><span class="p">(</span><span class="n">center_form_priors</span><span class="p">)</span>
+        <span class="n">ious</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">iou_of</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">gt_boxes</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">corner_form_priors</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="c1"># size: num_priors</span>
+        <span class="n">best_target_per_prior</span><span class="p">,</span> <span class="n">best_target_per_prior_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ious</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">ious</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># size: num_targets</span>
+        <span class="n">best_prior_per_target</span><span class="p">,</span> <span class="n">best_prior_per_target_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">ious</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">ious</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">target_index</span><span class="p">,</span> <span class="n">prior_index</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">best_prior_per_target_index</span><span class="p">):</span>
+            <span class="n">best_target_per_prior_index</span><span class="p">[</span><span class="n">prior_index</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_index</span>
+        <span class="c1"># 2.0 is used to make sure every target has a prior assigned</span>
+        <span class="n">best_prior_per_target_index_list</span> <span class="o">=</span> <span class="n">best_prior_per_target_index</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">best_target_per_prior</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">best_prior_per_target_index_list</span><span class="p">:</span>
+                <span class="n">best_target_per_prior</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="n">gt_labels</span><span class="p">[</span><span class="n">best_target_per_prior_index</span><span class="p">]</span>
+        <span class="n">labels</span><span class="p">[</span><span class="n">best_target_per_prior</span> <span class="o">&lt;</span> <span class="n">iou_threshold</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># the backgournd id</span>
+        <span class="n">boxes</span> <span class="o">=</span> <span class="n">gt_boxes</span><span class="p">[</span><span class="n">best_target_per_prior_index</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">labels</span></div>
+
+<div class="viewcode-block" id="SsdBboxDatasetV2.binding_class_names"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2.binding_class_names">[docs]</a>    <span class="k">def</span> <span class="nf">binding_class_names</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">class_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">language</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">class_names</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">class_names</span><span class="p">,</span> <span class="s1">&#39;__len__&#39;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">language</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">language</span> <span class="o">=</span> <span class="s1">&#39;en-us&#39;</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="n">language</span><span class="p">]</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">class_names</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">__default_language__</span> <span class="o">=</span> <span class="n">language</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_lab2idx</span> <span class="o">=</span> <span class="p">{</span><span class="n">v</span><span class="p">:</span> <span class="n">k</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="n">language</span><span class="p">])}</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_idx2lab</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="n">language</span><span class="p">])}</span></div>
+
+<div class="viewcode-block" id="SsdBboxDatasetV2.bbox_transform"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdBboxDatasetV2.bbox_transform">[docs]</a>    <span class="k">def</span> <span class="nf">bbox_transform</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bbox</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">bbox</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">bbox</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">4</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">bbox</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">height</span><span class="p">,</span> <span class="n">width</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">image_size</span>
+            <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">width</span>
+            <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="n">width</span>
+            <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">height</span>
+            <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">/</span> <span class="n">height</span>
+            <span class="k">if</span> <span class="n">bbox</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span>
+                <span class="n">gt_box</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+                <span class="n">gt_label</span> <span class="o">=</span> <span class="n">bbox</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]</span>
+                <span class="n">boxes</span><span class="p">,</span> <span class="n">labels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">assign_priors</span><span class="p">(</span><span class="n">gt_box</span><span class="p">,</span> <span class="n">gt_label</span><span class="p">,</span> <span class="n">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="p">),</span> <span class="mf">0.3</span><span class="p">)</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">xyxy2xywh</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span>
+                <span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">convert_boxes_to_locations</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="n">to_numpy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="p">))</span>
+                <span class="k">return</span> <span class="n">boxes</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">labels</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">bbox</span></div></div>
+
+
+<span class="k">def</span> <span class="nf">hard_negative_mining</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">neg_pos_ratio</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    It used to suppress the presence of a large number of negative prediction.</span>
+<span class="sd">    It works on image level not batch level.</span>
+<span class="sd">    For any example/image, it keeps all the positive predictions and</span>
+<span class="sd">     cut the number of negative predictions to make sure the ratio</span>
+<span class="sd">     between the negative examples and positive examples is no more</span>
+<span class="sd">     the given ratio for an image.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        loss (N, num_priors): the loss for each example.</span>
+<span class="sd">        labels (N, num_priors): the labels.</span>
+<span class="sd">        neg_pos_ratio:  the ratio between the negative examples and positive examples.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pos_mask</span> <span class="o">=</span> <span class="n">labels</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+    <span class="n">num_pos</span> <span class="o">=</span> <span class="n">pos_mask</span><span class="o">.</span><span class="n">long</span><span class="p">()</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+    <span class="n">num_neg</span> <span class="o">=</span> <span class="n">num_pos</span> <span class="o">*</span> <span class="n">neg_pos_ratio</span>
+
+    <span class="n">loss</span><span class="p">[</span><span class="n">pos_mask</span><span class="p">]</span> <span class="o">=</span> <span class="o">-</span><span class="n">math</span><span class="o">.</span><span class="n">inf</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">indexes</span> <span class="o">=</span> <span class="n">loss</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">descending</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">orders</span> <span class="o">=</span> <span class="n">indexes</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="n">neg_mask</span> <span class="o">=</span> <span class="n">orders</span> <span class="o">&lt;</span> <span class="n">num_neg</span>
+    <span class="k">return</span> <span class="n">pos_mask</span> <span class="o">|</span> <span class="n">neg_mask</span>
+
+
+<div class="viewcode-block" id="MultiBoxLoss"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.MultiBoxLoss">[docs]</a><span class="k">class</span> <span class="nc">MultiBoxLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">neg_pos_ratio</span><span class="p">,</span> <span class="n">center_variance</span><span class="p">,</span> <span class="n">size_variance</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Implement SSD Multibox Loss.</span>
+
+<span class="sd">        Basically, Multibox loss combines classification loss</span>
+<span class="sd">         and Smooth L1 regression loss.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MultiBoxLoss</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">neg_pos_ratio</span> <span class="o">=</span> <span class="n">neg_pos_ratio</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span> <span class="o">=</span> <span class="n">center_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span> <span class="o">=</span> <span class="n">size_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">priors</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiBoxLoss.forward"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.MultiBoxLoss.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">confidence</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">target_confidence</span><span class="p">,</span> <span class="n">target_locations</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute classification loss and smooth l1 loss.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            confidence (batch_size, num_priors, num_classes): class predictions.</span>
+<span class="sd">            locations (batch_size, num_priors, 4): predicted locations.</span>
+<span class="sd">            labels (batch_size, num_priors): real labels of all the priors.</span>
+<span class="sd">            boxes (batch_size, num_priors, 4): real boxes corresponding all the priors.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># derived from cross_entropy=sum(log(p))</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">confidence</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">hard_negative_mining</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">target_confidence</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">neg_pos_ratio</span><span class="p">)</span>
+        <span class="n">weight</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.05</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">10</span><span class="p">]))</span>
+        <span class="n">classification_loss</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">cross_entropy</span><span class="p">(</span><span class="n">confidence</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_classes</span><span class="p">),</span> <span class="n">target_confidence</span><span class="p">[</span><span class="n">mask</span><span class="p">],</span>
+                                              <span class="n">weight</span><span class="o">=</span><span class="n">weight</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s1">&#39;sum&#39;</span><span class="p">)</span>
+        <span class="c1"># classification_loss += 0.1*F.cross_entropy(confidence.reshape(-1, num_classes), target_confidence.reshape(</span>
+        <span class="c1"># -1), weight=weight, reduction=&#39;sum&#39;)</span>
+
+        <span class="n">pos_mask</span> <span class="o">=</span> <span class="n">target_confidence</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="n">locations</span><span class="p">[</span><span class="n">pos_mask</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">target_locations</span> <span class="o">=</span> <span class="n">target_locations</span><span class="p">[</span><span class="n">pos_mask</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">smooth_l1_loss</span> <span class="o">=</span> <span class="n">F</span><span class="o">.</span><span class="n">mse_loss</span><span class="p">(</span><span class="n">locations</span><span class="p">,</span> <span class="n">target_locations</span><span class="p">,</span> <span class="n">reduction</span><span class="o">=</span><span class="s1">&#39;sum&#39;</span><span class="p">)</span>  <span class="c1"># smooth_l1_loss</span>
+        <span class="n">smooth_l1_loss</span> <span class="o">+=</span> <span class="n">F</span><span class="o">.</span><span class="n">l1_loss</span><span class="p">(</span><span class="n">locations</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">exp</span><span class="p">(),</span> <span class="n">target_locations</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">exp</span><span class="p">(),</span> <span class="n">reduction</span><span class="o">=</span><span class="s1">&#39;sum&#39;</span><span class="p">)</span>
+        <span class="n">num_pos</span> <span class="o">=</span> <span class="n">target_locations</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">smooth_l1_loss</span> <span class="o">+</span> <span class="n">classification_loss</span><span class="p">)</span> <span class="o">/</span> <span class="n">num_pos</span></div></div>
+
+
+<div class="viewcode-block" id="MultiBoxLossV2"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.MultiBoxLossV2">[docs]</a><span class="k">class</span> <span class="nc">MultiBoxLossV2</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span> <span class="n">neg_pos_ratio</span><span class="p">,</span> <span class="n">center_variance</span><span class="p">,</span> <span class="n">size_variance</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Implement SSD Multibox Loss.</span>
+
+<span class="sd">        Basically, Multibox loss combines classification loss</span>
+<span class="sd">         and Smooth L1 regression loss.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MultiBoxLossV2</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">neg_pos_ratio</span> <span class="o">=</span> <span class="n">neg_pos_ratio</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span> <span class="o">=</span> <span class="n">center_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span> <span class="o">=</span> <span class="n">size_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">priors</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MultiBoxLossV2.forward"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.MultiBoxLossV2.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">confidence</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">target_confidence</span><span class="p">,</span> <span class="n">target_locations</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute classification loss and smooth l1 loss.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            confidence (batch_size, num_priors, num_classes): class predictions.</span>
+<span class="sd">            locations (batch_size, num_priors, 4): predicted locations.</span>
+<span class="sd">            target_confidence (batch_size, num_priors): real labels of all the priors.</span>
+<span class="sd">            target_locations (batch_size, num_priors, 4): real boxes corresponding all the priors.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="c1"># derived from cross_entropy=sum(log(p))</span>
+        <span class="k">with</span> <span class="n">torch</span><span class="o">.</span><span class="n">no_grad</span><span class="p">():</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="o">-</span><span class="n">F</span><span class="o">.</span><span class="n">log_softmax</span><span class="p">(</span><span class="n">confidence</span><span class="p">,</span> <span class="n">dim</span><span class="o">=</span><span class="mi">2</span><span class="p">)[:,</span> <span class="p">:,</span> <span class="mi">0</span><span class="p">]</span>
+            <span class="n">mask</span> <span class="o">=</span> <span class="n">hard_negative_mining</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">target_confidence</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">neg_pos_ratio</span><span class="p">)</span>
+
+        <span class="n">classification_loss</span> <span class="o">=</span> <span class="n">CrossEntropyLabelSmooth</span><span class="p">(</span><span class="n">weight</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">5</span><span class="p">,</span><span class="mi">25</span><span class="p">,</span><span class="mi">15</span><span class="p">]),</span><span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span><span class="n">num_classes</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span><span class="n">reduction</span><span class="o">=</span><span class="s1">&#39;sum&#39;</span><span class="p">)(</span><span class="n">confidence</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">num_classes</span><span class="p">),</span> <span class="n">target_confidence</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
+
+        <span class="n">pos_mask</span> <span class="o">=</span> <span class="n">target_confidence</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="n">target_locations</span> <span class="o">=</span> <span class="n">target_locations</span><span class="p">[</span><span class="n">pos_mask</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+
+        <span class="n">num_pos</span> <span class="o">=</span> <span class="n">target_locations</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span>   <span class="n">classification_loss</span> <span class="o">/</span> <span class="n">num_pos</span></div></div>
+
+<div class="viewcode-block" id="IouLoss"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.IouLoss">[docs]</a><span class="k">class</span> <span class="nc">IouLoss</span><span class="p">(</span><span class="n">nn</span><span class="o">.</span><span class="n">Module</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">priors</span><span class="p">,</span>  <span class="n">center_variance</span><span class="p">,</span> <span class="n">size_variance</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Implement SSD Multibox Loss.</span>
+
+<span class="sd">        Basically, Multibox loss combines classification loss</span>
+<span class="sd">         and Smooth L1 regression loss.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">IouLoss</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span> <span class="o">=</span> <span class="n">center_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span> <span class="o">=</span> <span class="n">size_variance</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">priors</span><span class="p">)</span>
+
+<div class="viewcode-block" id="IouLoss.forward"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.IouLoss.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">confidence</span><span class="p">,</span> <span class="n">locations</span><span class="p">,</span> <span class="n">target_confidence</span><span class="p">,</span> <span class="n">target_locations</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute classification loss and smooth l1 loss.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            confidence (batch_size, num_priors, num_classes): class predictions.</span>
+<span class="sd">            locations (batch_size, num_priors, 4): predicted locations.</span>
+<span class="sd">            target_confidence (batch_size, num_priors): real labels of all the priors.</span>
+<span class="sd">            target_locations (batch_size, num_priors, 4): real boxes corresponding all the priors.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_classes</span> <span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">num_batch</span><span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="n">confidence_logit</span> <span class="o">=</span> <span class="n">softmax</span><span class="p">(</span><span class="n">confidence</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">confidence_logit_probs</span><span class="p">,</span> <span class="n">confidence_logit_idxs</span> <span class="o">=</span> <span class="n">confidence_logit</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">probs_mask</span> <span class="o">=</span> <span class="n">confidence_logit_probs</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+        <span class="n">label_mask</span> <span class="o">=</span> <span class="n">confidence_logit_idxs</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="n">pos_target_mask_all</span> <span class="o">=</span> <span class="n">target_confidence</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="n">pos_infer_mask_all</span> <span class="o">=</span> <span class="p">(</span><span class="n">pos_target_mask_all</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">+</span><span class="n">probs_mask</span><span class="o">.</span><span class="n">float</span><span class="p">()</span> <span class="o">+</span> <span class="n">label_mask</span><span class="o">.</span><span class="n">float</span><span class="p">()</span><span class="o">==</span><span class="mi">3</span><span class="p">)</span>
+
+
+
+        <span class="n">decode_locations_all</span> <span class="o">=</span> <span class="n">decode</span><span class="p">(</span><span class="n">locations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span><span class="p">))</span>
+        <span class="n">decode_target_locations_all</span> <span class="o">=</span> <span class="n">decode</span><span class="p">(</span><span class="n">target_locations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">center_variance</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">size_variance</span><span class="p">))</span>
+        <span class="n">giou_np</span><span class="o">=</span><span class="mf">0.0</span>
+        <span class="n">giou</span><span class="o">=</span><span class="mf">0.0</span>
+        <span class="n">overlaps</span><span class="o">=</span><span class="mf">0.0</span>
+        <span class="n">num_boxes</span><span class="o">=</span><span class="mi">0</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_batch</span><span class="p">):</span>
+            <span class="n">pos_target_mask</span><span class="o">=</span><span class="n">pos_target_mask_all</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">pos_infer_mask</span><span class="o">=</span><span class="n">pos_infer_mask_all</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="n">decode_locations</span><span class="o">=</span><span class="n">decode_locations_all</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">pos_infer_mask</span><span class="p">,:]</span>
+            <span class="n">decode_target_locations</span><span class="o">=</span><span class="n">decode_target_locations_all</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">pos_target_mask</span><span class="p">,:]</span>
+            <span class="n">num_boxes</span><span class="o">+=</span><span class="n">decode_target_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">decode_target_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">0</span> <span class="ow">and</span> <span class="n">decode_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">&gt;</span><span class="mi">0</span><span class="p">:</span>
+                <span class="n">giou</span><span class="o">=</span><span class="n">giou</span><span class="o">+</span><span class="p">(</span><span class="mi">1</span><span class="o">-</span><span class="p">(</span><span class="n">bbox_giou</span><span class="p">(</span><span class="n">decode_locations</span><span class="p">,</span> <span class="n">decode_target_locations</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">/</span><span class="n">decode_target_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+                <span class="n">overlaps</span><span class="o">=</span><span class="n">overlaps</span><span class="o">+</span><span class="p">(</span><span class="o">-</span><span class="n">log</span><span class="p">(</span><span class="n">clip</span><span class="p">(</span><span class="n">jaccard</span><span class="p">(</span><span class="n">decode_locations</span><span class="p">,</span> <span class="n">decode_target_locations</span><span class="p">),</span><span class="nb">min</span><span class="o">=</span><span class="mf">1e-8</span><span class="p">))</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">/</span><span class="n">decode_target_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="n">decode_target_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">==</span><span class="mi">0</span> <span class="ow">and</span> <span class="n">decode_locations</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">==</span><span class="mi">0</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">giou</span><span class="o">=</span><span class="n">giou</span><span class="o">+</span><span class="mi">1</span>
+                <span class="n">overlaps</span><span class="o">=</span><span class="n">overlaps</span><span class="o">-</span><span class="n">log</span><span class="p">(</span><span class="n">to_tensor</span><span class="p">(</span><span class="mf">1e-8</span><span class="p">))</span>
+
+        <span class="n">giou</span><span class="o">=</span><span class="n">giou</span><span class="o">/</span><span class="n">num_boxes</span>
+        <span class="n">overlaps</span><span class="o">=</span><span class="n">overlaps</span><span class="o">/</span><span class="n">num_boxes</span>
+        <span class="k">return</span> <span class="n">giou</span></div></div>
+
+
+<div class="viewcode-block" id="Ssd"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.Ssd">[docs]</a><span class="k">class</span> <span class="nc">Ssd</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">backbond</span><span class="p">,</span> <span class="n">base_filters</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">num_regressors</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+                 <span class="n">variance</span><span class="o">=</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;tiny_mobile_rfbnet&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        layer_defs : object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Ssd</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_filters</span> <span class="o">=</span> <span class="n">base_filters</span>
+
+        <span class="n">idxes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">backbond</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">):</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">backbond</span><span class="o">.</span><span class="n">_modules</span><span class="p">)):</span>
+                <span class="n">layer</span> <span class="o">=</span> <span class="n">backbond</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="s1">&#39;strides&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">):</span>
+                        <span class="n">layer</span> <span class="o">=</span> <span class="n">layer</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="nb">int</span><span class="p">)</span> <span class="ow">and</span> <span class="n">layer</span><span class="o">.</span><span class="n">strides</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                        <span class="n">idxes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">layer</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="n">layer</span><span class="o">.</span><span class="n">strides</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+                        <span class="n">idxes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">backbond1</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">backbond</span><span class="p">[:</span><span class="n">idxes</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]],</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;backbond1&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">backbond2</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">backbond</span><span class="p">[</span><span class="n">idxes</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]:</span><span class="n">idxes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]],</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;backbond2&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">backbond3</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">backbond</span><span class="p">[</span><span class="n">idxes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:],</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;backbond3&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> is not a valid backbond...&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">backbond</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">iou_threshold</span> <span class="o">=</span> <span class="n">iou_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">variance</span> <span class="o">=</span> <span class="n">variance</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span> <span class="o">=</span> <span class="n">num_classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_regressors</span> <span class="o">=</span> <span class="n">num_regressors</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">extra</span> <span class="o">=</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                                <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span>
+                                                <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                                <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">Relu</span><span class="p">())</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">regression_headers</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_regressors</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+
+            <span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_regressors</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+
+            <span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_regressors</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+
+            <span class="n">Conv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_regressors</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span> <span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">classification_headers</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">ModuleList</span><span class="p">([</span><span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+            <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+
+            <span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+
+            <span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                <span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">2</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">)),</span>
+
+            <span class="n">Conv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                   <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># generate priors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">define_img_size</span><span class="p">(</span><span class="mi">640</span><span class="p">)</span>
+
+<div class="viewcode-block" id="Ssd.generate_priors"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.Ssd.generate_priors">[docs]</a>    <span class="k">def</span> <span class="nf">generate_priors</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">feature_map_list</span><span class="p">,</span> <span class="n">shrinkage_list</span><span class="p">,</span> <span class="n">image_size</span><span class="p">,</span> <span class="n">min_boxes</span><span class="p">,</span> <span class="n">clamp</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">torch</span><span class="o">.</span><span class="n">Tensor</span><span class="p">:</span>
+        <span class="n">priors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">feature_map_list</span><span class="p">[</span><span class="mi">0</span><span class="p">])):</span>
+            <span class="n">scale_w</span> <span class="o">=</span> <span class="n">image_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">shrinkage_list</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">index</span><span class="p">]</span>
+            <span class="n">scale_h</span> <span class="o">=</span> <span class="n">image_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">shrinkage_list</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">index</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">feature_map_list</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">index</span><span class="p">]):</span>
+                <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">feature_map_list</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">index</span><span class="p">]):</span>
+                    <span class="n">x_center</span> <span class="o">=</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale_w</span>
+                    <span class="n">y_center</span> <span class="o">=</span> <span class="p">(</span><span class="n">j</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">/</span> <span class="n">scale_h</span>
+
+                    <span class="k">for</span> <span class="n">min_box</span> <span class="ow">in</span> <span class="n">min_boxes</span><span class="p">[</span><span class="n">index</span><span class="p">]:</span>
+                        <span class="n">w</span> <span class="o">=</span> <span class="n">min_box</span> <span class="o">/</span> <span class="n">image_size</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                        <span class="n">h</span> <span class="o">=</span> <span class="n">min_box</span> <span class="o">/</span> <span class="n">image_size</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                        <span class="n">priors</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">x_center</span><span class="p">,</span> <span class="n">y_center</span><span class="p">,</span> <span class="n">w</span><span class="p">,</span> <span class="n">h</span><span class="p">])</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;priors nums:</span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">priors</span><span class="p">)))</span>
+        <span class="n">priors</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">priors</span><span class="p">)</span>  <span class="c1"># .view(-1, 4)</span>
+        <span class="k">if</span> <span class="n">clamp</span><span class="p">:</span>
+            <span class="n">torch</span><span class="o">.</span><span class="n">clamp</span><span class="p">(</span><span class="n">priors</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">priors</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">priors</span></div>
+
+<div class="viewcode-block" id="Ssd.define_img_size"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.Ssd.define_img_size">[docs]</a>    <span class="k">def</span> <span class="nf">define_img_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">640</span><span class="p">):</span>
+        <span class="k">global</span> <span class="n">image_size</span><span class="p">,</span> <span class="n">feature_map_w_h_list</span><span class="p">,</span> <span class="n">priors</span>
+        <span class="n">img_size_dict</span> <span class="o">=</span> <span class="p">{</span><span class="mi">128</span><span class="p">:</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">96</span><span class="p">],</span> <span class="mi">160</span><span class="p">:</span> <span class="p">[</span><span class="mi">160</span><span class="p">,</span> <span class="mi">120</span><span class="p">],</span> <span class="mi">320</span><span class="p">:</span> <span class="p">[</span><span class="mi">320</span><span class="p">,</span> <span class="mi">240</span><span class="p">],</span> <span class="mi">480</span><span class="p">:</span> <span class="p">[</span><span class="mi">480</span><span class="p">,</span> <span class="mi">360</span><span class="p">],</span> <span class="mi">640</span><span class="p">:</span> <span class="p">[</span><span class="mi">640</span><span class="p">,</span> <span class="mi">480</span><span class="p">],</span>
+                         <span class="mi">1280</span><span class="p">:</span> <span class="p">[</span><span class="mi">1280</span><span class="p">,</span> <span class="mi">960</span><span class="p">]}</span>
+
+        <span class="n">min_boxes</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">10</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">24</span><span class="p">],</span> <span class="p">[</span><span class="mi">32</span><span class="p">,</span> <span class="mi">48</span><span class="p">],</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">96</span><span class="p">],</span> <span class="p">[</span><span class="mi">128</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">256</span><span class="p">]]</span>
+        <span class="n">shrinkage_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">feature_map_w_h_list_dict</span> <span class="o">=</span> <span class="p">{</span><span class="mi">128</span><span class="p">:</span> <span class="p">[[</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">],</span> <span class="p">[</span><span class="mi">12</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">2</span><span class="p">]],</span> <span class="mi">160</span><span class="p">:</span> <span class="p">[[</span><span class="mi">20</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="p">[</span><span class="mi">15</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">]],</span>
+                                     <span class="mi">320</span><span class="p">:</span> <span class="p">[[</span><span class="mi">40</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="p">[</span><span class="mi">30</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="mi">4</span><span class="p">]],</span> <span class="mi">480</span><span class="p">:</span> <span class="p">[[</span><span class="mi">60</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">8</span><span class="p">],</span> <span class="p">[</span><span class="mi">45</span><span class="p">,</span> <span class="mi">23</span><span class="p">,</span> <span class="mi">12</span><span class="p">,</span> <span class="mi">6</span><span class="p">]],</span>
+                                     <span class="mi">640</span><span class="p">:</span> <span class="p">[[</span><span class="mi">80</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">10</span><span class="p">],</span> <span class="p">[</span><span class="mi">60</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">15</span><span class="p">,</span> <span class="mi">8</span><span class="p">]],</span>
+                                     <span class="mi">1280</span><span class="p">:</span> <span class="p">[[</span><span class="mi">160</span><span class="p">,</span> <span class="mi">80</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">20</span><span class="p">],</span> <span class="p">[</span><span class="mi">120</span><span class="p">,</span> <span class="mi">60</span><span class="p">,</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">15</span><span class="p">]]}</span>
+        <span class="n">feature_map_w_h_list</span> <span class="o">=</span> <span class="n">feature_map_w_h_list_dict</span><span class="p">[</span><span class="n">size</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">image_size</span><span class="p">)):</span>
+            <span class="n">item_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">feature_map_w_h_list</span><span class="p">[</span><span class="n">i</span><span class="p">])):</span>
+                <span class="n">item_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">image_size</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">/</span> <span class="n">feature_map_w_h_list</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">k</span><span class="p">])</span>
+            <span class="n">shrinkage_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item_list</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">priors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">generate_priors</span><span class="p">(</span><span class="n">feature_map_w_h_list_dict</span><span class="p">[</span><span class="n">size</span><span class="p">],</span> <span class="n">shrinkage_list</span><span class="p">,</span> <span class="n">img_size_dict</span><span class="p">[</span><span class="n">size</span><span class="p">],</span>
+                                           <span class="n">min_boxes</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Ssd.init_from_pretrained_ssd"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.Ssd.init_from_pretrained_ssd">[docs]</a>    <span class="k">def</span> <span class="nf">init_from_pretrained_ssd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">model</span><span class="p">):</span>
+        <span class="k">def</span> <span class="nf">_xavier_init_</span><span class="p">(</span><span class="n">m</span><span class="p">:</span> <span class="n">Layer</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">m</span><span class="p">,</span> <span class="p">(</span><span class="n">Conv2d</span><span class="p">,</span> <span class="n">DepthwiseConv2d</span><span class="p">)):</span>
+                <span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">xavier_uniform_</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="n">map_location</span><span class="o">=</span><span class="k">lambda</span> <span class="n">storage</span><span class="p">,</span> <span class="n">loc</span><span class="p">:</span> <span class="n">storage</span><span class="p">)</span>
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="n">state_dict</span><span class="p">[</span><span class="s1">&#39;state_dict&#39;</span><span class="p">]</span>
+        <span class="n">state_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">state_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span>
+                      <span class="ow">not</span> <span class="p">(</span><span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;classification_headers&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">k</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;regression_headers&quot;</span><span class="p">))}</span>
+        <span class="n">model_dict</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_dict</span><span class="p">()</span>
+        <span class="n">model_dict</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state_dict</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">load_state_dict</span><span class="p">(</span><span class="n">model_dict</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">classification_headers</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_xavier_init_</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">regression_headers</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">_xavier_init_</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="Ssd.compute_header"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.Ssd.compute_header">[docs]</a>    <span class="k">def</span> <span class="nf">compute_header</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">x</span><span class="p">):</span>
+        <span class="n">confidence</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">classification_headers</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">confidence</span> <span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">confidence</span> <span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">confidence</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">)</span>
+
+        <span class="n">location</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">regression_headers</span><span class="p">[</span><span class="n">i</span><span class="p">](</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="n">location</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="n">location</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">location</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">confidence</span><span class="p">,</span> <span class="n">location</span></div>
+
+<div class="viewcode-block" id="Ssd.forward"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.Ssd.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">confidences</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backbond1</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">confidence0</span><span class="p">,</span> <span class="n">location0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_header</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+        <span class="n">confidences</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">confidence0</span><span class="p">)</span>
+        <span class="n">locations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">location0</span><span class="p">)</span>
+
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backbond2</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">confidence1</span><span class="p">,</span> <span class="n">location1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_header</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+        <span class="n">confidences</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">confidence1</span><span class="p">)</span>
+        <span class="n">locations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">location1</span><span class="p">)</span>
+
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">backbond3</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">confidence2</span><span class="p">,</span> <span class="n">location2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_header</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+        <span class="n">confidences</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">confidence2</span><span class="p">)</span>
+        <span class="n">locations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">location2</span><span class="p">)</span>
+
+        <span class="n">x</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="n">confidence3</span><span class="p">,</span> <span class="n">location3</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">compute_header</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">x</span><span class="p">)</span>
+        <span class="n">confidences</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">confidence3</span><span class="p">)</span>
+        <span class="n">locations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">location3</span><span class="p">)</span>
+
+        <span class="n">confidences</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">confidences</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">locations</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">(</span><span class="n">locations</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">training</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">confidences</span><span class="p">,</span> <span class="n">locations</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">confidences</span> <span class="o">=</span> <span class="n">softmax</span><span class="p">(</span><span class="n">confidences</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+            <span class="n">locations</span> <span class="o">=</span> <span class="n">decode</span><span class="p">(</span><span class="n">locations</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">priors</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">variance</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">confidences</span><span class="p">,</span> <span class="n">locations</span></div></div>
+
+
+<div class="viewcode-block" id="SsdDetectionModel"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel">[docs]</a><span class="k">class</span> <span class="nc">SsdDetectionModel</span><span class="p">(</span><span class="n">ImageDetectionModel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">input_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">SsdDetectionModel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">preprocess_flow</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span> <span class="o">=</span> <span class="mf">0.7</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">iou_threshold</span> <span class="o">=</span> <span class="mf">0.3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">palette</span> <span class="o">=</span> <span class="p">{}</span>
+
+<div class="viewcode-block" id="SsdDetectionModel.area_of"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel.area_of">[docs]</a>    <span class="k">def</span> <span class="nf">area_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left_top</span><span class="p">,</span> <span class="n">right_bottom</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the areas of rectangles given two corners.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            left_top (N, 2): left top corner.</span>
+<span class="sd">            right_bottom (N, 2): right bottom corner.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            area (N): return the area.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">hw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">right_bottom</span> <span class="o">-</span> <span class="n">left_top</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">hw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">hw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SsdDetectionModel.iou_of"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel.iou_of">[docs]</a>    <span class="k">def</span> <span class="nf">iou_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes0</span><span class="p">,</span> <span class="n">boxes1</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return intersection-over-union (Jaccard index) of boxes.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            boxes0 (N, 4): ground truth boxes.</span>
+<span class="sd">            boxes1 (N or 1, 4): predicted boxes.</span>
+<span class="sd">            eps: a small number to avoid 0 as denominator.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            iou (N): IoU values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">overlap_left_top</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">overlap_right_bottom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+
+        <span class="n">overlap_area</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">overlap_left_top</span><span class="p">,</span> <span class="n">overlap_right_bottom</span><span class="p">)</span>
+        <span class="n">area0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+        <span class="n">area1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+        <span class="k">return</span> <span class="n">overlap_area</span> <span class="o">/</span> <span class="p">(</span><span class="n">area0</span> <span class="o">+</span> <span class="n">area1</span> <span class="o">-</span> <span class="n">overlap_area</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SsdDetectionModel.hard_nms"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel.hard_nms">[docs]</a>    <span class="k">def</span> <span class="nf">hard_nms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">box_scores</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">candidate_size</span><span class="o">=</span><span class="mi">200</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            box_scores (N, 5): boxes in corner-form and probabilities.</span>
+<span class="sd">            iou_threshold: intersection over union threshold.</span>
+<span class="sd">            top_k: keep top_k results. If k &lt;= 0, keep all the results.</span>
+<span class="sd">            candidate_size: only consider the candidates with the highest scores.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">             picked: a list of indexes of the kept boxes</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">box_scores</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">box_scores</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">box_scores</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">boxes</span> <span class="o">=</span> <span class="n">box_scores</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">picked</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># _, indexes = scores.sort(descending=True)</span>
+        <span class="n">indexes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+        <span class="c1"># indexes = indexes[:candidate_size]</span>
+        <span class="n">indexes</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[</span><span class="o">-</span><span class="n">candidate_size</span><span class="p">:]</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">indexes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># current = indexes[0]</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">picked</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+            <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">top_k</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">picked</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">indexes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">current_box</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">current</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="c1"># indexes = indexes[1:]</span>
+            <span class="n">indexes</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">rest_boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">indexes</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="n">iou</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">iou_of</span><span class="p">(</span><span class="n">rest_boxes</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">current_box</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="p">)</span>
+            <span class="n">indexes</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[</span><span class="n">iou</span> <span class="o">&lt;=</span> <span class="n">iou_threshold</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">box_scores</span><span class="p">[</span><span class="n">picked</span><span class="p">,</span> <span class="p">:],</span> <span class="n">picked</span></div>
+
+<div class="viewcode-block" id="SsdDetectionModel.nms"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel.nms">[docs]</a>    <span class="k">def</span> <span class="nf">nms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.3</span><span class="p">):</span>
+        <span class="c1"># if there are no boxes, return an empty list</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="c1"># initialize the list of picked indexes</span>
+        <span class="n">pick</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># grab the coordinates of the bounding boxes</span>
+        <span class="n">x1</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">y1</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">x2</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+        <span class="n">y2</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span>
+
+        <span class="c1"># compute the area of the bounding boxes and sort the bounding</span>
+        <span class="c1"># boxes by the bottom-right y-coordinate of the bounding box</span>
+        <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y2</span> <span class="o">-</span> <span class="n">y1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">idxs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">y2</span><span class="p">)</span>
+
+        <span class="c1"># keep looping while some indexes still remain in the indexes</span>
+        <span class="c1"># list</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">idxs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># grab the last index in the indexes list, add the index</span>
+            <span class="c1"># value to the list of picked indexes, then initialize</span>
+            <span class="c1"># the suppression list (i.e. indexes that will be deleted)</span>
+            <span class="c1"># using the last index</span>
+            <span class="n">last</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">idxs</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="n">idxs</span><span class="p">[</span><span class="n">last</span><span class="p">]</span>
+            <span class="n">pick</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">suppress</span> <span class="o">=</span> <span class="p">[</span><span class="n">last</span><span class="p">]</span>
+
+            <span class="c1"># loop over all indexes in the indexes list</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">last</span><span class="p">):</span>
+                <span class="c1"># grab the current index</span>
+                <span class="n">j</span> <span class="o">=</span> <span class="n">idxs</span><span class="p">[</span><span class="n">pos</span><span class="p">]</span>
+
+                <span class="c1"># find the largest (x, y) coordinates for the start of</span>
+                <span class="c1"># the bounding box and the smallest (x, y) coordinates</span>
+                <span class="c1"># for the end of the bounding box</span>
+                <span class="n">xx1</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">x1</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">x1</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">yy1</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">y1</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y1</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">xx2</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">x2</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">x2</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">yy2</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">y2</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y2</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+
+                <span class="c1"># compute the width and height of the bounding box</span>
+                <span class="n">w</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">xx2</span> <span class="o">-</span> <span class="n">xx1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">h</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">yy2</span> <span class="o">-</span> <span class="n">yy1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+                <span class="c1"># compute the ratio of overlap between the computed</span>
+                <span class="c1"># bounding box and the bounding box in the area list</span>
+                <span class="n">overlap</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">w</span> <span class="o">*</span> <span class="n">h</span><span class="p">)</span> <span class="o">/</span> <span class="n">area</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+
+                <span class="c1"># if there is sufficient overlap, suppress the</span>
+                <span class="c1"># current bounding box</span>
+                <span class="k">if</span> <span class="n">overlap</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">:</span>
+                    <span class="n">suppress</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+
+            <span class="c1"># delete all indexes from the index list that are in the</span>
+            <span class="c1"># suppression list</span>
+            <span class="n">idxs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">idxs</span><span class="p">,</span> <span class="n">suppress</span><span class="p">)</span>
+
+        <span class="c1"># return only the bounding boxes that were picked</span>
+        <span class="k">return</span> <span class="n">boxes</span><span class="p">[</span><span class="n">pick</span><span class="p">],</span> <span class="n">pick</span></div>
+
+<div class="viewcode-block" id="SsdDetectionModel.infer_single_image"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel.infer_single_image">[docs]</a>    <span class="k">def</span> <span class="nf">infer_single_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">built</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+                <span class="n">img</span> <span class="o">=</span> <span class="n">image2array</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+                    <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+                <span class="n">img_orig</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+                <span class="k">for</span> <span class="n">func</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">preprocess_flow</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+                        <span class="n">img</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">func</span><span class="o">.</span><span class="vm">__qualname__</span> <span class="o">==</span> <span class="s1">&#39;resize.&lt;locals&gt;.img_op&#39;</span><span class="p">:</span>
+                            <span class="n">scale</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">scale</span>
+
+                <span class="n">img</span> <span class="o">=</span> <span class="n">image_backend_adaption</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+                <span class="n">inp</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                    <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">loss_weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">is_cuda</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">loss_weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+
+                <span class="n">confidence</span><span class="p">,</span> <span class="n">boxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">(</span><span class="n">inp</span><span class="p">)</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">confidence</span> <span class="o">=</span> <span class="n">confidence</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="n">probs</span><span class="p">,</span> <span class="n">label</span> <span class="o">=</span> <span class="n">confidence</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">probs</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">probs</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="n">label</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="p">:]</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">label</span> <span class="o">&gt;</span> <span class="mi">0</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">probs</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="n">label</span> <span class="o">=</span> <span class="n">label</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="p">:]</span>
+
+                <span class="k">if</span> <span class="n">boxes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">boxes</span> <span class="o">=</span> <span class="n">to_numpy</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span>
+                    <span class="n">label</span> <span class="o">=</span> <span class="n">to_numpy</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
+                    <span class="n">probs</span> <span class="o">=</span> <span class="n">to_numpy</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span>
+                    <span class="n">box_probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">boxes</span><span class="p">,</span> <span class="n">label</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">probs</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="n">box_probs</span><span class="p">,</span> <span class="n">keep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hard_nms</span><span class="p">(</span><span class="n">box_probs</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">iou_threshold</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="p">)</span>
+                    <span class="n">boxes</span> <span class="o">=</span> <span class="n">box_probs</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+                    <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">*=</span> <span class="mi">640</span>
+                    <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">::</span><span class="mi">2</span><span class="p">]</span> <span class="o">*=</span> <span class="mi">480</span>
+                    <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">/=</span> <span class="n">scale</span>
+
+                    <span class="c1"># boxes = boxes * (1 / scale[0])</span>
+                    <span class="k">return</span> <span class="n">img_orig</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">box_probs</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span> <span class="n">box_probs</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">img_orig</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">PrintException</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;the model is not built yet.&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SsdDetectionModel.infer_then_draw_single_image"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_ssd.SsdDetectionModel.infer_then_draw_single_image">[docs]</a>    <span class="k">def</span> <span class="nf">infer_then_draw_single_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">):</span>
+        <span class="n">rgb_image</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">infer_single_image</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+        <span class="n">bgr_image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">rgb_image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGB2BGR</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">boxes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">boxes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">boxes</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">labels</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)):</span>
+                <span class="n">this_box</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
+                <span class="n">this_label</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
+                <span class="n">cv2</span><span class="o">.</span><span class="n">rectangle</span><span class="p">(</span><span class="n">bgr_image</span><span class="p">,</span> <span class="p">(</span><span class="n">this_box</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">this_box</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="p">(</span><span class="n">this_box</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">this_box</span><span class="p">[</span><span class="mi">3</span><span class="p">]),</span>
+                              <span class="bp">self</span><span class="o">.</span><span class="n">palette</span><span class="p">[</span><span class="n">this_label</span><span class="p">],</span>
+                              <span class="mi">1</span> <span class="k">if</span> <span class="n">bgr_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">480</span> <span class="k">else</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">bgr_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">640</span> <span class="k">else</span> <span class="mi">3</span> <span class="k">if</span>
+                              <span class="n">bgr_image</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">960</span> <span class="k">else</span> <span class="mi">4</span><span class="p">)</span>
+        <span class="n">rgb_image</span> <span class="o">=</span> <span class="n">cv2</span><span class="o">.</span><span class="n">cvtColor</span><span class="p">(</span><span class="n">bgr_image</span><span class="p">,</span> <span class="n">cv2</span><span class="o">.</span><span class="n">COLOR_RGB2BGR</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">rgb_image</span></div></div>
+
+</pre></div>
+
+        </div>
+        <div class="side-doc-outline">
+            <div class="side-doc-outline--content"> 
+            </div>
+        </div>
+
+      <div class="clearer"></div>
+    </div><div class="pagenation">
+  </div>
+        <footer class="mdl-mini-footer">
+    <div class="mdl-mini-footer__left-section">
+      <div class="mdl-logo">trident</div>
+      <div>
+        
+        
+      </div>
+    </div>
+
+    <div class="mdl-mini-footer__right-section">
+        <div>&copy; Copyright 2020, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+    </div>
+</footer>
+        </main>
+    </div>
+  </body>
+</html>

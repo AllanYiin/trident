@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    
+    <title>trident.models.pytorch_yolo &#8212; trident 5.5.0 documentation</title>
+
+    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+  </head>
+<body>
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header mdl-layout--fixed-drawer"><header class="mdl-layout__header mdl-layout__header--waterfall ">
+    <div class="mdl-layout__header-row">
+        
+        <!-- Title -->
+        <span class="mdl-layout-title">
+            <a class="brand" href="../../../index.html">
+                trident
+            </a>
+        </span>
+        
+        <nav class="mdl-navigation breadcrumb">
+            <a class="mdl-navigation__link" href="../../index.html">Module code</a><i class="material-icons">navigate_next</i>
+            <a class="mdl-navigation__link is-active">trident.models.pytorch_yolo</a>
+        </nav>
+        <div class="mdl-layout-spacer"></div>
+        <nav class="mdl-navigation">
+        
+<form class="form-inline pull-sm-right" action="../../../search.html" method="get">
+      <div class="mdl-textfield mdl-js-textfield mdl-textfield--expandable mdl-textfield--floating-label mdl-textfield--align-right">
+        <label id="quick-search-icon" class="mdl-button mdl-js-button mdl-button--icon"  for="waterfall-exp">
+            <i class="material-icons">search</i>
+        </label>
+        <div class="mdl-textfield__expandable-holder">
+          <input class="mdl-textfield__input" type="text" name="q"  id="waterfall-exp" placeholder="Search" />
+          <input type="hidden" name="check_keywords" value="yes" />
+          <input type="hidden" name="area" value="default" />
+        </div>
+      </div>
+      <div class="mdl-tooltip" data-mdl-for="quick-search-icon">
+      Quick search
+      </div>
+</form>
+        
+        </nav>
+    </div>
+    <div class="mdl-layout__header-row header-links">
+      <div class="mdl-layout-spacer"></div>
+      <nav class="mdl-navigation">
+          <a  class="mdl-navigation__link" href="../../../index.html">
+                  <i class="material-icons navigation-link-icon">home</i>
+                  Home
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  <i class="material-icons navigation-link-icon">launch</i>
+                  ExternalLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  
+                  NoIconLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="https://github.com/AllanYiin/trident">
+                  <i class="material-icons navigation-link-icon">link</i>
+                  GitHub
+              </a>
+      </nav>
+    </div>
+</header><header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+        <main class="mdl-layout__content" tabIndex="0">
+<header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+
+    <div class="document">
+        <div class="page-content">
+        
+  <h1>Source code for trident.models.pytorch_yolo</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
+
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">repeat</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">container_abcs</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
+
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span><span class="p">,</span> <span class="n">get_device</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_ops</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.image_common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.bbox_common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.utils</span> <span class="k">import</span> <span class="n">download_model_from_google_drive</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_activations</span> <span class="k">import</span> <span class="n">get_activation</span><span class="p">,</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">Mish</span><span class="p">,</span> <span class="n">LeakyRelu</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_blocks</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_layers</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_normalizations</span> <span class="k">import</span> <span class="n">get_normalization</span><span class="p">,</span> <span class="n">BatchNorm2d</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_pooling</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.optims.pytorch_trainer</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.misc.visualization_utils</span> <span class="k">import</span> <span class="n">generate_palette</span><span class="p">,</span><span class="n">plot_bbox</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span> <span class="s1">&#39;yolo4_body&#39;</span><span class="p">,</span> <span class="s1">&#39;YoloDetectionModel&#39;</span><span class="p">,</span> <span class="s1">&#39;DarknetConv2D&#39;</span><span class="p">,</span> <span class="s1">&#39;DarknetConv2D_BN_Mish&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;DarknetConv2D_BN_Leaky&#39;</span><span class="p">,</span> <span class="s1">&#39;YoloLayer&#39;</span><span class="p">]</span>
+
+<span class="n">_session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">()</span>
+<span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">_epsilon</span> <span class="o">=</span> <span class="n">_session</span><span class="o">.</span><span class="n">epsilon</span>
+<span class="n">_trident_dir</span> <span class="o">=</span> <span class="n">_session</span><span class="o">.</span><span class="n">trident_dir</span>
+
+<span class="n">anchors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">12</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">19</span><span class="p">,</span> <span class="mi">36</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">28</span><span class="p">,</span> <span class="mi">36</span><span class="p">,</span> <span class="mi">75</span><span class="p">,</span> <span class="mi">76</span><span class="p">,</span> <span class="mi">55</span><span class="p">,</span> <span class="mi">72</span><span class="p">,</span> <span class="mi">146</span><span class="p">,</span> <span class="mi">142</span><span class="p">,</span> <span class="mi">110</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">243</span><span class="p">,</span> <span class="mi">459</span><span class="p">,</span> <span class="mi">401</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+    <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+
+
+
+<div class="viewcode-block" id="DarknetConv2D"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.DarknetConv2D">[docs]</a><span class="k">def</span> <span class="nf">DarknetConv2D</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Wrapper to set Darknet parameters for Convolution2D.&quot;&quot;&quot;</span>
+    <span class="n">darknet_conv_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;use_bias&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
+    <span class="n">darknet_conv_kwargs</span><span class="p">[</span><span class="s1">&#39;auto_pad&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span> <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;strides&#39;</span><span class="p">)</span><span class="o">==</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">2</span><span class="p">)</span> <span class="k">else</span> <span class="kc">True</span>
+    <span class="n">darknet_conv_kwargs</span><span class="p">[</span><span class="s1">&#39;use_bias&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="n">darknet_conv_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Conv2d</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">darknet_conv_kwargs</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="DarknetConv2D_BN_Leaky"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.DarknetConv2D_BN_Leaky">[docs]</a><span class="k">def</span> <span class="nf">DarknetConv2D_BN_Leaky</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Darknet Convolution2D followed by BatchNormalization and LeakyReLU.&quot;&quot;&quot;</span>
+    <span class="n">darknet_conv_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;use_bias&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span><span class="s1">&#39;normalization&#39;</span><span class="p">:</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.03</span><span class="p">,</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">)}</span>
+    <span class="n">darknet_conv_kwargs</span><span class="p">[</span><span class="s1">&#39;activation&#39;</span><span class="p">]</span><span class="o">=</span><span class="n">LeakyRelu</span><span class="p">(</span><span class="n">alpha</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">darknet_conv_kwargs</span><span class="p">[</span><span class="s1">&#39;auto_pad&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span> <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;strides&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="k">else</span> <span class="kc">True</span>
+    <span class="n">darknet_conv_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Conv2d_Block</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">darknet_conv_kwargs</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="DarknetConv2D_BN_Mish"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.DarknetConv2D_BN_Mish">[docs]</a><span class="k">def</span> <span class="nf">DarknetConv2D_BN_Mish</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Darknet Convolution2D followed by BatchNormalization and LeakyReLU.&quot;&quot;&quot;</span>
+    <span class="n">darknet_conv_kwargs</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;use_bias&#39;</span><span class="p">:</span> <span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;normalization&#39;</span><span class="p">:</span><span class="n">BatchNorm2d</span><span class="p">(</span><span class="n">momentum</span><span class="o">=</span><span class="mf">0.03</span><span class="p">,</span><span class="n">eps</span><span class="o">=</span><span class="mf">1e-4</span><span class="p">),</span> <span class="s1">&#39;activation&#39;</span><span class="p">:</span> <span class="n">Mish</span><span class="p">}</span>
+    <span class="n">darknet_conv_kwargs</span><span class="p">[</span><span class="s1">&#39;auto_pad&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span> <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;strides&#39;</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span> <span class="k">else</span> <span class="kc">True</span>
+    <span class="n">darknet_conv_kwargs</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Conv2d_Block</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">darknet_conv_kwargs</span><span class="p">)</span></div>
+
+
+<span class="k">def</span> <span class="nf">resblock_body</span><span class="p">(</span><span class="n">num_filters</span><span class="p">,</span> <span class="n">num_blocks</span><span class="p">,</span> <span class="n">all_narrow</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+    <span class="c1"># block=Sequential()</span>
+    <span class="c1"># block.add_module(name+&#39;_preconv1&#39;,DarknetConv2D_BN_Mish((3, 3),num_filters , strides=(2, 2),auto_pad=False, padding=((1,0),(1,0)),name=name+&#39;_preconv1&#39;))</span>
+    <span class="c1"># shortconv=DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters, name=name + &#39;_shortconv&#39;)</span>
+    <span class="c1"># branch=Sequential(</span>
+    <span class="c1">#             DarknetConv2D_BN_Mish((1, 1), num_filters // 2 if all_narrow else num_filters,name=name+&#39;_mainconv&#39;),</span>
+    <span class="c1">#             For(range(num_blocks), lambda i:</span>
+    <span class="c1">#                 ShortCut2d(</span>
+    <span class="c1">#                     Identity(),</span>
+    <span class="c1">#                     Sequential(</span>
+    <span class="c1">#                         DarknetConv2D_BN_Mish((1, 1),num_filters // 2,name=name+&#39;_for{0}_1&#39;.format(i)),</span>
+    <span class="c1">#                         DarknetConv2D_BN_Mish((3, 3),num_filters // 2 if all_narrow else num_filters,name=name+&#39;_for{0}_2&#39;.format(i))</span>
+    <span class="c1">#                     ),</span>
+    <span class="c1">#                     mode=&#39;add&#39;)</span>
+    <span class="c1">#             ),</span>
+    <span class="c1">#             DarknetConv2D_BN_Mish( (1, 1),num_filters // 2 if all_narrow else num_filters,name=name+&#39;_postconv&#39;)</span>
+    <span class="c1">#         )</span>
+    <span class="c1"># block.add_module(name+&#39;_route&#39;,ShortCut2d(branch,shortconv,mode=&#39;concate&#39;,name=name+&#39;_route&#39;))</span>
+    <span class="c1"># block.add_module(name+&#39;_convblock5&#39;,DarknetConv2D_BN_Mish((1,1),num_filters,name=name+&#39;_convblock5&#39;))</span>
+    <span class="c1"># return block</span>
+    <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span>
+        <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="n">num_filters</span> <span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span><span class="n">auto_pad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">),(</span><span class="mi">1</span><span class="p">,</span><span class="mi">0</span><span class="p">)),</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_preconv1&#39;</span><span class="p">),</span>
+        <span class="n">ShortCut2d</span><span class="p">(</span>
+            <span class="p">{</span>
+            <span class="mi">1</span><span class="p">:</span><span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">all_narrow</span> <span class="k">else</span> <span class="n">num_filters</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_shortconv&#39;</span><span class="p">),</span>
+            <span class="mi">0</span><span class="p">:</span><span class="n">Sequential</span><span class="p">(</span>
+                <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">all_narrow</span> <span class="k">else</span> <span class="n">num_filters</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_mainconv&#39;</span><span class="p">),</span>
+                <span class="n">For</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">num_blocks</span><span class="p">),</span> <span class="k">lambda</span> <span class="n">i</span><span class="p">:</span>
+                    <span class="n">ShortCut2d</span><span class="p">(</span>
+                        <span class="n">Identity</span><span class="p">(),</span>
+                        <span class="n">Sequential</span><span class="p">(</span>
+                            <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="n">num_filters</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_for</span><span class="si">{0}</span><span class="s1">_1&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)),</span>
+                            <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="n">num_filters</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">all_narrow</span> <span class="k">else</span> <span class="n">num_filters</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_for</span><span class="si">{0}</span><span class="s1">_2&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+                        <span class="p">),</span>
+                        <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;add&#39;</span><span class="p">)</span>
+                <span class="p">),</span>
+                <span class="n">DarknetConv2D_BN_Mish</span><span class="p">(</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="n">num_filters</span> <span class="o">//</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">all_narrow</span> <span class="k">else</span> <span class="n">num_filters</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_postconv&#39;</span><span class="p">)</span>
+            <span class="p">)},</span>
+            <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_route&#39;</span><span class="p">),</span>
+
+        <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span><span class="n">num_filters</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="o">+</span><span class="s1">&#39;_convblock5&#39;</span><span class="p">)</span>
+        <span class="p">)</span>
+
+
+
+
+<span class="k">def</span> <span class="nf">darknet_body</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span>
+        <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">32</span><span class="p">),</span>
+        <span class="n">resblock_body</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">all_narrow</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="n">resblock_body</span><span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>
+        <span class="n">resblock_body</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+        <span class="n">resblock_body</span><span class="p">(</span><span class="mi">512</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span>
+        <span class="n">resblock_body</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span>
+    <span class="p">)</span>
+
+<div class="viewcode-block" id="yolo4_body"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.yolo4_body">[docs]</a><span class="k">def</span> <span class="nf">yolo4_body</span><span class="p">(</span><span class="n">num_classes</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span><span class="n">image_size</span><span class="o">=</span><span class="mi">608</span><span class="p">):</span>
+    <span class="n">anchors1</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">12</span><span class="p">,</span> <span class="mi">16</span><span class="p">,</span> <span class="mi">19</span><span class="p">,</span> <span class="mi">36</span><span class="p">,</span> <span class="mi">40</span><span class="p">,</span> <span class="mi">28</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span><span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">anchors2</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">36</span><span class="p">,</span> <span class="mi">75</span><span class="p">,</span> <span class="mi">76</span><span class="p">,</span> <span class="mi">55</span><span class="p">,</span> <span class="mi">72</span><span class="p">,</span> <span class="mi">146</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span><span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">anchors3</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">142</span><span class="p">,</span> <span class="mi">110</span><span class="p">,</span> <span class="mi">192</span><span class="p">,</span> <span class="mi">243</span><span class="p">,</span> <span class="mi">459</span><span class="p">,</span> <span class="mi">401</span><span class="p">])</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span><span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">num_anchors</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">anchors1</span><span class="p">)</span>
+    <span class="sd">&quot;&quot;&quot;Create YOLO_V4 model CNN body in Keras.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span>
+            <span class="n">DarknetConv2D_BN_Mish</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">32</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;first_layer&#39;</span><span class="p">),</span>
+            <span class="n">resblock_body</span><span class="p">(</span><span class="mi">64</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">all_narrow</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block64&#39;</span><span class="p">),</span>
+            <span class="n">resblock_body</span><span class="p">(</span><span class="mi">128</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block128&#39;</span><span class="p">),</span>
+            <span class="n">resblock_body</span><span class="p">(</span><span class="mi">256</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block256&#39;</span><span class="p">),</span>
+            <span class="n">ShortCut2d</span><span class="p">(</span>
+                <span class="p">{</span>
+                    <span class="mi">1</span><span class="p">:</span><span class="n">Sequential</span><span class="p">(</span>
+                        <span class="n">resblock_body</span><span class="p">(</span><span class="mi">512</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block512&#39;</span><span class="p">),</span>
+                        <span class="n">ShortCut2d</span><span class="p">(</span>
+                            <span class="p">{</span>
+                                <span class="mi">1</span><span class="p">:</span><span class="n">Sequential</span><span class="p">(</span>
+                                    <span class="n">resblock_body</span><span class="p">(</span><span class="mi">1024</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;block1024&#39;</span><span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">(</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_maxpool1&#39;</span><span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">(</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="mi">1024</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_maxpool2&#39;</span><span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span><span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_maxpool3&#39;</span><span class="p">),</span>
+                                    <span class="n">ShortCut2d</span><span class="p">(</span>
+                                        <span class="n">MaxPool2d</span><span class="p">((</span><span class="mi">13</span><span class="p">,</span><span class="mi">13</span><span class="p">),</span><span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="mi">1</span><span class="p">),</span><span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                                        <span class="n">MaxPool2d</span><span class="p">((</span><span class="mi">9</span><span class="p">,</span><span class="mi">9</span><span class="p">),</span> <span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                                        <span class="n">MaxPool2d</span><span class="p">((</span><span class="mi">5</span><span class="p">,</span><span class="mi">5</span><span class="p">),</span> <span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                                        <span class="n">Identity</span><span class="p">(),</span>
+                                        <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span>
+                                    <span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_1&#39;</span><span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">1024</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_2&#39;</span><span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y_19&#39;</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_upsample&#39;</span><span class="p">),</span>
+                                    <span class="n">Upsampling2d</span><span class="p">(</span><span class="n">scale_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y19_upsample&#39;</span><span class="p">),</span>
+                                <span class="p">),</span>
+                                <span class="mi">0</span><span class="p">:</span><span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">256</span><span class="p">)</span>
+                            <span class="p">},</span><span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span><span class="p">),</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_1&#39;</span><span class="p">),</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_2&#39;</span><span class="p">),</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_3&#39;</span><span class="p">),</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_4&#39;</span><span class="p">),</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y_38&#39;</span><span class="p">,</span><span class="n">keep_output</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="mi">128</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y_38_upsample&#39;</span><span class="p">),</span>
+                        <span class="n">Upsampling2d</span><span class="p">(</span><span class="n">scale_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y_38_upsample&#39;</span><span class="p">),</span>
+                    <span class="p">),</span>
+                    <span class="mi">0</span><span class="p">:</span><span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">128</span><span class="p">)</span>
+                <span class="p">},</span>
+                <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span><span class="p">),</span>
+            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">128</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y76_concate1&#39;</span><span class="p">),</span>
+            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y76_concate2&#39;</span><span class="p">),</span>
+            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">128</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y76_concate3&#39;</span><span class="p">),</span>
+            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y76_concate4&#39;</span><span class="p">),</span>
+            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">128</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y76_concate5&#39;</span><span class="p">),</span>
+            <span class="n">ShortCut2d</span><span class="p">(</span>
+                <span class="c1">#y76_output</span>
+                <span class="n">Sequential</span><span class="p">(</span>
+                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">(</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y76_output&#39;</span><span class="p">),</span>
+                    <span class="n">DarknetConv2D</span><span class="p">(</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span><span class="n">num_anchors</span> <span class="o">*</span> <span class="p">(</span><span class="n">num_classes</span> <span class="o">+</span> <span class="mi">5</span><span class="p">),</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y76_output&#39;</span><span class="p">),</span>
+                    <span class="n">YoloLayer</span><span class="p">(</span><span class="n">anchors</span><span class="o">=</span><span class="n">anchors1</span><span class="p">,</span><span class="n">num_classes</span><span class="o">=</span><span class="n">num_classes</span><span class="p">,</span><span class="n">grid_size</span><span class="o">=</span><span class="mi">76</span><span class="p">,</span> <span class="n">img_dim</span><span class="o">=</span><span class="n">image_size</span><span class="p">),</span>
+                <span class="n">name</span><span class="o">=</span><span class="s1">&#39;y76_output&#39;</span><span class="p">),</span>
+                <span class="c1"># y38_output</span>
+                <span class="n">Sequential</span><span class="p">(</span>
+                    <span class="n">ShortCut2d</span><span class="p">(</span>
+                        <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y76_downsample&#39;</span><span class="p">),</span>
+                        <span class="n">branch_from</span><span class="o">=</span><span class="s1">&#39;y_38&#39;</span><span class="p">,</span><span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span><span class="p">),</span>
+                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_concate1&#39;</span><span class="p">),</span>
+                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_concate2&#39;</span><span class="p">),</span>
+                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_concate3&#39;</span><span class="p">),</span>
+                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_concate4&#39;</span><span class="p">),</span>
+                    <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_concate5&#39;</span><span class="p">),</span>
+                    <span class="n">ShortCut2d</span><span class="p">(</span>
+                        <span class="n">Sequential</span><span class="p">(</span>
+                            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y38_output&#39;</span><span class="p">),</span>
+                            <span class="n">DarknetConv2D</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_anchors</span> <span class="o">*</span> <span class="p">(</span><span class="n">num_classes</span> <span class="o">+</span> <span class="mi">5</span><span class="p">),</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;y38_output&#39;</span><span class="p">),</span>
+                            <span class="n">YoloLayer</span><span class="p">(</span><span class="n">anchors</span><span class="o">=</span><span class="n">anchors2</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="n">num_classes</span><span class="p">,</span><span class="n">grid_size</span><span class="o">=</span><span class="mi">38</span><span class="p">,</span>  <span class="n">img_dim</span><span class="o">=</span><span class="n">image_size</span><span class="p">),</span>
+                            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;y38_output&#39;</span><span class="p">),</span>
+
+                        <span class="n">Sequential</span><span class="p">(</span>
+                            <span class="n">ShortCut2d</span><span class="p">(</span>
+                                <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">padding</span><span class="o">=</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y38_downsample&#39;</span><span class="p">),</span>
+                                <span class="n">branch_from</span><span class="o">=</span><span class="s1">&#39;y_19&#39;</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span><span class="p">),</span>
+                            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_concate1&#39;</span><span class="p">),</span>
+                            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">1024</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_concate2&#39;</span><span class="p">),</span>
+                            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_concate3&#39;</span><span class="p">),</span>
+                            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">1024</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_concate4&#39;</span><span class="p">),</span>
+                            <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">512</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_concate5&#39;</span><span class="p">),</span>
+                            <span class="n">Sequential</span><span class="p">(</span>
+                                <span class="n">DarknetConv2D_BN_Leaky</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span><span class="mi">1024</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;pre_y19_output&#39;</span><span class="p">),</span>
+                                <span class="n">DarknetConv2D</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_anchors</span> <span class="o">*</span> <span class="p">(</span><span class="n">num_classes</span> <span class="o">+</span> <span class="mi">5</span><span class="p">),</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;y19_output&#39;</span><span class="p">),</span>
+                                <span class="n">YoloLayer</span><span class="p">(</span><span class="n">anchors</span><span class="o">=</span><span class="n">anchors3</span><span class="p">,</span><span class="n">num_classes</span><span class="o">=</span><span class="n">num_classes</span><span class="p">,</span><span class="n">grid_size</span><span class="o">=</span><span class="mi">19</span><span class="p">,</span> <span class="n">img_dim</span><span class="o">=</span><span class="n">image_size</span><span class="p">),</span>
+                            <span class="n">name</span><span class="o">=</span><span class="s1">&#39;y19_output&#39;</span><span class="p">)),</span>
+
+                        <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;concate&#39;</span><span class="p">)</span>
+                <span class="p">)</span>
+                <span class="p">,</span><span class="n">mode</span> <span class="o">=</span> <span class="s1">&#39;concate&#39;</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="YoloLayer"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloLayer">[docs]</a><span class="k">class</span> <span class="nc">YoloLayer</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Detection layer&quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">anchors</span><span class="p">,</span> <span class="n">num_classes</span><span class="p">,</span><span class="n">grid_size</span><span class="p">,</span> <span class="n">img_dim</span><span class="o">=</span><span class="mi">608</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">YoloLayer</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;grid&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">register_buffer</span><span class="p">(</span><span class="s1">&#39;anchors&#39;</span><span class="p">,</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">anchors</span><span class="p">,</span> <span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">()))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_anchors</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">anchors</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span> <span class="o">=</span> <span class="n">num_classes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ignore_thres</span> <span class="o">=</span> <span class="mf">0.5</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mse_loss</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">MSELoss</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bce_loss</span> <span class="o">=</span> <span class="n">nn</span><span class="o">.</span><span class="n">BCELoss</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obj_scale</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">noobj_scale</span> <span class="o">=</span> <span class="mi">100</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">metrics</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">img_dim</span> <span class="o">=</span> <span class="n">img_dim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">=</span> <span class="n">grid_size</span> <span class="c1"># grid size</span>
+
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">compute_grid_offsets</span><span class="p">(</span><span class="n">grid_size</span><span class="p">)</span>
+
+<div class="viewcode-block" id="YoloLayer.compute_grid_offsets"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloLayer.compute_grid_offsets">[docs]</a>    <span class="k">def</span> <span class="nf">compute_grid_offsets</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">):</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">stride</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">img_dim</span> <span class="o">/</span> <span class="n">grid_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">anchor_vec</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">anchors</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">stride</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">anchor_wh</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">anchor_vec</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">num_anchors</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="n">yv</span><span class="p">,</span> <span class="n">xv</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">meshgrid</span><span class="p">([</span><span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">grid_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">get_device</span><span class="p">()),</span> <span class="n">torch</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">grid_size</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">get_device</span><span class="p">())])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">stack</span><span class="p">((</span><span class="n">xv</span><span class="p">,</span> <span class="n">yv</span><span class="p">),</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span><span class="o">.</span><span class="n">float</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid1</span><span class="o">=</span><span class="n">meshgrid</span><span class="p">(</span><span class="n">grid_size</span><span class="p">,</span><span class="n">grid_size</span><span class="p">,</span><span class="n">requires_grad</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">view</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">,</span><span class="n">grid_size</span><span class="p">,</span><span class="mi">2</span><span class="p">])</span></div>
+        <span class="c1"># Calculate offsets for each grid</span>
+
+<div class="viewcode-block" id="YoloLayer.forward"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloLayer.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">targets</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">grid_size</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+        <span class="c1"># # If grid size does not match current we compute new offsets</span>
+        <span class="c1"># if grid_size != self.grid_size:</span>
+        <span class="c1">#     self.compute_grid_offsets(grid_size, cuda=x.is_cuda)</span>
+
+        <span class="n">prediction</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_anchors</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span> <span class="o">+</span> <span class="mi">5</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">,</span> <span class="n">grid_size</span><span class="p">)</span><span class="o">.</span><span class="n">permute</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">contiguous</span><span class="p">()</span>
+
+        <span class="c1"># Get outputs</span>
+        <span class="n">xy</span> <span class="o">=</span> <span class="n">sigmoid</span><span class="p">(</span><span class="n">prediction</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">])</span>  <span class="c1"># Center x</span>
+        <span class="n">wh</span> <span class="o">=</span> <span class="n">prediction</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>  <span class="c1"># Width</span>
+
+        <span class="n">pred_conf</span> <span class="o">=</span> <span class="n">sigmoid</span><span class="p">(</span><span class="n">prediction</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">4</span><span class="p">])</span>  <span class="c1"># Conf</span>
+        <span class="n">pred_cls</span> <span class="o">=</span> <span class="n">sigmoid</span><span class="p">(</span><span class="n">prediction</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">5</span><span class="p">:])</span>  <span class="c1"># Cls pred.</span>
+        <span class="n">cls_probs</span><span class="o">=</span><span class="n">reduce_max</span><span class="p">(</span><span class="n">pred_cls</span><span class="p">,</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span><span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Add offset and scale with anchors</span>
+        <span class="n">pred_boxes</span> <span class="o">=</span> <span class="n">zeros_like</span><span class="p">(</span><span class="n">prediction</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">4</span><span class="p">])</span>
+        <span class="n">pred_boxes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">xy</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
+        <span class="n">pred_boxes</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">exp</span><span class="p">(</span><span class="n">wh</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">anchor_wh</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">get_device</span><span class="p">())</span>
+
+
+        <span class="n">output</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">cat</span><span class="p">((</span><span class="n">pred_boxes</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">stride</span><span class="p">,</span> <span class="n">pred_conf</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">pred_cls</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">num_samples</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_classes</span><span class="p">),),</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="p">)</span>
+        <span class="k">return</span> <span class="n">output</span></div></div>
+        <span class="c1"># if targets is None:  #     return output,  # else:  #     iou_scores, class_mask, obj_mask,</span>
+        <span class="c1"># noobj_mask, tx, ty, tw, th, tcls, tconf = build_targets(  #         pred_boxes=pred_boxes,</span>
+        <span class="c1">#         pred_cls=pred_cls,  #         target=targets,  #         anchors=self.scaled_anchors,</span>
+        <span class="c1">#         ignore_thres=self.ignore_thres,  #     )  #  #     # Loss : Mask outputs to ignore non-existing</span>
+        <span class="c1">#         objects (except with conf. loss)  #     loss_x = self.mse_loss(x[obj_mask], tx[obj_mask])  #</span>
+        <span class="c1">#         loss_y = self.mse_loss(y[obj_mask], ty[obj_mask])  #     loss_w = self.mse_loss(w[obj_mask],</span>
+        <span class="c1">#         tw[obj_mask])  #     loss_h = self.mse_loss(h[obj_mask], th[obj_mask])  #     loss_conf_obj =</span>
+        <span class="c1">#         self.bce_loss(pred_conf[obj_mask], tconf[obj_mask])  #     loss_conf_noobj = self.bce_loss(</span>
+        <span class="c1">#         pred_conf[noobj_mask], tconf[noobj_mask])  #     loss_conf = self.obj_scale * loss_conf_obj +</span>
+        <span class="c1">#         self.noobj_scale * loss_conf_noobj  #     loss_cls = self.bce_loss(pred_cls[obj_mask],</span>
+        <span class="c1">#         tcls[obj_mask])  #     total_loss = loss_x + loss_y + loss_w + loss_h + loss_conf + loss_cls  #  #</span>
+        <span class="c1"># Metrics  #     cls_acc = 100 * class_mask[obj_mask].mean()  #     conf_obj = pred_conf[obj_mask].mean()  #</span>
+        <span class="c1"># conf_noobj = pred_conf[noobj_mask].mean()  #     conf50 = (pred_conf &gt; 0.5).float()  #     iou50 = (</span>
+        <span class="c1"># iou_scores &gt; 0.5).float()  #     iou75 = (iou_scores &gt; 0.75).float()  #     detected_mask = conf50 *</span>
+        <span class="c1"># class_mask * tconf  #     precision = torch.sum(iou50 * detected_mask) / (conf50.sum() + 1e-16)  #</span>
+        <span class="c1"># recall50 = torch.sum(iou50 * detected_mask) / (obj_mask.sum() + 1e-16)  #     recall75 = torch.sum(iou75 *</span>
+        <span class="c1"># detected_mask) / (obj_mask.sum() + 1e-16)  #  #     self.metrics = {  #         &quot;loss&quot;: to_numpy(</span>
+        <span class="c1"># total_loss).item(),  #         &quot;x&quot;:to_numpy(loss_x).item(),  #         &quot;y&quot;: to_numpy(loss_y).item(),</span>
+        <span class="c1">#         &quot;w&quot;: to_numpy(loss_w).item(),  #         &quot;h&quot;: to_numpy(loss_h).item(),  #         &quot;conf&quot;: to_cpu(</span>
+        <span class="c1">#         loss_conf).item(),  #         &quot;cls&quot;: to_numpy(loss_cls).item(),  #         &quot;cls_acc&quot;: to_cpu(</span>
+        <span class="c1">#         cls_acc).item(),  #         &quot;recall50&quot;: to_cpu(recall50).item(),  #         &quot;recall75&quot;: to_cpu(</span>
+        <span class="c1">#         recall75).item(),  #         &quot;precision&quot;: to_cpu(precision).item(),  #         &quot;conf_obj&quot;: to_cpu(</span>
+        <span class="c1">#         conf_obj).item(),  #         &quot;conf_noobj&quot;: to_cpu(conf_noobj).item(),  #         &quot;grid_size&quot;: grid_size,  #     }  #  #     return output, total_loss</span>
+
+
+
+<div class="viewcode-block" id="YoloDetectionModel"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel">[docs]</a><span class="k">class</span> <span class="nc">YoloDetectionModel</span><span class="p">(</span><span class="n">ImageDetectionModel</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">inputs</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">input_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">YoloDetectionModel</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">preprocess_flow</span> <span class="o">=</span> <span class="p">[</span><span class="n">resize</span><span class="p">((</span><span class="n">input_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">],</span> <span class="n">input_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span> <span class="kc">True</span><span class="p">),</span> <span class="n">normalize</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">)]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span> <span class="o">=</span> <span class="mf">0.7</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">iou_threshold</span> <span class="o">=</span> <span class="mf">0.3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">palette</span> <span class="o">=</span> <span class="n">generate_palette</span><span class="p">(</span><span class="mi">80</span><span class="p">)</span>
+
+<div class="viewcode-block" id="YoloDetectionModel.area_of"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel.area_of">[docs]</a>    <span class="k">def</span> <span class="nf">area_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">left_top</span><span class="p">,</span> <span class="n">right_bottom</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Compute the areas of rectangles given two corners.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            left_top (N, 2): left top corner.</span>
+<span class="sd">            right_bottom (N, 2): right bottom corner.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            area (N): return the area.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">hw</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">right_bottom</span> <span class="o">-</span> <span class="n">left_top</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">hw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">hw</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="YoloDetectionModel.iou_of"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel.iou_of">[docs]</a>    <span class="k">def</span> <span class="nf">iou_of</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes0</span><span class="p">,</span> <span class="n">boxes1</span><span class="p">,</span> <span class="n">eps</span><span class="o">=</span><span class="mf">1e-5</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;Return intersection-over-union (Jaccard index) of boxes.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            boxes0 (N, 4): ground truth boxes.</span>
+<span class="sd">            boxes1 (N or 1, 4): predicted boxes.</span>
+<span class="sd">            eps: a small number to avoid 0 as denominator.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">            iou (N): IoU values.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">overlap_left_top</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">])</span>
+        <span class="n">overlap_right_bottom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+
+        <span class="n">overlap_area</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">overlap_left_top</span><span class="p">,</span> <span class="n">overlap_right_bottom</span><span class="p">)</span>
+        <span class="n">area0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes0</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+        <span class="n">area1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">area_of</span><span class="p">(</span><span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="p">:</span><span class="mi">2</span><span class="p">],</span> <span class="n">boxes1</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">:])</span>
+        <span class="k">return</span> <span class="n">overlap_area</span> <span class="o">/</span> <span class="p">(</span><span class="n">area0</span> <span class="o">+</span> <span class="n">area1</span> <span class="o">-</span> <span class="n">overlap_area</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="YoloDetectionModel.hard_nms"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel.hard_nms">[docs]</a>    <span class="k">def</span> <span class="nf">hard_nms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">box_scores</span><span class="p">,</span> <span class="n">iou_threshold</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">candidate_size</span><span class="o">=</span><span class="mi">200</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            box_scores (N, 5): boxes in corner-form and probabilities.</span>
+<span class="sd">            iou_threshold: intersection over union threshold.</span>
+<span class="sd">            top_k: keep top_k results. If k &lt;= 0, keep all the results.</span>
+<span class="sd">            candidate_size: only consider the candidates with the highest scores.</span>
+<span class="sd">        Returns:</span>
+<span class="sd">             picked: a list of indexes of the kept boxes</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">box_scores</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">box_scores</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+        <span class="n">scores</span> <span class="o">=</span> <span class="n">box_scores</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">boxes</span> <span class="o">=</span> <span class="n">box_scores</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">picked</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="c1"># _, indexes = scores.sort(descending=True)</span>
+        <span class="n">indexes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">scores</span><span class="p">)</span>
+        <span class="c1"># indexes = indexes[:candidate_size]</span>
+        <span class="n">indexes</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[</span><span class="o">-</span><span class="n">candidate_size</span><span class="p">:]</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">indexes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># current = indexes[0]</span>
+            <span class="n">current</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">picked</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">current</span><span class="p">)</span>
+            <span class="k">if</span> <span class="mi">0</span> <span class="o">&lt;</span> <span class="n">top_k</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">picked</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">indexes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="k">break</span>
+            <span class="n">current_box</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">current</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="c1"># indexes = indexes[1:]</span>
+            <span class="n">indexes</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+            <span class="n">rest_boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">indexes</span><span class="p">,</span> <span class="p">:]</span>
+            <span class="n">iou</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">iou_of</span><span class="p">(</span><span class="n">rest_boxes</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">current_box</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">),</span> <span class="p">)</span>
+            <span class="n">indexes</span> <span class="o">=</span> <span class="n">indexes</span><span class="p">[</span><span class="n">iou</span> <span class="o">&lt;=</span> <span class="n">iou_threshold</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">box_scores</span><span class="p">[</span><span class="n">picked</span><span class="p">,</span> <span class="p">:],</span> <span class="n">picked</span></div>
+
+<div class="viewcode-block" id="YoloDetectionModel.nms"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel.nms">[docs]</a>    <span class="k">def</span> <span class="nf">nms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">threshold</span><span class="o">=</span><span class="mf">0.3</span><span class="p">):</span>
+        <span class="c1"># if there are no boxes, return an empty list</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="p">[]</span>
+
+        <span class="c1"># initialize the list of picked indexes</span>
+        <span class="n">pick</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c1"># grab the coordinates of the bounding boxes</span>
+        <span class="n">x1</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+        <span class="n">y1</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+        <span class="n">x2</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+        <span class="n">y2</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">]</span>
+
+        <span class="c1"># compute the area of the bounding boxes and sort the bounding</span>
+        <span class="c1"># boxes by the bottom-right y-coordinate of the bounding box</span>
+        <span class="n">area</span> <span class="o">=</span> <span class="p">(</span><span class="n">x2</span> <span class="o">-</span> <span class="n">x1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="p">(</span><span class="n">y2</span> <span class="o">-</span> <span class="n">y1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">idxs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">y2</span><span class="p">)</span>
+
+        <span class="c1"># keep looping while some indexes still remain in the indexes</span>
+        <span class="c1"># list</span>
+        <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">idxs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># grab the last index in the indexes list, add the index</span>
+            <span class="c1"># value to the list of picked indexes, then initialize</span>
+            <span class="c1"># the suppression list (i.e. indexes that will be deleted)</span>
+            <span class="c1"># using the last index</span>
+            <span class="n">last</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">idxs</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="n">idxs</span><span class="p">[</span><span class="n">last</span><span class="p">]</span>
+            <span class="n">pick</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
+            <span class="n">suppress</span> <span class="o">=</span> <span class="p">[</span><span class="n">last</span><span class="p">]</span>
+
+            <span class="c1"># loop over all indexes in the indexes list</span>
+            <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">last</span><span class="p">):</span>
+                <span class="c1"># grab the current index</span>
+                <span class="n">j</span> <span class="o">=</span> <span class="n">idxs</span><span class="p">[</span><span class="n">pos</span><span class="p">]</span>
+
+                <span class="c1"># find the largest (x, y) coordinates for the start of</span>
+                <span class="c1"># the bounding box and the smallest (x, y) coordinates</span>
+                <span class="c1"># for the end of the bounding box</span>
+                <span class="n">xx1</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">x1</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">x1</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">yy1</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">y1</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y1</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">xx2</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">x2</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">x2</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+                <span class="n">yy2</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">y2</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y2</span><span class="p">[</span><span class="n">j</span><span class="p">])</span>
+
+                <span class="c1"># compute the width and height of the bounding box</span>
+                <span class="n">w</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">xx2</span> <span class="o">-</span> <span class="n">xx1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                <span class="n">h</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">yy2</span> <span class="o">-</span> <span class="n">yy1</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+
+                <span class="c1"># compute the ratio of overlap between the computed</span>
+                <span class="c1"># bounding box and the bounding box in the area list</span>
+                <span class="n">overlap</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">w</span> <span class="o">*</span> <span class="n">h</span><span class="p">)</span> <span class="o">/</span> <span class="n">area</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
+
+                <span class="c1"># if there is sufficient overlap, suppress the</span>
+                <span class="c1"># current bounding box</span>
+                <span class="k">if</span> <span class="n">overlap</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">:</span>
+                    <span class="n">suppress</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pos</span><span class="p">)</span>
+
+            <span class="c1"># delete all indexes from the index list that are in the</span>
+            <span class="c1"># suppression list</span>
+            <span class="n">idxs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">delete</span><span class="p">(</span><span class="n">idxs</span><span class="p">,</span> <span class="n">suppress</span><span class="p">)</span>
+
+        <span class="c1"># return only the bounding boxes that were picked</span>
+        <span class="k">return</span> <span class="n">boxes</span><span class="p">[</span><span class="n">pick</span><span class="p">],</span> <span class="n">pick</span></div>
+
+<div class="viewcode-block" id="YoloDetectionModel.infer_single_image"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel.infer_single_image">[docs]</a>    <span class="k">def</span> <span class="nf">infer_single_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">built</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+                <span class="n">img</span> <span class="o">=</span> <span class="n">image2array</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">img</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>
+                    <span class="n">img</span> <span class="o">=</span> <span class="n">img</span><span class="p">[:,</span> <span class="p">:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+                <span class="n">img_orig</span> <span class="o">=</span> <span class="n">img</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+
+                <span class="k">for</span> <span class="n">func</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">preprocess_flow</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isfunction</span><span class="p">(</span><span class="n">func</span><span class="p">):</span>
+                        <span class="n">img</span> <span class="o">=</span> <span class="n">func</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+                        <span class="k">if</span> <span class="n">func</span><span class="o">.</span><span class="vm">__qualname__</span> <span class="o">==</span> <span class="s1">&#39;resize.&lt;locals&gt;.img_op&#39;</span><span class="p">:</span>
+                            <span class="n">scale</span> <span class="o">=</span> <span class="n">func</span><span class="o">.</span><span class="n">scale</span>
+
+                <span class="n">img</span> <span class="o">=</span> <span class="n">image_backend_adaption</span><span class="p">(</span><span class="n">img</span><span class="p">)</span>
+                <span class="n">inp</span> <span class="o">=</span> <span class="n">to_tensor</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">device</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="o">.</span><span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">dtype</span><span class="p">)</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_model</span><span class="p">(</span><span class="n">inp</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="nb">min</span><span class="p">(</span><span class="n">boxes</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]),</span><span class="nb">max</span><span class="p">(</span><span class="n">boxes</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]))</span>
+                <span class="n">mask</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">verbose</span><span class="p">:</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;detection threshold:</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">detection_threshold</span><span class="p">))</span>
+                    <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> bboxes keep!&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)))</span>
+                <span class="k">if</span> <span class="n">boxes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">boxes</span> <span class="o">=</span> <span class="n">to_numpy</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span>
+                    <span class="n">boxes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">xywh2xyxy</span><span class="p">(</span><span class="n">boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]),</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">:]],</span> <span class="n">axis</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                        <span class="n">box_probs</span><span class="p">,</span> <span class="n">keep</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hard_nms</span><span class="p">(</span><span class="n">boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">5</span><span class="p">],</span> <span class="n">iou_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">iou_threshold</span><span class="p">,</span> <span class="n">top_k</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="p">)</span>
+                        <span class="n">boxes</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">keep</span><span class="p">]</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;iou threshold:</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">iou_threshold</span><span class="p">))</span>
+                        <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">{0}</span><span class="s1"> bboxes keep!&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)))</span>
+                    <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">/=</span><span class="n">scale</span>
+
+                    <span class="c1"># boxes = boxes * (1 / scale[0])</span>
+                    <span class="k">return</span> <span class="n">img_orig</span><span class="p">,</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">4</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">boxes</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">:],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">),</span> <span class="n">boxes</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="n">img_orig</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">PrintException</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s1">&#39;the model is not built yet.&#39;</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="YoloDetectionModel.infer_then_draw_single_image"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_yolo.YoloDetectionModel.infer_then_draw_single_image">[docs]</a>    <span class="k">def</span> <span class="nf">infer_then_draw_single_image</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">img</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+
+        <span class="n">rgb_image</span><span class="p">,</span> <span class="n">boxes</span><span class="p">,</span> <span class="n">labels</span><span class="p">,</span> <span class="n">probs</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">infer_single_image</span><span class="p">(</span><span class="n">img</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">verbose</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">verbose</span> <span class="ow">and</span> <span class="n">boxes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)):</span>
+                <span class="nb">print</span><span class="p">(</span><span class="s1">&#39;box</span><span class="si">{0}</span><span class="s1">: </span><span class="si">{1}</span><span class="s1"> prob:</span><span class="si">{2:.2%}</span><span class="s1"> class:</span><span class="si">{3}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="p">[</span><span class="nb">round</span><span class="p">(</span><span class="n">num</span><span class="p">,</span><span class="mi">4</span><span class="p">)</span> <span class="k">for</span> <span class="n">num</span> <span class="ow">in</span> <span class="n">boxes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()],</span> <span class="n">probs</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                                                                  <span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">i</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span>
+                                                                      <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">)</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span>
+                                                                      <span class="nb">int</span><span class="p">(</span><span class="n">labels</span><span class="p">[</span><span class="n">i</span><span class="p">])]))</span>
+
+        <span class="k">if</span> <span class="n">boxes</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">boxes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">boxes</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int32</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">boxes</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">boxes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">boxes</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">labels</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">labels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">expand_dims</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">boxes</span><span class="p">)):</span>
+                <span class="n">this_box</span> <span class="o">=</span> <span class="n">boxes</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
+                <span class="n">this_label</span> <span class="o">=</span> <span class="n">labels</span><span class="p">[</span><span class="n">m</span><span class="p">]</span>
+                <span class="n">thiscolor</span><span class="o">=</span><span class="nb">tuple</span><span class="p">([</span><span class="nb">int</span><span class="p">(</span><span class="n">c</span><span class="p">)</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">palette</span><span class="p">[</span><span class="n">this_label</span><span class="p">][:</span><span class="mi">3</span><span class="p">]])</span>
+                <span class="n">rgb_image</span><span class="o">=</span><span class="n">plot_bbox</span><span class="p">(</span><span class="n">this_box</span><span class="p">,</span><span class="n">rgb_image</span><span class="p">,</span><span class="n">thiscolor</span><span class="p">,</span><span class="bp">self</span><span class="o">.</span><span class="n">class_names</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">labels</span><span class="p">[</span><span class="n">m</span><span class="p">])])</span>
+                <span class="c1"># cv2.rectangle(bgr_image, (this_box[0], this_box[1]), (this_box[2], this_box[3]),</span>
+                <span class="c1">#               self.palette[this_label],</span>
+                <span class="c1">#               1 if bgr_image.shape[1] &lt; 480 else 2 if bgr_image.shape[1] &lt; 640 else 3 if</span>
+                <span class="c1">#               bgr_image.shape[1] &lt; 960 else 4)</span>
+        <span class="c1">#rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)</span>
+        <span class="k">return</span> <span class="n">rgb_image</span></div></div>
+
+
+</pre></div>
+
+        </div>
+        <div class="side-doc-outline">
+            <div class="side-doc-outline--content"> 
+            </div>
+        </div>
+
+      <div class="clearer"></div>
+    </div><div class="pagenation">
+  </div>
+        <footer class="mdl-mini-footer">
+    <div class="mdl-mini-footer__left-section">
+      <div class="mdl-logo">trident</div>
+      <div>
+        
+        
+      </div>
+    </div>
+
+    <div class="mdl-mini-footer__right-section">
+        <div>&copy; Copyright 2020, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+    </div>
+</footer>
+        </main>
+    </div>
+  </body>
+</html>

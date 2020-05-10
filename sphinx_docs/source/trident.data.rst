@@ -92,34 +92,10 @@ trident.data.preprocess\_policy module
    :undoc-members:
    :show-inheritance:
 
-trident.data.pytorch\_datasets module
--------------------------------------
-
-.. automodule:: trident.data.pytorch_datasets
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 trident.data.samplers module
 ----------------------------
 
 .. automodule:: trident.data.samplers
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-trident.data.tensorflow\_datasets module
-----------------------------------------
-
-.. automodule:: trident.data.tensorflow_datasets
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-trident.data.text\_common module
---------------------------------
-
-.. automodule:: trident.data.text_common
    :members:
    :undoc-members:
    :show-inheritance:

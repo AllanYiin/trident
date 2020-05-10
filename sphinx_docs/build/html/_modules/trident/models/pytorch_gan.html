@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    
+    <title>trident.models.pytorch_gan &#8212; trident 5.5.0 documentation</title>
+
+    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+  </head>
+<body>
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header mdl-layout--fixed-drawer"><header class="mdl-layout__header mdl-layout__header--waterfall ">
+    <div class="mdl-layout__header-row">
+        
+        <!-- Title -->
+        <span class="mdl-layout-title">
+            <a class="brand" href="../../../index.html">
+                trident
+            </a>
+        </span>
+        
+        <nav class="mdl-navigation breadcrumb">
+            <a class="mdl-navigation__link" href="../../index.html">Module code</a><i class="material-icons">navigate_next</i>
+            <a class="mdl-navigation__link is-active">trident.models.pytorch_gan</a>
+        </nav>
+        <div class="mdl-layout-spacer"></div>
+        <nav class="mdl-navigation">
+        
+<form class="form-inline pull-sm-right" action="../../../search.html" method="get">
+      <div class="mdl-textfield mdl-js-textfield mdl-textfield--expandable mdl-textfield--floating-label mdl-textfield--align-right">
+        <label id="quick-search-icon" class="mdl-button mdl-js-button mdl-button--icon"  for="waterfall-exp">
+            <i class="material-icons">search</i>
+        </label>
+        <div class="mdl-textfield__expandable-holder">
+          <input class="mdl-textfield__input" type="text" name="q"  id="waterfall-exp" placeholder="Search" />
+          <input type="hidden" name="check_keywords" value="yes" />
+          <input type="hidden" name="area" value="default" />
+        </div>
+      </div>
+      <div class="mdl-tooltip" data-mdl-for="quick-search-icon">
+      Quick search
+      </div>
+</form>
+        
+        </nav>
+    </div>
+    <div class="mdl-layout__header-row header-links">
+      <div class="mdl-layout-spacer"></div>
+      <nav class="mdl-navigation">
+          <a  class="mdl-navigation__link" href="../../../index.html">
+                  <i class="material-icons navigation-link-icon">home</i>
+                  Home
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  <i class="material-icons navigation-link-icon">launch</i>
+                  ExternalLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  
+                  NoIconLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="https://github.com/AllanYiin/trident">
+                  <i class="material-icons navigation-link-icon">link</i>
+                  GitHub
+              </a>
+      </nav>
+    </div>
+</header><header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+        <main class="mdl-layout__content" tabIndex="0">
+<header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+
+    <div class="document">
+        <div class="page-content">
+        
+  <h1>Source code for trident.models.pytorch_gan</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">enum</span> <span class="k">import</span> <span class="n">Enum</span><span class="p">,</span> <span class="n">unique</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">repeat</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">container_abcs</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
+
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">to_numpy</span><span class="p">,</span> <span class="n">to_tensor</span><span class="p">,</span> <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span>
+<span class="kn">from</span> <span class="nn">trident.data.image_common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.utils</span> <span class="k">import</span> <span class="n">download_file_from_google_drive</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_activations</span> <span class="k">import</span> <span class="n">get_activation</span><span class="p">,</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">LeakyRelu</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_blocks</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_layers</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_normalizations</span> <span class="k">import</span> <span class="n">get_normalization</span><span class="p">,</span> <span class="n">BatchNorm</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_pooling</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.optims.pytorch_trainer</span> <span class="k">import</span> <span class="o">*</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;gan_builder&#39;</span><span class="p">,</span> <span class="s1">&#39;UpsampleMode&#39;</span><span class="p">,</span> <span class="s1">&#39;BuildBlockMode&#39;</span><span class="p">]</span>
+
+<span class="n">_session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">()</span>
+<span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">_epsilon</span> <span class="o">=</span> <span class="n">_session</span><span class="o">.</span><span class="n">epsilon</span>
+<span class="n">_trident_dir</span> <span class="o">=</span> <span class="n">_session</span><span class="o">.</span><span class="n">trident_dir</span>
+
+
+<span class="k">def</span> <span class="nf">resnet_block</span><span class="p">(</span><span class="n">num_filters</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;leaky_relu&#39;</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                 <span class="n">dilation</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+    <span class="n">kernal</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">strides</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">3</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">ShortCut2d</span><span class="p">(</span><span class="n">Sequential</span><span class="p">(</span>
+        <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                     <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                     <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_0_conv&#39;</span><span class="p">),</span>
+        <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                     <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                     <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_1_conv&#39;</span><span class="p">)),</span> <span class="n">Identity</span><span class="p">(),</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">),</span>
+            <span class="n">Conv2d_Block</span><span class="p">((</span><span class="n">kernal</span><span class="p">,</span> <span class="n">kernal</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="n">num_filters</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                         <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span>
+                         <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_conv&#39;</span><span class="p">)]</span>
+
+
+<span class="k">def</span> <span class="nf">separable_resnet_block</span><span class="p">(</span><span class="n">num_filters</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;leaky_relu&#39;</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span>
+                           <span class="n">use_spectral</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+    <span class="n">kernal</span> <span class="o">=</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">strides</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="mi">3</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">ShortCut2d</span><span class="p">(</span><span class="n">Sequential</span><span class="p">(</span>
+        <span class="n">SeparableConv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                              <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span>
+                              <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_0_conv&#39;</span><span class="p">),</span>
+        <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                     <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                     <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_1_conv&#39;</span><span class="p">)),</span> <span class="n">Identity</span><span class="p">(),</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">),</span>
+            <span class="n">Conv2d_Block</span><span class="p">((</span><span class="n">kernal</span><span class="p">,</span> <span class="n">kernal</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="n">num_filters</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                         <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span>
+                         <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_conv&#39;</span><span class="p">)]</span>
+
+
+<span class="k">def</span> <span class="nf">bottleneck_block</span><span class="p">(</span><span class="n">num_filters</span><span class="o">=</span><span class="mi">64</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;leaky_relu&#39;</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span>
+                     <span class="n">use_spectral</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">):</span>
+    <span class="n">shortcut</span> <span class="o">=</span> <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="n">num_filters</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;zero&#39;</span><span class="p">,</span>
+                            <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_downsample&#39;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ShortCut2d</span><span class="p">(</span><span class="n">Sequential</span><span class="p">(</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                                              <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span>
+                                              <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_0_conv&#39;</span><span class="p">),</span>
+                                 <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span> <span class="o">/</span> <span class="n">reduce</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                                              <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                              <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                              <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_1_conv&#39;</span><span class="p">),</span>
+                                 <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="n">num_filters</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                                              <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                              <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                              <span class="n">name</span><span class="o">=</span><span class="n">name</span> <span class="o">+</span> <span class="s1">&#39;_2_conv&#39;</span><span class="p">)),</span> <span class="n">shortcut</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">)</span>
+
+
+<span class="k">def</span> <span class="nf">weights_init_normal</span><span class="p">(</span><span class="n">m</span><span class="p">):</span>
+    <span class="n">classname</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="vm">__class__</span><span class="o">.</span><span class="vm">__name__</span>
+    <span class="k">if</span> <span class="n">classname</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;Conv&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">and</span> <span class="n">classname</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s2">&quot;Conv2d_Block&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+        <span class="n">torch</span><span class="o">.</span><span class="n">nn</span><span class="o">.</span><span class="n">init</span><span class="o">.</span><span class="n">normal_</span><span class="p">(</span><span class="n">m</span><span class="o">.</span><span class="n">weight</span><span class="o">.</span><span class="n">data</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="UpsampleMode"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_gan.UpsampleMode">[docs]</a><span class="k">class</span> <span class="nc">UpsampleMode</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">pixel_shuffle</span> <span class="o">=</span> <span class="s1">&#39;pixel_shuffle&#39;</span>
+    <span class="n">transpose</span> <span class="o">=</span> <span class="s1">&#39;transpose&#39;</span>
+    <span class="n">nearest</span> <span class="o">=</span> <span class="s1">&#39;nearest&#39;</span>
+    <span class="n">bilinear</span> <span class="o">=</span> <span class="s1">&#39;bilinear&#39;</span></div>
+
+
+<div class="viewcode-block" id="BuildBlockMode"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_gan.BuildBlockMode">[docs]</a><span class="k">class</span> <span class="nc">BuildBlockMode</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">base</span> <span class="o">=</span> <span class="s1">&#39;base&#39;</span>
+    <span class="n">resnet</span> <span class="o">=</span> <span class="s1">&#39;resnet&#39;</span>
+    <span class="n">bottleneck</span> <span class="o">=</span> <span class="s1">&#39;bottleneck&#39;</span>
+    <span class="n">separable_resnet</span> <span class="o">=</span> <span class="s1">&#39;separable_resnet&#39;</span></div>
+
+
+<span class="k">class</span> <span class="nc">NetworkType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">encoder</span> <span class="o">=</span> <span class="s1">&#39;encoder&#39;</span>
+    <span class="n">decoder</span> <span class="o">=</span> <span class="s1">&#39;decoder&#39;</span>
+    <span class="n">autoencoder</span> <span class="o">=</span> <span class="s1">&#39;autoencoder&#39;</span>
+
+
+<div class="viewcode-block" id="gan_builder"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_gan.gan_builder">[docs]</a><span class="k">def</span> <span class="nf">gan_builder</span><span class="p">(</span><span class="n">noise_shape</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">image_width</span><span class="o">=</span><span class="mi">256</span><span class="p">,</span> <span class="n">upsample_mode</span><span class="o">=</span><span class="s1">&#39;nearest&#39;</span><span class="p">,</span> <span class="n">generator_build_block</span><span class="o">=</span><span class="s1">&#39;resnet&#39;</span><span class="p">,</span>
+        <span class="n">discriminator_build_block</span><span class="o">=</span><span class="s1">&#39;resnet&#39;</span><span class="p">,</span> <span class="n">generator_network_type</span><span class="o">=</span><span class="s1">&#39;decoder&#39;</span><span class="p">,</span> <span class="n">discriminator_network_type</span><span class="o">=</span><span class="s1">&#39;encoder&#39;</span><span class="p">,</span>
+        <span class="n">use_spectral</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;leaky_relu&#39;</span><span class="p">,</span> <span class="n">generator_norm</span><span class="o">=</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span> <span class="n">discriminator_norm</span><span class="o">=</span><span class="s1">&#39;batch&#39;</span><span class="p">,</span>
+        <span class="n">use_dilation</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_dropout</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">use_self_attention</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="n">noise_input</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">tensor</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">noise_shape</span><span class="p">)))</span>
+
+    <span class="k">def</span> <span class="nf">build_generator</span><span class="p">():</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">initial_size</span> <span class="o">=</span> <span class="mi">8</span>
+        <span class="k">if</span> <span class="n">image_width</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">192</span><span class="p">,</span> <span class="mi">96</span><span class="p">,</span> <span class="mi">48</span><span class="p">]:</span>
+            <span class="n">initial_size</span> <span class="o">=</span> <span class="mi">6</span>
+        <span class="k">elif</span> <span class="n">image_width</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">144</span><span class="p">,</span> <span class="mi">72</span><span class="p">,</span> <span class="mi">36</span><span class="p">]:</span>
+            <span class="n">initial_size</span> <span class="o">=</span> <span class="mi">9</span>
+        <span class="k">elif</span> <span class="n">image_width</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">160</span><span class="p">,</span> <span class="mi">80</span><span class="p">]:</span>
+            <span class="n">initial_size</span> <span class="o">=</span> <span class="mi">10</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Dense</span><span class="p">(</span><span class="mi">16</span> <span class="o">*</span> <span class="n">initial_size</span> <span class="o">*</span> <span class="n">initial_size</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;fc&#39;</span><span class="p">))</span>
+        <span class="c1"># layers.append(BatchNorm())</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LeakyRelu</span><span class="p">())</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Reshape</span><span class="p">((</span><span class="mi">16</span><span class="p">,</span> <span class="n">initial_size</span><span class="p">,</span> <span class="n">initial_size</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;reshape&#39;</span><span class="p">))</span>
+
+        <span class="k">if</span> <span class="n">upsample_mode</span> <span class="o">==</span> <span class="n">UpsampleMode</span><span class="o">.</span><span class="n">pixel_shuffle</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">256</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">))</span>
+
+        <span class="nb">filter</span> <span class="o">=</span> <span class="mi">256</span> <span class="k">if</span> <span class="n">upsample_mode</span> <span class="o">==</span> <span class="n">UpsampleMode</span><span class="o">.</span><span class="n">pixel_shuffle</span><span class="o">.</span><span class="n">value</span> <span class="k">else</span> <span class="mi">64</span>
+        <span class="n">current_width</span> <span class="o">=</span> <span class="n">initial_size</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">current_width</span> <span class="o">&lt;</span> <span class="n">image_width</span><span class="p">:</span>
+            <span class="n">scale</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="p">(</span><span class="n">image_width</span> <span class="o">//</span> <span class="n">current_width</span><span class="p">)</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="p">(</span><span class="n">image_width</span> <span class="o">//</span> <span class="n">current_width</span><span class="p">)</span>
+
+            <span class="n">dilation</span> <span class="o">=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">use_dilation</span><span class="p">:</span>
+                <span class="n">dilation</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">current_width</span> <span class="o">&gt;=</span> <span class="mi">64</span> <span class="k">else</span> <span class="mi">1</span>
+
+            <span class="k">if</span> <span class="n">upsample_mode</span> <span class="o">==</span> <span class="n">UpsampleMode</span><span class="o">.</span><span class="n">transpose</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">TransConv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                                      <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span>
+                                      <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                      <span class="n">name</span><span class="o">=</span><span class="s1">&#39;transconv_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">upsample_mode</span> <span class="o">==</span> <span class="n">UpsampleMode</span><span class="o">.</span><span class="n">pixel_shuffle</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                        <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span>
+                                        <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">))</span>
+                    <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="o">*</span> <span class="mi">4</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Upsampling2d</span><span class="p">(</span><span class="n">scale_factor</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">{0}{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">i</span><span class="p">)))</span>
+                <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="o">//</span> <span class="p">(</span><span class="n">scale</span> <span class="o">*</span> <span class="n">scale</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                        <span class="n">DepthwiseConv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">depth_multiplier</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                        <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span>
+                                        <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">))</span>
+
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Upsampling2d</span><span class="p">(</span><span class="n">scale_factor</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">{0}{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">i</span><span class="p">)))</span>
+
+
+            <span class="k">if</span> <span class="n">generator_build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span>
+                                           <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span>
+                                           <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                           <span class="n">name</span><span class="o">=</span><span class="s1">&#39;base_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">generator_build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">resnet</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">resnet_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                           <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                           <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">generator_build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">bottleneck</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bottleneck_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                               <span class="n">normalization</span><span class="o">=</span><span class="n">generator_norm</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                               <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="n">use_self_attention</span> <span class="ow">and</span> <span class="n">current_width</span> <span class="o">==</span> <span class="n">initial_size</span> <span class="o">*</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">SelfAttention</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;self_attention&#39;</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">use_dropout</span> <span class="ow">and</span> <span class="n">current_width</span> <span class="o">==</span> <span class="n">initial_size</span> <span class="o">*</span> <span class="mi">4</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Dropout</span><span class="p">(</span><span class="mf">0.2</span><span class="p">))</span>
+
+            <span class="n">current_width</span> <span class="o">=</span> <span class="n">current_width</span> <span class="o">*</span> <span class="n">scale</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">((</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="mi">3</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;tanh&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;last_layer&#39;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;generator&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">build_discriminator</span><span class="p">():</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">Conv2d</span><span class="p">((</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="mi">32</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;first_layer&#39;</span><span class="p">))</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">64</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                   <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">discriminator_norm</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;second_layer&#39;</span><span class="p">))</span>
+        <span class="nb">filter</span> <span class="o">=</span> <span class="mi">64</span>
+        <span class="n">current_width</span> <span class="o">=</span> <span class="n">image_width</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">while</span> <span class="n">current_width</span> <span class="o">&gt;</span> <span class="mi">8</span><span class="p">:</span>
+            <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="o">*</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="nb">filter</span>
+            <span class="k">if</span> <span class="n">discriminator_build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                 <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">discriminator_norm</span><span class="p">,</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;base_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">discriminator_build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">resnet</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">resnet_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                           <span class="n">normalization</span><span class="o">=</span><span class="n">discriminator_norm</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+
+            <span class="k">elif</span> <span class="n">discriminator_build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">bottleneck</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">bottleneck_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                     <span class="n">normalization</span><span class="o">=</span><span class="n">discriminator_norm</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;bottleneck_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+
+            <span class="n">current_width</span> <span class="o">=</span> <span class="n">current_width</span> <span class="o">//</span> <span class="mi">2</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">use_self_attention</span><span class="p">:</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="o">-</span><span class="mi">2</span><span class="p">,</span> <span class="n">SelfAttention</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;self_attention&#39;</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">use_dropout</span> <span class="p">:</span>
+            <span class="n">layers</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">Dropout</span><span class="p">(</span><span class="mf">0.2</span><span class="p">))</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">128</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;leaky_relu&#39;</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span><span class="n">normalization</span><span class="o">=</span><span class="n">discriminator_norm</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;depthwise_conv&#39;</span><span class="p">))</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">1</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;leaky_relu&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;features&#39;</span><span class="p">))</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">GlobalAvgPool2d</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;discriminator&#39;</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">build_autoencoder</span><span class="p">(</span><span class="n">gan_role</span><span class="o">=</span><span class="s1">&#39;generator&#39;</span><span class="p">):</span>
+        <span class="n">normalization</span> <span class="o">=</span> <span class="n">generator_norm</span> <span class="k">if</span> <span class="n">gan_role</span> <span class="o">==</span> <span class="s1">&#39;generator&#39;</span> <span class="k">else</span> <span class="n">discriminator_norm</span>
+        <span class="n">build_block</span> <span class="o">=</span> <span class="n">generator_build_block</span> <span class="k">if</span> <span class="n">gan_role</span> <span class="o">==</span> <span class="s1">&#39;generator&#39;</span> <span class="k">else</span> <span class="n">discriminator_build_block</span>
+        <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">initial_size</span> <span class="o">=</span> <span class="n">image_width</span> <span class="o">//</span> <span class="mi">8</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">Conv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">32</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;first_layer&#39;</span><span class="p">))</span>
+        <span class="nb">filter</span> <span class="o">=</span> <span class="mi">32</span>
+        <span class="n">dilation</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="o">+</span> <span class="mi">32</span>
+            <span class="k">if</span> <span class="n">use_dilation</span><span class="p">:</span>
+                <span class="n">dilation</span> <span class="o">=</span> <span class="mi">2</span> <span class="k">if</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="k">else</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                 <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;base_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">resnet</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">resnet_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                           <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">bottleneck</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">bottleneck_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">reduce</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                     <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;bottleneck_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">if</span> <span class="n">use_self_attention</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">SelfAttention</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;self_attention&#39;</span><span class="p">))</span>
+        <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="o">//</span> <span class="mi">2</span>
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">((</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">))</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">upsample_mode</span> <span class="o">==</span> <span class="n">UpsampleMode</span><span class="o">.</span><span class="n">transpose</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">TransConv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="nb">filter</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">filter</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                                      <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span>
+                                      <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                      <span class="n">name</span><span class="o">=</span><span class="s1">&#39;transconv_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">upsample_mode</span> <span class="o">==</span> <span class="n">UpsampleMode</span><span class="o">.</span><span class="n">pixel_shuffle</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">num_filters</span><span class="o">=</span><span class="mi">4</span> <span class="o">*</span> <span class="nb">filter</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">2</span> <span class="o">*</span> <span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                                 <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span>
+                                 <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">))</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Upsampling2d</span><span class="p">(</span><span class="n">scale_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">{0}{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">i</span><span class="p">)))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Upsampling2d</span><span class="p">(</span><span class="n">scale_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;</span><span class="si">{0}{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">upsample_mode</span><span class="p">,</span> <span class="n">i</span><span class="p">)))</span>
+
+            <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">filter</span> <span class="o">+</span> <span class="mi">32</span>
+            <span class="k">if</span> <span class="n">use_dropout</span> <span class="ow">and</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Dropout</span><span class="p">(</span><span class="mf">0.2</span><span class="p">))</span>
+
+            <span class="k">if</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">base</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                    <span class="n">Conv2d_Block</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                 <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                 <span class="n">name</span><span class="o">=</span><span class="s1">&#39;base_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">resnet</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">resnet_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                           <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                           <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">bottleneck</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">bottleneck_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                               <span class="n">normalization</span><span class="o">=</span><span class="n">normalization</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="n">dilation</span><span class="p">,</span>
+                                               <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+            <span class="k">elif</span> <span class="n">build_block</span> <span class="o">==</span> <span class="n">BuildBlockMode</span><span class="o">.</span><span class="n">separable_resnet</span><span class="o">.</span><span class="n">value</span><span class="p">:</span>
+                <span class="n">layers</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
+                    <span class="n">separable_resnet_block</span><span class="p">(</span><span class="nb">filter</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="n">activation</span><span class="p">,</span> <span class="n">use_spectral</span><span class="o">=</span><span class="n">use_spectral</span><span class="p">,</span>
+                                           <span class="n">normalization</span><span class="o">=</span><span class="n">discriminator_norm</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;resnet_block</span><span class="si">{0}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">i</span><span class="p">)))</span>
+
+            <span class="nb">filter</span> <span class="o">=</span> <span class="nb">filter</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">filter</span> <span class="o">+</span> <span class="mi">32</span>
+
+        <span class="n">layers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">Conv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="mi">3</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;tanh&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;last_layer&#39;</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">Sequential</span><span class="p">(</span><span class="n">layers</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;autoencoder&#39;</span><span class="p">)</span>
+
+    <span class="n">gen</span> <span class="o">=</span> <span class="n">ImageGenerationModel</span><span class="p">(</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">image_width</span><span class="p">,</span> <span class="n">image_width</span><span class="p">)</span> <span class="k">if</span> <span class="n">generator_network_type</span> <span class="o">==</span> <span class="s1">&#39;autoencoder&#39;</span> <span class="k">else</span> <span class="p">(</span><span class="n">noise_shape</span><span class="p">),</span>
+        <span class="n">output</span><span class="o">=</span><span class="n">build_autoencoder</span><span class="p">(</span><span class="s1">&#39;generator&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">generator_network_type</span> <span class="o">==</span> <span class="s1">&#39;autoencoder&#39;</span> <span class="k">else</span> <span class="n">build_generator</span><span class="p">())</span>
+    <span class="n">gen</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;generator&#39;</span>
+    <span class="n">gen</span><span class="o">.</span><span class="n">signature</span> <span class="o">=</span> <span class="n">get_signature</span><span class="p">(</span><span class="n">gen</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">forward</span><span class="p">)</span>
+    <span class="n">dis</span> <span class="o">=</span> <span class="n">ImageClassificationModel</span><span class="p">(</span><span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">image_width</span><span class="p">,</span> <span class="n">image_width</span><span class="p">),</span> <span class="n">output</span><span class="o">=</span><span class="n">build_autoencoder</span><span class="p">(</span>
+        <span class="s1">&#39;discriminator&#39;</span><span class="p">)</span> <span class="k">if</span> <span class="n">discriminator_build_block</span> <span class="o">==</span> <span class="s1">&#39;autoencoder&#39;</span> <span class="k">else</span> <span class="n">build_discriminator</span><span class="p">())</span>
+    <span class="n">dis</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="s1">&#39;discriminator&#39;</span>
+    <span class="n">dis</span><span class="o">.</span><span class="n">signature</span> <span class="o">=</span> <span class="n">get_signature</span><span class="p">(</span><span class="n">dis</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">forward</span><span class="p">)</span>
+
+    <span class="n">gen</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">weights_init_normal</span><span class="p">)</span>
+    <span class="n">dis</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">weights_init_normal</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">gen</span><span class="p">,</span> <span class="n">dis</span></div>
+</pre></div>
+
+        </div>
+        <div class="side-doc-outline">
+            <div class="side-doc-outline--content"> 
+            </div>
+        </div>
+
+      <div class="clearer"></div>
+    </div><div class="pagenation">
+  </div>
+        <footer class="mdl-mini-footer">
+    <div class="mdl-mini-footer__left-section">
+      <div class="mdl-logo">trident</div>
+      <div>
+        
+        
+      </div>
+    </div>
+
+    <div class="mdl-mini-footer__right-section">
+        <div>&copy; Copyright 2020, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+    </div>
+</footer>
+        </main>
+    </div>
+  </body>
+</html>

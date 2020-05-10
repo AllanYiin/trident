@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    
+    <title>trident.models.pytorch_vgg &#8212; trident 5.5.0 documentation</title>
+
+    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+  </head>
+<body>
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header mdl-layout--fixed-drawer"><header class="mdl-layout__header mdl-layout__header--waterfall ">
+    <div class="mdl-layout__header-row">
+        
+        <!-- Title -->
+        <span class="mdl-layout-title">
+            <a class="brand" href="../../../index.html">
+                trident
+            </a>
+        </span>
+        
+        <nav class="mdl-navigation breadcrumb">
+            <a class="mdl-navigation__link" href="../../index.html">Module code</a><i class="material-icons">navigate_next</i>
+            <a class="mdl-navigation__link is-active">trident.models.pytorch_vgg</a>
+        </nav>
+        <div class="mdl-layout-spacer"></div>
+        <nav class="mdl-navigation">
+        
+<form class="form-inline pull-sm-right" action="../../../search.html" method="get">
+      <div class="mdl-textfield mdl-js-textfield mdl-textfield--expandable mdl-textfield--floating-label mdl-textfield--align-right">
+        <label id="quick-search-icon" class="mdl-button mdl-js-button mdl-button--icon"  for="waterfall-exp">
+            <i class="material-icons">search</i>
+        </label>
+        <div class="mdl-textfield__expandable-holder">
+          <input class="mdl-textfield__input" type="text" name="q"  id="waterfall-exp" placeholder="Search" />
+          <input type="hidden" name="check_keywords" value="yes" />
+          <input type="hidden" name="area" value="default" />
+        </div>
+      </div>
+      <div class="mdl-tooltip" data-mdl-for="quick-search-icon">
+      Quick search
+      </div>
+</form>
+        
+        </nav>
+    </div>
+    <div class="mdl-layout__header-row header-links">
+      <div class="mdl-layout-spacer"></div>
+      <nav class="mdl-navigation">
+          <a  class="mdl-navigation__link" href="../../../index.html">
+                  <i class="material-icons navigation-link-icon">home</i>
+                  Home
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  <i class="material-icons navigation-link-icon">launch</i>
+                  ExternalLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  
+                  NoIconLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="https://github.com/AllanYiin/trident">
+                  <i class="material-icons navigation-link-icon">link</i>
+                  GitHub
+              </a>
+      </nav>
+    </div>
+</header><header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+        <main class="mdl-layout__content" tabIndex="0">
+<header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+
+    <div class="document">
+        <div class="page-content">
+        
+  <h1>Source code for trident.models.pytorch_vgg</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">uuid</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">deque</span>
+<span class="kn">from</span> <span class="nn">copy</span> <span class="k">import</span> <span class="n">copy</span><span class="p">,</span> <span class="n">deepcopy</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">repeat</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">container_abcs</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
+
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span> <span class="n">to_numpy</span><span class="p">,</span> <span class="n">to_tensor</span><span class="p">,</span> <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span>
+<span class="kn">from</span> <span class="nn">trident.data.image_common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.data.utils</span> <span class="k">import</span> <span class="n">download_model_from_google_drive</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_activations</span> <span class="k">import</span> <span class="n">get_activation</span><span class="p">,</span> <span class="n">Identity</span><span class="p">,</span> <span class="n">Relu</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_blocks</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_layers</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_normalizations</span> <span class="k">import</span> <span class="n">get_normalization</span>
+<span class="kn">from</span> <span class="nn">trident.layers.pytorch_pooling</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.optims.pytorch_trainer</span> <span class="k">import</span> <span class="n">ImageClassificationModel</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;VGG19&#39;</span><span class="p">,</span><span class="s1">&#39;VGG11&#39;</span><span class="p">,</span><span class="s1">&#39;VGG13&#39;</span><span class="p">,</span><span class="s1">&#39;VGG16&#39;</span><span class="p">]</span>
+
+<span class="n">_session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">()</span>
+<span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">_epsilon</span><span class="o">=</span><span class="n">_session</span><span class="o">.</span><span class="n">epsilon</span>
+<span class="n">_trident_dir</span><span class="o">=</span><span class="n">_session</span><span class="o">.</span><span class="n">trident_dir</span>
+
+
+<span class="n">dirname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_trident_dir</span><span class="p">,</span> <span class="s1">&#39;models&#39;</span><span class="p">)</span>
+<span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">dirname</span><span class="p">):</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">dirname</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">OSError</span><span class="p">:</span>
+        <span class="c1"># Except permission denied and potential race conditions</span>
+        <span class="c1"># in multi-threaded environments.</span>
+        <span class="k">pass</span>
+
+
+
+
+<span class="n">cfgs</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;A&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;B&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;D&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">],</span>
+    <span class="s1">&#39;E&#39;</span><span class="p">:</span> <span class="p">[</span><span class="mi">64</span><span class="p">,</span> <span class="mi">64</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="mi">256</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="s1">&#39;M&#39;</span><span class="p">],</span>
+<span class="p">}</span>
+
+
+<span class="k">def</span> <span class="nf">make_vgg_layers</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">num_classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span><span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span><span class="mi">224</span><span class="p">,</span><span class="mi">224</span><span class="p">),</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="n">layers</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">in_channels</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="n">block</span><span class="o">=</span><span class="mi">1</span>
+    <span class="n">conv</span><span class="o">=</span><span class="mi">1</span>
+    <span class="n">vgg</span><span class="o">=</span><span class="n">Sequential</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">cfg</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">v</span> <span class="o">==</span> <span class="s1">&#39;M&#39;</span><span class="p">:</span>
+            <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_pool&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">),</span><span class="n">MaxPool2d</span><span class="p">(</span><span class="n">kernel_size</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_pool&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">)))</span>
+            <span class="n">block</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="n">conv</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vgg</span><span class="p">)</span><span class="o">==</span><span class="mi">0</span><span class="p">:</span>
+                <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_conv</span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">,</span><span class="n">conv</span><span class="p">),</span><span class="n">Conv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span><span class="mi">3</span><span class="p">),</span><span class="n">v</span><span class="p">,</span><span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_conv</span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">,</span><span class="n">conv</span><span class="p">)))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_conv</span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">conv</span><span class="p">),</span> <span class="n">Conv2d</span><span class="p">((</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">v</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">name</span><span class="o">=</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_conv</span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">conv</span><span class="p">)))</span>
+
+            <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;block</span><span class="si">{0}</span><span class="s1">_relu</span><span class="si">{1}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">block</span><span class="p">,</span> <span class="n">conv</span><span class="p">),</span><span class="n">Relu</span><span class="p">())</span>
+            <span class="n">conv</span><span class="o">+=</span><span class="mi">1</span>
+            <span class="n">in_channels</span> <span class="o">=</span> <span class="n">v</span>
+    <span class="k">if</span> <span class="n">include_top</span><span class="o">==</span><span class="kc">True</span><span class="p">:</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;avgpool&#39;</span><span class="p">,</span><span class="n">AdaptiveAvgPool2d</span><span class="p">((</span><span class="mi">7</span><span class="p">,</span><span class="mi">7</span><span class="p">)))</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;flattened&#39;</span><span class="p">,</span> <span class="n">Flatten</span><span class="p">())</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;fc1&#39;</span><span class="p">,</span><span class="n">Dense</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">))</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;drop1&#39;</span><span class="p">,</span> <span class="n">Dropout</span><span class="p">(</span><span class="mf">0.5</span><span class="p">))</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;fc2&#39;</span><span class="p">,</span> <span class="n">Dense</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="s1">&#39;relu&#39;</span><span class="p">))</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;drop2&#39;</span><span class="p">,</span> <span class="n">Dropout</span><span class="p">(</span><span class="mf">0.5</span><span class="p">))</span>
+        <span class="n">vgg</span><span class="o">.</span><span class="n">add_module</span><span class="p">(</span><span class="s1">&#39;fc3&#39;</span><span class="p">,</span> <span class="n">Dense</span><span class="p">(</span><span class="n">num_classes</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">))</span>
+
+
+    <span class="n">model</span> <span class="o">=</span> <span class="n">ImageClassificationModel</span><span class="p">(</span><span class="n">input_shape</span><span class="o">=</span><span class="n">input_shape</span><span class="p">,</span> <span class="n">output</span><span class="o">=</span><span class="n">vgg</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">signature</span> <span class="o">=</span> <span class="n">get_signature</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">forward</span><span class="p">)</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)),</span> <span class="s1">&#39;imagenet_labels1.txt&#39;</span><span class="p">),</span> <span class="s1">&#39;r&#39;</span><span class="p">,</span>
+              <span class="n">encoding</span><span class="o">=</span><span class="s1">&#39;utf-8-sig&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">labels</span> <span class="o">=</span> <span class="p">[</span><span class="n">l</span><span class="o">.</span><span class="n">rstrip</span><span class="p">()</span> <span class="k">for</span> <span class="n">l</span> <span class="ow">in</span> <span class="n">f</span><span class="p">]</span>
+        <span class="n">model</span><span class="o">.</span><span class="n">class_names</span> <span class="o">=</span> <span class="n">labels</span>
+    <span class="n">model</span><span class="o">.</span><span class="n">preprocess_flow</span> <span class="o">=</span> <span class="p">[</span><span class="n">resize</span><span class="p">((</span><span class="n">input_shape</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">input_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="n">keep_aspect</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span> <span class="n">normalize</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">255</span><span class="p">),</span>
+                             <span class="n">normalize</span><span class="p">([</span><span class="mf">0.485</span><span class="p">,</span> <span class="mf">0.456</span><span class="p">,</span> <span class="mf">0.406</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.229</span><span class="p">,</span> <span class="mf">0.224</span><span class="p">,</span> <span class="mf">0.225</span><span class="p">])]</span>
+    <span class="c1"># model.summary()</span>
+
+    <span class="k">return</span> <span class="n">model</span>
+
+
+<span class="c1">#vgg11 =make_vgg_layers(cfgs[&#39;A&#39;], 1000)</span>
+<div class="viewcode-block" id="VGG11"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_vgg.VGG11">[docs]</a><span class="k">def</span> <span class="nf">VGG11</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">pretrained</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">input_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">input_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span><span class="o">==</span><span class="mi">3</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">224</span><span class="p">,</span> <span class="mi">224</span><span class="p">)</span>
+    <span class="n">vgg11</span> <span class="o">=</span><span class="n">make_vgg_layers</span><span class="p">(</span><span class="n">cfgs</span><span class="p">[</span><span class="s1">&#39;A&#39;</span><span class="p">],</span> <span class="n">classes</span><span class="p">)</span>
+    <span class="n">vgg11</span><span class="o">.</span><span class="n">input_shape</span> <span class="o">=</span><span class="n">input_shape</span>
+    <span class="k">if</span> <span class="n">pretrained</span><span class="o">==</span><span class="kc">True</span><span class="p">:</span>
+        <span class="n">download_model_from_google_drive</span><span class="p">(</span><span class="s1">&#39;1PV9-AwgD1v-JxDRzduOjjGduIR7MDhPW&#39;</span><span class="p">,</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg11.pth&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg11.pth&#39;</span><span class="p">))</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_top</span><span class="o">==</span><span class="kc">False</span><span class="p">:</span>
+            <span class="p">[</span><span class="n">recovery_model</span><span class="o">.</span><span class="fm">__delitem__</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">7</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">classes</span><span class="o">!=</span><span class="mi">1000</span><span class="p">:</span>
+                <span class="n">recovery_model</span><span class="o">.</span><span class="n">fc3</span><span class="o">=</span><span class="n">Dense</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">)</span>
+        <span class="n">vgg11</span><span class="o">.</span><span class="n">model</span><span class="o">=</span><span class="n">recovery_model</span>
+    <span class="k">return</span> <span class="n">vgg11</span></div>
+
+
+
+
+
+<span class="c1">#vgg13 =make_vgg_layers(cfgs[&#39;B&#39;],  1000)</span>
+<div class="viewcode-block" id="VGG13"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_vgg.VGG13">[docs]</a><span class="k">def</span> <span class="nf">VGG13</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">pretrained</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">input_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">input_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span><span class="o">==</span><span class="mi">3</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">224</span><span class="p">,</span> <span class="mi">224</span><span class="p">)</span>
+    <span class="n">vgg13</span> <span class="o">=</span><span class="n">make_vgg_layers</span><span class="p">(</span><span class="n">cfgs</span><span class="p">[</span><span class="s1">&#39;B&#39;</span><span class="p">],</span> <span class="n">classes</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">pretrained</span><span class="o">==</span><span class="kc">True</span><span class="p">:</span>
+        <span class="n">download_model_from_google_drive</span><span class="p">(</span><span class="s1">&#39;1wx67gmQ8eHWXs2mhJmNl-t-cFNw7dJ7O&#39;</span><span class="p">,</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg13.pth&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg13.pth&#39;</span><span class="p">))</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">include_top</span><span class="o">==</span><span class="kc">False</span><span class="p">:</span>
+            <span class="p">[</span><span class="n">recovery_model</span><span class="o">.</span><span class="fm">__delitem__</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">7</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">classes</span><span class="o">!=</span><span class="mi">1000</span><span class="p">:</span>
+                <span class="n">recovery_model</span><span class="o">.</span><span class="n">fc3</span><span class="o">=</span><span class="n">Dense</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">)</span>
+        <span class="n">vgg13</span><span class="o">.</span><span class="n">model</span><span class="o">=</span><span class="n">recovery_model</span>
+    <span class="k">return</span> <span class="n">vgg13</span></div>
+
+
+<span class="c1">#vgg16 =make_vgg_layers(cfgs[&#39;D&#39;],  1000)</span>
+<div class="viewcode-block" id="VGG16"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_vgg.VGG16">[docs]</a><span class="k">def</span> <span class="nf">VGG16</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">pretrained</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">input_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">input_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span><span class="o">==</span><span class="mi">3</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">224</span><span class="p">,</span> <span class="mi">224</span><span class="p">)</span>
+    <span class="n">vgg16</span> <span class="o">=</span><span class="n">make_vgg_layers</span><span class="p">(</span><span class="n">cfgs</span><span class="p">[</span><span class="s1">&#39;D&#39;</span><span class="p">],</span> <span class="n">classes</span><span class="p">)</span>
+    <span class="n">vgg16</span><span class="o">.</span><span class="n">input_shape</span> <span class="o">=</span><span class="n">input_shape</span>
+    <span class="k">if</span> <span class="n">pretrained</span><span class="o">==</span><span class="kc">True</span><span class="p">:</span>
+        <span class="n">download_model_from_google_drive</span><span class="p">(</span><span class="s1">&#39;1uXiH5MSy1rvxrHjW4uB9E2BHMM8b0Fwr&#39;</span><span class="p">,</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg16.pth&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg16.pth&#39;</span><span class="p">))</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">include_top</span><span class="o">==</span><span class="kc">False</span><span class="p">:</span>
+            <span class="p">[</span><span class="n">recovery_model</span><span class="o">.</span><span class="fm">__delitem__</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">7</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">classes</span><span class="o">!=</span><span class="mi">1000</span><span class="p">:</span>
+                <span class="n">recovery_model</span><span class="o">.</span><span class="n">fc3</span><span class="o">=</span><span class="n">Dense</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+        <span class="n">vgg16</span><span class="o">.</span><span class="n">model</span><span class="o">=</span><span class="n">recovery_model</span>
+    <span class="k">return</span> <span class="n">vgg16</span></div>
+
+<span class="c1">#vgg19 =make_vgg_layers(cfgs[&#39;E&#39;], 1000)</span>
+<div class="viewcode-block" id="VGG19"><a class="viewcode-back" href="../../../trident.models.html#trident.models.pytorch_vgg.VGG19">[docs]</a><span class="k">def</span> <span class="nf">VGG19</span><span class="p">(</span><span class="n">include_top</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">pretrained</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+             <span class="n">input_shape</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+             <span class="n">classes</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+             <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">input_shape</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span><span class="o">==</span><span class="mi">3</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">input_shape</span><span class="o">=</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">224</span><span class="p">,</span> <span class="mi">224</span><span class="p">)</span>
+    <span class="n">vgg19</span> <span class="o">=</span><span class="n">make_vgg_layers</span><span class="p">(</span><span class="n">cfgs</span><span class="p">[</span><span class="s1">&#39;E&#39;</span><span class="p">],</span> <span class="n">classes</span><span class="p">)</span>
+    <span class="n">vgg19</span><span class="o">.</span><span class="n">input_shape</span> <span class="o">=</span><span class="n">input_shape</span>
+    <span class="k">if</span> <span class="n">pretrained</span><span class="o">==</span><span class="kc">True</span><span class="p">:</span>
+        <span class="n">download_model_from_google_drive</span><span class="p">(</span><span class="s1">&#39;1nqQJLYMzeiUX9hji39-rrBUG42YyjhYg&#39;</span><span class="p">,</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg19.pth&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">dirname</span><span class="p">,</span><span class="s1">&#39;vgg19.pth&#39;</span><span class="p">))</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">eval</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">include_top</span><span class="o">==</span><span class="kc">False</span><span class="p">:</span>
+            <span class="p">[</span><span class="n">recovery_model</span><span class="o">.</span><span class="fm">__delitem__</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">7</span><span class="p">)]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">classes</span><span class="o">!=</span><span class="mi">1000</span><span class="p">:</span>
+                <span class="n">recovery_model</span><span class="o">.</span><span class="n">fc3</span><span class="o">=</span><span class="n">Dense</span><span class="p">(</span><span class="n">classes</span><span class="p">,</span><span class="n">use_bias</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">activation</span><span class="o">=</span><span class="s1">&#39;sigmoid&#39;</span><span class="p">)</span>
+        <span class="n">recovery_model</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">_device</span><span class="p">)</span>
+        <span class="n">vgg19</span><span class="o">.</span><span class="n">model</span><span class="o">=</span><span class="n">recovery_model</span>
+    <span class="k">return</span> <span class="n">vgg19</span></div>
+</pre></div>
+
+        </div>
+        <div class="side-doc-outline">
+            <div class="side-doc-outline--content"> 
+            </div>
+        </div>
+
+      <div class="clearer"></div>
+    </div><div class="pagenation">
+  </div>
+        <footer class="mdl-mini-footer">
+    <div class="mdl-mini-footer__left-section">
+      <div class="mdl-logo">trident</div>
+      <div>
+        
+        
+      </div>
+    </div>
+
+    <div class="mdl-mini-footer__right-section">
+        <div>&copy; Copyright 2020, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+    </div>
+</footer>
+        </main>
+    </div>
+  </body>
+</html>

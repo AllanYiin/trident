@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    
+    <title>trident.layers.pytorch_pooling &#8212; trident 5.5.0 documentation</title>
+
+    <link rel="stylesheet" href="../../../_static/material-icons.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/notosanscjkjp.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/roboto.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/material-design-lite-1.3.0/material.deep_orange-indigo.min.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/sphinx_materialdesign_theme.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../../" src="../../../_static/documentation_options.js"></script>
+    <script src="../../../_static/jquery.js"></script>
+    <script src="../../../_static/underscore.js"></script>
+    <script src="../../../_static/doctools.js"></script>
+    <script src="../../../_static/language_data.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script type="text/x-mathjax-config">MathJax.Hub.Config({"tex2jax": {"inlineMath": [["$", "$"], ["\\(", "\\)"]], "processEscapes": true, "ignoreClass": "document", "processClass": "math|output_area"}})</script>
+    <script src="../../../_static/sphinx_materialdesign_theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+  </head>
+<body>
+    <div class="mdl-layout mdl-js-layout mdl-layout--fixed-header mdl-layout--fixed-drawer"><header class="mdl-layout__header mdl-layout__header--waterfall ">
+    <div class="mdl-layout__header-row">
+        
+        <!-- Title -->
+        <span class="mdl-layout-title">
+            <a class="brand" href="../../../index.html">
+                trident
+            </a>
+        </span>
+        
+        <nav class="mdl-navigation breadcrumb">
+            <a class="mdl-navigation__link" href="../../index.html">Module code</a><i class="material-icons">navigate_next</i>
+            <a class="mdl-navigation__link is-active">trident.layers.pytorch_pooling</a>
+        </nav>
+        <div class="mdl-layout-spacer"></div>
+        <nav class="mdl-navigation">
+        
+<form class="form-inline pull-sm-right" action="../../../search.html" method="get">
+      <div class="mdl-textfield mdl-js-textfield mdl-textfield--expandable mdl-textfield--floating-label mdl-textfield--align-right">
+        <label id="quick-search-icon" class="mdl-button mdl-js-button mdl-button--icon"  for="waterfall-exp">
+            <i class="material-icons">search</i>
+        </label>
+        <div class="mdl-textfield__expandable-holder">
+          <input class="mdl-textfield__input" type="text" name="q"  id="waterfall-exp" placeholder="Search" />
+          <input type="hidden" name="check_keywords" value="yes" />
+          <input type="hidden" name="area" value="default" />
+        </div>
+      </div>
+      <div class="mdl-tooltip" data-mdl-for="quick-search-icon">
+      Quick search
+      </div>
+</form>
+        
+        </nav>
+    </div>
+    <div class="mdl-layout__header-row header-links">
+      <div class="mdl-layout-spacer"></div>
+      <nav class="mdl-navigation">
+          <a  class="mdl-navigation__link" href="../../../index.html">
+                  <i class="material-icons navigation-link-icon">home</i>
+                  Home
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  <i class="material-icons navigation-link-icon">launch</i>
+                  ExternalLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="http://example.com">
+                  
+                  NoIconLink
+              </a>
+          
+              <a  class="mdl-navigation__link" href="https://github.com/AllanYiin/trident">
+                  <i class="material-icons navigation-link-icon">link</i>
+                  GitHub
+              </a>
+      </nav>
+    </div>
+</header><header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+        <main class="mdl-layout__content" tabIndex="0">
+<header class="mdl-layout__drawer">
+    
+          <!-- Title -->
+      <span class="mdl-layout-title">
+          <a class="title" href="../../../index.html">
+              <span class="title-text">
+                  trident
+              </span>
+          </a>
+      </span>
+    
+    
+      <div class="globaltoc">
+        <span class="mdl-layout-title toc">Table Of Contents</span>
+        
+        
+        <!-- Local TOC -->
+        <nav class="mdl-navigation"></nav>
+        
+        </div>
+    
+</header>
+
+    <div class="document">
+        <div class="page-content">
+        
+  <h1>Source code for trident.layers.pytorch_pooling</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">absolute_import</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">division</span>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="k">import</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">inspect</span>
+<span class="kn">import</span> <span class="nn">math</span>
+<span class="kn">from</span> <span class="nn">collections</span> <span class="k">import</span> <span class="n">OrderedDict</span>
+<span class="kn">from</span> <span class="nn">functools</span> <span class="k">import</span> <span class="n">partial</span><span class="p">,</span> <span class="n">wraps</span><span class="p">,</span> <span class="n">update_wrapper</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">islice</span>
+<span class="kn">from</span> <span class="nn">itertools</span> <span class="k">import</span> <span class="n">repeat</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">torch</span>
+<span class="kn">import</span> <span class="nn">torch.nn</span> <span class="k">as</span> <span class="nn">nn</span>
+<span class="kn">import</span> <span class="nn">torch.nn.functional</span> <span class="k">as</span> <span class="nn">F</span>  <span class="c1"># import torch functions</span>
+<span class="kn">import</span> <span class="nn">torch.utils.hooks</span> <span class="k">as</span> <span class="nn">hooks</span>
+<span class="kn">from</span> <span class="nn">torch._jit_internal</span> <span class="k">import</span> <span class="n">List</span>
+<span class="kn">from</span> <span class="nn">torch._six</span> <span class="k">import</span> <span class="n">container_abcs</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">Module</span>
+<span class="kn">from</span> <span class="nn">torch.nn</span> <span class="k">import</span> <span class="n">init</span>
+<span class="kn">from</span> <span class="nn">torch.nn.parameter</span> <span class="k">import</span> <span class="n">Parameter</span>
+
+<span class="kn">from</span> <span class="nn">trident.backend.common</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">trident.backend.pytorch_backend</span> <span class="k">import</span>  <span class="n">Layer</span><span class="p">,</span> <span class="n">Sequential</span>
+
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;MaxPool2d&#39;</span><span class="p">,</span> <span class="s1">&#39;MaxPool1d&#39;</span><span class="p">,</span> <span class="s1">&#39;MaxPool3d&#39;</span><span class="p">,</span> <span class="s1">&#39;MaxUnpool1d&#39;</span><span class="p">,</span> <span class="s1">&#39;MaxUnpool2d&#39;</span><span class="p">,</span> <span class="s1">&#39;MaxUnpool3d&#39;</span><span class="p">,</span> <span class="s1">&#39;AvgPool1d&#39;</span><span class="p">,</span> <span class="s1">&#39;AvgPool2d&#39;</span><span class="p">,</span>
+           <span class="s1">&#39;AvgPool3d&#39;</span><span class="p">,</span> <span class="s1">&#39;GlobalAvgPool2d&#39;</span><span class="p">,</span> <span class="s1">&#39;AdaptiveAvgPool2d&#39;</span><span class="p">]</span>
+
+<span class="n">_session</span> <span class="o">=</span> <span class="n">get_session</span><span class="p">()</span>
+<span class="n">_device</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s2">&quot;cuda&quot;</span> <span class="k">if</span> <span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span> <span class="k">else</span> <span class="s2">&quot;cpu&quot;</span><span class="p">)</span>
+<span class="n">_epsilon</span> <span class="o">=</span> <span class="n">_session</span><span class="o">.</span><span class="n">epsilon</span>
+
+
+<span class="k">def</span> <span class="nf">_ntuple</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">parse</span><span class="p">(</span><span class="n">x</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">container_abcs</span><span class="o">.</span><span class="n">Iterable</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">x</span>
+        <span class="k">return</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">repeat</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">parse</span>
+
+
+<span class="n">_single</span> <span class="o">=</span> <span class="n">_ntuple</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+<span class="n">_pair</span> <span class="o">=</span> <span class="n">_ntuple</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">_triple</span> <span class="o">=</span> <span class="n">_ntuple</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>
+<span class="n">_quadruple</span> <span class="o">=</span> <span class="n">_ntuple</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
+
+
+<span class="k">class</span> <span class="nc">_PoolNd</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="n">__constants__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;kernel_size&#39;</span><span class="p">,</span> <span class="s1">&#39;strides&#39;</span><span class="p">,</span> <span class="s1">&#39;auto_pad&#39;</span><span class="p">,</span> <span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="s1">&#39;dilation&#39;</span><span class="p">,</span> <span class="s1">&#39;ceil_mode&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span> <span class="n">dilation</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span>
+                 <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">kernel_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">strides</span> <span class="ow">or</span> <span class="n">kernel_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_pad</span> <span class="o">=</span> <span class="n">auto_pad</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="n">padding_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dilation</span> <span class="o">=</span> <span class="n">dilation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_indices&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">get_padding</span><span class="p">(</span><span class="n">input_shape</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="k">def</span> <span class="nf">extra_repr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="s1">&#39;kernel_size=</span><span class="si">{kernel_size}</span><span class="s1">, strides=</span><span class="si">{strides}</span><span class="s1">, padding=</span><span class="si">{padding}</span><span class="s1">&#39;</span> \
+               <span class="s1">&#39;, dilation=</span><span class="si">{dilation}</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="MaxPool1d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool1d">[docs]</a><span class="k">class</span> <span class="nc">MaxPool1d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a 1D max pooling over an input signal composed of several input</span>
+<span class="sd">    planes.</span>
+
+<span class="sd">    In the simplest case, the output value of the layer with input size :math:`(N, C, L)`</span>
+<span class="sd">    and output :math:`(N, C, L_{out})` can be precisely described as:</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        out(N_i, C_j, k) = \max_{m=0, \ldots, \text{kernel\_size} - 1}</span>
+<span class="sd">                input(N_i, C_j, strides \times k + m)</span>
+
+<span class="sd">    If :attr:`padding` is non-zero, then the input is implicitly zero-padded on both sides</span>
+<span class="sd">    for :attr:`padding` number of points. :attr:`dilation` controls the spacing between the kernel points.</span>
+<span class="sd">    It is harder to describe, but this `link`_ has a nice visualization of what :attr:`dilation` does.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size: the size of the window to take a max over</span>
+<span class="sd">        stride: the strides of the window. Default value is :attr:`kernel_size`</span>
+<span class="sd">        padding: implicit zero padding to be added on both sides</span>
+<span class="sd">        dilation: a parameter that controls the strides of elements in the window</span>
+<span class="sd">        return_indices: if ``True``, will return the max indices along with the outputs.</span>
+<span class="sd">                        Useful for :class:`torch.nn.MaxUnpool1d` later</span>
+<span class="sd">        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, L_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, L_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}</span>
+<span class="sd">                    \times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.MaxPool1d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(20, 16, 50)</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+
+<span class="sd">    .. _link:</span>
+<span class="sd">        https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;replicate&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MaxPool1d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="n">padding_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_indices&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxPool1d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool1d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">max_pool1d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dilation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MaxPool2d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool2d">[docs]</a><span class="k">class</span> <span class="nc">MaxPool2d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a 2D max pooling over an input signal composed of several input</span>
+<span class="sd">    planes.</span>
+
+<span class="sd">    In the simplest case, the output value of the layer with input size :math:`(N, C, H, W)`,</span>
+<span class="sd">    output :math:`(N, C, H_{out}, W_{out})` and :attr:`kernel_size` :math:`(kH, kW)`</span>
+<span class="sd">    can be precisely described as:</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        \begin{aligned}</span>
+<span class="sd">            out(N_i, C_j, h, w) ={} &amp; \max_{m=0, \ldots, kH-1} \max_{n=0, \ldots, kW-1} \\</span>
+<span class="sd">                                    &amp; \text{input}(N_i, C_j, \text{stride[0]} \times h + m,</span>
+<span class="sd">                                                   \text{stride[1]} \times w + n)</span>
+<span class="sd">        \end{aligned}</span>
+
+<span class="sd">    If :attr:`padding` is non-zero, then the input is implicitly zero-padded on both sides</span>
+<span class="sd">    for :attr:`padding` number of points. :attr:`dilation` controls the spacing between the kernel points.</span>
+<span class="sd">    It is harder to describe, but this `link`_ has a nice visualization of what :attr:`dilation` does.</span>
+
+<span class="sd">    The parameters :attr:`kernel_size`, :attr:`stride`, :attr:`padding`, :attr:`dilation` can either be:</span>
+
+<span class="sd">        - a single ``int`` -- in which case the same value is used for the height and width dimension</span>
+<span class="sd">        - a ``tuple`` of two ints -- in which case, the first `int` is used for the height dimension,</span>
+<span class="sd">          and the second `int` for the width dimension</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size: the size of the window to take a max over</span>
+<span class="sd">        stride: the strides of the window. Default value is :attr:`kernel_size`</span>
+<span class="sd">        padding: implicit zero padding to be added on both sides</span>
+<span class="sd">        dilation: a parameter that controls the strides of elements in the window</span>
+<span class="sd">        return_indices: if ``True``, will return the max indices along with the outputs.</span>
+<span class="sd">                        Useful for :class:`torch.nn.MaxUnpool2d` later</span>
+<span class="sd">        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, H_{in}, W_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, H_{out}, W_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              H_{out} = \left\lfloor\frac{H_{in} + 2 * \text{padding[0]} - \text{dilation[0]}</span>
+<span class="sd">                    \times (\text{kernel\_size[0]} - 1) - 1}{\text{stride[0]}} + 1\right\rfloor</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              W_{out} = \left\lfloor\frac{W_{in} + 2 * \text{padding[1]} - \text{dilation[1]}</span>
+<span class="sd">                    \times (\text{kernel\_size[1]} - 1) - 1}{\text{stride[1]}} + 1\right\rfloor</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool of square window of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.MaxPool2d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; # pool of non-square window</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.MaxPool2d((3, 2), strides=(2, 1))</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(20, 16, 50, 32)</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+
+<span class="sd">    .. _link:</span>
+<span class="sd">        https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">padding_mode</span><span class="o">=</span><span class="s1">&#39;zero&#39;</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MaxPool2d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="n">padding_mode</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">padding_mode</span> <span class="o">==</span> <span class="s1">&#39;zero&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="s1">&#39;constant&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">padding_mode</span> <span class="o">=</span> <span class="n">padding_mode</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_indices&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxPool2d.get_padding"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool2d.get_padding">[docs]</a>    <span class="k">def</span> <span class="nf">get_padding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+        <span class="n">pad_h</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">pad_w</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_pad</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">ih</span><span class="p">,</span> <span class="n">iw</span> <span class="o">=</span> <span class="n">input_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">kh</span><span class="p">,</span> <span class="n">kw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">sh</span><span class="p">,</span> <span class="n">sw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+
+            <span class="n">oh</span><span class="p">,</span> <span class="n">ow</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ih</span> <span class="o">/</span> <span class="n">sh</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">iw</span> <span class="o">/</span> <span class="n">sw</span><span class="p">)</span>
+            <span class="n">pad_h</span> <span class="o">=</span> <span class="nb">max</span><span class="p">((</span><span class="n">oh</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">sh</span> <span class="o">+</span> <span class="p">(</span><span class="n">kh</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">ih</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">pad_w</span> <span class="o">=</span> <span class="nb">max</span><span class="p">((</span><span class="n">ow</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">sw</span> <span class="o">+</span> <span class="p">(</span><span class="n">kw</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">iw</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pad_h</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">sh</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">pad_h</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">pad_w</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">sw</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">pad_w</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">pad_h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span>
+            <span class="n">pad_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">pad_h</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">pad_w</span> <span class="o">/</span> <span class="mi">2</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="MaxPool2d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool2d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="c1"># self.get_padding(x.size()[1:])</span>
+        <span class="c1"># if self.padding[0] &gt; 0 or self.padding[1] &gt; 0:</span>
+        <span class="c1">#     x = F.pad(x, (self.padding[1] , self.padding[1], self.padding[0] , self.padding[0] ), mode=&#39;constant&#39;</span>
+        <span class="c1">#     if self.padding_mode == &#39;zero&#39; else self.padding_mode)</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">max_pool2d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dilation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MaxPool3d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool3d">[docs]</a><span class="k">class</span> <span class="nc">MaxPool3d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a 3D max pooling over an input signal composed of several input</span>
+<span class="sd">    planes.</span>
+
+<span class="sd">    In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,</span>
+<span class="sd">    output :math:`(N, C, D_{out}, H_{out}, W_{out})` and :attr:`kernel_size` :math:`(kD, kH, kW)`</span>
+<span class="sd">    can be precisely described as:</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        \begin{aligned}</span>
+<span class="sd">            \text{out}(N_i, C_j, d, h, w) ={} &amp; \max_{k=0, \ldots, kD-1} \max_{m=0, \ldots, kH-1} \max_{n=0, \ldots, </span>
+<span class="sd">            kW-1} \\</span>
+<span class="sd">                                              &amp; \text{input}(N_i, C_j, \text{stride[0]} \times d + k,</span>
+<span class="sd">                                                             \text{stride[1]} \times h + m, \text{stride[2]} \times w </span>
+<span class="sd">                                                             + n)</span>
+<span class="sd">        \end{aligned}</span>
+
+<span class="sd">    If :attr:`padding` is non-zero, then the input is implicitly zero-padded on both sides</span>
+<span class="sd">    for :attr:`padding` number of points. :attr:`dilation` controls the spacing between the kernel points.</span>
+<span class="sd">    It is harder to describe, but this `link`_ has a nice visualization of what :attr:`dilation` does.</span>
+
+<span class="sd">    The parameters :attr:`kernel_size`, :attr:`stride`, :attr:`padding`, :attr:`dilation` can either be:</span>
+
+<span class="sd">        - a single ``int`` -- in which case the same value is used for the depth, height and width dimension</span>
+<span class="sd">        - a ``tuple`` of three ints -- in which case, the first `int` is used for the depth dimension,</span>
+<span class="sd">          the second `int` for the height dimension and the third `int` for the width dimension</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size: the size of the window to take a max over</span>
+<span class="sd">        stride: the strides of the window. Default value is :attr:`kernel_size`</span>
+<span class="sd">        padding: implicit zero padding to be added on all three sides</span>
+<span class="sd">        dilation: a parameter that controls the strides of elements in the window</span>
+<span class="sd">        return_indices: if ``True``, will return the max indices along with the outputs.</span>
+<span class="sd">                        Useful for :class:`torch.nn.MaxUnpool3d` later</span>
+<span class="sd">        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, D_{in}, H_{in}, W_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] - \text{dilation}[0] \times</span>
+<span class="sd">                (\text{kernel\_size}[0] - 1) - 1}{\text{stride}[0]} + 1\right\rfloor</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] - \text{dilation}[1] \times</span>
+<span class="sd">                (\text{kernel\_size}[1] - 1) - 1}{\text{stride}[1]} + 1\right\rfloor</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] - \text{dilation}[2] \times</span>
+<span class="sd">                (\text{kernel\_size}[2] - 1) - 1}{\text{stride}[2]} + 1\right\rfloor</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool of square window of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.MaxPool3d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; # pool of non-square window</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.MaxPool3d((3, 2, 2), strides=(2, 1, 2))</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(20, 16, 50,44, 31)</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+
+<span class="sd">    .. _link:</span>
+<span class="sd">        https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md</span>
+<span class="sd">    &quot;&quot;&quot;</span>  <span class="c1"># noqa: E501</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MaxPool3d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;return_indices&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxPool3d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxPool3d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">max_pool3d</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">dilation</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">return_indices</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MaxUnpool1d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxUnpool1d">[docs]</a><span class="k">class</span> <span class="nc">MaxUnpool1d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Computes a partial inverse of :class:`MaxPool1d`.</span>
+
+<span class="sd">    :class:`MaxPool1d` is not fully invertible, since the non-maximal values are lost.</span>
+
+<span class="sd">    :class:`MaxUnpool1d` takes in as input the output of :class:`MaxPool1d`</span>
+<span class="sd">    including the indices of the maximal values and computes a partial inverse</span>
+<span class="sd">    in which all non-maximal values are set to zero.</span>
+
+<span class="sd">    .. note:: :class:`MaxPool1d` can map several input sizes to the same output</span>
+<span class="sd">              sizes. Hence, the inversion process can get ambiguous.</span>
+<span class="sd">              To accommodate this, you can provide the needed output size</span>
+<span class="sd">              as an additional argument :attr:`output_size` in the forward call.</span>
+<span class="sd">              See the Inputs and Example below.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size (int or tuple): Size of the max pooling window.</span>
+<span class="sd">        strides (int or tuple): Stride of the max pooling window.</span>
+<span class="sd">            It is set to :attr:`kernel_size` by default.</span>
+<span class="sd">        padding (int or tuple): Padding that was added to the input</span>
+
+<span class="sd">    Inputs:</span>
+<span class="sd">        - `input`: the input Tensor to invert</span>
+<span class="sd">        - `indices`: the indices given out by :class:`~torch.nn.MaxPool1d`</span>
+<span class="sd">        - `output_size` (optional): the targeted output size</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, H_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, H_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              H_{out} = (H_{in} - 1) \times \text{stride}[0] - 2 \times \text{padding}[0] + \text{kernel\_size}[0]</span>
+
+<span class="sd">          or as given by :attr:`output_size` in the call operator</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt;&gt; pool = nn.MaxPool1d(2, strides=2, return_indices=True)</span>
+<span class="sd">        &gt;&gt;&gt; unpool = nn.MaxUnpool1d(2, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.tensor([[[1., 2, 3, 4, 5, 6, 7, 8]]])</span>
+<span class="sd">        &gt;&gt;&gt; output, indices = pool(input)</span>
+<span class="sd">        &gt;&gt;&gt; unpool(output, indices)</span>
+<span class="sd">        tensor([[[ 0.,  2.,  0.,  4.,  0.,  6.,  0., 8.]]])</span>
+
+<span class="sd">        &gt;&gt;&gt; # Example showcasing the use of output_size</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.tensor([[[1., 2, 3, 4, 5, 6, 7, 8, 9]]])</span>
+<span class="sd">        &gt;&gt;&gt; output, indices = pool(input)</span>
+<span class="sd">        &gt;&gt;&gt; unpool(output, indices, output_size=input.size())</span>
+<span class="sd">        tensor([[[ 0.,  2.,  0.,  4.,  0.,  6.,  0., 8.,  0.]]])</span>
+
+<span class="sd">        &gt;&gt;&gt; unpool(output, indices)</span>
+<span class="sd">        tensor([[[ 0.,  2.,  0.,  4.,  0.,  6.,  0., 8.]]])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MaxUnpool1d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxUnpool1d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxUnpool1d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">output_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">max_unpool1d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="n">output_size</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MaxUnpool2d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxUnpool2d">[docs]</a><span class="k">class</span> <span class="nc">MaxUnpool2d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Computes a partial inverse of :class:`MaxPool2d`.</span>
+
+<span class="sd">    :class:`MaxPool2d` is not fully invertible, since the non-maximal values are lost.</span>
+
+<span class="sd">    :class:`MaxUnpool2d` takes in as input the output of :class:`MaxPool2d`</span>
+<span class="sd">    including the indices of the maximal values and computes a partial inverse</span>
+<span class="sd">    in which all non-maximal values are set to zero.</span>
+
+<span class="sd">    .. note:: :class:`MaxPool2d` can map several input sizes to the same output</span>
+<span class="sd">              sizes. Hence, the inversion process can get ambiguous.</span>
+<span class="sd">              To accommodate this, you can provide the needed output size</span>
+<span class="sd">              as an additional argument :attr:`output_size` in the forward call.</span>
+<span class="sd">              See the Inputs and Example below.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size (int or tuple): Size of the max pooling window.</span>
+<span class="sd">        strides (int or tuple): Stride of the max pooling window.</span>
+<span class="sd">            It is set to :attr:`kernel_size` by default.</span>
+<span class="sd">        padding (int or tuple): Padding that was added to the input</span>
+
+<span class="sd">    Inputs:</span>
+<span class="sd">        - `input`: the input Tensor to invert</span>
+<span class="sd">        - `indices`: the indices given out by :class:`~torch.nn.MaxPool2d`</span>
+<span class="sd">        - `output_size` (optional): the targeted output size</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, H_{in}, W_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, H_{out}, W_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">            H_{out} = (H_{in} - 1) \times \text{stride[0]} - 2 \times \text{padding[0]} + \text{kernel\_size[0]}</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">            W_{out} = (W_{in} - 1) \times \text{stride[1]} - 2 \times \text{padding[1]} + \text{kernel\_size[1]}</span>
+
+<span class="sd">          or as given by :attr:`output_size` in the call operator</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt;&gt; pool = nn.MaxPool2d(2, strides=2, return_indices=True)</span>
+<span class="sd">        &gt;&gt;&gt; unpool = nn.MaxUnpool2d(2, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.tensor([[[[ 1.,  2,  3,  4],</span>
+<span class="sd">                                    [ 5,  6,  7,  8],</span>
+<span class="sd">                                    [ 9, 10, 11, 12],</span>
+<span class="sd">                                    [13, 14, 15, 16]]]])</span>
+<span class="sd">        &gt;&gt;&gt; output, indices = pool(input)</span>
+<span class="sd">        &gt;&gt;&gt; unpool(output, indices)</span>
+<span class="sd">        tensor([[[[  0.,   0.,   0.,   0.],</span>
+<span class="sd">                  [  0.,   6.,   0.,   8.],</span>
+<span class="sd">                  [  0.,   0.,   0.,   0.],</span>
+<span class="sd">                  [  0.,  14.,   0.,  16.]]]])</span>
+
+<span class="sd">        &gt;&gt;&gt; # specify a different output size than input size</span>
+<span class="sd">        &gt;&gt;&gt; unpool(output, indices, output_size=torch.Size([1, 1, 5, 5]))</span>
+<span class="sd">        tensor([[[[  0.,   0.,   0.,   0.,   0.],</span>
+<span class="sd">                  [  6.,   0.,   8.,   0.,   0.],</span>
+<span class="sd">                  [  0.,   0.,   0.,  14.,   0.],</span>
+<span class="sd">                  [ 16.,   0.,   0.,   0.,   0.],</span>
+<span class="sd">                  [  0.,   0.,   0.,   0.,   0.]]]])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MaxUnpool2d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">strides</span> <span class="ow">or</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_pad</span> <span class="o">=</span> <span class="n">auto_pad</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxUnpool2d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxUnpool2d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">output_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">max_unpool2d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span>
+                              <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">output_size</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="MaxUnpool3d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxUnpool3d">[docs]</a><span class="k">class</span> <span class="nc">MaxUnpool3d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Computes a partial inverse of :class:`MaxPool3d`.</span>
+
+<span class="sd">    :class:`MaxPool3d` is not fully invertible, since the non-maximal values are lost.</span>
+<span class="sd">    :class:`MaxUnpool3d` takes in as input the output of :class:`MaxPool3d`</span>
+<span class="sd">    including the indices of the maximal values and computes a partial inverse</span>
+<span class="sd">    in which all non-maximal values are set to zero.</span>
+
+<span class="sd">    .. note:: :class:`MaxPool3d` can map several input sizes to the same output</span>
+<span class="sd">              sizes. Hence, the inversion process can get ambiguous.</span>
+<span class="sd">              To accommodate this, you can provide the needed output size</span>
+<span class="sd">              as an additional argument :attr:`output_size` in the forward call.</span>
+<span class="sd">              See the Inputs section below.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size (int or tuple): Size of the max pooling window.</span>
+<span class="sd">        strides (int or tuple): Stride of the max pooling window.</span>
+<span class="sd">            It is set to :attr:`kernel_size` by default.</span>
+<span class="sd">        padding (int or tuple): Padding that was added to the input</span>
+
+<span class="sd">    Inputs:</span>
+<span class="sd">        - `input`: the input Tensor to invert</span>
+<span class="sd">        - `indices`: the indices given out by :class:`~torch.nn.MaxPool3d`</span>
+<span class="sd">        - `output_size` (optional): the targeted output size</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, D_{in}, H_{in}, W_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              D_{out} = (D_{in} - 1) \times \text{stride[0]} - 2 \times \text{padding[0]} + \text{kernel\_size[0]}</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              H_{out} = (H_{in} - 1) \times \text{stride[1]} - 2 \times \text{padding[1]} + \text{kernel\_size[1]}</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              W_{out} = (W_{in} - 1) \times \text{stride[2]} - 2 \times \text{padding[2]} + \text{kernel\_size[2]}</span>
+
+<span class="sd">          or as given by :attr:`output_size` in the call operator</span>
+
+<span class="sd">    Example::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool of square window of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; pool = nn.MaxPool3d(3, strides=2, return_indices=True)</span>
+<span class="sd">        &gt;&gt;&gt; unpool = nn.MaxUnpool3d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; output, indices = pool(torch.randn(20, 16, 51, 33, 15))</span>
+<span class="sd">        &gt;&gt;&gt; unpooled_output = unpool(output, indices)</span>
+<span class="sd">        &gt;&gt;&gt; unpooled_output.size()</span>
+<span class="sd">        torch.Size([20, 16, 51, 33, 15])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">MaxUnpool3d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MaxUnpool3d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.MaxUnpool3d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="n">output_size</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">max_unpool3d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">indices</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="n">output_size</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="AvgPool1d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool1d">[docs]</a><span class="k">class</span> <span class="nc">AvgPool1d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a 1D average pooling over an input signal composed of several</span>
+<span class="sd">    input planes.</span>
+
+<span class="sd">    In the simplest case, the output value of the layer with input size :math:`(N, C, L)`,</span>
+<span class="sd">    output :math:`(N, C, L_{out})` and :attr:`kernel_size` :math:`k`</span>
+<span class="sd">    can be precisely described as:</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        \text{out}(N_i, C_j, l) = \frac{1}{k} \sum_{m=0}^{k-1}</span>
+<span class="sd">                               \text{input}(N_i, C_j, \text{stride} \times l + m)</span>
+
+<span class="sd">    If :attr:`padding` is non-zero, then the input is implicitly zero-padded on both sides</span>
+<span class="sd">    for :attr:`padding` number of points.</span>
+
+<span class="sd">    The parameters :attr:`kernel_size`, :attr:`stride`, :attr:`padding` can each be</span>
+<span class="sd">    an ``int`` or a one-element tuple.</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size: the size of the window</span>
+<span class="sd">        stride: the strides of the window. Default value is :attr:`kernel_size`</span>
+<span class="sd">        padding: implicit zero padding to be added on both sides</span>
+<span class="sd">        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape</span>
+<span class="sd">        count_include_pad: when True, will include the zero-padding in the averaging calculation</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, L_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, L_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              L_{out} = \left\lfloor \frac{L_{in} +</span>
+<span class="sd">              2 \times \text{padding} - \text{kernel\_size}}{\text{stride}} + 1\right\rfloor</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool with window of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.AvgPool1d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; m(torch.tensor([[[1.,2,3,4,5,6,7]]]))</span>
+<span class="sd">        tensor([[[ 2.,  4.,  6.]]])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AvgPool1d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_single</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AvgPool1d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool1d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">avg_pool1d</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="AvgPool2d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool2d">[docs]</a><span class="k">class</span> <span class="nc">AvgPool2d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a 2D average pooling over an input signal composed of several input</span>
+<span class="sd">    planes.</span>
+
+<span class="sd">    In the simplest case, the output value of the layer with input size :math:`(N, C, H, W)`,</span>
+<span class="sd">    output :math:`(N, C, H_{out}, W_{out})` and :attr:`kernel_size` :math:`(kH, kW)`</span>
+<span class="sd">    can be precisely described as:</span>
+
+<span class="sd">    .. math::</span>
+
+<span class="sd">        out(N_i, C_j, h, w)  = \frac{1}{kH * kW} \sum_{m=0}^{kH-1} \sum_{n=0}^{kW-1}</span>
+<span class="sd">                               input(N_i, C_j, stride[0] \times h + m, stride[1] \times w + n)</span>
+
+<span class="sd">    If :attr:`padding` is non-zero, then the input is implicitly zero-padded on both sides</span>
+<span class="sd">    for :attr:`padding` number of points.</span>
+
+<span class="sd">    The parameters :attr:`kernel_size`, :attr:`stride`, :attr:`padding` can either be:</span>
+
+<span class="sd">        - a single ``int`` -- in which case the same value is used for the height and width dimension</span>
+<span class="sd">        - a ``tuple`` of two ints -- in which case, the first `int` is used for the height dimension,</span>
+<span class="sd">          and the second `int` for the width dimension</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size: the size of the window</span>
+<span class="sd">        stride: the strides of the window. Default value is :attr:`kernel_size`</span>
+<span class="sd">        padding: implicit zero padding to be added on both sides</span>
+<span class="sd">        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape</span>
+<span class="sd">        count_include_pad: when True, will include the zero-padding in the averaging calculation</span>
+<span class="sd">        divisor_override: if specified, it will be used as divisor, otherwise attr:`kernel_size` will be used</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, H_{in}, W_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, H_{out}, W_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              H_{out} = \left\lfloor\frac{H_{in}  + 2 \times \text{padding}[0] -</span>
+<span class="sd">                \text{kernel\_size}[0]}{\text{stride}[0]} + 1\right\rfloor</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              W_{out} = \left\lfloor\frac{W_{in}  + 2 \times \text{padding}[1] -</span>
+<span class="sd">                \text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool of square window of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.AvgPool2d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; # pool of non-square window</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.AvgPool2d((3, 2), strides=(2, 1))</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(20, 16, 50, 32)</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">__constants__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;kernel_size&#39;</span><span class="p">,</span> <span class="s1">&#39;stride&#39;</span><span class="p">,</span> <span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="s1">&#39;divisor_override&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span><span class="n">count_include_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">divisor_override</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AvgPool2d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">auto_pad</span> <span class="o">==</span> <span class="n">auto_pad</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">divisor_override</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;divisor_override&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AvgPool2d.get_padding"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool2d.get_padding">[docs]</a>    <span class="k">def</span> <span class="nf">get_padding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+        <span class="n">pad_h</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="n">pad_w</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">auto_pad</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">ih</span><span class="p">,</span> <span class="n">iw</span> <span class="o">=</span> <span class="n">input_shape</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">kh</span><span class="p">,</span> <span class="n">kw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+            <span class="n">sh</span><span class="p">,</span> <span class="n">sw</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]</span>
+
+            <span class="n">oh</span><span class="p">,</span> <span class="n">ow</span> <span class="o">=</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">ih</span> <span class="o">/</span> <span class="n">sh</span><span class="p">),</span> <span class="n">math</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="n">iw</span> <span class="o">/</span> <span class="n">sw</span><span class="p">)</span>
+            <span class="n">pad_h</span> <span class="o">=</span> <span class="nb">max</span><span class="p">((</span><span class="n">oh</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">sh</span> <span class="o">+</span> <span class="p">(</span><span class="n">kh</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">ih</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">pad_w</span> <span class="o">=</span> <span class="nb">max</span><span class="p">((</span><span class="n">ow</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">sw</span> <span class="o">+</span> <span class="p">(</span><span class="n">kw</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">iw</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">pad_h</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">sh</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">pad_h</span> <span class="o">+=</span> <span class="mi">1</span>
+            <span class="k">if</span> <span class="n">pad_w</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">sw</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">pad_w</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">pad_h</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span>
+            <span class="n">pad_w</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">pad_h</span> <span class="o">/</span> <span class="mi">2</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">pad_w</span> <span class="o">/</span> <span class="mi">2</span><span class="p">))</span></div>
+
+<div class="viewcode-block" id="AvgPool2d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool2d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">avg_pool2d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">divisor_override</span><span class="p">)</span></div></div>
+
+
+<div class="viewcode-block" id="AvgPool3d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool3d">[docs]</a><span class="k">class</span> <span class="nc">AvgPool3d</span><span class="p">(</span><span class="n">_PoolNd</span><span class="p">):</span>
+    <span class="sa">r</span><span class="sd">&quot;&quot;&quot;Applies a 3D average pooling over an input signal composed of several input</span>
+<span class="sd">    planes.</span>
+
+<span class="sd">    In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,</span>
+<span class="sd">    output :math:`(N, C, D_{out}, H_{out}, W_{out})` and :attr:`kernel_size` :math:`(kD, kH, kW)`</span>
+<span class="sd">    can be precisely described as:</span>
+
+<span class="sd">    .. math::</span>
+<span class="sd">        \begin{aligned}</span>
+<span class="sd">            \text{out}(N_i, C_j, d, h, w) ={} &amp; \sum_{k=0}^{kD-1} \sum_{m=0}^{kH-1} \sum_{n=0}^{kW-1} \\</span>
+<span class="sd">                                              &amp; \frac{\text{input}(N_i, C_j, \text{stride}[0] \times d + k,</span>
+<span class="sd">                                                      \text{stride}[1] \times h + m, \text{stride}[2] \times w + n)}</span>
+<span class="sd">                                                     {kD \times kH \times kW}</span>
+<span class="sd">        \end{aligned}</span>
+
+<span class="sd">    If :attr:`padding` is non-zero, then the input is implicitly zero-padded on all three sides</span>
+<span class="sd">    for :attr:`padding` number of points.</span>
+
+<span class="sd">    The parameters :attr:`kernel_size`, :attr:`stride` can either be:</span>
+
+<span class="sd">        - a single ``int`` -- in which case the same value is used for the depth, height and width dimension</span>
+<span class="sd">        - a ``tuple`` of three ints -- in which case, the first `int` is used for the depth dimension,</span>
+<span class="sd">          the second `int` for the height dimension and the third `int` for the width dimension</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        kernel_size: the size of the window</span>
+<span class="sd">        stride: the strides of the window. Default value is :attr:`kernel_size`</span>
+<span class="sd">        padding: implicit zero padding to be added on all three sides</span>
+<span class="sd">        ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape</span>
+<span class="sd">        count_include_pad: when True, will include the zero-padding in the averaging calculation</span>
+<span class="sd">        divisor_override: if specified, it will be used as divisor, otherwise attr:`kernel_size` will be used</span>
+
+<span class="sd">    Shape:</span>
+<span class="sd">        - Input: :math:`(N, C, D_{in}, H_{in}, W_{in})`</span>
+<span class="sd">        - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] -</span>
+<span class="sd">                    \text{kernel\_size}[0]}{\text{stride}[0]} + 1\right\rfloor</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] -</span>
+<span class="sd">                    \text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor</span>
+
+<span class="sd">          .. math::</span>
+<span class="sd">              W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] -</span>
+<span class="sd">                    \text{kernel\_size}[2]}{\text{stride}[2]} + 1\right\rfloor</span>
+
+<span class="sd">    Examples::</span>
+
+<span class="sd">        &gt;&gt;&gt; # pool of square window of size=3, strides=2</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.AvgPool3d(3, strides=2)</span>
+<span class="sd">        &gt;&gt;&gt; # pool of non-square window</span>
+<span class="sd">        &gt;&gt;&gt; m = nn.AvgPool3d((3, 2, 2), strides=(2, 1, 2))</span>
+<span class="sd">        &gt;&gt;&gt; input = torch.randn(20, 16, 50,44, 31)</span>
+<span class="sd">        &gt;&gt;&gt; output = m(input)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">__constants__</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;kernel_size&#39;</span><span class="p">,</span> <span class="s1">&#39;stride&#39;</span><span class="p">,</span> <span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="s1">&#39;divisor_override&#39;</span><span class="p">]</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">auto_pad</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AvgPool3d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">,</span> <span class="n">strides</span><span class="p">,</span> <span class="n">auto_pad</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">strides</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="n">strides</span> <span class="k">if</span> <span class="n">strides</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">kernel_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">padding</span> <span class="o">=</span> <span class="n">_triple</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">divisor_override</span> <span class="o">=</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;divisor_override&#39;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+<div class="viewcode-block" id="AvgPool3d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AvgPool3d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">input</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">avg_pool3d</span><span class="p">(</span><span class="nb">input</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">kernel_size</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">strides</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">padding</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ceil_mode</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">count_include_pad</span><span class="p">,</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">divisor_override</span><span class="p">)</span></div>
+
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">d</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AvgPool3d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__setstate__</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;padding&#39;</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;ceil_mode&#39;</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s1">&#39;count_include_pad&#39;</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="GlobalAvgPool2d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.GlobalAvgPool2d">[docs]</a><span class="k">class</span> <span class="nc">GlobalAvgPool2d</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;avg_pool&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">GlobalAvgPool2d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">keepdim</span> <span class="o">=</span> <span class="n">keepdim</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+<div class="viewcode-block" id="GlobalAvgPool2d.build"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.GlobalAvgPool2d.build">[docs]</a>    <span class="k">def</span> <span class="nf">build</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">input_shape</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">==</span> <span class="kc">False</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">keepdim</span> <span class="o">==</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="n">output_shape</span> <span class="o">=</span> <span class="n">input_shape</span><span class="o">.</span><span class="n">clone</span><span class="p">()</span>
+                <span class="n">output_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="n">output_shape</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">output_shape</span> <span class="o">=</span> <span class="n">output_shape</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">output_shape</span> <span class="o">=</span> <span class="n">input_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_built</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+<div class="viewcode-block" id="GlobalAvgPool2d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.GlobalAvgPool2d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">keepdim</span><span class="p">)</span>
+
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="n">x</span><span class="o">.</span><span class="n">view</span><span class="p">(</span><span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">x</span><span class="o">.</span><span class="n">size</span><span class="p">(</span><span class="mi">1</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dim</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdim</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">keepdim</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">x</span></div></div>
+
+
+<div class="viewcode-block" id="AdaptiveAvgPool2d"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AdaptiveAvgPool2d">[docs]</a><span class="k">class</span> <span class="nc">AdaptiveAvgPool2d</span><span class="p">(</span><span class="n">Layer</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">output_size</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s1">&#39;adaptive_avg_pool&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">AdaptiveAvgPool2d</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="fm">__init__</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_size</span> <span class="o">=</span> <span class="n">_pair</span><span class="p">(</span><span class="n">output_size</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+<div class="viewcode-block" id="AdaptiveAvgPool2d.forward"><a class="viewcode-back" href="../../../trident.layers.html#trident.layers.pytorch_pooling.AdaptiveAvgPool2d.forward">[docs]</a>    <span class="k">def</span> <span class="nf">forward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">x</span><span class="p">):</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">enforce_singleton</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">F</span><span class="o">.</span><span class="n">adaptive_avg_pool2d</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">output_size</span><span class="p">)</span></div></div>
+
+<span class="c1">#</span>
+<span class="c1"># class GlobalAvgPool1d(Layer):</span>
+<span class="c1">#     def __init__(self):</span>
+<span class="c1">#         super(GlobalAvgPool1d, self).__init__()</span>
+<span class="c1">#</span>
+<span class="c1">#     def build(self, input_shape):</span>
+<span class="c1">#         pass</span>
+<span class="c1">#</span>
+<span class="c1">#     def forward(self, *x):</span>
+<span class="c1">#         x = enforce_singleton(x)</span>
+<span class="c1">#         assert len(x.size()) == 3, x.size()</span>
+<span class="c1">#         B, C, L = x.size()</span>
+<span class="c1">#         return F.avg_pool1d(x, L)</span>
+<span class="c1">#</span>
+<span class="c1">#</span>
+<span class="c1"># class GlobalAvgPool2d(Layer):</span>
+<span class="c1">#     def __init__(self):</span>
+<span class="c1">#         super(GlobalAvgPool2d, self).__init__()</span>
+<span class="c1">#</span>
+<span class="c1">#     def build(self, input_shape):</span>
+<span class="c1">#         pass</span>
+<span class="c1">#</span>
+<span class="c1">#     def forward(self, *x):</span>
+<span class="c1">#         x = enforce_singleton(x)</span>
+<span class="c1">#         assert len(x.size()) == 4, x.size()</span>
+<span class="c1">#         B, C, W, H = x.size()</span>
+<span class="c1">#         return F.avg_pool2d(x, (W, H))</span>
+</pre></div>
+
+        </div>
+        <div class="side-doc-outline">
+            <div class="side-doc-outline--content"> 
+            </div>
+        </div>
+
+      <div class="clearer"></div>
+    </div><div class="pagenation">
+  </div>
+        <footer class="mdl-mini-footer">
+    <div class="mdl-mini-footer__left-section">
+      <div class="mdl-logo">trident</div>
+      <div>
+        
+        
+      </div>
+    </div>
+
+    <div class="mdl-mini-footer__right-section">
+        <div>&copy; Copyright 2020, AllanYiin.</div>
+      <div>Generated by <a href="http://sphinx.pocoo.org/">Sphinx</a> 3.0.3 using <a href="https://github.com/myyasuda/sphinx_materialdesign_theme">sphinx_materialdesign_theme</a>.</div>
+    </div>
+</footer>
+        </main>
+    </div>
+  </body>
+</html>
