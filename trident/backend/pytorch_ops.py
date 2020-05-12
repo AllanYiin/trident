@@ -12,6 +12,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 from  trident.backend.common import *
 
@@ -24,15 +25,75 @@ def _get_device():
 
 
 def is_tensor(x):
-    return isinstance(x,torch.Tensor)
+    '''Checks whether `x` is exactly a tensor ".
 
-def to_numpy(x) -> np.ndarray:
+      Usage example:
 
-    """
+      >>> is_tensor(torch.tensor([[1,2,3],[4,5,6],[7,8,9]]))
+      True
+      >>> is_tensor(Parameter(to_tensor([[1,2,3],[4,5,6],[7,8,9]])))
+      True
+      >>> is_tensor(np.array([[1,2,3],[4,5,6],[7,8,9]]))
+      False
+      >>> is_tensor("Hello World")
+      False
+
+      Args:
+        x: A python object to check.
+
+      Returns:
+        `True` if `x` is a tensor or "tensor-like", `False` if not.
+
+    '''
+    return torch.is_tensor(x)
+
+def is_tensor_like(x):
+    '''Checks whether `x` is a "tensor-like".
+
+      If `is_tensor_like(x)` returns `True`, it is safe to assume that `x` is a tensor or
+      can be converted to a tensor`.
+
+      Usage example:
+
+      >>> is_tensor_like(torch.tensor([[1,2,3],[4,5,6],[7,8,9]]))
+      True
+      >>> is_tensor_like([[1,2,3],[4,5,6],[7,8,9]])
+      True
+      >>> is_tensor_like(np.array([[1,2,3],[4,5,6],[7,8,9]]))
+      True
+      >>> is_tensor_like("Hello World")
+      False
+
+      Args:
+        x: A python object to check.
+
+      Returns:
+        `True` if `x` is a tensor or "tensor-like", `False` if not.
+
+    '''
+    return torch.is_tensor(to_tensor(x))
+
+def to_numpy(*x) -> np.ndarray:
+    '''
     Convert whatever to numpy array
-    :param x: List, tuple, PyTorch tensor or numpy array
-    :return: Numpy array
-    """
+
+    Args
+        x: List, tuple, PyTorch tensor or numpy array
+
+    Returns
+        Numpy array
+
+    Examples
+        >>> to_numpy(5)
+        array([5])
+        >>> to_numpy([1,2,3])
+        array([1, 2, 3])
+        >>> to_numpy((2,4),(1,3))
+        array([[2, 4],
+           [1, 3]])
+
+    '''
+    x=unpack_singleton(x)
     if isinstance(x, np.ndarray):
         return x
     elif isinstance(x, torch.Tensor):
@@ -110,7 +171,7 @@ def to_tensor(x, dtype=torch.float32,requires_grad=None) -> torch.Tensor:
             x.requires_grad = True
         return x
     else:
-        raise ValueError("Unsupported input type" + str(type(x)))
+        return x
 
 ############################
 ## tensor attribute
@@ -1451,10 +1512,10 @@ def meshgrid(x, y, normalized_coordinates=False,requires_grad=False):
     if normalized_coordinates:
         xs = torch.linspace(0, 1, int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
         ys = torch.linspace(0, 1, int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
+    grid_x, grid_y = torch.meshgrid([xs, ys])
 
-    return torch.stack(torch.meshgrid([ys, xs]),-1).to(_get_device())
-
-
+    grid = torch.stack([grid_y, grid_x], -1).to(_get_device())
+    return grid
 
 
 ############################
