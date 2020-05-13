@@ -568,7 +568,7 @@ class IouLoss(_Loss):
 
 def focal_loss_with_logits(input: torch.Tensor, target: torch.Tensor, gamma=2.0, alpha=0.25, reduction="mean",
                            normalized=False, threshold=None, ) -> torch.Tensor:
-    """Compute binary focal loss between target and output logits.
+    '''Compute binary focal loss between target and output logits.
 
     See :class:`~pytorch_toolbelt.losses.FocalLoss` for details.
 
@@ -587,7 +587,7 @@ def focal_loss_with_logits(input: torch.Tensor, target: torch.Tensor, gamma=2.0,
     References::
 
         https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/loss/losses.py
-    """
+    '''
     if len(target.shape) == len(input.shape):
         target = target.type(input.type())
     elif len(target.shape) + 1 == len(input.shape) and target.shape[0] == input.shape[0]:
@@ -700,10 +700,10 @@ class SoftIoULoss(_Loss):
 
 
 def _lovasz_grad(gt_sorted):
-    """
+    '''
     Computes gradient of the Lovasz extension w.r.t sorted errors
     See Alg. 1 in paper
-    """
+    '''
     p = len(gt_sorted)
     gts = gt_sorted.sum()
     intersection = gts - gt_sorted.float().cumsum(0)
@@ -757,10 +757,10 @@ class LovaszSoftmax(_Loss):
         return loss
 
     def flatten_binary_scores(self, scores, labels, ignore=None):
-        """
+        '''
         Flattens predictions in the batch (binary case)
         Remove labels equal to 'ignore'
-        """
+        '''
         scores = scores.view(-1)
         labels = labels.view(-1)
         if ignore is None:
@@ -771,13 +771,13 @@ class LovaszSoftmax(_Loss):
         return vscores, vlabels
 
     def lovasz_hinge(self, logits, labels, per_image=True, ignore=None):
-        """
+        '''
         Binary Lovasz hinge loss
           logits: [B, H, W] Variable, logits at each pixel (between -\infty and +\infty)
           labels: [B, H, W] Tensor, binary ground truth masks (0 or 1)
           per_image: compute the loss per image instead of per batch
           ignore: void class id
-        """
+        '''
         if per_image:
             loss = (self.lovasz_hinge_flat(*self.flatten_binary_scores(log.unsqueeze(0), lab.unsqueeze(0), ignore)) for
                     log, lab in zip(logits, labels)).mean()
@@ -786,12 +786,12 @@ class LovaszSoftmax(_Loss):
         return loss
 
     def lovasz_hinge_flat(self, logits, labels):
-        """
+        '''
         Binary Lovasz hinge loss
           logits: [P] Variable, logits at each prediction (between -\infty and +\infty)
           labels: [P] Tensor, binary ground truth labels (0 or 1)
           ignore: label to ignore
-        """
+        '''
         if len(labels) == 0:
             # only void pixels, the gradients should be 0
             return logits.sum() * 0.
@@ -817,14 +817,14 @@ class LovaszSoftmax(_Loss):
 
 
 class TripletLoss(_Loss):
-    """Triplet loss with hard positive/negative mining.
+    '''Triplet loss with hard positive/negative mining.
     Reference:
         Hermans et al. In Defense of the Triplet Loss for Person Re-Identification. arXiv:1703.07737.
     Imported from `<https://github.com/Cysu/open-reid/blob/master/reid/loss/triplet.py>`_.
 
     Args:
         margin (float, optional): margin for triplet. Default is 0.3.
-    """
+    '''
 
     def __init__(self, global_feat, labels, margin=0.3, reduction="mean", reduced=False):
         super(TripletLoss, self).__init__()
@@ -834,11 +834,11 @@ class TripletLoss(_Loss):
         self.ranking_loss = nn.MarginRankingLoss(margin=margin, reduction=reduction)
 
     def forward(self, output, target):
-        """
+        '''
         Args:
             output (torch.Tensor): feature matrix with shape (batch_size, feat_dim).
             target (torch.LongTensor): ground truth labels with shape (num_classes).
-        """
+        '''
         n = output.size(0)
         # Compute pairwise distance, replace by the official when merged
         dist = torch.pow(output, 2).sum(dim=1, keepdim=True).expand(n, n)
@@ -862,14 +862,14 @@ class TripletLoss(_Loss):
 
 
 class CenterLoss(_Loss):
-    """Center loss.
+    '''Center loss.
     Reference:
     Wen et al. A Discriminative Feature Learning Approach for Deep Face Recognition. ECCV 2016.
 
     Args:
         num_classes (int): number of classes.
         feat_dim (int): feature dimension.
-    """
+    '''
 
     def __init__(self, num_classes=751, feat_dim=2048, reduction="mean", reduced=False):
         super(CenterLoss, self).__init__()
@@ -882,12 +882,12 @@ class CenterLoss(_Loss):
         self.to(_device)
 
     def forward(self, output, target):
-        """
+        '''
         Args:
             output: feature matrix with shape (batch_size, feat_dim).
             target: ground truth labels with shape (num_classes).
 
-        """
+        '''
         assert output.size(0) == target.size(0), "features.size(0) is not equal to labels.size(0)"
         batch_size = output.size(0)
         distmat = torch.pow(output, 2).sum(dim=1, keepdim=True).expand(batch_size, self.num_classes) + torch.pow(
@@ -1036,7 +1036,7 @@ class GPLoss(nn.Module):
 
 
 class F1ScoreLoss(_Loss):
-    """
+    '''
     This operation computes the f-measure between the output and target. If beta is set as one,
     its called the f1-scorce or dice similarity coefficient. f1-scorce is monotonic in jaccard distance.
 
@@ -1055,7 +1055,7 @@ class F1ScoreLoss(_Loss):
     Returns:
         :class:`~cntk.ops.functions.Function`
 
-    """
+    '''
 
     def __init__(self, reduction='mean', num_class=2, ignore_index=-100, beta=1):
         super(F1ScoreLoss, self).__init__(reduction=reduction)

@@ -756,11 +756,8 @@ class GlobalAvgPool2d(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        if x.size(1) == 1:
-            x = x.view(x.size(0), x.size(1), -1).mean(dim=-1, keepdim=self.keepdim)
-
-        else:
-            x = x.view(x.size(0), x.size(1), -1).mean(dim=-1, keepdim=self.keepdim)
+        N,C,H,W=x.size()
+        x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdim)
         return x
 
 

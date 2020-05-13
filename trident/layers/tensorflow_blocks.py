@@ -498,9 +498,7 @@ class Classifer1d(tf.keras.Sequential):
 class ShortCut2d(Layer):
     def __init__(self, *args, axis=-1,branch_from=None,activation=None, mode='add', name=None, keep_output=False,**kwargs):
         """
-
-        Parameters
-        ----------
+        Args
         layer_defs : object
         """
         super(ShortCut2d, self).__init__(name=name)

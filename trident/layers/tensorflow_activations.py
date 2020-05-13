@@ -13,7 +13,13 @@ from trident.backend.common import *
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','Softmax','BertGELU','GPTGELU','get_activation']
+__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','Softmax',
+
+
+           'BertGelu',
+
+
+           'GptGelu', 'get_activation']
 
 
 
@@ -225,17 +231,17 @@ class Mish(Layer):
 
 
 
-class BertGELU(Layer):
+class BertGelu(Layer):
     def __init__(self,name=None):
-        super(BertGELU, self).__init__(name=name)
+        super(BertGelu, self).__init__(name=name)
     def forward(self, x, mask=None):
         return bert_gelu(x)
 
 
 
-class GPTGELU(Layer):
+class GptGelu(Layer):
     def __init__(self,name=None):
-        super(GPTGELU, self).__init__(name=name)
+        super(GptGelu, self).__init__(name=name)
     def forward(self, x, mask=None):
         return gpt_gelu(x)
 

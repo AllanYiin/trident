@@ -29,7 +29,7 @@ from six.moves.urllib.request import urlopen
 from tqdm import tqdm
 from urllib3.exceptions import NewConnectionError
 
-from trident.backend.common import OrderedDict, PrintException
+from trident.backend.common import OrderedDict, PrintException,get_session,make_dir_if_need
 
 try:
     from urllib.request import urlretrieve
@@ -139,7 +139,7 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
 
     Args:
         file_id (str): id of file to be downloaded
-        root (str): Directory to place downloaded file in
+        dirname (str): Directory to place downloaded file in
         filename (str, optional): Name to save the file under. If None, use the id of the file.
         md5 (str, optional): MD5 checksum of the download. If None, do not check
     """
@@ -172,6 +172,49 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
             print( '***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
             print(e)
             return False
+
+def get_image_from_google_drive(file_id):
+    '''Download a Google Drive image  and place it in root.
+
+    Args:
+        file_id (str): id of file to be downloaded
+
+    Returns:
+        the file path of this downloaded image
+
+    '''
+
+    import requests
+    url = 'https://drive.google.com/uc?export=download'
+
+    filename = file_id
+
+    _session = get_session()
+    _trident_dir = _session.trident_dir
+    dirname = os.path.join(_trident_dir, 'download')
+    make_dir_if_need(dirname)
+    fpath = os.path.join(dirname, filename)
+
+    if os.path.exists(fpath) :
+        os.remove(fpath)
+    try:
+        session = requests.Session()
+        response = session.get(url, params={'id': file_id}, stream=True)
+        content_type=response.headers.get('content-type')
+        filename=file_id+'.'+content_type.split('/')[-1]
+        fpath = os.path.join(dirname, filename)
+
+        token = _get_confirm_token(response)
+        if token:
+            params = {'id': file_id, 'confirm': token}
+            response = session.get(url, params=params, stream=True)
+        _save_response_content(response, fpath)
+        return fpath
+    except Exception as e:
+        print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
+        print( '***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
+        print(e)
+        return None
 
 
 

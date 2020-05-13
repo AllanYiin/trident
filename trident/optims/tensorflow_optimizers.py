@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 import collections
 import itertools
 import math
@@ -21,10 +22,11 @@ from tensorflow.python.keras.engine.input_spec import InputSpec
 from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.ops import nn_ops
 
-from trident.backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, snake2camel, camel2snake
-from trident.backend.tensorflow_backend import  Sequential
-from trident.backend.tensorflow_ops import to_numpy, to_tensor
+from trident.backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, \
+    snake2camel, camel2snake
 from trident.backend.optimizer import OptimizerBase
+from trident.backend.tensorflow_backend import Sequential
+from trident.backend.tensorflow_ops import to_numpy, to_tensor
 
 _session=get_session()
 _epsilon=_session.epsilon

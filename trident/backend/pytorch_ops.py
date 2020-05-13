@@ -16,7 +16,7 @@ from torch.nn.parameter import Parameter
 from torch.autograd import Variable
 from  trident.backend.common import *
 
-__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','ones','ones_like','zeros','zeros_like','meshgrid','reshape','permute','transpose','squeeze','expand_dims','concate','stack','gram_matrix','shuffle','random_choice','get_rotation_matrix2d','warp_affine']
+__all__ = ['is_tensor','to_numpy','to_tensor','ndim','int_shape','is_sparse','is_nan','is_inf','is_abnormal_number','any_nan','any_inf','any_abnormal_number','less','equal','greater','greater_equal','not_equal','less_equal','argmax','argmin','argsort','maximum','minimum','floor','ceil','round','dot','sqrt','square','abs','pow','log','exp','clip','add','subtract','true_divide','pi','matmul','sin','cos','tan','asin','acos','atan','sinh','cosh','tanh','element_times','element_max','element_min','element_divide','element_cosine_distance','where','reduce_mean','reduce_sum','reduce_max','reduce_min','mean','sum','max','min','reduce_logsumexp','reduce_prod','depth_to_space','space_to_depth','identity','sigmoid','relu','relu6','leaky_relu','leaky_relu6','smooth_relu','p_relu','swish','elu','hard_sigmoid','hard_swish','selu','lecun_tanh','soft_sign','soft_plus','hard_tanh','logit','log_log','mish','softmax','log_softmax','bert_gelu','gpt_gelu','moments','l2_normalize','ones','ones_like','zeros','zeros_like','meshgrid','reshape','permute','transpose','squeeze','expand_dims','concate','stack','gram_matrix','shuffle','random_choice','get_rotation_matrix2d','warp_affine']
 
 
 
@@ -312,10 +312,10 @@ def less(left:torch.Tensor, right:torch.Tensor):
         Result is 1 if left < right else 0.
 
     Example:
-   >>> less(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-   tensor([1., 0., 0.])
-   >>> less(to_tensor([-1,0,1]), 0)
-   tensor([1., 0., 0.])
+       >>> less(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+       tensor([1., 0., 0.])
+       >>> less(to_tensor([-1,0,1]), 0)
+       tensor([1., 0., 0.])
 
     '''
 
@@ -331,10 +331,11 @@ def equal(left:torch.Tensor, right:torch.Tensor):
         :Result is 1 if values are equal 0 otherwise
 
     Example:
-    >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-    tensor([0., 1., 0.])
-    >>> equal(to_tensor([-1,0,1]), 1)
-    tensor([0., 0., 1.])
+        >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        tensor([0., 1., 0.])
+        >>> equal(to_tensor([-1,0,1]), 1)
+        tensor([0., 0., 1.])
+
     '''
     return left.eq(right).float()
 
@@ -348,10 +349,11 @@ def greater(left:torch.Tensor, right:torch.Tensor):
         :Result is 1 if left > right else 0.
 
     Example:
-    >>> greater(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-    tensor([0., 0., 1.])
-    >>> greater(to_tensor([-1,0,1]), 0)
-    tensor([0., 0., 1.])
+        >>> greater(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        tensor([0., 0., 1.])
+        >>> greater(to_tensor([-1,0,1]), 0)
+        tensor([0., 0., 1.])
+
     '''
     return left.gt(right).float()
 
@@ -366,10 +368,11 @@ def greater_equal(left:torch.Tensor, right:torch.Tensor):
         :Result is 1 if left >= right else 0
 
     Example:
-    >>> greater_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-    tensor([0., 1., 1.])
-    >>> greater_equal(to_tensor([-1,0,1]), 0)
-    tensor([0., 1., 1.])
+        >>> greater_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        tensor([0., 1., 1.])
+        >>> greater_equal(to_tensor([-1,0,1]), 0)
+        tensor([0., 1., 1.])
+
     '''
     return left.ge(right).float()
 
@@ -384,10 +387,11 @@ def not_equal(left:torch.Tensor, right:torch.Tensor):
         :Result is 1 if left != right else 0.
 
     Example:
-    >>> not_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-    tensor([1., 0., 1.])
-    >>> not_equal(to_tensor([-1,0,1]), 0)
-    tensor([1., 0., 1.])
+        >>> not_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        tensor([1., 0., 1.])
+        >>> not_equal(to_tensor([-1,0,1]), 0)
+        tensor([1., 0., 1.])
+
     '''
     return 1-(left.eq(right).float())
 
@@ -400,12 +404,12 @@ def less_equal(left:torch.Tensor, right:torch.Tensor):
         right: right side tensor
 
     Returns:
-        :Result is 1 if left <= right else 0.
+        Result is 1 if left <= right else 0.
     Example:
-    >>> less_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-    tensor([1., 1., 0.])
-    >>> less_equal(to_tensor([-1,0,1]), 0)
-    tensor([1., 1., 0.])
+        >>> less_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        tensor([1., 1., 0.])
+        >>> less_equal(to_tensor([-1,0,1]), 0)
+        tensor([1., 1., 0.])
 
     '''
     return left.le(right).float()
@@ -870,21 +874,22 @@ def reduce_sum(x:torch.Tensor,axis=None,keepdims=False,**kwargs):
         **kwargs ():
 
     Returns:
-
+        The sum of the input tensor's elements across a specified axis or a list of specified axes.
 
     Exsample:
-    >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
-    >>> print(reduce_sum(data).cpu())
-    tensor(219.)
-    >>> print(reduce_sum(data, 0).cpu())
-    tensor([[ 90.,   3.],
-            [120.,   6.]])
-    >>> print(reduce_sum(data, axis=0).cpu())
-    tensor([[ 90.,   3.],
-            [120.,   6.]])
-    >>> print(reduce_sum(data, axis=[0,2]).cpu())
-    tensor([ 93., 126.])
-        '''
+        >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+        >>> print(reduce_sum(data).cpu())
+        tensor(219.)
+        >>> print(reduce_sum(data, 0).cpu())
+        tensor([[ 90.,   3.],
+                [120.,   6.]])
+        >>> print(reduce_sum(data, axis=0).cpu())
+        tensor([[ 90.,   3.],
+                [120.,   6.]])
+        >>> print(reduce_sum(data, axis=[0,2]).cpu())
+        tensor([ 93., 126.])
+
+    '''
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if axis is None:
@@ -1233,6 +1238,23 @@ def bert_gelu(x):
 def gpt_gelu(x):
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
+
+
+
+############################
+## normalization operation
+###########################
+
+def moments(x:torch.Tensor, axis,  keepdims=True):
+    _axes = list(axis)
+    norm_mean = reduce_mean(x,axis=_axes,keepdims=keepdims).detach()
+    norm_variance=reduce_mean(square(x-norm_mean),axis=_axes,keepdims=keepdims)
+    return norm_mean, norm_variance
+
+
+
+def l2_normalize(x:torch.Tensor, eps=epsilon()):
+    return x / (x.norm() + eps)
 
 
 ############################

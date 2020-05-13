@@ -139,7 +139,7 @@ def generate_priors(feature_map_list, shrinkage_list, image_size, min_boxes, cla
 
 
 def convert_locations_to_boxes(locations, priors, center_variance, size_variance):
-    """Convert regressional location results of SSD into boxes in the form of (center_x, center_y, h, w).
+    '''Convert regressional location results of SSD into boxes in the form of (center_x, center_y, h, w).
 
     The conversion:
         $$predicted\_center * center_variance = \frac {real\_center - prior\_center} {prior\_hw}$$
@@ -153,7 +153,7 @@ def convert_locations_to_boxes(locations, priors, center_variance, size_variance
     Returns:
         boxes:  priors: [[center_x, center_y, h, w]]. All the values
             are relative to the image size.
-    """
+    '''
     # priors can have one dimension less.
     if priors.dim() + 1 == locations.dim():
         priors = priors.unsqueeze(0)
@@ -228,12 +228,12 @@ def tiny_mobile_rfbnet(filter_base=16, num_classes=4):
 class RFBnet(Layer):
     def __init__(self, *args, base_filters=16, num_classes=4, num_regressors=14,iou_threshold=0.3, center_variance=0.1, size_variance=0.2,
                  name='tiny_mobile_rfbnet', **kwargs):
-        """
+        '''
 
         Parameters
         ----------
         layer_defs : object
-        """
+        '''
         super(RFBnet, self).__init__(name=name)
         self.base_filters = base_filters
         backbond = tiny_mobile_rfbnet(self.base_filters)

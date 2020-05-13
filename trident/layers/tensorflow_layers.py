@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import builtins
 import collections
 import inspect
 import itertools
@@ -20,18 +20,19 @@ from tensorflow.python.keras.layers.convolutional import Conv
 from tensorflow.python.keras.utils import conv_utils
 from tensorflow.python.keras.utils.generic_utils import deserialize_keras_object
 from tensorflow.python.keras.utils.generic_utils import serialize_keras_object
-from tensorflow.python.ops import gen_math_ops, image_ops,math_ops
+from tensorflow.python.ops import gen_math_ops, image_ops, math_ops
 from tensorflow.python.ops import nn, nn_ops, array_ops
 from tensorflow.python.ops import sparse_ops
 from tensorflow.python.ops import standard_ops
 
-
 from trident.backend.common import *
 from trident.backend.load_backend import *
-from trident.backend.tensorflow_backend import Layer,  Sequential
+from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_activations import get_activation
+
 _tf_data_format = 'channels_last'
+
 
 def _ntuple(n):
     def parse(x):
@@ -47,9 +48,9 @@ _pair = _ntuple(2)
 _triple = _ntuple(3)
 _quadruple = _ntuple(4)
 
-
-__all__ = [ 'Dense', 'Flatten', 'Concatenate', 'Concate', 'Add', 'Subtract', 'Conv1d', 'Conv2d', 'Conv3d','TransConv1d',
-           'TransConv2d', 'TransConv3d','DepthwiseConv1d','DepthwiseConv2d','DepthwiseConv3d','SeparableConv2d','Upsampling2d', 'Reshape', 'Dropout', 'Lambda', 'SoftMax', 'Noise']
+__all__ = ['Dense', 'Flatten', 'Concatenate', 'Concate', 'Add', 'Subtract', 'Conv1d', 'Conv2d', 'Conv3d', 'TransConv1d',
+           'TransConv2d', 'TransConv3d', 'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'SeparableConv2d',
+           'Upsampling2d', 'Reshape', 'Dropout', 'Lambda', 'SoftMax', 'Noise']
 
 _session = get_session()
 
@@ -105,7 +106,6 @@ def get_layer_repr(layer):
     return main_str
 
 
-
 class Dense(Layer):
     def __init__(self, num_filters, use_bias=True, activation=None, keep_output=False, name=None, **kwargs):
         super(Dense, self).__init__()
@@ -126,19 +126,17 @@ class Dense(Layer):
 
     def build(self, input_shape):
         if self._built == False:
-            shape =tf.TensorShape([s.value for s in input_shape.dims] + list(self.num_filters))
+            shape = tf.TensorShape([s.value for s in input_shape.dims] + list(self.num_filters))
             self.weight = tf.Variable(tf.random.normal(shape=shape, mean=0, stddev=1) * 0.02, name='weight')
             if self.use_bias:
-
                 self.bias = tf.Variable(to_tensor(np.zeros((self.num_filters))), name='bias')
 
             self._built = True
 
-
     def forward(self, *x):
         x = enforce_singleton(x)
 
-        x =dot(x, self.weight)
+        x = dot(x, self.weight)
         if self.use_bias:
             x = tf.nn.bias_add(x, self.bias, data_format='NHWC')
         if self.activation is not None:
@@ -151,10 +149,12 @@ class Flatten(Layer):
         super(Flatten, self).__init__()
         self._name = name
         self.keep_output = keep_output
-        self.keep_output=keep_output
+        self.keep_output = keep_output
+
     def build(self, input_shape):
         if self._built == False:
             self._built = True
+
     def forward(self, *x):
         x = enforce_singleton(x)
         x = tf.reshape(x, [x.get_shape().as_list()[0], -1], dtype=tf.int32)
@@ -162,13 +162,14 @@ class Flatten(Layer):
 
 
 class Concate(Layer):
-    r"""Concate layer to splice  tensors ."""
+    '''Concate layer to splice  tensors .'''
 
     def __init__(self, axis=-1):
         super(Concate, self).__init__()
         self.axis = axis
-    def forward(self, *x) ->tf.Tensor:
-        if not isinstance(x, (list,tuple)) or len(x) < 2:
+
+    def forward(self, *x) -> tf.Tensor:
+        if not isinstance(x, (list, tuple)) or len(x) < 2:
             raise ValueError('A `Concatenate` layer should be called on a list of at least 2 tensor  inputs')
 
         if all([k.size() is None for k in x]):
@@ -183,16 +184,15 @@ class Concate(Layer):
             raise ValueError(
                 'A `Concatenate` layer requires inputs with matching shapes except for the concat axis. Got inputs '
                 'shapes: %s' % shape_set)
-        x =tf.concat(x, axis=self.axis)
+        x = tf.concat(x, axis=self.axis)
         return x
 
 
 Concatenate = Concate
 
 
-
 class Add(Layer):
-    r"""Flatten layer to flatten a tensor after convolution."""
+    '''Flatten layer to flatten a tensor after convolution.'''
 
     def __init__(self):
         super(Add, self).__init__()
@@ -202,7 +202,7 @@ class Add(Layer):
             self.output_shape = input_shape
             self._built = True
 
-    def forward(self, *x) ->tf.Tensor:
+    def forward(self, *x) -> tf.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if isinstance(x, tuple):
@@ -214,7 +214,7 @@ class Add(Layer):
 
 
 class Subtract(Layer):
-    r"""Flatten layer to flatten a tensor after convolution."""
+    '''Flatten layer to flatten a tensor after convolution.'''
 
     def __init__(self):
         super(Subtract, self).__init__()
@@ -231,12 +231,12 @@ class Subtract(Layer):
             x = list(x)
         out = 0
         for item in x:
-            out -=item
+            out -= item
         return out
 
 
 class Dot(Layer):
-    r"""Flatten layer to flatten a tensor after convolution."""
+    '''Flatten layer to flatten a tensor after convolution.'''
 
     def __init__(self, axis=1):
         super(Dot, self).__init__()
@@ -253,12 +253,12 @@ class Dot(Layer):
             x = list(x)
         out = 0
         for item in x:
-            out*=item
+            out *= item
         return out
 
 
 class SoftMax(Layer):
-    r"""Flatten layer to flatten a tensor after convolution."""
+    '''Flatten layer to flatten a tensor after convolution.'''
 
     def __init__(self, axis=-1, add_noise=False, noise_intensity=0.005, name=None, **kwargs):
         super(SoftMax, self).__init__(name=name)
@@ -279,6 +279,7 @@ class SoftMax(Layer):
         else:
             x = tf.math.softmax(x, -1)
         return x
+
 
 # def get_static_padding(rank,input_shape,kernal_shape,strides,dilations):
 #     if isinstance(strides,int):
@@ -304,7 +305,7 @@ class SoftMax(Layer):
 #         static_padding.append(rightbtm_pad[-1-k])
 #     return static_padding
 
-def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None):
+def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None):
     ''' Calcualte the actual padding we need in different rank and different convlution settings.
 
     Args:
@@ -331,39 +332,38 @@ def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None):
     ((4, 4), (4, 4), (4, 4))
     '''
     if input_shape is None:
-        input_shape=[224]*rank
-    if isinstance(kernal_shape,int):
-        kernal_shape= _ntuple(rank)(kernal_shape)
-    if isinstance(strides,int):
-        strides= _ntuple(rank)(strides)
-    if isinstance(dilations,int):
-        dilations= _ntuple(rank)(dilations)
+        input_shape = [224] * rank
+    if isinstance(kernal_shape, int):
+        kernal_shape = _ntuple(rank)(kernal_shape)
+    if isinstance(strides, int):
+        strides = _ntuple(rank)(strides)
+    if isinstance(dilations, int):
+        dilations = _ntuple(rank)(dilations)
 
-    input_shape=to_numpy(input_shape)
-    kernal_shape=to_numpy(list(kernal_shape))
+    input_shape = to_numpy(input_shape)
+    kernal_shape = to_numpy(list(kernal_shape))
     strides = to_numpy(list(strides)).astype(np.float32)
-    dilations= to_numpy(list(dilations))
+    dilations = to_numpy(list(dilations))
 
-    output_shape=np.ceil(input_shape/strides)
-    raw_padding=np.clip((output_shape-1)*strides+(kernal_shape-1)*dilations+1-input_shape,a_min=0,a_max=np.inf)
-    remainder=np.remainder(raw_padding,np.ones_like(raw_padding)*2)
+    output_shape = np.ceil(input_shape / strides)
+    raw_padding = np.clip((output_shape - 1) * strides + (kernal_shape - 1) * dilations + 1 - input_shape, a_min=0,
+                          a_max=np.inf)
+    remainder = np.remainder(raw_padding, np.ones_like(raw_padding) * 2)
 
-    raw_padding=raw_padding+(remainder*np.greater(strides,1).astype(np.float32))
-    lefttop_pad = np.ceil(raw_padding/2.0).astype(np.int32)
-    rightbtm_pad=(raw_padding-lefttop_pad).astype(np.int32)
-    static_padding =np.concatenate([np.expand_dims(lefttop_pad,-1),np.expand_dims(rightbtm_pad,-1)],-1)
+    raw_padding = raw_padding + (remainder * np.greater(strides, 1).astype(np.float32))
+    lefttop_pad = np.ceil(raw_padding / 2.0).astype(np.int32)
+    rightbtm_pad = (raw_padding - lefttop_pad).astype(np.int32)
+    static_padding = np.concatenate([np.expand_dims(lefttop_pad, -1), np.expand_dims(rightbtm_pad, -1)], -1)
 
-    return tuple([(static_padding[i,0],static_padding[i,1]) for  i in range(rank)])
-
-
+    return tuple([(static_padding[i, 0], static_padding[i, 1]) for i in range(rank)])
 
 
 class _ConvNd(Layer):
     __constants__ = ['kernel_size', 'num_filters', 'strides', 'auto_pad', 'padding_mode', 'use_bias', 'dilation',
                      'groups', 'transposed']
 
-    def __init__(self, rank,kernel_size, num_filters, strides, auto_pad,padding, padding_mode, use_bias, dilation, groups,
-                 transposed=False, name=None, depth_multiplier=1, depthwise=False,separable=False,**kwargs):
+    def __init__(self, rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias, dilation,
+                 groups, transposed=False, name=None, depth_multiplier=1, depthwise=False, separable=False, **kwargs):
         super(_ConvNd, self).__init__(name=name)
         self.rank = rank
         self.num_filters = num_filters
@@ -398,20 +398,11 @@ class _ConvNd(Layer):
         if self._built == False:
             self.input_filters = input_shape.as_list()[-1]
             if self.auto_pad:
-                self.padding = get_static_padding(self.rank+2, (1,)+self.kernel_size+ (1,),  (1,)+self.strides+ (1,),  (1,)+self.dilation+ (1,), (1,)+tuple(input_shape.as_list()[:-1])+ (1,))
+                self.padding = get_static_padding(self.rank, self.kernel_size ,
+                                                   self.strides ,  self.dilation ,
+                                                   tuple(input_shape.as_list()[:-1]))
             else:
-                if self.padding is None:
-                    self.padding = ((0,0)) * (self.rank+2)
-                elif isinstance(self.padding, int):
-                    self.padding =(0,0)+ (self.padding,self.padding) * self.rank+(0,0)
-                elif len(self.padding) ==self.rank  and isinstance(self.padding[0], int):
-                    self.padding =(0,0)+ ((p,p) for p in self.padding)+(0,0)
-                elif len(self.padding) ==2*self.rank  and isinstance(self.padding[0], tuple) and len(self.padding[0])==2:
-                    self.padding=(0,0)+ self.padding+(0,0)
-                elif len(self.padding) == 2 * self.rank and isinstance(self.padding[0], int) :
-                    self.padding=((0,0),(self.padding[0],self.padding[1]),(self.padding[2],self.padding[3]),(0,0))
-                elif len(self.padding) == 2 * self.rank + 2:
-                    print(self.padding)
+                self.padding = normalize_padding(self.padding, self.rank)
 
             if self.depthwise or self.separable:
                 if self.depth_multiplier is None:
@@ -423,9 +414,8 @@ class _ConvNd(Layer):
                 else:
                     self.groups = self.input_filters if self.groups == 1 else self.groups
 
-
             if self.num_filters is None and self.depth_multiplier is not None:
-                self.num_filters = int(builtins.round(self.input_filters * self.depth_multiplier,0))
+                self.num_filters = int(builtins.round(self.input_filters * self.depth_multiplier, 0))
 
             if self.groups != 1 and self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
@@ -433,20 +423,26 @@ class _ConvNd(Layer):
             if self.depthwise and self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
 
-
-            channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
+            channel_multiplier = int(
+                self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
 
             if self.transposed:
-                #filter_height, filter_width,  out_channels in_channels,
-                self.weight = tf.Variable(tf.random.normal(shape=[*self.kernel_size,channel_multiplier ,int(self.input_filters) ], mean=0, stddev=1) * 0.02, name='weight')
+                # filter_height, filter_width,  out_channels in_channels,
+                self.weight = tf.Variable(
+                    tf.random.normal(shape=[*self.kernel_size, channel_multiplier, int(self.input_filters)], mean=0,
+                                     stddev=1) * 0.02, name='weight')
             else:
 
                 # [filter_height, filter_width, in_channels, out_channels]`
-                self.weight = tf.Variable(tf.random.normal(shape=[*self.kernel_size, int(self.input_filters),channel_multiplier], mean=0, stddev=1) * 0.02, name='weight')
+                self.weight = tf.Variable(
+                    tf.random.normal(shape=[*self.kernel_size, int(self.input_filters), channel_multiplier], mean=0,
+                                     stddev=1) * 0.02, name='weight')
 
                 if self.separable:
-                    pointwise_kernel_size=(1,)*len(self.kernel_size)
-                    self.pointwise = tf.Variable(tf.random.normal(shape=[*pointwise_kernel_size, int(self.input_filters*channel_multiplier), int(self.num_filters) ], mean=0, stddev=1) * 0.02, name='weight')
+                    pointwise_kernel_size = (1,) * len(self.kernel_size)
+                    self.pointwise = tf.Variable(tf.random.normal(
+                        shape=[*pointwise_kernel_size, int(self.input_filters * channel_multiplier),
+                               int(self.num_filters)], mean=0, stddev=1) * 0.02, name='weight')
 
             if self.use_bias:
                 self.bias = tf.Variable(tf.zeros([int(self.num_filters)]), name='bias')
@@ -467,8 +463,8 @@ class _ConvNd(Layer):
         if self._input_shape is not None:
             s += ', input_shape={0}, input_filters={1}'.format(self._input_shape.as_list(), self.input_filters)
         if self.output_shape is not None:
-            s += ', output_shape={0}'.format(self.output_shape if isinstance(self.output_shape, (
-            list, tuple)) else self.output_shape.as_list())
+            s += ', output_shape={0}'.format(
+                self.output_shape if isinstance(self.output_shape, (list, tuple)) else self.output_shape.as_list())
         #     if self.bias is None:
         #         s += ', use_bias=False'
         return s.format(**self.__dict__)
@@ -479,8 +475,8 @@ class _ConvNd(Layer):
 
 
 class Conv1d(_ConvNd):
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero',
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -488,9 +484,7 @@ class Conv1d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
+
         if isinstance(padding, str) and auto_pad == False:
             auto_pad = (padding.lower() == 'same')
             auto_pad = False
@@ -505,10 +499,10 @@ class Conv1d(_ConvNd):
 
         self.activation = get_activation(activation)
 
-
     def conv1d_forward(self, x):
         x = tf.pad(x, [[0], [self.padding[0]], [self.padding[1]], [0]])
-        return tf.nn.conv1d(x, filters=self.weight, strides=(1,)+self.strides+(1,), padding='VALID', data_format="NHWC", dilations=(1,)+self.dilation+(1,), name=self._name)
+        return tf.nn.conv1d(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding='VALID',
+                            data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -536,103 +530,103 @@ class Conv1d(_ConvNd):
 
 
 class Conv2d(_ConvNd):
-    r"""Applies to create a 2D convolution layer
+    '''Applies to create a 2D convolution layer
 
-            Args:
-                kernel_size :(int or tupleof ints)
-                    shape (spatial extent) of the receptive field
+        Args:
+            kernel_size :(int or tupleof ints)
+                shape (spatial extent) of the receptive field
 
-                num_filters :(int  or None, default to None)
-                    number of output channel (filters)`, sometimes in backbond design output channel is propotional
-                    to input channel.
-                    But in trident all layer is shape  delay inferred
+            num_filters :(int  or None, default to None)
+                number of output channel (filters)`, sometimes in backbond design output channel is propotional
+                to input channel.
+                But in trident all layer is shape  delay inferred
 
-                strides:(int or tupleof ints ,default to 1)
-                     stride of the convolution (increment when sliding the filter over the input)
+            strides:(int or tupleof ints ,default to 1)
+                 stride of the convolution (increment when sliding the filter over the input)
 
-                auto_pad:bool
-                    if `False`, then the filter will be shifted over the "valid" area of input, that is,
-                    no value outside the area is used. If ``pad=True`` means 'same
+            auto_pad:bool
+                if `False`, then the filter will be shifted over the "valid" area of input, that is,
+                no value outside the area is used. If ``pad=True`` means 'same
 
-                *padding (optional)
-                    auto_pad can help you calculate the pad you need.
-                    if you have special need , you still can use the paddding
-                    implicit paddings on both sides of the input. Can be a single number or a double tuple (padH, padW)
-                    or quadruple(pad_left, pad_right, pad_top, pad_btm )
+            *padding (optional)
+                auto_pad can help you calculate the pad you need.
+                if you have special need , you still can use the paddding
+                implicit paddings on both sides of the input. Can be a single number or a double tuple (padH, padW)
+                or quadruple(pad_left, pad_right, pad_top, pad_btm )
 
-                padding_mode:string (default is 'zero', available option are 'reflect', 'replicate','constant',
-                'circular')
-                mode: One of "CONSTANT", "REFLECT", or "SYMMETRIC" (case-insensitive)
+            padding_mode:string (default is 'zero', available option are 'reflect', 'replicate','constant',
+            'circular')
+            mode: One of "CONSTANT", "REFLECT", or "SYMMETRIC" (case-insensitive)
 
-                activation: (None, string, function or Layer)
-                    activation function after the convolution operation for apply non-linearity.
+            activation: (None, string, function or Layer)
+                activation function after the convolution operation for apply non-linearity.
 
-                use_bias:bool
-                    the layer will have no bias if `False` is passed here
+            use_bias:bool
+                the layer will have no bias if `False` is passed here
 
-                dilation:(int or tupleof ints)
-                    the spacing between kernel elements. Can be a single number or a tuple (dH, dW). Default: 1
+            dilation:(int or tupleof ints)
+                the spacing between kernel elements. Can be a single number or a tuple (dH, dW). Default: 1
 
-                groups
-                    split input into groups, \text{in\_channels}in_channels should be divisible by the number of
-                    groups. Default: 1
-                depth_multiplier: (int of decimal)
+            groups
+                split input into groups, \text{in\_channels}in_channels should be divisible by the number of
+                groups. Default: 1
+            depth_multiplier: (int of decimal)
 
-                name
-                    name of the layer
+            name
+                name of the layer
 
-            Shape:
-                - Input: :math:`(N, *, H_{in})` where :math:`*` means any number of
-                  additional dimensions and :math:`H_{in} = \text{in\_features}`
-                - Output: :math:`(N, *, H_{out})` where all but the last dimension
-                  are the same shape as the input and :math:`H_{out} = \text{out\_features}`.
+        Shape:
+            - Input: :math:`(N, *, H_{in})` where :math:`*` means any number of
+              additional dimensions and :math:`H_{in} = \text{in\_features}`
+            - Output: :math:`(N, *, H_{out})` where all but the last dimension
+              are the same shape as the input and :math:`H_{out} = \text{out\_features}`.
 
-            Attributes:
-                weight: the learnable weights of the module of shape
-                    :math:`(\text{out\_features}, \text{in\_features})`. The values are
-                    initialized from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})`, where
+        Attributes:
+            weight: the learnable weights of the module of shape
+                :math:`(\text{out\_features}, \text{in\_features})`. The values are
+                initialized from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})`, where
+                :math:`k = \frac{1}{\text{in\_features}}`
+            bias:   the learnable bias of the module of shape :math:`(\text{out\_features})`.
+                    If :attr:`bias` is ``True``, the values are initialized from
+                    :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
                     :math:`k = \frac{1}{\text{in\_features}}`
-                bias:   the learnable bias of the module of shape :math:`(\text{out\_features})`.
-                        If :attr:`bias` is ``True``, the values are initialized from
-                        :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
-                        :math:`k = \frac{1}{\text{in\_features}}`
 
-            Examples::
-                >>> input =to_tensor(np.random.random((1,128,128,32)))
-                >>> conv1= Conv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
-                >>> output = conv1(input)
-                >>> print(output.shape)
-                (1, 64, 64, 64)
-                >>> print(conv1.weight.shape)
-                (3, 3, 32, 64)
-                >>> print(conv1.padding)
-                [1, 1, 1, 1]
-                >>> conv2= Conv2d((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)))
-                >>> output = conv2(input)
-                >>> print(output.shape)
-                (1, 64, 64, 256)
-                >>> print(conv2.weight.shape)
-                (3, 3, 32, 256)
-                >>> print(conv2.padding)
-                (1, 0, 1, 0)
-                >>> conv3= Conv2d((3,5),64,strides=(1,2),activation=mish, auto_pad=True,use_bias=False,dilation=4,groups=16)
-                >>> output = conv3(input)
-                >>> print(output.shape)
-                (1, 136, 60, 4)
-                >>> print(conv3.weight.shape)
-                (3, 5, 32, 4)
-                >>> print(conv3.padding)
-                [8, 8, 4, 4]
-                >>> input = to_tensor(np.random.random((1,37,37,32)))
-                >>> conv4= Conv2d((3,3),64,strides=2,activation=mish, auto_pad=True,use_bias=False)
-                >>> output = conv4(input)
-                >>> print(output.shape)
-                (1, 19, 19, 64)
+     Examples::
+        >>> input =to_tensor(np.random.random((1,128,128,32)))
+        >>> conv1= Conv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
+        >>> output = conv1(input)
+        >>> print(output.shape)
+        (1, 64, 64, 64)
+        >>> print(conv1.weight.shape)
+        (3, 3, 32, 64)
+        >>> print(conv1.padding)
+        [1, 1, 1, 1]
+        >>> conv2= Conv2d((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)))
+        >>> output = conv2(input)
+        >>> print(output.shape)
+        (1, 64, 64, 256)
+        >>> print(conv2.weight.shape)
+        (3, 3, 32, 256)
+        >>> print(conv2.padding)
+        (1, 0, 1, 0)
+        >>> conv3= Conv2d((3,5),64,strides=(1,2),activation=mish, auto_pad=True,use_bias=False,dilation=4,groups=16)
+        >>> output = conv3(input)
+        >>> print(output.shape)
+        (1, 136, 60, 4)
+        >>> print(conv3.weight.shape)
+        (3, 5, 32, 4)
+        >>> print(conv3.padding)
+        [8, 8, 4, 4]
+        >>> input = to_tensor(np.random.random((1,37,37,32)))
+        >>> conv4= Conv2d((3,3),64,strides=2,activation=mish, auto_pad=True,use_bias=False)
+        >>> output = conv4(input)
+        >>> print(output.shape)
+        (1, 19, 19, 64)
 
-            """
+    '''
 
-    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+    def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero',
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
 
         rank = 2
         kernel_size = _pair(kernel_size)
@@ -641,29 +635,38 @@ class Conv2d(_ConvNd):
         num_filters = kwargs.get('filters', kwargs.get('out_channels', num_filters))
         use_bias = kwargs.get('bias', use_bias)
         padding_mode = padding_mode.lower().replace('zeros', 'zero') if isinstance(padding_mode, str) else padding_mode
-        padding = kwargs.get('padding', None)
-        if 'padding' in kwargs:
-            kwargs.pop('padding')
-        if isinstance(padding, str) and auto_pad == False:
-            auto_pad = (padding.lower() == 'same')
+        if isinstance(padding, str):
+            if padding.lower() == 'same':
+                auto_pad = True
+                padding = None
+            elif padding.lower() == 'valid':
+                auto_pad = False
+                padding = _ntuple(self.rank)(0)
         elif isinstance(padding, int) and padding > 0:
             padding = _pair(padding)
             auto_pad = False
         elif isinstance(padding, tuple):
             auto_pad = False
             pass
+
         super(Conv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                      dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
                                      depthwise=False, separable=False, **kwargs)
 
         self.activation = get_activation(activation)
 
-
-
     def conv2d_forward(self, x):
-        x=tf.pad(x,self.padding,mode='CONSTANT')
-        return tf.nn.conv2d(x, filters=self.weight, strides=(1,)+self.strides+(1,),padding='VALID', data_format="NHWC",dilations=(1,)+self.dilation+(1,), name=self._name)
+        if self.auto_pad == True and len(self.padding) == self.rank + 2:
+            x = tf.pad(x, self.padding, mode='CONSTANT')
+        else:
+            padlist = list(self.padding)
+            padlist.insert(0, (0, 0))
+            padlist.append((0, 0))
 
+            x = tf.pad(x, tuple(padlist), mode='CONSTANT')
+
+        return tf.nn.conv2d(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding='VALID',
+                            data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -693,13 +696,14 @@ class Conv3d(_ConvNd):
                                      groups=groups, use_bias=use_bias, depth_multiplier=depth_multiplier,
                                      transposed=False, name=name, **kwargs)
 
-
     def conv3d_forward(self, x):
-        return tf.nn.conv3d(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding=self.padding,data_format="NHWC", dilations=(1,)+self.dilation+(1,), name=self._name)
+        return tf.nn.conv3d(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding=self.padding,
+                            data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
+
 
 class TransConv1d(_ConvNd):
-    def __init__(self, kernel_size, num_filters, strides=1, auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, name=None, **kwargs):
+    def __init__(self, kernel_size, num_filters, strides=1, auto_pad=True, activation=None, use_bias=False, dilation=1,
+                 groups=1, depth_multiplier=None, name=None, **kwargs):
         kernel_size = _single(kernel_size)
         strides = _single(strides)
         dilation = _single(dilation)
@@ -711,17 +715,17 @@ class TransConv1d(_ConvNd):
 
         groups = groups
         super(TransConv1d, self).__init__(num_filters=num_filters, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero', dilation=dilation, groups=groups,
-                                      use_bias=use_bias, depth_multiplier=depth_multiplier,
-                                     transposed=True, name=name, **kwargs)
-
+                                          auto_pad=auto_pad, padding=padding, padding_mode='zero', dilation=dilation,
+                                          groups=groups, use_bias=use_bias, depth_multiplier=depth_multiplier,
+                                          transposed=True, name=name, **kwargs)
 
     def conv1d_forward(self, x):
-        in_shape=x.get_shape().as_list()
-        in_shape[1]*=self.strides[0]
-        in_shape[-1]=self.num_filters
-        return tf.nn.conv1d_transpose(x, filters=self.weight, output_shape=in_shape,strides=(1,)+self.strides+(1,), padding=self.padding, data_format="NHWC",   dilations=(1,)+self.dilation+(1,), name=self._name)
-
+        in_shape = x.get_shape().as_list()
+        in_shape[1] *= self.strides[0]
+        in_shape[-1] = self.num_filters
+        return tf.nn.conv1d_transpose(x, filters=self.weight, output_shape=in_shape, strides=(1,) + self.strides + (1,),
+                                      padding=self.padding, data_format="NHWC", dilations=(1,) + self.dilation + (1,),
+                                      name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -731,6 +735,7 @@ class TransConv1d(_ConvNd):
         if self.activation is not None:
             x = self.activation(x)
         return x
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {filters},strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -748,8 +753,8 @@ class TransConv1d(_ConvNd):
 
 
 class TransConv2d(_ConvNd):
-    def __init__(self, kernel_size, num_filters, strides=1, auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, name=None, **kwargs):
+    def __init__(self, kernel_size, num_filters, strides=1, auto_pad=True, activation=None, use_bias=False, dilation=1,
+                 groups=1, depth_multiplier=None, name=None, **kwargs):
         kernel_size = _pair(kernel_size)
         strides = _pair(strides)
         dilation = _pair(dilation)
@@ -761,19 +766,18 @@ class TransConv2d(_ConvNd):
 
         groups = groups
         super(TransConv2d, self).__init__(num_filters=num_filters, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero', dilation=dilation, groups=groups,
-                                      use_bias=use_bias, depth_multiplier=depth_multiplier,
-                                     transposed=True, name=name, **kwargs)
-
+                                          auto_pad=auto_pad, padding=padding, padding_mode='zero', dilation=dilation,
+                                          groups=groups, use_bias=use_bias, depth_multiplier=depth_multiplier,
+                                          transposed=True, name=name, **kwargs)
 
     def conv2d_forward(self, x):
-        in_shape=x.get_shape().as_list()
-        in_shape[1]*=self.strides[0]
+        in_shape = x.get_shape().as_list()
+        in_shape[1] *= self.strides[0]
         in_shape[2] *= self.strides[1]
-        in_shape[3]=self.num_filters
-        return tf.nn.conv2d_transpose(x, filters=self.weight, output_shape=in_shape,strides=(1,)+self.strides+(1,), padding=self.padding, data_format="NHWC",
-                            dilations=(1,)+self.dilation+(1,), name=self._name)
-
+        in_shape[3] = self.num_filters
+        return tf.nn.conv2d_transpose(x, filters=self.weight, output_shape=in_shape, strides=(1,) + self.strides + (1,),
+                                      padding=self.padding, data_format="NHWC", dilations=(1,) + self.dilation + (1,),
+                                      name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -783,6 +787,7 @@ class TransConv2d(_ConvNd):
         if self.activation is not None:
             x = self.activation(x)
         return x
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {filters},strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -800,8 +805,8 @@ class TransConv2d(_ConvNd):
 
 
 class TransConv3d(_ConvNd):
-    def __init__(self, kernel_size, num_filters, strides=1, auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, name=None, **kwargs):
+    def __init__(self, kernel_size, num_filters, strides=1, auto_pad=True, activation=None, use_bias=False, dilation=1,
+                 groups=1, depth_multiplier=None, name=None, **kwargs):
         kernel_size = _pair(kernel_size)
         strides = _pair(strides)
         dilation = _pair(dilation)
@@ -813,18 +818,19 @@ class TransConv3d(_ConvNd):
 
         groups = groups
         super(TransConv3d, self).__init__(num_filters=num_filters, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero', dilation=dilation, groups=groups,
-                                      use_bias=use_bias, depth_multiplier=depth_multiplier,
-                                     transposed=True, name=name, **kwargs)
+                                          auto_pad=auto_pad, padding=padding, padding_mode='zero', dilation=dilation,
+                                          groups=groups, use_bias=use_bias, depth_multiplier=depth_multiplier,
+                                          transposed=True, name=name, **kwargs)
+
     def conv3d_forward(self, x):
-        in_shape=x.get_shape().as_list()
-        in_shape[1]*=self.strides[0]
+        in_shape = x.get_shape().as_list()
+        in_shape[1] *= self.strides[0]
         in_shape[2] *= self.strides[1]
         in_shape[3] *= self.strides[2]
-        in_shape[-1]=self.num_filters
-        return tf.nn.conv3d_transpose(x, filters=self.weight, output_shape=in_shape,strides=(1,)+self.strides+(1,), padding=self.padding, data_format="NHWC",
-                            dilations=(1,)+self.dilation+(1,), name=self._name)
-
+        in_shape[-1] = self.num_filters
+        return tf.nn.conv3d_transpose(x, filters=self.weight, output_shape=in_shape, strides=(1,) + self.strides + (1,),
+                                      padding=self.padding, data_format="NHWC", dilations=(1,) + self.dilation + (1,),
+                                      name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -852,8 +858,8 @@ class TransConv3d(_ConvNd):
 
 
 class DepthwiseConv1d(_ConvNd):
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1,  auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, groups=1,  name=None, **kwargs):
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, activation=None, use_bias=False,
+                 dilation=1, groups=1, name=None, **kwargs):
         kernel_size = _single(kernel_size)
         strides = _single(strides)
         dilation = _single(dilation)
@@ -865,24 +871,28 @@ class DepthwiseConv1d(_ConvNd):
 
         groups = groups
         super(DepthwiseConv1d, self).__init__(num_filters=None, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero',dilation=dilation,groups=groups, use_bias=use_bias,depth_multiplier=depth_multiplier,transposed=False,depthwise=True,
-                                      name=name, **kwargs)
+                                              auto_pad=auto_pad, padding=padding, padding_mode='zero',
+                                              dilation=dilation, groups=groups, use_bias=use_bias,
+                                              depth_multiplier=depth_multiplier, transposed=False, depthwise=True,
+                                              name=name, **kwargs)
 
     def conv1d_forward(self, x):
-        return tf.nn.convolution(x, filters=self.weight, strides=(1,)+self.strides+(1,),padding=self.padding, data_format="NHWC",dilations=(1,)+self.dilation+(1,), name=self._name)
+        return tf.nn.convolution(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding=self.padding,
+                                 data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
         x = self.conv1d_forward(x)
         if self.use_bias:
-            x+=self.bias
+            x += self.bias
         if self.activation is not None:
             x = self.activation(x)
         return x
 
+
 class DepthwiseConv2d(_ConvNd):
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1,  auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, name=None, **kwargs):
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, activation=None, use_bias=False,
+                 dilation=1, name=None, **kwargs):
         kernel_size = _pair(kernel_size)
         strides = _pair(strides)
         dilation = _pair(dilation)
@@ -892,11 +902,13 @@ class DepthwiseConv2d(_ConvNd):
         if auto_pad == True:
             padding = 'SAME'
         super(DepthwiseConv2d, self).__init__(num_filters=None, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero',dilation=dilation, use_bias=use_bias,depth_multiplier=depth_multiplier,transposed=False,depthwise=True,
-                                      name=name, **kwargs)
+                                              auto_pad=auto_pad, padding=padding, padding_mode='zero',
+                                              dilation=dilation, use_bias=use_bias, depth_multiplier=depth_multiplier,
+                                              transposed=False, depthwise=True, name=name, **kwargs)
 
     def conv2d_forward(self, x):
-        return tf.nn.depthwise_conv2d(x, filters=self.weight, strides=(1,)+self.strides+(1,),padding=self.padding, data_format="NHWC",dilations=(1,)+self.dilation+(1,), name=self._name)
+        return tf.nn.depthwise_conv2d(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding=self.padding,
+                                      data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -907,9 +919,10 @@ class DepthwiseConv2d(_ConvNd):
             x = self.activation(x)
         return x
 
+
 class DepthwiseConv3d(_ConvNd):
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1,  auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, groups=1,  name=None, **kwargs):
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, activation=None, use_bias=False,
+                 dilation=1, groups=1, name=None, **kwargs):
         kernel_size = _triple(kernel_size)
         strides = _triple(strides)
         dilation = _triple(dilation)
@@ -921,25 +934,28 @@ class DepthwiseConv3d(_ConvNd):
 
         groups = groups
         super(DepthwiseConv3d, self).__init__(num_filters=None, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero',dilation=dilation,groups=groups, use_bias=use_bias,depth_multiplier=depth_multiplier,transposed=False,depthwise=True,
-                                      name=name, **kwargs)
+                                              auto_pad=auto_pad, padding=padding, padding_mode='zero',
+                                              dilation=dilation, groups=groups, use_bias=use_bias,
+                                              depth_multiplier=depth_multiplier, transposed=False, depthwise=True,
+                                              name=name, **kwargs)
 
     def conv3d_forward(self, x):
-        return tf.nn.convolution(x, filters=self.weight, strides=(1,)+self.strides+(1,),padding=self.padding, data_format="NHWC",dilations=(1,)+self.dilation+(1,), name=self._name)
+        return tf.nn.convolution(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding=self.padding,
+                                 data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
         x = self.conv3d_forward(x)
         if self.use_bias:
-            x+=self.bias
+            x += self.bias
         if self.activation is not None:
             x = self.activation(x)
         return x
 
 
 class SeparableConv2d(_ConvNd):
-    def __init__(self, kernel_size, depth_multiplier=1, strides=1,  auto_pad=True, activation=None,
-                 use_bias=False, dilation=1, groups=1,  name=None, **kwargs):
+    def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, activation=None, use_bias=False,
+                 dilation=1, groups=1, name=None, **kwargs):
         kernel_size = _pair(kernel_size)
         strides = _pair(strides)
         dilation = _pair(dilation)
@@ -951,11 +967,15 @@ class SeparableConv2d(_ConvNd):
 
         groups = groups
         super(SeparableConv2d, self).__init__(num_filters=None, kernel_size=kernel_size, strides=strides,
-                                     auto_pad=auto_pad,padding=padding, padding_mode='zero',dilation=dilation,groups=groups, use_bias=use_bias,depth_multiplier=depth_multiplier,transposed=False,separable=True,
-                                      name=name, **kwargs)
+                                              auto_pad=auto_pad, padding=padding, padding_mode='zero',
+                                              dilation=dilation, groups=groups, use_bias=use_bias,
+                                              depth_multiplier=depth_multiplier, transposed=False, separable=True,
+                                              name=name, **kwargs)
 
     def conv2d_forward(self, x):
-        return tf.nn.separable_conv2d(x, depthwise_filter=self.weight,pointwise_filter=self.pointwise, strides=(1,)+self.strides+(1,),padding=self.padding, data_format="NHWC",dilations=(1,)+self.dilation+(1,), name=self._name)
+        return tf.nn.separable_conv2d(x, depthwise_filter=self.weight, pointwise_filter=self.pointwise,
+                                      strides=(1,) + self.strides + (1,), padding=self.padding, data_format="NHWC",
+                                      dilations=(1,) + self.dilation + (1,), name=self._name)
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -967,33 +987,32 @@ class SeparableConv2d(_ConvNd):
         return x
 
 
-
 class Upsampling2d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, keep_output=False,name=None):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, keep_output=False, name=None):
         super(Upsampling2d, self).__init__(name=name)
-        if mode not in {'nearest', 'bilinear','area','pixel_shuffle'}:
+        if mode not in {'nearest', 'bilinear', 'area', 'pixel_shuffle'}:
             raise ValueError('`mode` argument should be one of `"nearest"` '
                              'or `"bilinear"`.')
-        self.rank=2
+        self.rank = 2
         self.size = size
         if isinstance(scale_factor, tuple):
             self.scale_factor = scale_factor
         else:
-            self.scale_factor =(float(scale_factor) ,float(scale_factor) )
+            self.scale_factor = (float(scale_factor), float(scale_factor))
         self.mode = mode
         self.align_corners = align_corners
-        self.keep_output=keep_output
+        self.keep_output = keep_output
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        new_shape=x.shape.as_list()[1:-1]
+        new_shape = x.shape.as_list()[1:-1]
 
-        if self.scale_factor is not None and isinstance(self.scale_factor,tuple):
-            new_shape[0]=int(new_shape[0]*self.scale_factor[0])
+        if self.scale_factor is not None and isinstance(self.scale_factor, tuple):
+            new_shape[0] = int(new_shape[0] * self.scale_factor[0])
             new_shape[1] = int(new_shape[1] * self.scale_factor[1])
-        new_shape=to_tensor(new_shape,dtype=tf.int32)
+        new_shape = to_tensor(new_shape, dtype=tf.int32)
         if self.mode == 'pixel_shuffle':
-            return tf.nn.depth_to_space(x,int(self.scale_factor[0]))
+            return tf.nn.depth_to_space(x, int(self.scale_factor[0]))
         elif self.mode == 'nearest':
             return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
         elif self.mode == 'bilinear':
@@ -1012,13 +1031,12 @@ class Upsampling2d(Layer):
         return info
 
 
-
 class Lambda(Layer):
-    """
+    '''
     Applies a lambda function on forward()
     Args:
         lamb (fn): the lambda function
-    """
+    '''
 
     def __init__(self, function, name=''):
         super(Lambda, self).__init__(name=name)
@@ -1027,8 +1045,10 @@ class Lambda(Layer):
     def build(self, input_shape):
         if self._built == False:
             self._built = True
+
     def forward(self, *x):
         return self.function(*x)
+
     def extra_repr(self):
         s = 'function={0}'.format("".join(inspect.getsourcelines(self.function)[0]))
 
@@ -1036,7 +1056,7 @@ class Lambda(Layer):
 class Reshape(Layer):
     def __init__(self, target_shape, name=None, **kwargs):
         super(Reshape, self).__init__(name=name)
-        self.target_shape=target_shape
+        self.target_shape = target_shape
 
     def build(self, input_shape):
         if self._built == False:
@@ -1083,23 +1103,21 @@ class Noise(tf.keras.layers.GaussianNoise):
         s = 'stddev={0}'.format(self.stddev)
 
 
-
-
-
 class SingleImageLayer(Layer):
-    def __init__(self, image,is_recursive=False,name=''):
+    def __init__(self, image, is_recursive=False, name=''):
         super(SingleImageLayer, self).__init__(name=name)
-        if isinstance(image,(np.ndarray,tf.Tensor)):
+        if isinstance(image, (np.ndarray, tf.Tensor)):
             self.origin_image = to_tensor(image)
             self.input_shape = image.shape[1:]
 
     def build(self, input_shape):
         if self._built == False:
-            self.weight =tf.Variable(to_tensor(self.origin_image.clone()), name='weight')
+            self.weight = tf.Variable(to_tensor(self.origin_image.clone()), name='weight')
             self.input_filters = input_shape.get_shape().as_list()[-1]
             self._built = True
-    def forward(self,x):
-        return expand_dims(self.weight,0)
+
+    def forward(self, x):
+        return expand_dims(self.weight, 0)
 
     def extra_repr(self):
         return 'is_recursive={0}'.format(self.is_recursive)

@@ -19,22 +19,27 @@ import torch
 import torch.nn as nn
 
 from trident import __version__
+from trident.backend.common import *
+from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_ops import *
+from trident.backend.model import ModelBase, progress_bar
+from trident.backend.optimizer import OptimizerBase
+
 from trident.optims.pytorch_constraints import get_constraint
 from trident.optims.pytorch_losses import get_loss
 from trident.optims.pytorch_metrics import get_metric
 from trident.optims.pytorch_optimizers import get_optimizer
 from trident.optims.pytorch_regularizers import get_reg
-from trident.optims.trainers import ModelBase, progress_bar
-from trident.backend.common import *
-from trident.backend.pytorch_backend import *
+
+
 from trident.layers.pytorch_layers import *
-from trident.backend.pytorch_ops import *
+
 from trident.callbacks.lr_schedulers import get_lr_scheduler
 from trident.data.image_common import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
-from trident.backend.optimizer import OptimizerBase
 
-__all__ = ['TrainingItem', 'Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
+
+__all__ = [ 'Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel','FaceRecognitionModel']
 
 _, term_width = get_terminal_size()

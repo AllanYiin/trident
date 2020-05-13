@@ -28,7 +28,7 @@ __all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRe
 class Identity(Layer):
     '''Identity activation Layer
     '''
-    def __init__(self, name=''):
+    def __init__(self, name=None):
         super(Identity, self).__init__(name=name)
 
     def forward(self, x):
@@ -38,7 +38,7 @@ class Identity(Layer):
 class Relu(Layer):
     '''Relu activation Layer
     '''
-    def __init__(self, name=''):
+    def __init__(self, name=None):
         super(Relu, self).__init__(name=name)
 
     def forward(self, *x):
@@ -48,7 +48,7 @@ class Relu(Layer):
 class Relu6(Layer):
     '''Relu6 activation Layer
     '''
-    def __init__(self, ):
+    def __init__(self, name=None ):
         super(Relu6, self).__init__()
 
     def forward(self, *x):
@@ -59,7 +59,7 @@ class Relu6(Layer):
 class LeakyRelu(Layer):
     '''leaky_relu activation Layer
     '''
-    def __init__(self, alpha=0.2):
+    def __init__(self, alpha=0.2, name=None):
         super(LeakyRelu, self).__init__()
         self.alpha=alpha
 
@@ -75,7 +75,7 @@ class LeakyRelu(Layer):
 class LeakyRelu6(Layer):
     '''leaky_relu6 activation Layer
     '''
-    def __init__(self):
+    def __init__(self, name=None):
         super(LeakyRelu6, self).__init__()
 
     def forward(self, *x):
@@ -89,7 +89,7 @@ class LeakyRelu6(Layer):
 class SmoothRelu(Layer):
     '''smooth_relu activation Layer
     '''
-    def __init__(self):
+    def __init__(self, name=None):
         super(SmoothRelu, self).__init__()
 
     def forward(self, *x):
@@ -99,7 +99,7 @@ class SmoothRelu(Layer):
 class PRelu(Layer):
     '''PRelu activation Layer
     '''
-    def __init__(self, num_parameters=1, init=0.25):
+    def __init__(self, num_parameters=1, init=0.25, name=None):
         super(PRelu, self).__init__()
         self.num_parameters=num_parameters
         self.init = init
@@ -126,7 +126,7 @@ class Sigmoid(Layer):
 
        """
 
-    def __init__(self):
+    def __init__(self, name=None):
         super(Sigmoid, self).__init__()
 
     def forward(self, *x):
@@ -137,7 +137,7 @@ class Sigmoid(Layer):
 
 
 class Tanh(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(Tanh, self).__init__()
 
     def forward(self, *x):
@@ -146,7 +146,7 @@ class Tanh(Layer):
 
 
 class Swish(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(Swish, self).__init__()
 
     def forward(self, *x):
@@ -156,18 +156,18 @@ class Swish(Layer):
 
 
 class HardSigmoid(Layer):
-    def __init__(self, inplace=False):
+    def __init__(self, inplace=False, name=None):
         super(HardSigmoid, self).__init__()
 
         self.inplace = inplace
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return hard_sigmoid(x, inplace=self.inplace)
+        return hard_sigmoid(x)
 
 
 class HardSwish(Layer):
-    def __init__(self, inplace=False):
+    def __init__(self, inplace=False, name=None):
         super(HardSwish, self).__init__()
 
         self.inplace = inplace
@@ -178,7 +178,7 @@ class HardSwish(Layer):
 
 
 class HardTanh(Layer):
-    def __init__(self, ):
+    def __init__(self, name=None):
         super(HardTanh, self).__init__()
 
     def forward(self, *x):
@@ -186,7 +186,7 @@ class HardTanh(Layer):
         return hard_tanh(x)
 
 class Selu(Layer):
-    def __init__(self, inplace=False):
+    def __init__(self, inplace=False, name=None):
         super(Selu, self).__init__()
 
         self.inplace = inplace
@@ -196,7 +196,7 @@ class Selu(Layer):
         return selu(x)
 
 class Elu(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(Elu, self).__init__()
 
     def forward(self, *x):
@@ -205,7 +205,7 @@ class Elu(Layer):
 
 
 class LecunTanh(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(LecunTanh, self).__init__()
 
     def forward(self, *x):
@@ -214,7 +214,7 @@ class LecunTanh(Layer):
 
 
 class SoftSign(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(SoftSign, self).__init__()
 
     def forward(self, *x):
@@ -222,7 +222,7 @@ class SoftSign(Layer):
         return soft_sign(x)
 
 class SoftPlus(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(SoftPlus, self).__init__()
 
     def forward(self, *x):
@@ -231,7 +231,7 @@ class SoftPlus(Layer):
 
 
 class Logit(Layer):
-    def __init__(self, ):
+    def __init__(self , name=None ):
         super(Logit, self).__init__()
 
     def forward(self, *x):
@@ -239,7 +239,7 @@ class Logit(Layer):
         return logit(x)
 
 class LogLog(Layer):
-    def __init__(self, ):
+    def __init__(self, name=None ):
         super(LogLog, self).__init__()
 
     def forward(self, *x):
@@ -253,7 +253,7 @@ class Mish(Layer):
 
     '''
 
-    def __init__(self):
+    def __init__(self, name=None):
         super().__init__()
 
     def forward(self, *x):
@@ -274,7 +274,7 @@ class Softmax(Layer):
        # Raises
            ValueError: In case `dim(x) == 1`.
        """
-    def __init__(self):
+    def __init__(self, name=None):
         super(Softmax, self).__init__()
 
     def forward(self, *x):
@@ -284,7 +284,7 @@ class Softmax(Layer):
 
 
 class LogSoftmax(Layer):
-    def __init__(self):
+    def __init__(self, name=None):
         super(LogSoftmax, self).__init__()
 
     def forward(self, *x):
@@ -298,7 +298,7 @@ class BertGelu(Layer):
     r"""Bert uses GELU as the activation function for the position-wise network.
     """
 
-    def __init__(self):
+    def __init__(self, name=None):
         super(BertGelu, self).__init__()
 
     def forward(self, *x):
@@ -314,7 +314,7 @@ class GptGelu(Layer):
     slightly different results).
     """
 
-    def __init__(self):
+    def __init__(self, name=None):
         super(GptGelu, self).__init__()
 
     def forward(self, *x):
@@ -325,6 +325,19 @@ class GptGelu(Layer):
 
 
 def get_activation(fn_name):
+    '''
+
+    Args:
+        fn_name ():
+
+    Returns:
+
+    Examples:
+        >>> print(get_activation('swish'))
+
+
+
+    '''
     if fn_name is None:
         return None
     fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops','torch.nn.functional']
@@ -357,6 +370,7 @@ def get_activation(fn_name):
                     return fn_name if inspect.isfunction(fn_name) else fn_name()
                 else:
                     raise ValueError('Unknown activation function/ class')
-    except Exception:
+    except Exception as e:
+        print(e)
         return None
 

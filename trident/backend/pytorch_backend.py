@@ -13,7 +13,7 @@ from collections import defaultdict
 from copy import copy
 from functools import update_wrapper
 from itertools import islice
-from distutils.version import LooseVersion
+from distutils.version import Version,LooseVersion
 import torch.nn as nn
 import torch.onnx
 from torch._six import container_abcs
@@ -22,22 +22,21 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList',  'get_device', 'load','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
+__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList',  'get_device', 'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
 
 
-pt_version=LooseVersion(version)
-base_version=LooseVersion('1.2.0')
+pt_version=LooseVersion(vstring=version)
+base_version=LooseVersion(vstring='1.2.0')
 
-if pt_version <base_version:
-    raise ValueError('Not support Pytorch below 1.2' )
+# if pt_version.version <base_version.version:
+#     raise ValueError('Not support Pytorch older then version 1.2' )
 
 
 def get_device():
-    _device=get_session().device
-    if _device is None:
+    if get_session().device is None:
         set_device("cuda" if torch.cuda.is_available() else "cpu")
     return get_session().device
 
@@ -99,6 +98,7 @@ def reset_name(module:nn.Module, prefix_dict=None):
     prefix,seq=module._default_name.rsplit('_', 1) #if '_' in module._default_name else
     seq=int(seq)
     module.default_name = prefix + '_' + str(seq-get_uid(prefix,seq)+1)
+    module.__name__=module._name if module._name is None else module.default_name
 
 
 _UID_PREFIX = defaultdict(int)
@@ -113,11 +113,14 @@ class Layer(nn.Module):
     Trident extened nn.Module
     """
 
-    def __init__(self,**kwargs):
+    def __init__(self,name=None,**kwargs):
+        self._built = False
+        self._uid_prefixs = {}
         super(Layer, self).__init__()
+        self._name = name
         self.training = True
-        self._built= False
-        self._uid_prefixs ={}
+
+
         self.rank= kwargs.get('rank',None)
         self._input_shape = None
         self._output_shape = None
@@ -127,13 +130,13 @@ class Layer(nn.Module):
 
         prefix = self.__class__.__name__
         self._default_name= camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
-        reset_name(self,self._uid_prefixs)
+        self.default_name=self._default_name
         self.relative_name=''
+        reset_name(self, self._uid_prefixs)
         # self._input_shape=None
         # self._output_shape = None
         self.input_filters =None
 
-        self._name = kwargs.get('name')
         #self.dump_patches = True
 
         self.uuid=uuid.uuid4().node
@@ -150,6 +153,7 @@ class Layer(nn.Module):
     @name.setter
     def name(self,value):
         self._name=value
+        self.__name__ = value
 
 
 
@@ -291,17 +295,6 @@ class Layer(nn.Module):
             print('{0} parameters have set untrainable'.format(n))
 
 
-    def get_config(self):
-        config = {'name': self.name,
-                  'trainable': self.trainable}
-
-        if hasattr(self, 'batch_input_shape'):
-            config['batch_input_shape'] = self.batch_input_shape
-
-        if hasattr(self, 'dtype'):
-            config['dtype'] = self.dtype
-
-        return config
 
     @property
     def device(self):
@@ -397,16 +390,15 @@ class Layer(nn.Module):
 
     @property
     def output(self):
-        """Retrieves the output tensor(s) of a layer.
-        for memory saving issue, we don'tb prefer to keep every input/output
-        tensor in every layer.You should set self.keep.output flag to True, and then
-        retrive the output tensor when the calll() is executing.
-        # Returns
+        '''
+            Retrieves the output tensor(s) of a layer.
+            for memory saving issue, we don'tb prefer to keep every input/output
+            tensor in every layer.You should set self.keep.output flag to True, and then
+            retrive the output tensor when the calll() is executing.
+        Returns
             Output tensor or list of output tensors.
-        # Raises
-            AttributeError: if the layer is connected to
-            more than one incoming layers.
-        """
+
+        '''
         if self.keep_output==False:
             raise ValueError('Layer {0} has not set self.keep.output  to True, cannot access output '.format(self.name))
         return list(self._output_tensor) if isinstance(self._output_tensor,tuple) else self._output_tensor
@@ -496,8 +488,9 @@ class Layer(nn.Module):
             modules = self.__dict__['_modules']
             if name in modules:
                 return modules[name]
-        raise AttributeError("'{}' object has no attribute '{}'".format(
-            type(self).__name__, name))
+        if name in self.__dict__:
+            return self.__dict__[name]
+        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __setattr__(self, name, value):
         def remove_from(*dicts):
@@ -574,8 +567,6 @@ class Layer(nn.Module):
 
 
 
-
-
 class Sequential(Layer):
     r"""A sequential container.
     Modules will be added to it in the order they are passed in the constructor.
@@ -600,8 +591,9 @@ class Sequential(Layer):
                 ]))
     """
 
-    def __init__(self, *args,name=''):
-        super(Sequential, self).__init__(name=name)
+    def __init__(self, *args,name=None):
+        super(Sequential, self).__init__()
+        self._name=name
         self._built = False
         if len(args) == 1 and isinstance(args[0], OrderedDict):
             for key, module in args[0].items():
@@ -714,8 +706,6 @@ class Sequential(Layer):
         for module in self._modules.values():
             x = module(x)
         return x
-
-
 
 class ModuleList(Layer):
     r"""Holds submodules in a list.
@@ -830,7 +820,6 @@ class ModuleList(Layer):
         for i, module in enumerate(modules):
             self.add_module(str(offset + i), module)
         return self
-
 
 class Combine(Layer):
     r"""A sequential container.
@@ -1086,6 +1075,9 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
 
 def normalize_padding(padding, rank):
     '''
+    normalized format of padding should have length equal to rank+2
+    And the order should follow the order of dimension
+    ex. Conv2d (rank=2) it's normalized format length:2+2  ==>(left, right,top bottom)
 
     Args:
         padding (None, int, tuple):

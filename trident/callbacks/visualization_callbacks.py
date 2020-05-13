@@ -12,7 +12,7 @@ import numpy as np
 from trident.backend.common import *
 from trident.backend.load_backend import *
 from trident.backend.pillow_backend import image2array
-from trident.callbacks import CallbackBase
+from trident.callbacks.callback_base import CallbackBase
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *

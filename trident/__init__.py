@@ -12,15 +12,11 @@ if sys.getdefaultencoding() != defaultencoding:
 
 
 
-__version__ = '0.5.4'
+__version__ = '0.5.5'
 stderr.write('trident {0}\n'.format(__version__))
 
-from trident import backend
+
 from trident.backend import *
-from trident import models
-from trident import misc
-from trident import callbacks
-from trident import data
 import threading
 
 

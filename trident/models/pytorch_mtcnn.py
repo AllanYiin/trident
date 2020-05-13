@@ -238,10 +238,10 @@ def remove_useless_boxes(boxes,image_size=None,min_size=5):
 
 
 def calibrate_box(bboxes, offsets):
-    """
+    '''
         Transform bounding boxes to be more like true bounding boxes.
         'offsets' is one of the outputs of the nets.
-    """
+    '''
     x1, y1, x2, y2 = [bboxes[:, i] for i in range(4)]
     w = x2 - x1 + 1.0
     h = y2 - y1 + 1.0
@@ -305,7 +305,7 @@ class Mtcnn(ImageDetectionModel):
 
     #adjust bbox like square
     def rerec(self,bboxA,img_shape):
-        """Convert bboxA to square."""
+        '''Convert bboxA to square.'''
         bboxA=to_numpy(bboxA)
         h = bboxA[:, 3] - bboxA[:, 1]
         w = bboxA[:, 2] - bboxA[:, 0]

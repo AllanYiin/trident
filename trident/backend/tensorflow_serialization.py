@@ -254,7 +254,7 @@ class _open_buffer_reader(_opener):
 
 class _open_buffer_writer(_opener):
     def __exit__(self, *args):
-        self.file_like.flush()
+        self.file_like.close()
 
 
 def _open_file_like(name_or_buffer, mode):
@@ -804,7 +804,7 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
     #unpickler.persistent_load = persistent_load
     result = unpickler.load()
 
-    deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
+    #deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
 
     # offset = f.tell() if f_should_read_directly else None
     # for key in deserialized_storage_keys:

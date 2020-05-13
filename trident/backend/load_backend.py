@@ -5,6 +5,9 @@ import json
 import os
 from sys import stderr
 from trident.backend.common import *
+from trident.backend.model import *
+from trident.backend.optimizer import *
+
 
 _session=get_session()
 _trident_dir=get_trident_dir()
@@ -57,8 +60,8 @@ if _session.backend == 'pytorch':
     _session.backend='pytorch'
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
-    from .pytorch_ops import *
-    from .pytorch_backend import *
+
+
 
     #module = importlib.import_module(mName)
     #layers=importlib.import_module('layers.pytorch_layers')
@@ -71,8 +74,7 @@ elif _session.backend == 'tensorflow':
     _session.backend = 'tensorflow'
     _session.image_data_format = 'channels_last'
     _session.image_channel_order = 'rgb'
-    from .tensorflow_ops import *
-    from .tensorflow_backend import  *
+
 
 
 if 'TRIDENT_IMG_BACKEND' in os.environ:

@@ -26,8 +26,9 @@ from trident.data.utils import pickle_it,unpickle
 from trident.backend.common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, format_time, \
     get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_signature
 from trident.backend.tensorflow_ops import *
+from  trident.backend import tensorflow_serialization as serialization
 
-__all__ = [ 'Layer', 'get_flops','Sequential', 'ConcatContainer', 'ReplayBuffer','summary']
+__all__ = [ 'Layer', 'get_flops','Sequential',  'ReplayBuffer','summary','normalize_padding']
 
 gpus = tf.config.list_physical_devices('GPU')
 def get_device():
@@ -41,18 +42,27 @@ def get_device():
 version = tf.version
 sys.stdout.write('Tensorflow version:{0}.\n'.format(version.VERSION))
 
-
-tf_version=LooseVersion(version.VERSION)
-base_version=LooseVersion('2.2.0-rc0')
-
-if tf_version <base_version:
-    raise ValueError('Not support Tensorflow below 2.2.0-rc0\n')
+#
+# tf_version=LooseVersion(vstring=version.VERSION)
+# base_version=LooseVersion(vstring='2.2.0-rc0')
+#
+# if tf_version.version <base_version.version:
+#     raise ValueError('trident only support Tensorflow 2.2.0-rc0 or newer.\n')
 
 sys.stdout.write('use device:{0}.\n'.format(get_device()))
 
 enable_eager_execution()
 tf.executing_eagerly()
 sys.stdout.write('executing_eagerly\n')
+
+def load(path):
+    item=serialization.load(path)
+    return item
+
+def save(obj,path,is_compressed=False):
+    serialization.save(obj,path,_use_new_zipfile_serialization=is_compressed)
+    return True
+
 
 
 
@@ -848,7 +858,7 @@ class Layer(tf.Module):
             elif is_tensor(inp):
                 self.input_shape =inp.get_shape()[1:]
             elif isinstance(inp,np.ndarray):
-                self.input_shape =tf.TensorShape(inp.shape[1:].tolist())
+                self.input_shape =inp.shape[1:]
                 inp=to_tensor(inp)
             else:
                 print('input shou be tensor or tuple of tensor')
@@ -1497,89 +1507,6 @@ class Combine(tf.keras.Model):
         return tuple(outputs)
 
 
-def compute_output_shape(self, input_shape):
-    shape = input_shape
-    for layer in self.layers:
-        shape = layer.compute_output_shape(shape)
-    return shape
-
-
-class ConcatContainer(tf.keras.Model):
-    r"""A sequential container.
-    Modules will be added to it in the order they are passed in the constructor.
-    Alternatively, an ordered dict of modules can also be passed in.
-
-    To make it easier to understand, here is a small example::
-
-        # Example of using Sequential
-        model = nn.Sequential(
-                  nn.Conv2d(1,20,5),
-                  nn.ReLU(),
-                  nn.Conv2d(20,64,5),
-                  nn.ReLU()
-                )
-
-        # Example of using Sequential with OrderedDict
-        model = nn.Sequential(OrderedDict([
-                  ('conv1', nn.Conv2d(1,20,5)),
-                  ('relu1', nn.ReLU()),
-                  ('conv2', nn.Conv2d(20,64,5)),
-                  ('relu2', nn.ReLU())
-                ]))
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(ConcatContainer, self).__init__()
-        self.axis = kwargs.get('axis', -1)
-        if len(args) == 1 and isinstance(args[0], OrderedDict):
-            for key, module in args[0].items():
-                self._modules[len(self._modules)] = module
-        else:
-            for idx, module in enumerate(args):
-                self._modules[idx] = module
-        self.to(self.device)
-
-    def _get_item_by_idx(self, iterator, idx):
-        """Get the idx-th item of the iterator"""
-        size = len(self)
-        idx = idx.__index__()
-        if not -size <= idx < size:
-            raise IndexError('index {} is out of range'.format(idx))
-        idx %= size
-        return next(islice(iterator, idx, None))
-
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            return self.__class__(OrderedDict(list(self._modules.items())[idx]))
-        else:
-            return self._get_item_by_idx(self._modules.values(), idx)
-
-    def __setitem__(self, idx, module):
-        key = self._get_item_by_idx(self._modules.keys(), idx)
-        return setattr(self, key, module)
-
-    def __delitem__(self, idx):
-        if isinstance(idx, slice):
-            for key in list(self._modules.keys())[idx]:
-                delattr(self, key)
-        else:
-            key = self._get_item_by_idx(self._modules.keys(), idx)
-            delattr(self, key)
-
-    def __len__(self):
-        return len(self._modules)
-
-    def __dir__(self):
-        keys = super(ConcatContainer, self).__dir__()
-        keys = [key for key in keys if not key.isdigit()]
-        return keys
-
-    def call(self, x, **kwargs):
-        results = []
-        for module in self._modules.values():
-            x1 = module(x)
-            results.append(x1)
-        return tf.concat(results, axis=-1)
 
 
 class ReplayBuffer:
@@ -1772,7 +1699,69 @@ def summary(model, input_size, batch_size=-1):
 
 
 
+def normalize_padding(padding, rank):
+    '''
+    normalize different padding format to most comlete representaion.
+    Tensorflow and Pytorch have totally different padding representation format and padding strategy.
+    In Pytorch the complete format is 2* rank ex.: conv2d rank=2 NCHW , we only need to pad the last 2 dimentions
+    and the most terrible  is  padding in rank format and 2*rank format are perfectly "REVERSE"!!
+    Conv2d((3,3), 32, strides=1)   padding=(1, 1) ==>(height , width)
+    Conv2d((3,3), 32, strides=1)   full padding=(1, 1, 1, 1) ==>(left right , top , down)
 
+    In tensorflow the complete format is 2* (rank+2) ex.: conv2d rank=2 NHWC , we only need to pad the middle 2 dimentions and empty head and tail dimentions
+    Conv2d((3,3), 32, strides=1)   padding=(1, 1) ==>(height , width)
+    Conv2d((3,3), 32, strides=1)   full padding=((0, 0), (1, 1), (1, 1), (0, 0)) ==>((batch), (height), (width), (channel)
+
+    for clear and no-confused definition, trident will always define padding by the nature ordinal of the dimention.
+    ex. Conv2d((3,3), 32, strides=1)
+    No matter in pytorch or tensorflow backend
+    padding=(1, 1) ==>(height , width)
+    padding=((1, 1),(1,1)) ==>(height , width)
+
+    Args:
+        padding (None, int, tuple):
+        rank (int):
+
+    Returns:
+        the normalized format of padding
+    Examples
+    >>> normalize_padding(((1,0),(1,0)),2)
+    ((1, 0), (1, 0))
+    >>> normalize_padding((1,0),2)
+    ((1, 1), (0, 0))
+    >>> normalize_padding(1,2)
+    ((1, 1), (1, 1))
+    >>> normalize_padding((1),2)
+    ((1, 1), (1, 1))
+    >>> normalize_padding((1,0),2)
+    ((1, 1), (0, 0))
+   >>> normalize_padding((0,1 ,0, 1),2)
+   ((0, 1), (0, 1))
+
+    '''
+    if padding is None:
+        #None=>((0,0),(0,0))
+        padding=((0,0),)*rank
+    elif isinstance(padding,int):
+        # 1=>((1,1),(1,1))
+        padding = ((padding,padding),) * rank
+    elif isinstance(padding,(list,tuple)) and len(padding)==1 and padding[0]==int:
+        #(1)=>((1,1),(1,1))
+        padding =  ((padding[0],padding[0]),) * rank
+    elif isinstance(padding,(list,tuple)) and len(padding)==rank and  isinstance(padding[0],int):
+        # rank=2 (1,1)=>((1,1,), (1,1))   (1,0)=>((1,1),(0,0))
+        padding=list(padding)
+        return_padding=[]
+        for i in range(rank):
+            return_padding.append((padding[i],padding[i]))
+        padding = tuple(return_padding)
+    elif isinstance(padding, (list,tuple)) and len(padding) == rank and isinstance(padding[0], (list,tuple)):
+        # rank=2  ((1,0),(1,0)=>(1,0,1,0)
+        pass
+        #padding= tuple(list(itertools.chain(*list(padding))))
+    elif isinstance(padding, (list,tuple)) and len(padding) == 2*rank and isinstance(padding[0], int):
+        padding=((padding[0],padding[1]),(padding[2],padding[3]))
+    return padding
 
 
 

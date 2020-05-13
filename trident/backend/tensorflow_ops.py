@@ -10,7 +10,7 @@ import tensorflow as tf
 from tensorflow.python.framework import ops
 from tensorflow.python.eager import context
 from tensorflow.python.framework.ops import EagerTensor
-from trident.backend.common import to_list
+from trident.backend.common import to_list,unpack_singleton,epsilon
 
 __all__ = ['is_tensor', 'to_numpy', 'to_tensor', 'ndim', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
@@ -22,7 +22,7 @@ __all__ = ['is_tensor', 'to_numpy', 'to_tensor', 'ndim', 'int_shape', 'is_sparse
            'reduce_prod', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax', 'log_softmax', 'bert_gelu',
-           'gpt_gelu', 'ones', 'ones_like', 'zeros', 'zeros_like', 'meshgrid', 'reshape', 'permute', 'transpose',
+           'gpt_gelu','moments','l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix', 'shuffle', 'random_choice']
 
 
@@ -992,6 +992,18 @@ def bert_gelu(x):
 def gpt_gelu(x):
     return 0.5 * x * (1 + tf.math.tanh(tf.math.sqrt(2 / np.pi) * (x + 0.044715 * tf.math.pow(x, 3))))
 
+
+############################
+## normalization operation
+###########################
+
+def moments(x:tf.Tensor, axis,  keepdims=True):
+    return tf.nn.moments(x,axes=axis,keepdims=keepdims)
+
+
+
+def l2_normalize(x:tf.Tensor,axis,  keepdims=True, eps=epsilon()):
+    return x / (tf.norm(x,keepdims=keepdims)+eps)
 
 ############################
 ## tensor shape operation

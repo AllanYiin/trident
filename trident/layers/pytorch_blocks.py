@@ -716,7 +716,7 @@ class ShortCut2d(Layer):
         concate_list = []
 
         for k, v in self._modules.items():
-            new_item = v(x) if not isinstance(v, Identity) else x
+            new_item = v(x) #if not isinstance(v, Identity) else x
             if current is None:
                 current = new_item
                 concate_list.append(current)
@@ -810,19 +810,16 @@ class SqueezeExcite(Layer):
 
         self.se_filters = se_filters
         self.num_filters = num_filters
-        self.squeeze = None
-        self.excite = None
+        self.use_bias = use_bias
+        self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
+        self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
         self.is_gather_excite = is_gather_excite
         self.activation = get_activation('swish')
         self.pool = GlobalAvgPool2d()
-        self.use_bias = use_bias
+
 
     def build(self, input_shape):
         if self._built == False:
-            self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None,
-                                  use_bias=self.use_bias, name=self.name + '_squeeze')
-            self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None,
-                                 use_bias=self.use_bias, name=self.name + '_excite')
             self.to(self.device)
             self._built = True
 

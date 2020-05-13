@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import sys
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 import math
 if is_in_ipython():
@@ -17,16 +17,18 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 import matplotlib.patches as patches
 import matplotlib.font_manager
-fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
-names = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
 
-if  'Microsoft YaHei' in names:
-    matplotlib.rc('font', family='Microsoft YaHei')
-else:
-    for name in names:
-        if 'heiti' in name.lower():
-            matplotlib.rc('font', family=name)
-            break
+fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
+
+if  sys.platform == 'win32' :
+    if 'Microsoft YaHei' in fontnames:
+        matplotlib.rc('font', family='Microsoft YaHei')
+    else:
+        for name in fontnames:
+            if 'heiti' in name.lower():
+                matplotlib.rc('font', family=name)
+                break
 
 
 
@@ -54,27 +56,25 @@ def generate_palette(num_classes):
 
 
 def plot_bbox(x, img, color=None, label=None, line_thickness=None):
-    img_shape = img.shape
+    img_shape =(img.height,img.width,3)
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
-    img = array2image(img)
+    #img = array2image(img)
     draw = ImageDraw.Draw(img)
-    draw.rectangle(((x[0], x[1]), (x[2], x[3])), outline=color, width=tl)
-
+    draw.rectangle(((x[0], x[1]), (x[2], x[3])), outline=color,fill=None, width=tl)
     fontcolor = (255, 255, 255)
     avg_color = np.array(list(color)).mean()
     if avg_color > 150:
         fontcolor = (0, 0, 0)
-    if label:
-        font = ImageFont.truetype(fonts[names.index('Microsoft YaHei')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+    if label and sys.platform == 'win32' :
+        font = ImageFont.truetype(fonts[fontnames.index('Microsoft YaHei')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
         tf = max(tl - 1, 1)  # font thickness
         size = draw.textsize(label, font=font)
         offset = font.getoffset(label)
         draw.rectangle(((x[0], x[1] - size[1] - 2*(offset[1]+1)), (x[0] + 2*(size[0] + offset[0] + 1), x[1])), fill=color,
                        width=2)
         draw.text((x[0] + 2, x[1] - size[1] - offset[1]- 1), u'{0}'.format(label), fill=fontcolor, font=font)
-
-    rgb_image = image2array(img)
-    return rgb_image
+    #rgb_image = image2array(img)
+    return img
 
 
 

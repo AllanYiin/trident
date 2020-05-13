@@ -103,7 +103,7 @@ if not os.path.exists(dirname):
 
 
 def efficientnet_params(model_name):
-    """ Map EfficientNet model name to parameter coefficients. """
+    ''' Map EfficientNet model name to parameter coefficients. '''
     params_dict = {
         # Coefficients:   width,depth,res,dropout
         'efficientnet-b0': (1.0, 1.0, 224, 0.2),
@@ -127,7 +127,7 @@ def EfficientNet(width_coefficient,
                  model_name='efficientnet',
                  include_top=True,
                  num_classes=1000,**kwargs):
-    """Instantiates the EfficientNet architecture using given scaling coefficients.
+    '''Instantiates the EfficientNet architecture using given scaling coefficients.
         Optionally loads weights pre-trained on ImageNet.
         Note that the data format convention used by the model is
         the one specified in your Keras config at `~/.keras/keras.json`.
@@ -171,10 +171,10 @@ def EfficientNet(width_coefficient,
         Raises
             ValueError: in case of invalid argument for `weights`,
                 or invalid input shape.
-        """
+        '''
     default_block_args=deepcopy(DEFAULT_BLOCKS_ARGS)
     def round_filters(filters, divisor=depth_divisor):
-        """Round number of filters based on depth multiplier."""
+        '''Round number of filters based on depth multiplier.'''
         filters *= width_coefficient
         new_filters = max(divisor, int(filters + divisor / 2) // divisor * divisor)
         # Make sure that round down does not go down by more than 10%.
@@ -183,7 +183,7 @@ def EfficientNet(width_coefficient,
         return int(new_filters)
 
     def round_repeats(repeats):
-        """Round number of repeats based on depth multiplier."""
+        '''Round number of repeats based on depth multiplier.'''
         return int(math.ceil(depth_coefficient * repeats))
 
     flow_list=[]

@@ -439,7 +439,7 @@ def get_function(fn_name, module_paths=None):
     fn = locate(fn_name)
     if (fn is None) and (module_paths is not None):
         for module_path in module_paths:
-            fn = locate('.'.join([module_path, fn_or_name]))
+            fn = locate('.'.join([module_path, fn_name]))
             if fn is not None:
                 break
     if fn is None:

@@ -21,6 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
+from trident.backend.model import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
@@ -76,7 +77,7 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
             else:
                 vgg.add_module('block{0}_conv{1}'.format(block, conv), Conv2d((3, 3), v, auto_pad=True, activation=None, use_bias=True,name='block{0}_conv{1}'.format(block, conv)))
 
-            vgg.add_module('block{0}_relu{1}'.format(block, conv),Relu())
+            vgg.add_module('block{0}_relu{1}'.format(block, conv),Relu(name='block{0}_relu{1}'.format(block, conv)))
             conv+=1
             in_channels = v
     if include_top==True:
@@ -86,7 +87,7 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
         vgg.add_module('drop1', Dropout(0.5))
         vgg.add_module('fc2', Dense(4096, use_bias=True,activation='relu'))
         vgg.add_module('drop2', Dropout(0.5))
-        vgg.add_module('fc3', Dense(num_classes,use_bias=True,activation='sigmoid'))
+        vgg.add_module('fc3', Dense(num_classes,use_bias=True,activation='softmax'))
 
 
     model = ImageClassificationModel(input_shape=input_shape, output=vgg)
@@ -118,13 +119,14 @@ def VGG11(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1PV9-AwgD1v-JxDRzduOjjGduIR7MDhPW',dirname,'vgg11.pth')
         recovery_model=torch.load(os.path.join(dirname,'vgg11.pth'))
+        recovery_model.name='vgg11'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
             [recovery_model.__delitem__(-1) for i in range(7)]
         else:
             if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='sigmoid')
+                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
         vgg11.model=recovery_model
     return vgg11
 
@@ -147,13 +149,14 @@ def VGG13(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1wx67gmQ8eHWXs2mhJmNl-t-cFNw7dJ7O',dirname,'vgg13.pth')
         recovery_model=torch.load(os.path.join(dirname,'vgg13.pth'))
+        recovery_model.name = 'vgg13'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
             [recovery_model.__delitem__(-1) for i in range(7)]
         else:
             if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='sigmoid')
+                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
         vgg13.model=recovery_model
     return vgg13
 
@@ -173,15 +176,17 @@ def VGG16(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1uXiH5MSy1rvxrHjW4uB9E2BHMM8b0Fwr',dirname,'vgg16.pth')
         recovery_model=torch.load(os.path.join(dirname,'vgg16.pth'))
+        recovery_model.name = 'vgg16'
         recovery_model.eval()
 
         if include_top==False:
             [recovery_model.__delitem__(-1) for i in range(7)]
         else:
             if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='sigmoid')
+                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
         recovery_model.to(_device)
         vgg16.model=recovery_model
+        vgg16.signature = get_signature(densenet121.model.forward)
     return vgg16
 
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)
@@ -199,13 +204,14 @@ def VGG19(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1nqQJLYMzeiUX9hji39-rrBUG42YyjhYg',dirname,'vgg19.pth')
         recovery_model=torch.load(os.path.join(dirname,'vgg19.pth'))
+        recovery_model.name = 'vgg19'
         recovery_model.eval()
 
         if include_top==False:
             [recovery_model.__delitem__(-1) for i in range(7)]
         else:
             if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='sigmoid')
+                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
         recovery_model.to(_device)
         vgg19.model=recovery_model
     return vgg19

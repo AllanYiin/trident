@@ -23,7 +23,7 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary
 from trident.data.image_common import *
-from trident.data.utils import download_model_from_google_drive
+from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
 from trident.layers.pytorch_blocks import *
 from trident.layers.pytorch_layers import *
@@ -50,6 +50,17 @@ if not os.path.exists(dirname):
 
 
 def DenseLayer(growth_rate,name=''):
+    '''
+    The basic normalization, convolution and activation combination for dense connection
+
+    Args:
+        growth_rate (int):The growth rate regulates how much new information each layer contributes to the global state
+        name (str): None of this dense layer
+
+    Returns:
+        An instrance of dense layer.
+
+    '''
     items = OrderedDict()
     items['norm']=BatchNorm2d()
     items['relu']=Relu()
@@ -60,6 +71,21 @@ def DenseLayer(growth_rate,name=''):
 
 class DenseBlock(Layer):
     def __init__(self, num_layers,  growth_rate=32, drop_rate=0,keep_output=False,name=''):
+        '''
+        The dense connected block.
+        Feature-maps of eachconvolution layer are used as inputs into all subsequent layers
+
+        Args:
+            num_layers (int):  number of dense layers in this block
+            growth_rate (int):The growth rate regulates how much new information each layer contributes to the global state
+            drop_rate (decimal):  the drop out rate of this dense block
+            keep_output (bool):  If True, the output tensor will kept
+            name (str):Name of this dense block .
+
+        Returns:
+            An instrance of dense block.
+
+        '''
         super(DenseBlock, self).__init__()
         if len(name)>0:
             self.name=name
@@ -76,6 +102,17 @@ class DenseBlock(Layer):
 
 
 def Transition(reduction,name=''):
+    '''
+     The block for transition-down, down-sampling by average pooling
+    Args:
+        reduction (float): The depth_multiplier to transition-down the dense features
+        name (str): Name of the transition-down process
+
+    Returns:
+        An instrance of transition-down .
+
+
+    '''
     items=OrderedDict()
     items['norm']=BatchNorm2d()
     items['relu']=Relu()
@@ -85,6 +122,17 @@ def Transition(reduction,name=''):
 
 
 def TransitionDown(reduction,name=''):
+    '''
+     The block for transition-down, down-sampling by using depthwise convolution with strides==2
+
+    Args:
+        reduction (float): The depth_multiplier to transition-down the dense features
+        name (str): Name of the transition-down process
+
+    Returns:
+        An instrance of transition-down .
+
+    '''
     return DepthwiseConv2d_Block((3,3),depth_multiplier=reduction,strides=2,activation='leaky_relu',normalization='batch', dropout_rate=0.2)
 
 def TransitionUp(output_idx=None,num_filters=None,name=''):
@@ -99,46 +147,28 @@ def DenseNet(blocks,
              num_classes=1000,
              name='',
              **kwargs):
-    '''Instantiates the DenseNet architecture.
-        Optionally loads weights pre-trained on ImageNet.
-        Note that the data format convention used by the model is
-        the one specified in your Keras config at `~/.keras/keras.json`.
+    ''''
+    Instantiates the DenseNet architecture.
+    Optionally loads weights pre-trained on ImageNet.
+
     Args
-        blocks: numbers of building blocks for the four dense layers.
-        include_top: whether to include the fully-connected
-            layer at the top of the network.
-        weights: one of `None` (random initialization),
-              'imagenet' (pre-training on ImageNet),
-              or the path to the weights file to be loaded.
-        input_tensor: optional Keras tensor
-            (i.e. output of `layers.Input()`)
-            to use as image input for the model.
-        input_shape: optional shape tuple, only to be specified
-            if `include_top` is False (otherwise the input shape
-            has to be `(224, 224, 3)` (with `'channels_last'` data format)
-            or `(3, 224, 224)` (with `'channels_first'` data format).
-            It should have exactly 3 inputs channels,
-            and width and height should be no smaller than 32.
-            E.g. `(200, 200, 3)` would be one valid value.
-        pooling: optional pooling mode for feature extraction
-            when `include_top` is `False`.
-            - `None` means that the output of the model will be
-                the 4D tensor output of the
-                last convolutional block.
-            - `avg` means that global average pooling
-                will be applied to the output of the
-                last convolutional block, and thus
-                the output of the model will be a 2D tensor.
-            - `max` means that global max pooling will
-                be applied.
-        classes: optional number of classes to classify images
-            into, only to be specified if `include_top` is True, and
-            if no `weights` argument is specified.
+        blocks (tuple/ list of int ): numbers of building blocks for the dense layers.
+
+        growth_rate (int):The growth rate regulates how much new information each layer contributes to the global state
+
+        initial_filters (int): the channel of the first convolution layer
+
+        pretrained (bool): If True, returns a model pre-trained on ImageNet.
+
+        input_shape (tuple or list): the default input image size in CHW order (C, H, W)
+
+        num_classes (int): number of classes
+
+        name (string): anme of the model
+
     Returns
-        A Keras model instance.
-    Raises
-        ValueError: in case of invalid argument for `weights`,
-            or invalid input shape.
+        A trident image classification model instance.
+
     '''
     densenet=Sequential()
     densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
@@ -177,48 +207,29 @@ def DenseNetFcn(blocks=(4, 5, 7, 10, 12),
              num_classes=10,
              name='',
              **kwargs):
-    """Instantiates the DenseNet architecture.
+    '''
+    Instantiates the DenseNet FCN architecture.
     Optionally loads weights pre-trained on ImageNet.
-    Note that the data format convention used by the model is
-    the one specified in your Keras config at `~/.keras/keras.json`.
-    # Arguments
-        blocks: numbers of building blocks for the four dense layers.
-        include_top: whether to include the fully-connected
-            layer at the top of the network.
-        weights: one of `None` (random initialization),
-              'imagenet' (pre-training on ImageNet),
-              or the path to the weights file to be loaded.
-        input_tensor: optional Keras tensor
-            (i.e. output of `layers.Input()`)
-            to use as image input for the model.
-        input_shape: optional shape tuple, only to be specified
-            if `include_top` is False (otherwise the input shape
-            has to be `(224, 224, 3)` (with `'channels_last'` data format)
-            or `(3, 224, 224)` (with `'channels_first'` data format).
-            It should have exactly 3 inputs channels,
-            and width and height should be no smaller than 32.
-            E.g. `(200, 200, 3)` would be one valid value.
-        pooling: optional pooling mode for feature extraction
-            when `include_top` is `False`.
-            - `None` means that the output of the model will be
-                the 4D tensor output of the
-                last convolutional block.
-            - `avg` means that global average pooling
-                will be applied to the output of the
-                last convolutional block, and thus
-                the output of the model will be a 2D tensor.
-            - `max` means that global max pooling will
-                be applied.
-        classes: optional number of classes to classify images
-            into, only to be specified if `include_top` is True, and
-            if no `weights` argument is specified.
-    # Returns
-        A Keras model instance.
-    # Raises
-        ValueError: in case of invalid argument for `weights`,
-            or invalid input shape.
-    """
 
+    Args
+        blocks (tuple/ list of int ): numbers of building blocks for the dense layers.
+
+        growth_rate (int):The growth rate regulates how much new information each layer contributes to the global state
+
+        initial_filters (int): the channel of the first convolution layer
+
+        pretrained (bool): only False is valid for DenseNet FCN
+
+        input_shape (tuple or list): the default input image size in CHW order (C, H, W)
+
+        num_classes (int): number of classes
+
+        name (string): anme of the model
+
+    Returns
+        A trident image segmentation model instance.
+
+    '''
 
     model = ImageSegmentationModel(input_shape=input_shape, output=_DenseNetFcn2(blocks=blocks,
              growth_rate=growth_rate,
@@ -288,6 +299,28 @@ def DenseNet121(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
+    '''
+    Constructor the image classicication model with DenseNet121 as backbond
+
+    Args:
+        include_top ():
+        pretrained (bool): If True, returns a model pre-trained on ImageNet.
+        input_shape (tuple or list): the default input image size in CHW order (C, H, W)
+        classes (int): number of classes
+
+    References
+        Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf
+
+    Returns:
+        the image classicication model with DenseNet121
+
+    Examples:
+        >>> dense121 = DenseNet121(include_top=True,pretrained=True,input_shape=(3,224,224),classes=1000)
+        >>> 'n02124075' in dense121.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
+        True
+
+    '''
+
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
 
@@ -295,6 +328,7 @@ def DenseNet121(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('16N2BECErDMRTV5JqESEBWyylXbQmKAIk',dirname,'densenet121.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet121.pth'))
+        recovery_model.name = 'densenet121'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
@@ -305,7 +339,7 @@ def DenseNet121(include_top=True,
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
         densenet121.model=recovery_model
-        densenet121.rebinding_input_output(input_shape)
+
         densenet121.signature = get_signature(densenet121.model.forward)
     return densenet121
 
@@ -315,6 +349,28 @@ def DenseNet161(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
+    '''
+    Constructor the image classicication model with DenseNet161 as backbond
+
+    Args:
+        include_top ():
+        pretrained (bool): If True, returns a model pre-trained on ImageNet.
+        input_shape (tuple or list): the default input image size in CHW order (C, H, W)
+        classes (int): number of classes
+
+    References
+        Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf
+
+    Returns:
+        the image classicication model with DenseNet161
+
+    Examples:
+        >>> dense161 = DenseNet161(include_top=True,pretrained=True,input_shape=(3,224,224),classes=1000)
+        >>> 'n02124075' in dense161.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
+        True
+
+    '''
+
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
 
@@ -322,6 +378,7 @@ def DenseNet161(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1n3HRkdPbxKrLVua9gOCY6iJnzM8JnBau',dirname,'densenet161.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet161.pth'))
+        recovery_model.name = 'densenet161'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
@@ -332,7 +389,6 @@ def DenseNet161(include_top=True,
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
         densenet161.model=recovery_model
-        densenet161.rebinding_input_output(input_shape)
         densenet161.signature = get_signature(densenet161.model.forward)
     return densenet161
 
@@ -344,6 +400,27 @@ def DenseNet169(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
+    '''
+    Constructor the image classicication model with DenseNet169 as backbond
+
+    Args:
+        include_top ():
+        pretrained (bool): If True, returns a model pre-trained on ImageNet.
+        input_shape (tuple or list): the default input image size in CHW order (C, H, W)
+        classes (int): number of classes
+
+    References
+        Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf
+
+    Returns:
+        the image classicication model with DenseNet169
+
+    Examples:
+        >>> dense169 = DenseNet169(include_top=True,pretrained=True,input_shape=(3,224,224),classes=1000)
+        >>> 'n02124075' in dense169.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
+        True
+
+    '''
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
 
@@ -351,6 +428,7 @@ def DenseNet169(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1QV73Th0Wo4SCq9AFPVEKqnzs7BUvIG5B',dirname,'densenet169.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet169.pth'))
+        recovery_model.name = 'densenet169'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
@@ -361,7 +439,6 @@ def DenseNet169(include_top=True,
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
         densenet169.model=recovery_model
-        densenet169.rebinding_input_output(input_shape)
         densenet169.signature = get_signature(densenet169.model.forward)
     return densenet169
 
@@ -372,6 +449,27 @@ def DenseNet201(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
+    '''
+    Constructor the image classicication model with DenseNet201 as backbond
+
+    Args:
+        include_top ():
+        pretrained (bool): If True, returns a model pre-trained on ImageNet.
+        input_shape (tuple or list): the default input image size in CHW order (C, H, W)
+        classes (int): number of classes
+
+    References
+        Densely Connected Convolutional Networks" <https://arxiv.org/pdf/1608.06993.pdf
+
+    Returns:
+        the image classicication model with DenseNet201
+
+    Examples:
+        >>> dense201 = DenseNet201(include_top=True,pretrained=True,input_shape=(3,224,224),classes=1000)
+        >>> 'n02124075' in dense201.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
+        True
+
+    '''
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
 
@@ -379,6 +477,7 @@ def DenseNet201(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1V2JazzdnrU64lDfE-O4bVIgFNQJ38q3J',dirname,'densenet201.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet201.pth'))
+        recovery_model.name = 'densenet201'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
@@ -389,6 +488,5 @@ def DenseNet201(include_top=True,
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
         densenet201.model=recovery_model
-        densenet201.rebinding_input_output(input_shape)
         densenet201.signature = get_signature(densenet201.model.forward)
     return densenet201

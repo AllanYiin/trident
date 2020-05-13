@@ -1,3 +1,7 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import copy
 import inspect
 import os
@@ -10,21 +14,19 @@ from functools import partial
 
 import numpy as np
 import tensorflow as tf
-
 from tensorflow.python.client import device_lib
 from tensorflow.python.eager import context, tape, function
 from tensorflow.python.eager import forwardprop
 from tensorflow.python.eager.backprop import GradientTape
-from tensorflow.python.keras import backend
-from tensorflow.python.keras.engine import training_utils
 from tensorflow.python.keras.utils import losses_utils
 from tensorflow.python.ops.losses import util as tf_losses_utils
 
 from trident import __version__
 from trident.backend.common import *
-from trident.backend.optimizer import OptimizerBase
+
 from trident.backend.tensorflow_backend import Sequential, Layer, try_map_args_and_call, summary
 from trident.backend.tensorflow_ops import *
+from trident.backend.tensorflow_serialization import save, load
 from trident.callbacks.lr_schedulers import get_lr_scheduler
 from trident.data.image_common import *
 from trident.data.utils import pickle_it, unpickle
@@ -33,7 +35,8 @@ from trident.optims.tensorflow_losses import *
 from trident.optims.tensorflow_metrics import get_metric
 from trident.optims.tensorflow_optimizers import get_optimizer
 from trident.optims.tensorflow_regularizers import *
-from trident.optims.trainers import ModelBase, progress_bar
+from trident.backend.model import ModelBase, progress_bar
+from trident.backend.optimizer import OptimizerBase
 
 # from tensorflow.python.framework.ops import EagerTensor
 
@@ -615,13 +618,13 @@ class Model(ModelBase):
                                                                                                 'current_epoch']))
             folder, _, _ = split_path(save_path)
             self._model.eval()
-            pickle_it(save_path,{
+            save({
                 'state_dict': self._model.state_dict(),
                 'backend':'tensorflow',
                 'trident_version':__version__,
                 'tensorflow_version':tf.version.VERSION,
                 'signature':self.signature
-            })
+            },save_path)
             shutil.copy(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
 
             #tf.saved_model.save(self._model, "new_models")
@@ -668,7 +671,7 @@ class Model(ModelBase):
 
     def load_model(self, file_path):
         print('Loading pretrained model from {}'.format(file_path))
-        pretrained_dict = unpickle(file_path)
+        pretrained_dict = load(file_path)
 
         if "state_dict" in pretrained_dict.keys():
             pretrained_dict = pretrained_dict['state_dict']
