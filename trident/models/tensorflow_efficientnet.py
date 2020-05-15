@@ -8,6 +8,7 @@ from copy import deepcopy
 
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
+from trident.backend.tensorflow_ops import *
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive, unpickle
 from trident.layers.tensorflow_activations import Identity
@@ -15,6 +16,7 @@ from trident.layers.tensorflow_blocks import *
 from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_pooling import GlobalAvgPool2d
 from trident.optims.tensorflow_trainer import *
+
 
 __all__ = ['efficient_block','EfficientNet','EfficientNetB0','EfficientNetB1','EfficientNetB2','EfficientNetB3','EfficientNetB4','EfficientNetB5','EfficientNetB6','EfficientNetB7']
 
@@ -201,29 +203,29 @@ def EfficientNet(width_coefficient,
     if isinstance(default_size,int):
         default_size=default_size,
     if len(default_size)==1:
-        default_size=(3,default_size[0],default_size[0])
+        default_size=(default_size[0],default_size[0],3)
     model=ImageClassificationModel(input_shape=default_size,output=efficientnet)
     model.signature = get_signature(model.model.forward)
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names=labels
-    model.preprocess_flow=[resize((default_size[2],default_size[1]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+    model.preprocess_flow=[resize((default_size[1],default_size[0]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
     return model
 
 
 def EfficientNetB0(include_top=True,
              pretrained=True,
-             input_shape=(3,224,224),
+             input_shape=(224,224,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 224, 224)
+        input_shape=(224, 224,3)
     effb0 = EfficientNet(1.0, 1.0, input_shape, 0.2, model_name='efficientnet-b0',include_top=include_top, num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1bxnoDerzoNfiZZLft4ocD3DAgx4v6aTN',dirname,'efficientnet-b0.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b0.pkl'))
+        download_model_from_google_drive('1pO4wRWY6N4e7U_7E2H-NhBPEF4MlR4ru',dirname,'efficientnet-b0_tf.pth')
+        recovery_model=load(os.path.join(dirname,'efficientnet-b0_tf.pth'))
         recovery_model.input_shape=input_shape
         if include_top==False:
             recovery_model.__delitem__(-1)
@@ -242,17 +244,17 @@ def EfficientNetB0(include_top=True,
 
 def EfficientNetB1(include_top=True,
              pretrained=True,
-             input_shape=(3,240,240),
+             input_shape=(240,240,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 240, 240)
+        input_shape=(240, 240,3)
     effb1 =EfficientNet(1.0, 1.1, 240, 0.2, model_name='efficientnet-b1',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1F3BtnAjmDz4G9RS9Q0hqU_K7WWXCni1G',dirname,'efficientnet-b1.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b1.pkl'))
+        download_model_from_google_drive('1zCWDn4lwHCn4exAnGfBSPh9YHYTGdIYt',dirname,'efficientnet-b1.pkl')
+        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b1_tf.pth'))
         recovery_model.input_shape = input_shape
         recovery_model.eval()
 
@@ -270,17 +272,17 @@ def EfficientNetB1(include_top=True,
 
 def EfficientNetB2(include_top=True,
              pretrained=True,
-             input_shape=(3,260,260),
+             input_shape=(260,260,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 260, 260)
+        input_shape=(260, 260,3)
     effb2 =EfficientNet(1.1, 1.2, 260, 0.3, model_name='efficientnet-b2',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1PjqhB7WJasF_hqOwYtSBNSXSGBY-cRLU',dirname,'efficientnet-b2.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b2.pkl'))
+        download_model_from_google_drive('1YQgy7PTgj8VereQfaxKJCZshIZK_uqtI',dirname,'efficientnet-b2_tf.pth')
+        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b2_tf.pth'))
         recovery_model.input_shape = input_shape
         if include_top==False:
             recovery_model.__delitem__(-1)
@@ -296,17 +298,17 @@ def EfficientNetB2(include_top=True,
 
 def EfficientNetB3(include_top=True,
              pretrained=True,
-             input_shape=(3,300,300),
+             input_shape=(300,300,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 300, 300)
+        input_shape=(300, 300,3)
     effb3 =EfficientNet(1.2, 1.4, 300, 0.3, model_name='efficientnet-b3',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('11tMxdYdFfaEREwnESO4cwjtcoEB42zB_',dirname,'efficientnet-b3.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b3.pkl'))
+        download_model_from_google_drive('1LgG4bsYnkY-uj6sLqbebRP0va3gDEkgS',dirname,'efficientnet-b3_tf.pth')
+        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b3_tf.pth'))
         recovery_model.input_shape = input_shape
         if include_top==False:
             recovery_model.__delitem__(-1)
@@ -322,17 +324,17 @@ def EfficientNetB3(include_top=True,
 
 def EfficientNetB4(include_top=True,
              pretrained=True,
-             input_shape=(3,380,380),
+             input_shape=(380,380,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 380, 380)
+        input_shape=(380, 380,3)
     effb4 =EfficientNet(1.4, 1.8, 380, 0.4, model_name='efficientnet-b4',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1X4ZOBR_ETRHZJeffJHvCmWTTy9_aW8SP',dirname,'efficientnet-b4.pkl')
-        recovery_model=unpickle(sanitize_path(os.path.join(dirname,'efficientnet-b4.pkl')))
+        download_model_from_google_drive('1eOUvMemIysmAa0ePdGKz01NO1EYWI2Dp',dirname,'efficientnet-b4_tf.pth')
+        recovery_model=unpickle(sanitize_path(os.path.join(dirname,'efficientnet-b4_tf.pth')))
         recovery_model.input_shape = input_shape
 
         if include_top==False:
@@ -349,17 +351,17 @@ def EfficientNetB4(include_top=True,
 
 def EfficientNetB5(include_top=True,
              pretrained=True,
-             input_shape=(3,456,456),
+             input_shape=(456,456,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 456, 456)
+        input_shape=(456,456,3)
     effb5 =EfficientNet(1.6, 2.2, 456, 0.4, model_name='efficientnet-b5',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('17iTD12G9oW3jYAui84MKtdY4gjd9vpgG',dirname,'efficientnet-b5.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b5.pkl'))
+        download_model_from_google_drive('1o_JQkIFUP1_-9AkiTs-x8q7gyDMyqiJz',dirname,'efficientnet-b5_tf.pth')
+        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b5_tf.pth'))
         recovery_model.input_shape = input_shape
         if include_top==False:
             recovery_model.__delitem__(-1)
@@ -375,17 +377,17 @@ def EfficientNetB5(include_top=True,
 
 def EfficientNetB6(include_top=True,
              pretrained=True,
-             input_shape=(3,528,528),
+             input_shape=(528,528,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 528, 528)
+        input_shape=(528, 528,3)
     effb6 =EfficientNet(1.8, 2.6, 528, 0.5, model_name='efficientnet-b6',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1XJrKmcmMObN_nnjP2Z-YH_BQ3img58qF',dirname,'efficientnet-b6.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b6.pkl'))
+        download_model_from_google_drive('1-dUqwaLzv2V7m8w4jkvFBlHTCsZq54JY',dirname,'efficientnet-b6_tf.pth')
+        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b6_tf.pth'))
         recovery_model.input_shape = input_shape
 
         if include_top==False:
@@ -402,17 +404,17 @@ def EfficientNetB6(include_top=True,
 
 def EfficientNetB7(include_top=True,
              pretrained=True,
-             input_shape=(3,600,600),
+             input_shape=(600,600,3),
              classes=1000,
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
-        input_shape=(3, 600, 600)
+        input_shape=(600, 600,3)
     effb7 =EfficientNet(2.0, 3.1, 600, 0.5, model_name='efficientnet-b7',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1M2DfvsNPRCWSo_CeXnUCQOR46rvOrhLl',dirname,'efficientnet-b7.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b7.pkl'))
+        download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz',dirname,'efficientnet-b7_tf.pth')
+        recovery_model=load(os.path.join(dirname,'efficientnet-b7_tf.pth'))
         recovery_model.input_shape = input_shape
         if include_top==False:
             recovery_model.__delitem__(-1)

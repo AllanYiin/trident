@@ -16,7 +16,7 @@ import tensorflow as tf
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
 from trident.data.image_common import *
-from trident.data.utils import download_model_from_google_drive,download_file_from_google_drive,unpickle
+from trident.data.utils import download_model_from_google_drive,download_file_from_google_drive
 from trident.layers.tensorflow_activations import get_activation, Identity, Relu
 from trident.layers.tensorflow_blocks import *
 from trident.layers.tensorflow_layers import *
@@ -178,8 +178,8 @@ def ResNet50(include_top=True,
         input_shape=(224, 224,3)
     resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
     if pretrained==True:
-        download_model_from_google_drive('1V5VzPRzEq92vEr8pJJ5n9-PxcxJqI4Gr',dirname,'resnet50.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'resnet50.pkl'))
+        download_model_from_google_drive('1vReSW_l8fldyYQ6ay5HCYFGoMaGbdW2T',dirname,'resnet50_tf.pth')
+        recovery_model=load(os.path.join(dirname,'resnet50_tf.pth'))
         recovery_model.eval()
 
         if include_top==False:
@@ -208,8 +208,8 @@ def ResNet101(include_top=True,
         input_shape=(224, 224,3)
     resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
     if pretrained==True:
-        download_model_from_google_drive(model_urls['resnet101'],dirname,'resnet101.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'resnet101.pkl'))
+        download_model_from_google_drive('13QYdFX3CvsNiegi-iUX1PUC0KKKgPNwr',dirname,'resnet101_tf.pth')
+        recovery_model=load(os.path.join(dirname,'resnet101_tf.pth'))
         recovery_model.eval()
         if include_top == False:
             recovery_model.__delitem__(-1)
@@ -234,8 +234,8 @@ def ResNet152(include_top=True,
         input_shape=(224, 224,3)
     resnet152 =ResNet(bottleneck, [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     if pretrained==True:
-        download_model_from_google_drive(model_urls['resnet152'],dirname,'resnet152.pth')
-        recovery_model=unpickle(os.path.join(dirname,'resnet152.pth'))
+        download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152.pth')
+        recovery_model=load(os.path.join(dirname,'resnet152.pth'))
         recovery_model.eval()
 
         if include_top == False:

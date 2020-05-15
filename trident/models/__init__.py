@@ -18,10 +18,12 @@ if get_backend()=='pytorch':
     from trident.models import pytorch_rfbnet as rfbnet
     from trident.models import pytorch_ssd as ssd
     from trident.models import pytorch_yolo as yolo
-#elif get_backend()=='tensorflow':
-    #from trident.models import tensorflow_resnet as resnet
-    #from trident.models import tensorflow_efficientnet as efficientnet
-
+elif get_backend()=='tensorflow':
+    from trident.models import tensorflow_vgg as vgg
+    from trident.models import tensorflow_resnet as resnet
+    from trident.models import tensorflow_efficientnet as efficientnet
+    from trident.models import tensorflow_densenet as densenet
+    from trident.models import tensorflow_mobilenet as mobilenet
 __all__ = ['vgg','resnet','densenet','efficientnet','mobilenet','gan','deeplab','arcfacenet','mtcnn','rfbnet','ssd','yolo']
 
 
