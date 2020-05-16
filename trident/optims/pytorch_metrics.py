@@ -36,9 +36,9 @@ __all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean
 
 
 def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
-    '''Computes the precision@k for the specified values of k
+    """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-    '''
+    """
     input_tensor=output.clone().detach()
     target_tensor=target.clone().detach()
 

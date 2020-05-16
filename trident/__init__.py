@@ -12,7 +12,7 @@ if sys.getdefaultencoding() != defaultencoding:
 
 
 
-__version__ = '0.5.5'
+__version__ = '0.5.6'
 stderr.write('trident {0}\n'.format(__version__))
 
 

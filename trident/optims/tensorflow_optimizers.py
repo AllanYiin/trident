@@ -15,7 +15,7 @@ from shutil import copyfile
 
 import numpy as np
 import tensorflow as tf
-import tensorflow.keras as K
+
 import tensorflow_addons as tfa
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.keras.engine.input_spec import InputSpec
@@ -73,7 +73,7 @@ class Adadelta(tf.keras.optimizers.Adadelta,OptimizerBase):
 
 
 class RAdam(tfa.optimizers.RectifiedAdam,OptimizerBase):
-    '''Variant of the Adam optimizer whose adaptive learning rate is rectified
+    """Variant of the Adam optimizer whose adaptive learning rate is rectified
     so as to have a consistent variance.
 
     It implements the Rectified Adam (a.k.a. RAdam) proposed by
@@ -97,7 +97,15 @@ class RAdam(tfa.optimizers.RectifiedAdam,OptimizerBase):
     in 9000 steps.
 
 
-    '''
+    """
+
+    def __init__(self, lr=0.001, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.,name= None,**kwargs):
+        kwargs['lr']=lr
+        kwargs['beta_1'] = betas[0]
+        kwargs['beta_1'] = betas[1]
+        kwargs['epsilon']=eps
+        kwargs['weight_decay']=weight_decay
+        super(RAdam, self).__init__(name, **kwargs)
 
     def get_value(self,x):
         return x
@@ -107,7 +115,7 @@ class RAdam(tfa.optimizers.RectifiedAdam,OptimizerBase):
 
 
 class Lookahead(tf.keras.optimizers.Optimizer,OptimizerBase):
-    '''This class allows to extend optims with the lookahead mechanism.
+    """This class allows to extend optims with the lookahead mechanism.
         The mechanism is proposed by Michael R. Zhang et.al in the paper
         [Lookahead Optimizer: k steps forward, 1 step back]
         (https://arxiv.org/abs/1907.08610v1). The optimizer iteratively updates two
@@ -119,7 +127,7 @@ class Lookahead(tf.keras.optimizers.Optimizer,OptimizerBase):
 
     Example:
     >>> opt = Lookahead(SGD(learning_rate=0.01))
-    '''
+    """
 
     def __init__(self,
                  optimizer,
@@ -217,6 +225,11 @@ class Lookahead(tf.keras.optimizers.Optimizer,OptimizerBase):
 
     @property
     def weights(self):
+        """
+
+        Returns:
+
+        """
         return self._weights + self._optimizer.weights
 
     def _resource_apply_dense(self, grad, var, **kwargs):
@@ -255,7 +268,7 @@ class Lookahead(tf.keras.optimizers.Optimizer,OptimizerBase):
 
 
 class Ranger(tf.keras.optimizers.Optimizer,OptimizerBase):
-    '''This class allows to extend optims with the Ranger mechanism.
+    """This class allows to extend optims with the Ranger mechanism.
         Range= RAdam+ Lookahead
 
         Lookahead, proposed by Michael R. Zhang et.al in the paper
@@ -269,9 +282,9 @@ class Ranger(tf.keras.optimizers.Optimizer,OptimizerBase):
         >>> radam = RAdam()
         >>> ranger = Lookahead(RAdam(), sync_period=6, slow_step_size=0.5)
 
-    '''
+    """
 
-    def __init__(self, learning_rate=0.001, beta_1=0.9, beta_2=0.999, weight_decay=0., amsgrad=False,
+    def __init__(self,  lr=0.001, betas = (0.9, 0.999), eps=1e-8, weight_decay=0., amsgrad=False,
                  sma_threshold=5.0, total_steps=0, warmup_proportion=0.1, min_lr=0.,
                  sync_period=6,
                  slow_step_size=0.5,
@@ -295,12 +308,12 @@ class Ranger(tf.keras.optimizers.Optimizer,OptimizerBase):
                 decay of learning rate. `lr` is included for backward
                 compatibility, recommended to use `learning_rate` instead.
         """
+        beta_1, beta_2=betas
+
         super(Ranger, self).__init__(name, **kwargs)
-
-
-
-        self._optimizer = RAdam(learning_rate=learning_rate, beta_1=beta_1, beta_2=beta_2, epsilon=_epsilon, weight_decay=weight_decay, amsgrad=False,
+        radam=RAdam(beta_1=beta_1, beta_2=beta_2, epsilon=eps, weight_decay=weight_decay, amsgrad=False,
                  sma_threshold=sma_threshold, total_steps=total_steps, warmup_proportion=warmup_proportion, min_lr=1e-9)
+        self._optimizer = Lookahead(radam, sync_period=6, slow_step_size=0.5)
         self._set_hyper('sync_period', sync_period)
         self._set_hyper('slow_step_size', slow_step_size)
         self._initialized = False
@@ -405,6 +418,14 @@ class Ranger(tf.keras.optimizers.Optimizer,OptimizerBase):
 
 
 def get_optimizer(optimizer_name):
+    '''
+
+    Args:
+        optimizer_name ():
+
+    Returns:
+
+    '''
     if optimizer_name is None:
         return None
     optimizer_modules = ['trident.optims.tensorflow_optimizers']

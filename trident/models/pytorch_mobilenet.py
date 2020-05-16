@@ -110,7 +110,7 @@ def MobileNet( input_shape=(3, 224, 224), classes=1000, use_bias=False, width_mu
         mobilenet.add_module('fc',Dense((classes),activation=None))
         mobilenet.add_module('softmax', SoftMax(name='softmax'))
     model = ImageClassificationModel(input_shape=input_shape, output=mobilenet)
-    model.signature=get_signature(model.model.forward)
+
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]

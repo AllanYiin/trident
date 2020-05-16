@@ -28,7 +28,7 @@ from trident.backend.common import floatx, addindent, OrderedDict, camel2snake, 
 from trident.backend.tensorflow_ops import *
 from  trident.backend import tensorflow_serialization as serialization
 
-__all__ = [ 'Layer', 'get_flops','Sequential',  'ReplayBuffer','summary','normalize_padding']
+__all__ = [ 'Layer', 'get_flops','Sequential',  'ReplayBuffer','summary','normalize_padding','load','save']
 
 gpus = tf.config.list_physical_devices('GPU')
 def get_device():
@@ -574,7 +574,6 @@ class Layer(tf.Module):
                 self.input_filters = -1
             else:
                 self.input_filters =int(self._input_shape[-1])
-
 
             self.build(self._input_shape)
             self._built = True
@@ -1261,6 +1260,11 @@ class Layer(tf.Module):
 
     @property
     def trainable(self):
+        """
+
+        Returns: Is the layer trainable?
+
+        """
         if len(self.weights)==0:
             return False
         elif len(self.weights)>0:
@@ -1272,12 +1276,18 @@ class Layer(tf.Module):
 
     @trainable.setter
     def trainable(self,value:bool):
+        """
+
+        Args:
+            value (bool):  new value for the property "Trsainable"
+
+        """
         n=0
         need_update=False
         for name, para in self.named_parameters():
             if para.trainable!=value:
-                para.trainable = value
-                n+=np.prod(list(para.size()))
+                para._trainable = value
+                n+=np.prod(to_numpy(int_shape(para)))
                 need_update=True
         if not need_update:
             print('no parameter trainable state is changed')
@@ -1765,23 +1775,22 @@ def normalize_padding(padding, rank):
 
 
 
-def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,model=None):
+def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
     if isinstance(fn,tf.Tensor) or 'EagerTensor' in fn.__class__.__name__:
         return fn
     else:
         arg_map = OrderedDict()
         if isinstance(fn,Layer) :
-            for arg in fn.signature.key_list:
+            for arg in fn.signature.inputs.key_list:
                 if arg in data:
                     arg_map[arg] = data[arg]
                 elif arg in data_feed:
                     arg_map[arg]=data[data_feed[arg]]
-                elif arg == 'model' and model is not None:
-                    arg_map[arg] = model
+
                 else:
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
             #print('arg_map',arg_map.key_list)
-            if len(fn.signature.key_list)==1:
+            if len(fn.signature.inputs.key_list)==1:
                 inp=unpack_singleton(arg_map.value_list)
                 out = fn(inp)
                 return out
@@ -1789,13 +1798,12 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,model=None):
                 out=fn(*arg_map.value_list)
                 return out
         elif hasattr(fn,'signature') and callable(fn):
-            for arg in fn.signature.key_list:
+            for arg in fn.signature.inputs.key_list:
                 if arg in data:
                     arg_map[arg]=data[arg]
                 elif arg in data_feed:
                     arg_map[arg]=data[data_feed[arg]]
-                elif arg == 'model' and model is not None:
-                    arg_map[arg] = model
+
                 elif arg=='y_pred' and  'output' in data:
                     arg_map[arg] = data['output']
                 elif arg=='y_true' and  'target' in data:
@@ -1812,7 +1820,7 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None,model=None):
             return out
         elif  callable(fn):
 
-            args=get_signature(fn).key_list
+            args=get_signature(fn).inputs.key_list
             for arg in args:
                 if arg in  data_feed:
                     arg_map[arg]=data[data_feed[arg]]

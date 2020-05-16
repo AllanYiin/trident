@@ -1,3 +1,4 @@
+""" The base mixin class of  Optimizer"""
 import numpy as np
 from trident.backend.common import *
 
@@ -21,7 +22,15 @@ __all__ = [ 'OptimizerBase']
 
 
 class OptimizerBase(object):
+    """ The base mixin class of  Optimizer"""
     def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
         if _backend =='pytorch':
             old_lr = self.param_groups[0]['lr']
             if old_lr != new_lr:
@@ -44,6 +53,11 @@ class OptimizerBase(object):
 
     @property
     def default_setting(self):
+        """
+
+        Returns: the default setting of this optimizer
+
+        """
         if _backend == 'pytorch':
             return self.defaults
         elif _backend == 'tensorflow':
@@ -60,6 +74,11 @@ class OptimizerBase(object):
 
     @property
     def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
         if _backend == 'pytorch':
             return self.param_groups['params']
         elif _backend == 'tensorflow':
@@ -75,6 +94,11 @@ class OptimizerBase(object):
 
     @property
     def lr(self):
+        """
+
+        Returns: current learning rate
+
+        """
         if _backend ==  'pytorch':
             return self.param_groups[0]['lr']
         elif _backend == 'tensorflow':
@@ -100,6 +124,11 @@ class OptimizerBase(object):
 
     @property
     def base_lr(self):
+        """
+
+        Returns: base learning rate means the starting learning rate (after warmup)
+
+        """
         return self._base_lr
 
     @base_lr.setter
@@ -107,6 +136,15 @@ class OptimizerBase(object):
         self._base_lr = value
 
     def get_gradients(self, loss, params=None):
+        """
+
+        Args:
+            loss (tensor): the loss function calculation result.
+            params (tensor): the trainable parameters
+
+        Returns: gradients
+
+        """
         if _backend == 'pytorch':
             return loss.grad
         elif _backend == 'tensorflow':
@@ -114,7 +152,12 @@ class OptimizerBase(object):
 
 
     def updates(self, closure, training_context):
+        """
 
+        Args:
+            closure ():
+            training_context ():
+        """
         if _backend == 'pytorch':
             try:
                 if callable(closure):
@@ -125,7 +168,7 @@ class OptimizerBase(object):
         elif _backend == 'tensorflow':
             if callable(closure):
                 loss = closure()
-            self.get_updates(loss, training_context['current_model'].trainable_)
+
 
 
         for callback in training_context['callbacks']:

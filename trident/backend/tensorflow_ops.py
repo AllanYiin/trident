@@ -12,7 +12,8 @@ from tensorflow.python.eager import context
 from tensorflow.python.framework.ops import EagerTensor
 from trident.backend.common import to_list,unpack_singleton,epsilon
 
-__all__ = ['is_tensor', 'to_numpy', 'to_tensor', 'ndim', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
+
+__all__ = ['is_tensor', 'to_numpy', 'to_tensor', 'ndim', 'int_shape','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -106,7 +107,7 @@ def to_numpy(x) -> np.ndarray:
            [1, 3]])
 
      '''
-    x = unpack_singleton(x)
+
     if isinstance(x, np.ndarray):
         return x
     # elif isinstance(x,EagerTensor):
@@ -596,7 +597,7 @@ def prod(x):
 
 
 def clip(x: tf.Tensor, min_value=-np.inf, max_value=np.inf):
-    return tf.clip_by_value(x, min, max)
+    return tf.clip_by_value(x, float(min_value), float(max_value))
 
 
 def sin(x: tf.Tensor):
@@ -882,7 +883,7 @@ def relu(x, upper_limit=None):
 
 
 def relu6(x):
-    return clip(tf.nn.relu(x), 0, 6)
+    return relu(x,6)
 
 
 def leaky_relu(x, alpha=0.02, upper_limit=None):

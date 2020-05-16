@@ -91,7 +91,6 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
 
 
     model = ImageClassificationModel(input_shape=input_shape, output=vgg)
-    model.signature = get_signature(model.model.forward)
     model.model.to(_device)
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',
               encoding='utf-8-sig') as f:

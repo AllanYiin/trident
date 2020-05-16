@@ -24,12 +24,12 @@ _backend=_session.backend
 _image_backend=_session.image_backend
 
 if _image_backend=='opencv':
-    from ..backend.opencv_backend import *
+    from trident.backend.opencv_backend import *
 else:
-    from ..backend.pillow_backend import *
+    from trident.backend.pillow_backend import *
 
-from ..backend.load_backend import get_backend
-from .label_common import check_is_onehot,get_onehot
+from trident.backend.load_backend import get_backend
+from trident.data.label_common import check_is_onehot,get_onehot
 
 
 __all__ = ['mask2trimap','color2label','label2color','mask_backend_adaptive']

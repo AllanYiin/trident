@@ -8,22 +8,26 @@ import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import nn_ops
 from trident.backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
-
+from trident.backend.tensorflow_ops import *
 
 __all__ = ['accuracy','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 
-def accuracy(output,target, topk=1, axis=1, **kwargs):
+def accuracy(output,target, topk=1, axis=-1, **kwargs):
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
-    if  target.get_shape()!=output.get_shape():
+    if  int_shape(target)!=int_shape(output):
         raise  ValueError('output shape {0} is not competable with target shape {1}'.format(output.shape, target.shape))
 
     if topk==1:
-        return tf.reduce_mean(tf.cast(tf.math.equal(tf.math.argmax(target, -1), tf.math.argmax(output, -1)), tf.float32))
+        return reduce_mean(equal(argmax(target, axis), argmax(output, axis)))
     else:
-        return tf.reduce_mean(tf.cast(tf.nn.in_top_k(predictions=output, targets=target, k=topk), tf.float32))
+        return reduce_mean(cast(tf.nn.in_top_k(predictions=output, targets=target, k=topk), tf.float32))
+
+
+
+
 
 
 def psnr(output, target):

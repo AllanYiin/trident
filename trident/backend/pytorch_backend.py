@@ -1408,7 +1408,7 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
     else:
         arg_map = OrderedDict()
         if isinstance(fn,Layer) :
-            for arg in fn.signature.key_list:
+            for arg in fn.signature.inputs.key_list:
                 if arg in data_feed:
                     arg_map[arg]=data[data_feed[arg]]
                 else:
@@ -1417,7 +1417,7 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
             out=fn(*arg_map.value_list)
             return out
         elif hasattr(fn,'signature') and callable(fn):
-            for arg in fn.signature.key_list:
+            for arg in fn.signature.inputs.key_list:
                 if arg in data:
                     arg_map[arg]=data[arg]
                 elif arg in data_feed:
@@ -1429,7 +1429,6 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
             out=fn(*arg_map.value_list)
             return out
         elif  callable(fn):
-
             args=get_signature(fn).key_list
             for arg in args:
                 if arg in data:

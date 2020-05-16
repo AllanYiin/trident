@@ -4,7 +4,7 @@ from warnings import warn
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from .BaseLogger import *
+from trident.loggers.BaseLogger import *
 
 
 class TensorBoardLogger(BaseLogger):

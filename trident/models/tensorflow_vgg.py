@@ -16,7 +16,7 @@ import numpy as np
 import tensorflow as tf
 from trident.backend.common import *
 from trident.backend.model import *
-from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.tensorflow_activations import get_activation, Identity, Relu
@@ -111,17 +111,7 @@ def VGG11(include_top=True,
     vgg11 =make_vgg_layers(cfgs['A'], classes)
     vgg11.input_shape =input_shape
     if pretrained==True:
-        download_model_from_google_drive('1PV9-AwgD1v-JxDRzduOjjGduIR7MDhPW',dirname,'vgg11.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg11.pth'))
-        recovery_model.name='vgg11'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if include_top==False:
-            [recovery_model.__delitem__(-1) for i in range(7)]
-        else:
-            if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
-        vgg11.model=recovery_model
+       print('There is no pretrained Vgg11 in tensorflow backend')
     return vgg11
 
 
@@ -141,17 +131,7 @@ def VGG13(include_top=True,
     vgg13 =make_vgg_layers(cfgs['B'], classes)
 
     if pretrained==True:
-        download_model_from_google_drive('1wx67gmQ8eHWXs2mhJmNl-t-cFNw7dJ7O',dirname,'vgg13.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg13.pth'))
-        recovery_model.name = 'vgg13'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if include_top==False:
-            [recovery_model.__delitem__(-1) for i in range(7)]
-        else:
-            if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
-        vgg13.model=recovery_model
+        print('There is no pretrained Vgg13 in tensorflow backend')
     return vgg13
 
 
@@ -168,8 +148,8 @@ def VGG16(include_top=True,
     vgg16 =make_vgg_layers(cfgs['D'], classes)
     vgg16.input_shape =input_shape
     if pretrained==True:
-        download_model_from_google_drive('1uXiH5MSy1rvxrHjW4uB9E2BHMM8b0Fwr',dirname,'vgg16.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg16.pth'))
+        download_model_from_google_drive('1fozCY4Yv_ud5UGpv7q4M9tcxZ2ryDCTb',dirname,'vgg16_tf.pth')
+        recovery_model=load(os.path.join(dirname,'vgg16_tf.pth'))
         recovery_model.name = 'vgg16'
         recovery_model.eval()
 
@@ -178,9 +158,8 @@ def VGG16(include_top=True,
         else:
             if classes!=1000:
                 recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
-        recovery_model.to(_device)
+
         vgg16.model=recovery_model
-        vgg16.signature = get_signature(densenet121.model.forward)
     return vgg16
 
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)
@@ -196,8 +175,8 @@ def VGG19(include_top=True,
     vgg19 =make_vgg_layers(cfgs['E'], classes)
     vgg19.input_shape =input_shape
     if pretrained==True:
-        download_model_from_google_drive('1nqQJLYMzeiUX9hji39-rrBUG42YyjhYg',dirname,'vgg19.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg19.pth'))
+        download_model_from_google_drive('1nXKMsYklBimtqs7ZRv0dQ-RIqNvgopVh',dirname,'vgg19_tf.pth')
+        recovery_model=load(os.path.join(dirname,'vgg19_tf.pth'))
         recovery_model.name = 'vgg19'
         recovery_model.eval()
 
@@ -206,6 +185,5 @@ def VGG19(include_top=True,
         else:
             if classes!=1000:
                 recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
-        recovery_model.to(_device)
         vgg19.model=recovery_model
     return vgg19

@@ -23,7 +23,8 @@ from tensorflow.python.ops.losses import util as tf_losses_utils
 
 from trident import __version__
 from trident.backend.common import *
-
+from trident.backend.model import ModelBase, progress_bar
+from trident.backend.optimizer import OptimizerBase
 from trident.backend.tensorflow_backend import Sequential, Layer, try_map_args_and_call, summary
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_serialization import save, load
@@ -35,8 +36,6 @@ from trident.optims.tensorflow_losses import *
 from trident.optims.tensorflow_metrics import get_metric
 from trident.optims.tensorflow_optimizers import get_optimizer
 from trident.optims.tensorflow_regularizers import *
-from trident.backend.model import ModelBase, progress_bar
-from trident.backend.optimizer import OptimizerBase
 
 # from tensorflow.python.framework.ops import EagerTensor
 
@@ -108,7 +107,7 @@ class Model(ModelBase):
                 out = out_var(dummay_input)
                 #out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
                 self._model = out_var
-                self.signature = get_signature(self._model.forward)
+
                 if is_tensor(out):
                     self._outputs['output'] = out.get_shape()[1:]
                     self._targets['target'] = out.get_shape()[1:]
@@ -116,22 +115,30 @@ class Model(ModelBase):
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = out[i].get_shape()[1:]
                         self._targets['target_{0}'.format(i)] = out[i].get_shape()[1:]
+                self._model.signature = get_signature(self._model.forward, 'model')
+                self._model.signature.inputs = copy.deepcopy(self.inputs)
+                self._model.signature.outputs = copy.deepcopy(self._outputs)
+                self._signature = self._model.signature
 
 
         elif is_tensor(out_var):
             self._model = out_var
             self._outputs['output'] = out_var.get_shape()[1:]
             self._targets['target'] = out_var.get_shape()[1:]
-        elif isinstance(out_var,tf.keras.layers.Layer):
-            self._model = out_var
-            self._outputs['output'] = out_var.output_shape
-            self._targets['target'] = out_var.output_shape
+
+            self._model.signature = Signature('model')
+            self._model.signature.inputs['x'] = list(int_shape(self._model))[1:]
+            self._model.signature.outputs = copy.deepcopy(self._outputs)
+            self._signature = self._model.signature
+
         else:
             raise ValueError('')
 
-        self.device = _device
+
         self.training_context['current_model'] = self._model
-        return self
+        save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.name))
+        self.save_path = sanitize_path(make_dir_if_need(save_path))
+        self.training_context['save_path'] = self.save_path
 
     @property
     def outputs(self):
@@ -143,6 +150,10 @@ class Model(ModelBase):
             return self._outputs
         else:
             return self._outputs
+
+    @property
+    def device(self):
+        return get_device()
 
     def train(self):
         if self._model is not None and is_tensor(self._model):
@@ -198,7 +209,7 @@ class Model(ModelBase):
 
     def with_loss(self, loss, loss_weight=1, output_idx=0, start_epoch=0, name='', **kwargs):
         alias = name
-        argnames = OrderedDict()
+        argnames =  Signature()
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
 
@@ -211,9 +222,9 @@ class Model(ModelBase):
                 alias = alias + '_' + str(len(dup_keys) + 1)
             self._losses[alias] = loss_class(**kwargs)
             if hasattr(loss, 'forward'):
-                argnames = get_signature(self._losses[alias].forward)
+                argnames = get_signature(self._losses[alias].forward, alias)
             else:
-                argnames = get_signature(self._losses[alias].__call__)
+                argnames = get_signature(self._losses[alias].__call__, alias)
         elif inspect.isclass(loss) and inspect._is_type(loss):
             alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
             if alias in self._losses:
@@ -222,9 +233,9 @@ class Model(ModelBase):
 
             self._losses[alias] = loss(**kwargs)
             if hasattr(loss, 'forward'):
-                argnames = get_signature(self._losses[alias].forward)
+                argnames = get_signature(self._losses[alias].forward, alias)
             else:
-                argnames = get_signature(self._losses[alias].__call__)
+                argnames = get_signature(self._losses[alias].__call__, alias)
         elif not inspect.isfunction(loss) and callable(loss):
             alias = loss.__class__.__name__ if len(alias) == 0 else alias
             if alias in self._losses:
@@ -232,9 +243,9 @@ class Model(ModelBase):
                 alias = alias + '_' + str(len(dup_keys) + 1)
             self._losses[alias] = loss
             if hasattr(loss, 'forward'):
-                argnames = get_signature(self._losses[alias].forward)
+                argnames = get_signature(self._losses[alias].forward, alias)
             else:
-                argnames = get_signature(self._losses[alias].__call__)
+                argnames = get_signature(self._losses[alias].__call__, alias)
         elif inspect.isfunction(loss):
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -245,42 +256,48 @@ class Model(ModelBase):
                 self._losses[alias] = loss
             else:
                 self._losses[alias] = partial(loss, **kwargs)
-            argnames = get_signature(self._losses[alias], skip_default=True)
+            argnames = get_signature(loss,alias)
+        # create signature
+        if hasattr(self._losses[alias], 'signature') and self._losses[alias].signature is not None:
+            pass
+        else:
+            self._losses[alias].signature = argnames
+        self._losses[alias].signature.name = alias
+        print(self._losses[alias].signature)
 
         self.loss_weights[alias] = loss_weight
 
-        outputs = self.outputs
-        targets = self.targets
-        if all([k  in targets.key_list or k  in outputs.key_list for k  in argnames.key_list]):
-            pass
-        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
-                                                                                                         'output',
-                                                                                                         'y_pred'] and \
-                argnames.key_list[1] in ['target', 'label', 'y_true']:
-            argnames = OrderedDict()
-            argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
-            argnames[targets.key_list[0]] = targets[targets.key_list[0]]
-        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
-            argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
-            argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
-        elif outputs is not None and len(outputs) > 1:
-            output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
-            if len(output_idx) == 1 and len(argnames) == 2:
-                argnames = OrderedDict()
-                out = outputs.key_list[output_idx[0]]
-                target = targets.key_list[output_idx[0]]
-                argnames[argnames.key_list[0]] = outputs[out]
-                argnames[argnames.key_list[1]] = targets[target]
-            elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
-                for idx in output_idx:
-                    out = outputs.key_list[idx]
-                    target = targets.key_list[idx]
-                    if out in argnames:
-                        argnames[out] = outputs[out]
-                    if target in argnames:
-                        argnames[target] = targets[target]
+        # outputs = self.outputs
+        # targets = self.targets
+        # if all([k  in targets.key_list or k  in outputs.key_list for k  in argnames.key_list]):
+        #     pass
+        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
+        #                                                                                                  'output',
+        #                                                                                                  'y_pred'] and \
+        #         argnames.key_list[1] in ['target', 'label', 'y_true']:
+        #     argnames = OrderedDict()
+        #     argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
+        #     argnames[targets.key_list[0]] = targets[targets.key_list[0]]
+        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
+        #     argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
+        #     argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
+        # elif outputs is not None and len(outputs) > 1:
+        #     output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
+        #     if len(output_idx) == 1 and len(argnames) == 2:
+        #         argnames = OrderedDict()
+        #         out = outputs.key_list[output_idx[0]]
+        #         target = targets.key_list[output_idx[0]]
+        #         argnames[argnames.key_list[0]] = outputs[out]
+        #         argnames[argnames.key_list[1]] = targets[target]
+        #     elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
+        #         for idx in output_idx:
+        #             out = outputs.key_list[idx]
+        #             target = targets.key_list[idx]
+        #             if out in argnames:
+        #                 argnames[out] = outputs[out]
+        #             if target in argnames:
+        #                 argnames[target] = targets[target]
         self._losses[alias].__name__ = alias
-        self._losses[alias].signature = argnames
         self._losses[alias].start_epoch = start_epoch
         print('{0} signature:{1}'.format(alias, self._losses[alias].signature.item_list))
         return self
@@ -289,7 +306,7 @@ class Model(ModelBase):
         if collect_history is None:
             collect_history = True
         alias = name
-        argnames = OrderedDict()
+        argnames = Signature()
         if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
             alias = metric.__name__
 
@@ -301,9 +318,9 @@ class Model(ModelBase):
                 alias = alias + '_' + str(len(dup_keys) + 1)
             self._metrics[alias] = metric_class(**kwargs)
             if hasattr(metric, 'forward'):
-                argnames = get_signature(self._metrics[alias].forward)
+                argnames = get_signature(self._metrics[alias].forward, alias)
             else:
-                argnames = get_signature(self._metrics[alias].__call__)
+                argnames = get_signature(self._metrics[alias].__call__, alias)
         elif inspect.isclass(metric) and inspect._is_type(metric):
             alias = metric.__class__.__name__ if len(alias) == 0 else alias
             if alias in self._metrics:
@@ -321,9 +338,9 @@ class Model(ModelBase):
                 alias = alias + '_' + str(len(dup_keys) + 1)
             self._metrics[alias] = metric
             if hasattr(metric, 'forward'):
-                argnames = get_signature(self._metrics[alias].forward)
+                argnames = get_signature(self._metrics[alias].forward, alias)
             else:
-                argnames = get_signature(self._metrics[alias].__call__)
+                argnames = get_signature(self._metrics[alias].__call__, alias)
         elif inspect.isfunction(metric):
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
@@ -334,42 +351,46 @@ class Model(ModelBase):
                 self._metrics[alias] = metric
             else:
                 self._metrics[alias] = partial(metric, **kwargs)
-            argnames = get_signature(self._metrics[alias], skip_default=True)
-
-        outputs = self.outputs
-        targets = self.targets
-        if all([k in targets.key_list or k in outputs.key_list for k in argnames.key_list]):
+            argnames = get_signature(metric, alias)
+        # create signature
+        if hasattr(self._metrics[alias], 'signature') and self._metrics[alias].signature is not None:
             pass
-        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
-                                                                                                         'output',
-                                                                                                         'y_pred'] and \
-                argnames.key_list[1] in ['target', 'label', 'y_true']:
-            argnames = OrderedDict()
-            argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
-            argnames[targets.key_list[0]] = targets[targets.key_list[0]]
-        elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
-            argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
-            argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
-        elif outputs is not None and len(outputs) > 1:
-            output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
-            if len(output_idx) == 1 and len(argnames) == 2:
-                argnames = OrderedDict()
-                out = outputs.key_list[output_idx[0]]
-                target = targets.key_list[output_idx[0]]
-                argnames[argnames.key_list[0]] = outputs[out]
-                argnames[argnames.key_list[1]] = targets[target]
-            elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
-                for idx in output_idx:
-                    out = outputs.key_list[idx]
-                    target = targets.key_list[idx]
-                    if out in argnames:
-                        argnames[out] = outputs[out]
-                    if target in argnames:
-                        argnames[target] = targets[target]
+        else:
+            self._metrics[alias].signature = argnames
+        self._metrics[alias].signature.name = alias
+        print(self._metrics[alias].signature)
+        # outputs = self.outputs
+        # targets = self.targets
+        # if all([k in targets.key_list or k in outputs.key_list for k in argnames.key_list]):
+        #     pass
+        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
+        #                                                                                                  'output',
+        #                                                                                                  'y_pred'] and \
+        #         argnames.key_list[1] in ['target', 'label', 'y_true']:
+        #     argnames = OrderedDict()
+        #     argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
+        #     argnames[targets.key_list[0]] = targets[targets.key_list[0]]
+        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
+        #     argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
+        #     argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
+        # elif outputs is not None and len(outputs) > 1:
+        #     output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
+        #     if len(output_idx) == 1 and len(argnames) == 2:
+        #         argnames = OrderedDict()
+        #         out = outputs.key_list[output_idx[0]]
+        #         target = targets.key_list[output_idx[0]]
+        #         argnames[argnames.key_list[0]] = outputs[out]
+        #         argnames[argnames.key_list[1]] = targets[target]
+        #     elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
+        #         for idx in output_idx:
+        #             out = outputs.key_list[idx]
+        #             target = targets.key_list[idx]
+        #             if out in argnames:
+        #                 argnames[out] = outputs[out]
+        #             if target in argnames:
+        #                 argnames[target] = targets[target]
         self._metrics[alias].__name__ = alias
-        self._metrics[alias].signature = argnames
         self._metrics[alias].collect_history = collect_history
-        print('{0} signature:{1}'.format(alias, self._metrics[alias].signature.item_list))
         return self
 
     def with_regularizer(self, reg, **kwargs):
@@ -485,7 +506,7 @@ class Model(ModelBase):
                             Warning('input argment {0} cannot mapping to any data, please check it and update the '
                                     'datafeed'.format(arg))
 
-                    if len(self.signature.key_list) == 1 and data_feed[self.signature.key_list[0]] != None:
+                    if len(self.signature.inputs.key_list) == 1 and data_feed[self.signature.inputs.key_list[0]] != None:
                         self.training_context['data_feed'] = data_feed
 
                     # check for target
@@ -532,7 +553,7 @@ class Model(ModelBase):
             for item in train_data.key_list:
                 if item in input_list:
                     # only model 's input argments
-                    train_data[item] = to_tensor(train_data[item].copy(), requires_grad=True)
+                    train_data[item] = to_tensor(train_data[item].copy())
                 elif item in self.targets.key_list or data_feed:
                     train_data[item] = to_tensor(train_data[item].copy())
                 else:
@@ -563,12 +584,24 @@ class Model(ModelBase):
                 callback.on_optimization_step_start(self.training_context)
 
             # grads = tape.gradient(this_loss, self._model.trainable_variables)
+
+
+            # Gradients does not exist for variables during training using gradienttape
+            # for handling this issue, need filter
+            new_vars=[]
+            new_grads=[]
             vars = grads.watched_variables()
             cal_grads = grads.gradient(self.training_context['current_loss'], vars)
+            for i  in range(len(vars)):
+                if cal_grads[i] is not None:
+                    new_vars.append(vars[i] )
+                    new_grads.append(cal_grads[i] )
+
+            grads_and_vars=zip(new_grads, new_vars)
 
             if self.training_context['stop_update'] == 0:
 
-                self.optimizer.apply_gradients(zip(cal_grads, vars), )
+                self.optimizer.apply_gradients(grads_and_vars )
 
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
@@ -814,19 +847,13 @@ class Model(ModelBase):
                     for k, v in self._regs.items():
                         if k + '_Loss' not in self.training_context['losses']:
                             self.training_context['losses'][k + '_Loss'] = []
+                        if 'model' in v.signature:
+                            this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0)
+                        elif 'output' in v.signature:
 
-                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed'],self._model) * ( 1 if self.training_context['stop_update'] < 1 else 0)
+                            this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) * ( 1 if self.training_context['stop_update'] < 1 else 0)
 
-                        overall_loss = None
-                        if isinstance(this_loss, tuple):
-                            overall_loss = this_loss[0]
-
-                            for i in range(1, len(this_loss)):
-                                overall_loss += this_loss[i]
-                        else:
-                            overall_loss = this_loss
-
-                        self.training_context['current_loss'] += overall_loss  # self.training_context[
+                        self.training_context['current_loss'] += this_loss  # self.training_context[
 
                         # 'current_loss'] + this_loss
                         if is_collect_data:
@@ -903,7 +930,7 @@ class Model(ModelBase):
 
             if is_collect_data:
                 for k, v in self.training_context['tmp_metrics'].items():
-                    if not getattr(self._metrics[k], 'collect_history') == False:
+                    if not getattr(self._metrics[k], 'collect_history') == False and v is not None:
                         self.training_context['metrics'][k].append(float(to_numpy(v).mean()))
                         self.training_context['tmp_metrics'][k] = []
 

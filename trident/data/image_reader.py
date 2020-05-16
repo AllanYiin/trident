@@ -21,7 +21,7 @@ else:
     import matplotlib
 import matplotlib.pyplot as plt
 import itertools
-from .image_common import list_pictures
+from trident.data.image_common import list_pictures
 
 
 

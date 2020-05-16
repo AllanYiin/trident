@@ -189,7 +189,7 @@ def DenseNet(blocks,
     densenet.name = name
 
     model=ImageClassificationModel(input_shape=input_shape,output=densenet)
-    model.signature=get_signature(model.model.forward)
+
     #model.model.to(_device)
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]

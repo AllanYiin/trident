@@ -17,14 +17,14 @@ from typing import List, TypeVar, Iterable, Tuple, Union
 import numpy as np
 from skimage import color
 
-from .bbox_common import xywh2xyxy, xyxy2xywh
-from .image_common import gray_scale, image2array, mask2array, image_backend_adaption, reverse_image_backend_adaption, \
+from trident.data.bbox_common import xywh2xyxy, xyxy2xywh
+from trident.data.image_common import gray_scale, image2array, mask2array, image_backend_adaption, reverse_image_backend_adaption, \
     unnormalize, array2image, ExpectDataType, GetImageMode
-from .label_common import label_backend_adaptive
-from .mask_common import mask_backend_adaptive, color2label
-from .samplers import *
-from ..backend.common import DataSpec, PrintException, OrderedDict
-from ..backend.load_backend import get_backend
+from trident.data.label_common import label_backend_adaptive
+from trident.data.mask_common import mask_backend_adaptive, color2label
+from trident.data.samplers import *
+from trident.backend.common import DataSpec, PrintException, OrderedDict,Signature
+from trident.backend.load_backend import get_backend
 
 try:
     import Queue
@@ -32,7 +32,7 @@ except ImportError:
     import queue as Queue
 
 if get_backend() == 'pytorch':
-    from ..backend.pytorch_backend import to_numpy, to_tensor, ReplayBuffer
+    from trident.backend.pytorch_backend import to_numpy, to_tensor, ReplayBuffer
     import torch
 
 __all__ = ['Dataset', 'ImageDataset', 'MaskDataset', 'LabelDataset', 'BboxDataset', 'MultipleDataset', 'Iterator',
@@ -138,7 +138,7 @@ class ImageDataset(Dataset):
             img = img.astype(self.dtype)
 
         if self.get_image_mode == GetImageMode.expect and self.is_pair_process == False:
-            return image_backend_adaptive(img)
+            return image_backend_adaption(img)
         elif self.get_image_mode == GetImageMode.processed and self.is_pair_process == False:
             return self.image_transform(img)
         elif self.is_pair_process == True:
@@ -148,14 +148,14 @@ class ImageDataset(Dataset):
 
     def image_transform(self, img_data):
         if len(self.image_transform_funcs) == 0:
-            return image_backend_adaptive(img_data)
+            return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.image_transform_funcs:
                 if not fc.__qualname__.startswith(
                         'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
                         fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
                     img_data = fc(img_data)
-            img_data = image_backend_adaptive(img_data)
+            img_data = image_backend_adaption(img_data)
 
             return img_data
         else:
@@ -164,7 +164,7 @@ class ImageDataset(Dataset):
     @property
     def reverse_image_transform_funcs(self):
         return_list = []
-        return_list.append(reverse_image_backend_adaptive)
+        return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.image_transform_funcs)):
             fn = self.image_transform_funcs[-1 - i]
             if fn.__qualname__ == 'normalize.<locals>.img_op':
@@ -174,12 +174,12 @@ class ImageDataset(Dataset):
 
     def reverse_image_transform(self, img_data):
         if len(self.reverse_image_transform_funcs) == 0:
-            return reverse_image_backend_adaptive(img_data)
+            return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 img_data = fc(img_data)
-            img_data = reverse_image_backend_adaptive(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
 
             return img_data
         else:
@@ -272,7 +272,7 @@ class MaskDataset(Dataset):
     @property
     def reverse_image_transform_funcs(self):
         return_list = []
-        return_list.append(reverse_image_backend_adaptive)
+        return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.image_transform_funcs)):
             fn = self.image_transform_funcs[-1 - i]
             if fn.__qualname__ == 'normalize.<locals>.img_op':
@@ -282,12 +282,12 @@ class MaskDataset(Dataset):
 
     def reverse_image_transform(self, img_data):
         if len(self.reverse_image_transform_funcs) == 0:
-            return reverse_image_backend_adaptive(img_data)
+            return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 img_data = fc(img_data)
-            img_data = reverse_image_backend_adaptive(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
 
             return img_data
         else:
@@ -498,30 +498,24 @@ class Iterator(object):
 
     def update_signature(self, arg_names):
         iterdata = self.next()
-        if self.signature is None:
-            self.signature = OrderedDict()
+        if self.signature is None or not isinstance(self.signature,Signature):
+            self.signature = Signature()
+            self.signature.name = 'data_provider'
+        if isinstance(arg_names, (list, tuple)) and len(iterdata)==len(arg_names):
             for i in range(len(arg_names)):
                 arg = arg_names[i]
-                data = iterdata[i][0]
-                self.signature[arg] = data.shape
-        elif len(self.signature.key_list) == len(arg_names):
-            self.signature = OrderedDict()
-            for i in range(len(arg_names)):
-                arg = arg_names[i]
-                data = iterdata[i][0]
-                self.signature[arg] = data.shape
+                data = iterdata[i]
+                self.signature.outputs[arg] =(-1,)+ data.shape[1:] if data.ndim>1 else (-1)
 
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
         elif len(self.signature.key_list) != len(arg_names):
             raise ValueError('data feed and arg_names should be the same length')
         else:
-            self.signature = OrderedDict()
+            self.signature = None
             iterdata = self.next()
-            for i in range(len(arg_names)):
-                arg = arg_names[i]
-                data = iterdata[i][0]
-                self.signature[arg] = data.shape
+
+
 
     def paired_transform(self, img_data, paired_img):
 
@@ -606,21 +600,18 @@ class Iterator(object):
 
             return_data = []
             if self.signature is None or len(self.signature) == 0:
-                self.signature = OrderedDict()
+                self.signature=Signature()
+                self.signature.name='data_provider'
                 if data is not None:
-                    self.signature['data' if self.data.symbol is None or len(
-                        self.data.symbol) == 0 else self.data.symbol] = data.shape
+                    self.signature.outputs['data' if self.data.symbol is None or len(self.data.symbol) == 0 else self.data.symbol] = (-1,)+data.shape
                 if bbox is not None:
-                    self.signature['bbox' if self.label.symbol is None or len(
-                        self.label.symbol) == 0 else self.label.symbol] = bbox.shape
+                    self.signature.outputs['bbox' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] =(-1,)+ bbox.shape
                 if mask is not None:
-                    self.signature['mask' if self.label.symbol is None or len(
-                        self.label.symbol) == 0 else self.label.symbol] = mask.shape
+                    self.signature.outputs['mask' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] = (-1,)+mask.shape
                 if label is not None:
-                    self.signature['label' if self.label.symbol is None or len(self.label.symbol) == 0 or self.label.symbol in self.signature else self.label.symbol] = label.shape if isinstance(label, np.ndarray) else type(label)
+                    self.signature.outputs['label' if self.label.symbol is None or len(self.label.symbol) == 0 or self.label.symbol in self.signature else self.label.symbol] =(-1,)+ label.shape if isinstance(label, np.ndarray) else (-1,)
                 if unpair is not None:
-                    self.signature['unpair' if self.unpair.symbol is None or len(
-                        self.unpair.symbol) == 0 else self.unpair.symbol] = unpair.shape  # stop = time.time()  #
+                    self.signature.outputs['unpair' if self.unpair.symbol is None or len(self.unpair.symbol) == 0 else self.unpair.symbol] = (-1,)+unpair.shape  # stop = time.time()  #
                     # print('signature:{0}'.format(stop - start))  # start = stop
 
             if data is not None:

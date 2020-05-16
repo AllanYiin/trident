@@ -4,16 +4,36 @@ from __future__ import print_function
 import copy
 import inspect
 import os
+import builtins
 import random
 import shutil
 import string
 import sys
 import time
 import uuid
+import json
 import numpy as np
-from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path
-from trident.backend.optimizer import OptimizerBase
+from trident.backend.common import to_list,get_signature, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need
+from trident.backend.optimizer import OptimizerBase,Signature
+from trident.data.image_common import *
+
+_session = get_session()
+_backend = _session.backend
+if _backend == 'pytorch':
+    import torch
+    import torch.nn as nn
+    from trident.backend.pytorch_backend import *
+    from trident.backend.pytorch_ops import *
+
+elif _backend == 'tensorflow':
+    import tensorflow as tf
+    from trident.backend.tensorflow_backend import *
+    from trident.backend.tensorflow_ops import *
+
+
+
+
 __all__ = ['progress_bar','ModelBase']
 
 
@@ -91,22 +111,11 @@ class ModelBase(object):
     @model.setter
     def model(self, value):
         if isinstance(value, Layer):
-            if value.built:
-                inp_shape = copy.deepcopy(self.inputs.value_list[0])
-                self.inputs = OrderedDict()
-                self.targets = OrderedDict()
-                self._initial_graph(output=value, input_shape=inp_shape)
-                self._signature =get_signature(value.forward)
-            else:
-                self.inputs = OrderedDict()
-                self.targets = OrderedDict()
-                if self._model is not None:
-                    self._model.cpu()
-                self._initial_graph(output=value, input_shape=value.input_shape)
-                self._signature = get_signature(value.forward)
-        elif isinstance(value, nn.Module):
-            self._model = value
-            self._signature = get_signature(value.forward)
+            inp_shape = copy.deepcopy(self.inputs.value_list[0])
+            self.inputs = OrderedDict()
+            self.targets = OrderedDict()
+            self._initial_graph(output=value, input_shape=inp_shape)
+            self._signature = self._model.signature
         elif isinstance(value, np.ndarray) or 'tensor' in value.__name__.lower():
             self._model = to_tensor(value)
         else:
@@ -160,69 +169,49 @@ class ModelBase(object):
         if self._signature is not None:
             return self._signature
         elif self.model is not None and hasattr(self.model, 'signature'):
-            return self.model.signature
+            self._signature=self.model.signature
+            return self._signature
         else:
             self.model.signature = get_signature(self.model.forward)
-            self._signatures = self.model.signature
-            return self.model.signature
+            self._signature = self.model.signature
+            return self._signature
 
     @signature.setter
     def signature(self, value):
         if self.model is not None:
-            self.model.signature = value
+            self._signature = value
 
     def update_signature(self, arg_names):
-        if self._signature is None:
-            new_inputs = OrderedDict()
+        if self._signature is None or len(self._signature.inputs.key_list)+len(self._signature.outputs.key_list) == len(arg_names):
+
+            new_inputs =  OrderedDict()
             for i in range(len(arg_names[:len(self.inputs)])):
                 arg = arg_names[:len(self.inputs)][i]
                 new_inputs[arg] = self.inputs.value_list[0]
             self.inputs = new_inputs
-            self._signature = new_inputs
-            self._model.signature = new_inputs
+
             new_outputs = OrderedDict()
             new_target = OrderedDict()
-            outputs_args = arg_names[len(self.signature.key_list):]
+            outputs_args = arg_names[len(self._signature.inputs.key_list):]
             outputs=self._outputs
             targets=self._targets
             for i in range(len(outputs_args)):
                 arg = outputs_args[i]
                 new_outputs[arg] = outputs.value_list[0]
-
                 target_arg = arg.replace('output', 'target')
                 if 'target' not in target_arg:
                     target_arg = 'target_' + target_arg
                 new_target[target_arg] = targets.value_list[0]
             self._outputs = new_outputs
             self._targets = new_target
-            print(self._signature.key_list)
-            print(self._outputs.key_list)
-            print(self._targets.key_list)
+            if self.model is not None:
+                self._model.signature = get_signature(self._model.forward, 'model')
+                self._model.signature.inputs = copy.deepcopy(self.inputs)
+                self._model.signature.outputs = copy.deepcopy(self._outputs)
+                self._signatures
+            print(self._model.signature)
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
-        elif len(self.signature.key_list) < len(arg_names) and len(self.signature.key_list) + len(self.outputs) == len(
-                arg_names):
-            self.signature = OrderedDict()
-            for arg in arg_names[:len(self.signature.key_list)]:
-                self.signature[arg] = None
-            self.inputs = self.signature
-
-            new_outputs = OrderedDict()
-            new_target = OrderedDict()
-            outputs_args = arg_names[len(self.signature.key_list):]
-            for i in range(len(outputs_args)):
-                arg = outputs_args[i]
-                new_outputs[arg] = self.outputs.value_list[0]
-
-                target_arg = arg.replace('output', 'target')
-                if 'target' not in target_arg:
-                    target_arg = 'target_' + target_arg
-                new_target[target_arg] = self.targets.value_list[0]
-            self.outputs = new_outputs
-            self.targets = new_target
-            print(self._signature.key_list)
-            print(self.outputs.key_list)
-            print(self.targets.key_list)
         elif len(self._signature.key_list) != len(arg_names):
             raise ValueError('data deed and arg_names should be the same length')
         else:
@@ -385,10 +374,10 @@ class ModelBase(object):
         pass
 
     def do_post_gradient_update(self):
-        self.training_context['tmp_losses'].append(to_numpy(self.training_context['current_loss']).mean())
+        self.training_context['tmp_losses'].append(reduce_mean(to_numpy(self.training_context['current_loss'])))
         if self.training_context['is_collect_data'] == True:
             self.training_context['losses']['total_losses'].append(
-                float(to_numpy(self.training_context['tmp_losses']).mean()))
+                float(reduce_mean(to_numpy(self.training_context['tmp_losses']))))
             self.training_context['tmp_losses'] = []
 
     def do_on_metrics_evaluation_start(self):
@@ -461,7 +450,7 @@ class ModelBase(object):
         raise NotImplementedError
 
     def print_batch_progress(self, print_batch_progress_frequency):
-        slice_cnt = sum(self.sample_collect_history[-1 * print_batch_progress_frequency:])
+        slice_cnt = np.sum(to_numpy(self.sample_collect_history[-1 * print_batch_progress_frequency:]))
         metric_strings=[]
         for k, v in self._metrics.items():
             format_string='.3%'
@@ -783,7 +772,7 @@ def progress_bar(current, total, msg=None, name=''):
     global last_time, begin_time
     if current == 0:
         begin_time = time.time()  # Reset for new bar.
-    cur_len = max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
+    cur_len = builtins.max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
     rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
     # sys.stdout.write(' [')
     # for i in range(cur_len):

@@ -21,9 +21,6 @@ from trident.data.mask_common import *
 from trident.data.label_common import *
 from trident.data.bbox_common  import *
 
-# import pyximport; pyximport.install()
-# from .cython_nms import *
-# from .cython_bbox import *
 
 
 

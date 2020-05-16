@@ -21,7 +21,7 @@ from trident.data.data_provider import *
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 
-__all__ = [  'ModelBase', 'TrainingPlan']
+__all__ = ['TrainingPlan']
 
 _session = get_session()
 _backend = _session.backend
@@ -38,15 +38,6 @@ elif _backend == 'tensorflow':
     from trident.optims.tensorflow_optimizers import *
 
 
-_, term_width = get_terminal_size()
-term_width = int(term_width)
-TOTAL_BAR_LENGTH = 65.
-last_time = time.time()
-begin_time = last_time
-
-
-
-
 class TrainingPlan(object):
     def __init__(self):
         self.training_items = OrderedDict()
@@ -59,7 +50,7 @@ class TrainingPlan(object):
         self.print_progress_frequency = 10
         self.print_progress_unit = 'batch'
         self.print_progress_on_epoch_end = False
-        self.out_sample_evaluation_frequency =1
+        self.out_sample_evaluation_frequency = 1
         self.out_sample_evaluation_unit = 'epoch'
         self.out_sample_evaluation_on_epoch_end = True
         self.save_model_frequency = -1
@@ -165,26 +156,25 @@ class TrainingPlan(object):
         plan = cls()
         return plan
 
-    def add_training_item(self, training_item,name='', start_epoch=0):
+    def add_training_item(self, training_item, name='', start_epoch=0):
         n = len(self.training_items)
 
-        alias=name if len(name)>0 else  training_item.name
+        alias = name if len(name) > 0 else training_item.name
         alias = alias if len(alias) > 0 else training_item.model.name
-        alias = alias if len(alias) > 0 else  'model {0}'.format(n)
-
+        alias = alias if len(alias) > 0 else 'model {0}'.format(n)
 
         if len(training_item.name) > 0:
             self.training_names[n] = training_item.name
         else:
             if len(name) > 0:
                 training_item.name = name
-                if isinstance(training_item.model,Layer):
-                    training_item.model._name=name
+                if isinstance(training_item.model, Layer):
+                    training_item.model._name = name
                 self.training_names[n] = name
             else:
                 training_item.name = 'model {0}'.format(n)
                 if isinstance(training_item.model, Layer):
-                    training_item.model._name ='model {0}'.format(n)
+                    training_item.model._name = 'model {0}'.format(n)
                 self.training_names[n] = 'model {0}'.format(n)
         self.training_items[n] = training_item
         self.training_items[n].start_epoch = start_epoch
@@ -211,6 +201,7 @@ class TrainingPlan(object):
             self.out_sample_evaluation_unit = unit
 
         return self
+
     def print_progress_scheduling(self, frequency: int, unit='batch', on_epoch_end=True, show_loss_metric_curve=True):
         self.print_progress_on_epoch_end = on_epoch_end
         self.print_progress_frequency = frequency
@@ -241,9 +232,9 @@ class TrainingPlan(object):
                                       name_prefix: str = 'tile_image_{0}.png', include_input=True, include_output=True,
                                       include_target=True, include_mask=None, imshow=None):
         if (is_in_ipython() or is_in_colab()) and imshow is None:
-            imshow=True
-        elif not is_in_ipython() and not  is_in_colab()and imshow is None:
-            imshow=False
+            imshow = True
+        elif not is_in_ipython() and not is_in_colab() and imshow is None:
+            imshow = False
         if unit not in ['batch', 'epoch']:
             raise ValueError('unit should be batch or epoch')
 
@@ -259,12 +250,12 @@ class TrainingPlan(object):
                                              name_prefix: str = 'loss_metric_curve_{0}.png',
                                              clean_ipython_output_frequency=5, imshow=None):
         if (is_in_ipython() or is_in_colab()) and imshow is None:
-            imshow=True
-        elif not is_in_ipython() and not  is_in_colab()and imshow is None:
-            imshow=False
+            imshow = True
+        elif not is_in_ipython() and not is_in_colab() and imshow is None:
+            imshow = False
 
         if save_path is not None:
-            folder, _,_ =split_path(save_path)
+            folder, _, _ = split_path(save_path)
             if not os.path.exists(folder):
                 try:
                     os.makedirs(folder)
@@ -277,143 +268,143 @@ class TrainingPlan(object):
         self.callbacks.append(plot)
         return self
 
-    def generate_datafeed(self,data_loader):
+    def generate_datafeed(self, data_loader):
         if data_loader.signature is None:
             _ = data_loader.next()
         for trainingitem in self.training_items.value_list:
-            data_feed =None
-            if 'data_feed' in trainingitem.training_context and  all([  True for key in data_loader.signature.key_list if key in trainingitem.training_context['data_feed'].value_list]):
+            data_feed = None
+            if 'data_feed' in trainingitem.training_context:
                 data_feed = trainingitem.training_context['data_feed']
             else:
-                if 'data_feed' in trainingitem.training_context:
-                    data_feed = trainingitem.training_context['data_feed']
-                else:
-                    data_feed=OrderedDict()
-                outputs=trainingitem.outputs
-                targets=trainingitem.targets
-                if len(self._dataloaders)==1:
-                    if len(trainingitem.model.signature)+len(targets)==len(data_loader.signature) or len(data_loader.signature)==1:
-                        if len(outputs)==1 and len(trainingitem.model.signature)==1  :
-                            if  1<=len(data_loader.signature)<=2:
-                                    data_feed[trainingitem.model.signature.key_list[0]]=data_loader.signature.key_list[0]
-                                    for loss in trainingitem._losses.value_list:
-                                        args=get_signature(loss)
-                                        if hasattr(loss,'signature'):
-                                            args=loss.signature
-                                        if len(args)==2:
-                                            if args.key_list[0] not in data_feed or (args.key_list[0] in data_feed and data_feed[args.key_list[0]] is None):
-                                                data_feed[args.key_list[0]]=outputs.key_list[0]
-                                            if args.key_list[1] not in data_feed or (args.key_list[1] in data_feed and data_feed[args.key_list[1]] is None):
-                                                if args.key_list[1] in data_loader.signature.key_list:
-                                                    data_feed[args.key_list[1]] = args.key_list[1]
-                                                else:
-                                                    data_feed[args.key_list[1]] =data_loader.signature.key_list[-1]   #-1 is for handel autoencoder scenario
-                                        else:
-                                            raise ValueError('loss shoud only 2 argments when one-input-one-output model with 2 dataset items in data loaders')
 
-                                    trainingitem.training_context['data_feed']=data_feed
-                                    print('data_feed for {0} :{1}'.format(trainingitem.name,data_feed))
-                        #elif len(outputs)==1
+                data_feed = OrderedDict()
+                outputs = trainingitem.outputs
+                targets = trainingitem.targets
+                if len(self._dataloaders) == 1:
+                    if len(trainingitem.signature.inputs) + len(trainingitem.signature.outputs) == len(
+                            data_loader.signature.outputs) or len(data_loader.signature) == 1:
+                        # basic type  1 input / 1 output
+                        if len(trainingitem.signature.outputs) == 1 and len(trainingitem.signature.inputs) == 1:
+                            # data provider have 1 or 2 data items (1 data item just like autoencoder)
+                            if 1 <= len(data_loader.signature.outputs) <= 2:
+                                data_feed[trainingitem.signature.inputs.key_list[0]] = \
+                                data_loader.signature.outputs.key_list[0]
+                                for loss in trainingitem._losses.value_list:
+                                    args = loss.signature.inputs
+                                    if len(args) == 2:
+                                        if args.key_list[0] not in data_feed or (
+                                                args.key_list[0] in data_feed and data_feed[args.key_list[0]] is None):
+                                            data_feed[args.key_list[0]] = outputs.key_list[0]
+                                        if args.key_list[1] not in data_feed or (
+                                                args.key_list[1] in data_feed and data_feed[args.key_list[1]] is None):
+                                            if args.key_list[1] in data_loader.signature.key_list:
+                                                data_feed[args.key_list[1]] = args.key_list[1]
+                                            else:
+                                                data_feed[args.key_list[1]] = data_loader.signature.outputs.key_list[
+                                                    -1]  # -1 is for handel autoencoder scenario
+                                    else:
+                                        raise ValueError(
+                                            'loss shoud only 2 argments when one-input-one-output model with 2 dataset items in data loaders')
+
+                                trainingitem.training_context['data_feed'] = data_feed
+                                print('data_feed for {0} :{1}'.format(trainingitem.name,
+                                                                      data_feed))  # elif len(outputs)==1
 
                     else:
-                        raise RuntimeError('the number of models input plus the numbers of  targets should equal to the numbers of dataset items')
+                        raise RuntimeError(
+                            'the number of models input plus the numbers of  targets should equal to the numbers of dataset items')
                 else:
-                    raise  RuntimeError('Multiple data loader data_feed auto-generation is not support Now.')
+                    raise RuntimeError('Multiple data loader data_feed auto-generation is not support Now.')
 
-
-
-
-
-
-
-    def start_now(self, collect_data_inteval=1, is_resume=False,only_steps=False,max_batches=np.inf,keep_weights_history=False, keep_gradient_history=False):
+    def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
+                  keep_weights_history=False, keep_gradient_history=False):
         try:
             self.execution_id = get_time_suffix()
 
             # update callback
-            if not is_resume or only_steps==True:
+            if not is_resume or only_steps == True:
                 for item in self.training_items.values():
-                    item.training_context['execution_id']=self.execution_id
+                    item.training_context['execution_id'] = self.execution_id
                     for callback in self.callbacks:
                         if callback not in item.callbacks:
-                            #private callback
+                            # private callback
                             if callback.is_shared == False:
                                 item.with_callbacks(copy.deepcopy(callback))
                             else:
-                                #shared callback
+                                # shared callback
                                 item.with_callbacks(callback)
-                #shared callbacks will access training plan dict instead of training_context
+                # shared callbacks will access training plan dict instead of training_context
                 for callback in self.callbacks:
                     if callback.is_shared == True:
                         callback.on_training_start(self.__dict__)
 
             data_loader = self._dataloaders.value_list[0]
             data_loader.minibatch_size = self.minibatch_size
-            #generate data feed
+            # generate data feed
 
-            if not is_resume or only_steps==True:
+            if not is_resume or only_steps == True:
                 self.generate_datafeed(data_loader)
                 if collect_data_inteval == 1 and len(data_loader.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
-            if only_steps==True:
-                self.num_epochs=(max_batches//len(data_loader.batch_sampler))+2
+            if only_steps == True:
+                self.num_epochs = (max_batches // len(data_loader.batch_sampler)) + 2
 
             for epoch in range(self.num_epochs):
                 try:
                     for mbs, return_data in enumerate(data_loader):
-                        num_batches=len(data_loader.batch_sampler)*epoch+mbs
+                        num_batches = len(data_loader.batch_sampler) * epoch + mbs
                         iter_data = OrderedDict()
-                        for i in range(len(data_loader.signature.key_list)):
-                            name = data_loader.signature.key_list[i]
+                        for i in range(len(data_loader.signature.outputs.key_list)):
+                            name = data_loader.signature.outputs.key_list[i]
                             iter_data[name] = return_data[i]
 
-                        #check weather need out-of-sample evaluation
-                        need_out_sample_evaluation=False
-                        if  only_steps==False and self.out_sample_evaluation_on_epoch_end==True and mbs==len(data_loader.batch_sampler)-1:
-                            need_out_sample_evaluation=True
-                        elif only_steps==True and self.out_sample_evaluation_on_epoch_end==True and num_batches==max_batches-1:
-                            need_out_sample_evaluation=True
-                        elif only_steps==False and self.out_sample_evaluation_unit=='batch' and mbs>0 and mbs%self.out_sample_evaluation_frequency==0:
+                        # check weather need out-of-sample evaluation
+                        need_out_sample_evaluation = False
+                        if only_steps == False and self.out_sample_evaluation_on_epoch_end == True and mbs == len(
+                                data_loader.batch_sampler) - 1:
                             need_out_sample_evaluation = True
-                        elif only_steps==True and self.out_sample_evaluation_unit=='batch' and num_batches>0 and num_batches%self.out_sample_evaluation_frequency==0:
+                        elif only_steps == True and self.out_sample_evaluation_on_epoch_end == True and num_batches == max_batches - 1:
                             need_out_sample_evaluation = True
-                        elif only_steps==False and self.out_sample_evaluation_unit=='epoch' and mbs==len(data_loader.batch_sampler)-1 and epoch%self.out_sample_evaluation_frequency==0:
+                        elif only_steps == False and self.out_sample_evaluation_unit == 'batch' and mbs > 0 and mbs % self.out_sample_evaluation_frequency == 0:
                             need_out_sample_evaluation = True
-                        elif only_steps==True and self.out_sample_evaluation_unit=='epoch' and num_batches==max_batches-1 :
+                        elif only_steps == True and self.out_sample_evaluation_unit == 'batch' and num_batches > 0 and num_batches % self.out_sample_evaluation_frequency == 0:
                             need_out_sample_evaluation = True
-
+                        elif only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
+                                data_loader.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
+                            need_out_sample_evaluation = True
+                        elif only_steps == True and self.out_sample_evaluation_unit == 'epoch' and num_batches == max_batches - 1:
+                            need_out_sample_evaluation = True
 
                         iter_testdata = None
-                        if isinstance(data_loader, DataProviderV2) and data_loader.testdata is not None and need_out_sample_evaluation:
+                        if isinstance(data_loader,
+                                      DataProviderV2) and data_loader.testdata is not None and need_out_sample_evaluation:
                             return_test = data_loader.next_test()
                             if return_test is not None:
                                 iter_testdata = OrderedDict()
-                                for i in range(len(data_loader.signature.key_list)):
-                                    name = data_loader.signature.key_list[i]
+                                for i in range(len(data_loader.signature.outputs.key_list)):
+                                    name = data_loader.signature.outputs.key_list[i]
                                     iter_testdata[name] = return_test[i]
 
                         # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
-                        for trainitem_name, trainitem in zip(self.training_names.value_list,self.training_items.value_list):
-                            train_data=OrderedDict()
-                            test_data = None if iter_testdata is None else OrderedDict()
-                            for k,v in iter_data.items():
-                                train_data[k]=v.copy()
+                        for trainitem_name, trainitem in zip(self.training_names.value_list,
+                                                             self.training_items.value_list):
+                            train_data = copy.deepcopy(iter_data)
+                            test_data = copy.deepcopy(iter_testdata)
 
-                            if iter_testdata is not None:
-                                for k,v in iter_testdata.items():
-                                    test_data[k]=v.copy()
-
-                            trainitem.training_context['model_name']=trainitem_name
-                            if epoch<int(trainitem.start_epoch):
-                                trainitem.training_context['stop_update']=1
-                            trainitem.train_model(train_data,test_data, epoch if only_steps==False else 0,mbs if only_steps==False else  num_batches, self.num_epochs if only_steps==False else  1,
-                                                  len(data_loader.batch_sampler) if only_steps==False else max_batches,
+                            trainitem.training_context['model_name'] = trainitem_name
+                            if epoch < int(trainitem.start_epoch):
+                                trainitem.training_context['stop_update'] = 1
+                            trainitem.train_model(train_data, test_data, epoch if only_steps == False else 0,
+                                                  mbs if only_steps == False else num_batches,
+                                                  self.num_epochs if only_steps == False else 1, len(
+                                    data_loader.batch_sampler) if only_steps == False else max_batches,
                                                   is_collect_data=mbs % collect_data_inteval == 0,
                                                   is_print_batch_progress=self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0,
                                                   is_print_epoch_progress=self.print_progress_unit == 'epoch' and (
-                                                              epoch + 1) % self.print_progress_frequency == 0,
-                                                  log_gradients=keep_gradient_history, log_weights=keep_weights_history, accumulate_grads=False)
+                                                          epoch + 1) % self.print_progress_frequency == 0,
+                                                  log_gradients=keep_gradient_history, log_weights=keep_weights_history,
+                                                  accumulate_grads=False)
 
                         for k, trainitem in self.training_items.items():
                             for callback in trainitem.training_context['callbacks']:
@@ -427,16 +418,15 @@ class TrainingPlan(object):
                             for k, trainitem in self.training_items.items():
                                 trainitem.save_model()
 
-
-                        if only_steps==True and num_batches >= max_batches - 1:
+                        if only_steps == True and num_batches >= max_batches - 1:
                             for k, trainitem in self.training_items.items():
                                 try:
-                                     trainitem.save_model()
+                                    trainitem.save_model()
                                 except Exception as e:
                                     print(e)
                             return True
 
-                        if only_steps==False and (mbs + 1) % len(data_loader.batch_sampler) == 0:
+                        if only_steps == False and (mbs + 1) % len(data_loader.batch_sampler) == 0:
                             break
 
                 except StopIteration:
@@ -472,42 +462,7 @@ class TrainingPlan(object):
         self.start_now(is_resume=True)
 
     def only_steps(self, num_steps, collect_data_inteval=1, keep_weights_history=False, keep_gradient_history=False):
-        return self.start_now(collect_data_inteval=collect_data_inteval, is_resume=False,only_steps=True,max_batches=num_steps,keep_weights_history=keep_weights_history, keep_gradient_history=keep_gradient_history)
-
-
-last_time = time.time()
-begin_time = last_time
-
-
-def progress_bar(current, total, msg=None, name=''):
-    global last_time, begin_time
-    if current == 0:
-        begin_time = time.time()  # Reset for new bar.
-    cur_len = max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
-    rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
-    # sys.stdout.write(' [')
-    # for i in range(cur_len):
-    #     sys.stdout.write('=')
-    # sys.stdout.write('>')
-    # for i in range(rest_len):
-    #     sys.stdout.write('.')
-    # sys.stdout.write(']')
-    cur_time = time.time()
-    step_time = cur_time - last_time
-    last_time = cur_time
-    tot_time = cur_time - begin_time
-    L = []
-    L.append('{0:<12s}'.format(name))
-    L.append(' Step: {0:<8s}'.format(format_time(step_time)))
-    # L.append(' | Tot: {0:<12s}'.format(format_time(tot_time)))
-    if msg:
-        L.append(' | ' + msg)
-    msg = ''.join(L)
-    sys.stdout.write(msg)
-    # for i in range(term_width - int(TOTAL_BAR_LENGTH) - len(msg) - 3):
-    #     sys.stdout.write(' ')
-    sys.stdout.write(' ')
-    sys.stdout.write(' ( %d/%d )' % (current, total))
-    sys.stdout.write('\n')
-    sys.stdout.flush()  # # Go back to the center of the bar.  # for i in range(term_width-int(TOTAL_BAR_LENGTH/2)+2):  #     sys.stdout.write('\b')  # sys.stdout.write(' %d/%d ' % (current+1, total))  # if current < total-1:  #     sys.stdout.write('\r')  # else:  #     sys.stdout.write('\n')  # sys.stdout.flush()
+        return self.start_now(collect_data_inteval=collect_data_inteval, is_resume=False, only_steps=True,
+                              max_batches=num_steps, keep_weights_history=keep_weights_history,
+                              keep_gradient_history=keep_gradient_history)
 

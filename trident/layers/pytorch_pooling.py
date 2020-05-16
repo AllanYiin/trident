@@ -1,3 +1,4 @@
+"""Pytorch pooling layers definition in trident"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -21,10 +22,10 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import  Layer, Sequential
+from trident.backend.pytorch_backend import Layer, Sequential
 
 __all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
-           'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d']
+           'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d','get_pooling']
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -74,8 +75,7 @@ class _PoolNd(Layer):
 
 
 class MaxPool1d(_PoolNd):
-    r"""Applies a 1D max pooling over an input signal composed of several input
-    planes.
+    """Applies a 1D max pooling over an input signal composed of several input planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, L)`
     and output :math:`(N, C, L_{out})` can be precisely described as:
@@ -102,8 +102,7 @@ class MaxPool1d(_PoolNd):
         - Output: :math:`(N, C, L_{out})`, where
 
           .. math::
-              L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}
-                    \times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
+              L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}\times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
 
     Examples::
 
@@ -130,7 +129,7 @@ class MaxPool1d(_PoolNd):
         return F.max_pool1d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
                             self.return_indices)
 
-
+nn.MaxPool2d
 class MaxPool2d(_PoolNd):
     r"""Applies a 2D max pooling over an input signal composed of several input
     planes.
@@ -158,9 +157,9 @@ class MaxPool2d(_PoolNd):
 
     Args:
         kernel_size: the size of the window to take a max over
-        stride: the strides of the window. Default value is :attr:`kernel_size`
+        stride: the stride of the window. Default value is :attr:`kernel_size`
         padding: implicit zero padding to be added on both sides
-        dilation: a parameter that controls the strides of elements in the window
+        dilation: a parameter that controls the stride of elements in the window
         return_indices: if ``True``, will return the max indices along with the outputs.
                         Useful for :class:`torch.nn.MaxUnpool2d` later
         ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape
@@ -179,16 +178,17 @@ class MaxPool2d(_PoolNd):
 
     Examples::
 
-        >>> # pool of square window of size=3, strides=2
-        >>> m = nn.MaxPool2d(3, strides=2)
+        >>> # pool of square window of size=3, stride=2
+        >>> m = nn.MaxPool2d(3, stride=2)
         >>> # pool of non-square window
-        >>> m = nn.MaxPool2d((3, 2), strides=(2, 1))
+        >>> m = nn.MaxPool2d((3, 2), stride=(2, 1))
         >>> input = torch.randn(20, 16, 50, 32)
         >>> output = m(input)
 
     .. _link:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
     """
+
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', name='', **kwargs):
         super(MaxPool2d, self).__init__(kernel_size, strides, auto_pad, padding_mode, 1, name, **kwargs)
@@ -235,7 +235,7 @@ class MaxPool2d(_PoolNd):
 
 
 class MaxPool3d(_PoolNd):
-    r"""Applies a 3D max pooling over an input signal composed of several input
+    """Applies a 3D max pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,
@@ -244,10 +244,10 @@ class MaxPool3d(_PoolNd):
 
     .. math::
         \begin{aligned}
-            \text{out}(N_i, C_j, d, h, w) ={} & \max_{k=0, \ldots, kD-1} \max_{m=0, \ldots, kH-1} \max_{n=0, \ldots, 
+            \text{out}(N_i, C_j, d, h, w) ={} & \max_{k=0, \ldots, kD-1} \max_{m=0, \ldots, kH-1} \max_{n=0, \ldots,
             kW-1} \\
                                               & \text{input}(N_i, C_j, \text{stride[0]} \times d + k,
-                                                             \text{stride[1]} \times h + m, \text{stride[2]} \times w 
+                                                             \text{stride[1]} \times h + m, \text{stride[2]} \times w
                                                              + n)
         \end{aligned}
 
@@ -297,7 +297,8 @@ class MaxPool3d(_PoolNd):
 
     .. _link:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
-    """  # noqa: E501
+
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
         super(MaxPool3d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -313,7 +314,7 @@ class MaxPool3d(_PoolNd):
 
 
 class MaxUnpool1d(_PoolNd):
-    r"""Computes a partial inverse of :class:`MaxPool1d`.
+    """Computes a partial inverse of :class:`MaxPool1d`.
 
     :class:`MaxPool1d` is not fully invertible, since the non-maximal values are lost.
 
@@ -377,7 +378,7 @@ class MaxUnpool1d(_PoolNd):
 
 
 class MaxUnpool2d(_PoolNd):
-    r"""Computes a partial inverse of :class:`MaxPool2d`.
+    """Computes a partial inverse of :class:`MaxPool2d`.
 
     :class:`MaxPool2d` is not fully invertible, since the non-maximal values are lost.
 
@@ -451,7 +452,7 @@ class MaxUnpool2d(_PoolNd):
 
 
 class MaxUnpool3d(_PoolNd):
-    r"""Computes a partial inverse of :class:`MaxPool3d`.
+    """Computes a partial inverse of :class:`MaxPool3d`.
 
     :class:`MaxPool3d` is not fully invertible, since the non-maximal values are lost.
     :class:`MaxUnpool3d` takes in as input the output of :class:`MaxPool3d`
@@ -512,7 +513,7 @@ class MaxUnpool3d(_PoolNd):
 
 
 class AvgPool1d(_PoolNd):
-    r"""Applies a 1D average pooling over an input signal composed of several
+    """Applies a 1D average pooling over an input signal composed of several
     input planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, L)`,
@@ -566,7 +567,7 @@ class AvgPool1d(_PoolNd):
 
 
 class AvgPool2d(_PoolNd):
-    r"""Applies a 2D average pooling over an input signal composed of several input
+    """Applies a 2D average pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, H, W)`,
@@ -658,7 +659,7 @@ class AvgPool2d(_PoolNd):
 
 
 class AvgPool3d(_PoolNd):
-    r"""Applies a 3D average pooling over an input signal composed of several input
+    """Applies a 3D average pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,
@@ -738,7 +739,14 @@ class AvgPool3d(_PoolNd):
 
 
 class GlobalAvgPool2d(Layer):
+    """Global Average Pooling Imprementation """
     def __init__(self, keepdim=False, name='avg_pool'):
+        """
+
+        Args:
+            keepdim ():
+            name ():
+        """
         super(GlobalAvgPool2d, self).__init__()
         self.keepdim = keepdim
         self.name = name
@@ -762,6 +770,7 @@ class GlobalAvgPool2d(Layer):
 
 
 class AdaptiveAvgPool2d(Layer):
+    """AdaptiveAverage Pooling Imprementation """
     def __init__(self, output_size, name='adaptive_avg_pool'):
         super(AdaptiveAvgPool2d, self).__init__()
         self.output_size = _pair(output_size)
@@ -771,30 +780,39 @@ class AdaptiveAvgPool2d(Layer):
         x = enforce_singleton(x)
         return F.adaptive_avg_pool2d(x, self.output_size)
 
-#
-# class GlobalAvgPool1d(Layer):
-#     def __init__(self):
-#         super(GlobalAvgPool1d, self).__init__()
-#
-#     def build(self, input_shape):
-#         pass
-#
-#     def forward(self, *x):
-#         x = enforce_singleton(x)
-#         assert len(x.size()) == 3, x.size()
-#         B, C, L = x.size()
-#         return F.avg_pool1d(x, L)
-#
-#
-# class GlobalAvgPool2d(Layer):
-#     def __init__(self):
-#         super(GlobalAvgPool2d, self).__init__()
-#
-#     def build(self, input_shape):
-#         pass
-#
-#     def forward(self, *x):
-#         x = enforce_singleton(x)
-#         assert len(x.size()) == 4, x.size()
-#         B, C, W, H = x.size()
-#         return F.avg_pool2d(x, (W, H))
+
+def get_pooling(fn_name):
+    """
+
+    Args:
+        fn_name ():
+
+    Returns:
+
+    """
+    if fn_name is None:
+        return None
+    fn_modules = ['trident.layers.ptorch_pooling']
+    try:
+        if isinstance(fn_name,str) and fn_name in __all__:
+            try:
+                pooling_class = get_class(fn_name, fn_modules)
+                return pooling_class()
+            except Exception:
+                PrintException()
+                return None
+        if getattr(fn_name, '__module__', None) == fn_modules[0]:
+            if inspect.isfunction(fn_name):
+                return fn_name
+            elif isinstance(fn_name, Layer):
+                return fn_name()
+        else:
+            if callable(fn_name) :
+                result=inspect.getfullargspec(fn_name)
+                if 1<=len(result.args)<=2:
+                    return fn_name if inspect.isfunction(fn_name) else fn_name()
+                else:
+                    raise ValueError('Unknown pooling function/ class')
+    except Exception:
+        return None
+

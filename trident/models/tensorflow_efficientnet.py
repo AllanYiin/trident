@@ -5,7 +5,7 @@ from __future__ import print_function
 import math
 import os
 from copy import deepcopy
-
+import builtins
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
@@ -54,7 +54,7 @@ def efficient_block( expand_ratio=1 , filters_in=32, filters_out=16, kernel_size
 
         bottleneck=Sequential(
             DepthwiseConv2d_Block((kernel_size,kernel_size),depth_multiplier=1,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='swish',name=name + 'dwconv'),
-            SqueezeExcite( se_filters= max(1, int(filters_in * se_ratio)),num_filters=filters_in,use_bias=True) if 0 < se_ratio <= 1 else Identity(),
+            SqueezeExcite( se_filters= builtins.max(1, int(filters_in * se_ratio)),num_filters=filters_in,use_bias=True) if 0 < se_ratio <= 1 else Identity(),
             Conv2d_Block((1,1),num_filters=filters_out,strides=1,auto_pad=True,normalization='batch', activation=None,name=name + 'se'),
             Dropout(dropout_rate=drop_rate) if is_shortcut and drop_rate > 0 else Identity()
         )
@@ -68,7 +68,7 @@ def efficient_block( expand_ratio=1 , filters_in=32, filters_out=16, kernel_size
     else:
         bottleneck=Sequential(Conv2d_Block((1, 1), num_filters=filters, strides=1, auto_pad=True, normalization='batch', activation='swish' ,name=name + 'expand_bn'),
             DepthwiseConv2d_Block((kernel_size, kernel_size), depth_multiplier=1, strides=strides, auto_pad=True,padding_mode='zero', normalization='batch', activation='swish',name=name + 'dwconv'),
-            SqueezeExcite(se_filters= max(1, int(filters_in * se_ratio)),num_filters=filters,use_bias=True) if 0 < se_ratio <= 1 else Identity(),
+            SqueezeExcite(se_filters= builtins.max(1, int(filters_in * se_ratio)),num_filters=filters,use_bias=True) if 0 < se_ratio <= 1 else Identity(),
             Conv2d_Block((1, 1), num_filters=filters_out, strides=1, auto_pad=True,normalization='batch', activation=None,name=name + 'se'),
             Dropout(dropout_rate=drop_rate) if is_shortcut and drop_rate > 0 else Identity()
         )
@@ -116,10 +116,11 @@ def EfficientNet(width_coefficient,
                  model_name='efficientnet',
                  include_top=True,
                  num_classes=1000,**kwargs):
-    '''Instantiates the EfficientNet architecture using given scaling coefficients.
+    """Instantiates the EfficientNet architecture using given scaling coefficients.
         Optionally loads weights pre-trained on ImageNet.
         Note that the data format convention used by the model is
         the one specified in your Keras config at `~/.keras/keras.json`.
+
     Args
         width_coefficient: float, scaling coefficient for network width.
         depth_coefficient: float, scaling coefficient for network depth.
@@ -128,44 +129,26 @@ def EfficientNet(width_coefficient,
         drop_connect_rate: float, dropout rate at skip connections.
         depth_divisor: integer, a unit of network width.
         activation_fn: activation function.
-        blocks_args: list of dicts, parameters to construct block modules.
+
         model_name: string, model name.
-        include_top: whether to include the fully-connected
-            layer at the top of the network.
-        weights: one of `None` (random initialization),
-              'imagenet' (pre-training on ImageNet),
-              or the path to the weights file to be loaded.
-        input_tensor: optional Keras tensor
-            (i.e. output of `layers.Input()`)
-            to use as image input for the model.
+        include_top: whether to include the fully-connected layer at the top of the network.
         input_shape: optional shape tuple, only to be specified
             if `include_top` is False.
             It should have exactly 3 inputs channels.
-        pooling: optional pooling mode for feature extraction
-            when `include_top` is `False`.
-            - `None` means that the output of the model will be
-                the 4D tensor output of the
-                last convolutional layer.
-            - `avg` means that global average pooling
-                will be applied to the output of the
-                last convolutional layer, and thus
-                the output of the model will be a 2D tensor.
-            - `max` means that global max pooling will
-                be applied.
-        classes: optional number of classes to classify images
+
+        num_classes: optional number of classes to classify images
             into, only to be specified if `include_top` is True, and
             if no `weights` argument is specified.
     Returns
-        A Keras model instance.
-    Raises
-        ValueError: in case of invalid argument for `weights`,
-            or invalid input shape.
-    '''
+        A Efficientnet model instance.
+
+
+    """
     default_block_args=deepcopy(DEFAULT_BLOCKS_ARGS)
     def round_filters(filters, divisor=depth_divisor):
-        '''Round number of filters based on depth multiplier.'''
+        """Round number of filters based on depth multiplier."""
         filters *= width_coefficient
-        new_filters = max(divisor, int(filters + divisor / 2) // divisor * divisor)
+        new_filters = builtins.max(divisor, int(filters + divisor / 2) // divisor * divisor)
         # Make sure that round down does not go down by more than 10%.
         if new_filters < 0.9 * filters:
             new_filters += divisor
@@ -179,7 +162,7 @@ def EfficientNet(width_coefficient,
     efficientnet = Sequential(name=model_name)
     efficientnet.add_module('stem',Conv2d_Block((3,3),round_filters(32),strides=2,use_bias=False,auto_pad=True,padding_mode='zero',normalization='batch',activation='swish',name='stem'))
     b = 0
-    blocks = float(sum(args['repeats'] for args in default_block_args))
+    blocks = float(builtins.sum(args['repeats'] for args in default_block_args))
     for (i, args) in enumerate(default_block_args):
         assert args['repeats'] > 0
         # Update block input and output filters based on depth multiplier.
@@ -203,13 +186,13 @@ def EfficientNet(width_coefficient,
     if isinstance(default_size,int):
         default_size=default_size,
     if len(default_size)==1:
-        default_size=(default_size[0],default_size[0],3)
+        default_size=(default_size[0],default_size[1],3)
     model=ImageClassificationModel(input_shape=default_size,output=efficientnet)
-    model.signature = get_signature(model.model.forward)
+
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names=labels
-    model.preprocess_flow=[resize((default_size[1],default_size[0]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+    model.preprocess_flow=[resize((default_size[0],default_size[1]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
     return model
 
 
@@ -354,6 +337,18 @@ def EfficientNetB5(include_top=True,
              input_shape=(456,456,3),
              classes=1000,
              **kwargs):
+    """
+
+    Args:
+        include_top ():
+        pretrained ():
+        input_shape ():
+        classes ():
+        **kwargs ():
+
+    Returns:
+
+    """
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:

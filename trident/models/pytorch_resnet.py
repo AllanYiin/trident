@@ -162,7 +162,7 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
         resnet.add_module('softmax', SoftMax(name='softmax'))
     resnet.name=model_name
     model=ImageClassificationModel(input_shape=input_shape,output=resnet)
-    model.signature = get_signature(model.model.forward)
+
 
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
