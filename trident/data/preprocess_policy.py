@@ -42,7 +42,7 @@ class PreprocessPolicy(object):
                 img = item(img)
             except Exception as e:
                 print(e)
-        img=image_backend_adaptive(img)
+        img=image_backend_adaption(img)
         return img
 
     def __repr__(self):

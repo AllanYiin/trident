@@ -19,7 +19,7 @@ from skimage import exposure
 from skimage import morphology
 from skimage import transform, exposure
 from skimage.filters import *
-
+from skimage.morphology import square
 from trident.backend.common import *
 
 __all__ = ['transform_func','read_image', 'read_mask', 'save_image', 'save_mask', 'image2array', 'array2image', 'mask2array',
@@ -51,7 +51,7 @@ array2mask = array2mask
 
 
 def transform_func(func):
-    '''
+    """
 
     Args:
         func ():
@@ -60,7 +60,7 @@ def transform_func(func):
 
 
 
-    '''
+    """
     def wrapper(*args, **kwargs):
         argspec = inspect.getfullargspec(func)
 
@@ -782,7 +782,7 @@ def clahe(clip_limit=0.1, nbins=16):
 def image_erosion(filter_size=3, repeat=1):
     def img_op(image: np.ndarray):
         for i in range(repeat):
-            image = morphology.erosion(image, morphology.square(filter_size))
+            image = morphology.erosion(image,None)
         return image
 
     return img_op
@@ -791,7 +791,7 @@ def image_erosion(filter_size=3, repeat=1):
 def image_dilation(filter_size=3, repeat=1):
     def img_op(image: np.ndarray):
         for i in range(repeat):
-            image = morphology.dilation(image, morphology.square(filter_size))
+            image = morphology.dilation(image,None)
         return image
 
     return img_op
@@ -800,8 +800,8 @@ def image_dilation(filter_size=3, repeat=1):
 def erosion_then_dilation(filter_size=3, repeat=1):
     def img_op(image: np.ndarray):
         for i in range(repeat):
-            image = morphology.erosion(image, morphology.square(filter_size))
-            image = morphology.dilation(image, morphology.square(filter_size))
+            image = morphology.erosion(image,None)
+            image = morphology.dilation(image, None)
         return image
 
     return img_op
@@ -810,8 +810,8 @@ def erosion_then_dilation(filter_size=3, repeat=1):
 def dilation_then_erosion(filter_size=3, repeat=1):
     def img_op(image: np.ndarray):
         for i in range(repeat):
-            image = morphology.dilation(image, morphology.square(filter_size))
-            image = morphology.erosion(image, morphology.square(filter_size))
+            image = morphology.dilation(image, None)
+            image = morphology.erosion(image, None)
         return image
 
     return img_op
@@ -825,7 +825,7 @@ def adaptive_binarization(threshold_type='otsu'):
         try:
             if threshold_type == 'otsu':
                 if len(blur.shape) > 2 and blur.shape[-1] in (3, 4):
-                    image = color.rgb2gray(blur.astype(np.float32))
+                    blur = color.rgb2gray(blur.astype(np.float32))
                 if blur.min() == blur.max():
                     return image
                 else:
