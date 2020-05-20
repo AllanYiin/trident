@@ -30,9 +30,10 @@ from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_serialization import save, load
 from trident.callbacks.lr_schedulers import get_lr_scheduler
 from trident.data.image_common import *
-from trident.data.utils import pickle_it, unpickle
+from trident.layers.tensorflow_layers import SoftMax
+
 from trident.optims.tensorflow_constraints import get_constraint
-from trident.optims.tensorflow_losses import *
+from trident.optims.tensorflow_losses import get_loss, _ClassificationLoss
 from trident.optims.tensorflow_metrics import get_metric
 from trident.optims.tensorflow_optimizers import get_optimizer
 from trident.optims.tensorflow_regularizers import *
@@ -71,7 +72,7 @@ class Model(ModelBase):
             if input_shape is None:
                 pass
             else:
-                input_shape =tf.TensorShape(to_list(input_shape))
+                input_shape = tf.TensorShape(to_list(input_shape))
                 input_name = 'input_{0}'.format(len(self.inputs) + 1)
                 # input_var =tf.placeholder(dtype=tf.float32, shape=[None])
                 # input_var = Input(input_shape, name=input_name)
@@ -105,7 +106,7 @@ class Model(ModelBase):
             else:
                 dummay_input = to_tensor(np.random.standard_normal((1, *input_shape)).astype(np.float32))
                 out = out_var(dummay_input)
-                #out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
+                # out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
                 self._model = out_var
 
                 if is_tensor(out):
@@ -133,7 +134,6 @@ class Model(ModelBase):
 
         else:
             raise ValueError('')
-
 
         self.training_context['current_model'] = self._model
         save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.name))
@@ -192,15 +192,31 @@ class Model(ModelBase):
     #     return self
 
     def with_optimizer(self, optimizer, **kwargs):
-        if 'lr' in kwargs:
-            lr = kwargs['lr']
-            kwargs['learning_rate'] = lr
-            kwargs.pop('lr')
+        # if 'lr' in kwargs:
+        #     lr = kwargs['lr']
+        #     kwargs['learning_rate'] = lr
+        #     kwargs.pop('lr')
+        # if isinstance(optimizer, str):
+        #     optimizer_class = get_optimizer(optimizer)
+        #     self.optimizer = optimizer_class(**kwargs)
+        # else:
+        #     self.optimizer = optimizer(**kwargs)
+        # self.base_lr = kwargs.get('lr', kwargs.get('learning_rate', 1e-3))
+        # self.training_context['optimizer'] = self.optimizer
+        # self.training_context['base_lr'] = self.base_lr
+        # self.training_context['current_lr'] = self.base_lr
+        #
         if isinstance(optimizer, str):
             optimizer_class = get_optimizer(optimizer)
-            self.optimizer = optimizer_class(**kwargs)
+            self.optimizer = optimizer_class(
+                self._model.parameters() if isinstance(self._model, Layer) else [self._model], **kwargs)
+
         else:
-            self.optimizer = optimizer(**kwargs)
+            self.optimizer = optimizer(self._model.parameters() if isinstance(self._model, Layer) else [self._model],
+                                       **kwargs)
+        # self.lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, verbose=True, mode='min',
+        #                                                                factor=0.5, patience=5, threshold=1e-4,
+        #                                                                cooldown=0, min_lr=1e-10, eps=1e-8)
         self.base_lr = kwargs.get('lr', kwargs.get('learning_rate', 1e-3))
         self.training_context['optimizer'] = self.optimizer
         self.training_context['base_lr'] = self.base_lr
@@ -209,7 +225,7 @@ class Model(ModelBase):
 
     def with_loss(self, loss, loss_weight=1, output_idx=0, start_epoch=0, name='', **kwargs):
         alias = name
-        argnames =  Signature()
+        argnames = Signature()
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
 
@@ -220,7 +236,7 @@ class Model(ModelBase):
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
-            self._losses[alias] = loss_class(**kwargs)
+            self._losses[alias] = loss_class(**kwargs) if len(kwargs)>0 else loss()
             if hasattr(loss, 'forward'):
                 argnames = get_signature(self._losses[alias].forward, alias)
             else:
@@ -231,11 +247,12 @@ class Model(ModelBase):
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
 
-            self._losses[alias] = loss(**kwargs)
-            if hasattr(loss, 'forward'):
+            self._losses[alias] = loss(**kwargs) if len(kwargs)>0 else loss()
+            if hasattr(self._losses[alias] , 'forward'):
                 argnames = get_signature(self._losses[alias].forward, alias)
             else:
                 argnames = get_signature(self._losses[alias].__call__, alias)
+
         elif not inspect.isfunction(loss) and callable(loss):
             alias = loss.__class__.__name__ if len(alias) == 0 else alias
             if alias in self._losses:
@@ -251,55 +268,30 @@ class Model(ModelBase):
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
             spec = inspect.getfullargspec(loss)
-            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 and (
-                    spec.args[0] in ['output', 'y_pred', 'pred'] or 'target_' + spec.args[0] == spec.args[1]):
+            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2:
                 self._losses[alias] = loss
             else:
-                self._losses[alias] = partial(loss, **kwargs)
-            argnames = get_signature(loss,alias)
+                self._losses[alias] = partial(loss, **kwargs) if len(kwargs)>0 else loss()
+            argnames = get_signature(loss, alias)
         # create signature
         if hasattr(self._losses[alias], 'signature') and self._losses[alias].signature is not None:
             pass
         else:
             self._losses[alias].signature = argnames
         self._losses[alias].signature.name = alias
+        if (len(self._losses[alias].signature.outputs) == 1 and self._losses[alias].outputs.value_list[0] is None) or len(self._losses[alias].signature.outputs) == 0:
+            self._losses[alias].signature.outputs = OrderedDict()
+            self._losses[alias].signature.outputs[alias] = None
         print(self._losses[alias].signature)
-
+        if hasattr(self._losses[alias], 'is_logsoftmax'):
+            if isinstance(self._model, Layer):
+                last_module = list(self._model.modules())[-1]
+                if isinstance(last_module, SoftMax):
+                    self._losses[alias].is_logsoftmax = True
         self.loss_weights[alias] = loss_weight
 
-        # outputs = self.outputs
-        # targets = self.targets
-        # if all([k  in targets.key_list or k  in outputs.key_list for k  in argnames.key_list]):
-        #     pass
-        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input',
-        #                                                                                                  'output',
-        #                                                                                                  'y_pred'] and \
-        #         argnames.key_list[1] in ['target', 'label', 'y_true']:
-        #     argnames = OrderedDict()
-        #     argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
-        #     argnames[targets.key_list[0]] = targets[targets.key_list[0]]
-        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
-        #     argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
-        #     argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
-        # elif outputs is not None and len(outputs) > 1:
-        #     output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
-        #     if len(output_idx) == 1 and len(argnames) == 2:
-        #         argnames = OrderedDict()
-        #         out = outputs.key_list[output_idx[0]]
-        #         target = targets.key_list[output_idx[0]]
-        #         argnames[argnames.key_list[0]] = outputs[out]
-        #         argnames[argnames.key_list[1]] = targets[target]
-        #     elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
-        #         for idx in output_idx:
-        #             out = outputs.key_list[idx]
-        #             target = targets.key_list[idx]
-        #             if out in argnames:
-        #                 argnames[out] = outputs[out]
-        #             if target in argnames:
-        #                 argnames[target] = targets[target]
         self._losses[alias].__name__ = alias
         self._losses[alias].start_epoch = start_epoch
-        print('{0} signature:{1}'.format(alias, self._losses[alias].signature.item_list))
         return self
 
     def with_metric(self, metric, output_idx=0, collect_history=None, name='', **kwargs):
@@ -316,7 +308,7 @@ class Model(ModelBase):
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric_class(**kwargs)
+            self._metrics[alias] = metric_class(**kwargs) if len(kwargs)>0 else metric_class()
             if hasattr(metric, 'forward'):
                 argnames = get_signature(self._metrics[alias].forward, alias)
             else:
@@ -326,8 +318,8 @@ class Model(ModelBase):
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric(**kwargs)
-            if hasattr(metric, 'forward'):
+            self._metrics[alias] = metric(**kwargs) if len(kwargs)>0 else metric_class()
+            if hasattr(self._metrics[alias], 'forward'):
                 argnames = get_signature(self._metrics[alias].forward)
             else:
                 argnames = get_signature(self._metrics[alias].__call__)
@@ -346,8 +338,7 @@ class Model(ModelBase):
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
             spec = inspect.getfullargspec(metric)
-            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 and (
-                    spec.args[0] in ['output', 'y_pred', 'pred'] or 'target_' + spec.args[0] == spec.args[1]):
+            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2:
                 self._metrics[alias] = metric
             else:
                 self._metrics[alias] = partial(metric, **kwargs)
@@ -358,6 +349,9 @@ class Model(ModelBase):
         else:
             self._metrics[alias].signature = argnames
         self._metrics[alias].signature.name = alias
+        if (len(self._metrics[alias].signature.outputs) == 1 and self._metrics[alias].outputs.value_list[0] is None) or len(self._metrics[alias].signature.outputs) == 0:
+            self._metrics[alias].signature.outputs = OrderedDict()
+            self._metrics[alias].signature.outputs[alias] = None
         print(self._metrics[alias].signature)
         # outputs = self.outputs
         # targets = self.targets
@@ -506,7 +500,8 @@ class Model(ModelBase):
                             Warning('input argment {0} cannot mapping to any data, please check it and update the '
                                     'datafeed'.format(arg))
 
-                    if len(self.signature.inputs.key_list) == 1 and data_feed[self.signature.inputs.key_list[0]] != None:
+                    if len(self.signature.inputs.key_list) == 1 and data_feed[
+                        self.signature.inputs.key_list[0]] != None:
                         self.training_context['data_feed'] = data_feed
 
                     # check for target
@@ -585,27 +580,27 @@ class Model(ModelBase):
 
             # grads = tape.gradient(this_loss, self._model.trainable_variables)
 
-
             # Gradients does not exist for variables during training using gradienttape
             # for handling this issue, need filter
-            new_vars=[]
-            new_grads=[]
+            new_vars = []
+            new_grads = []
+
             vars = grads.watched_variables()
             cal_grads = grads.gradient(self.training_context['current_loss'], vars)
-            for i  in range(len(vars)):
-                if cal_grads[i] is not None:
-                    new_vars.append(vars[i] )
-                    new_grads.append(cal_grads[i] )
+            for i in range(len(vars)):
+                if cal_grads[i] is not None and not any_abnormal_number(cal_grads[i]):
+                    new_vars.append(vars[i])
+                    new_grads.append(cal_grads[i])
 
-            grads_and_vars=zip(new_grads, new_vars)
+            grads_and_vars = zip(new_grads, new_vars)
 
             if self.training_context['stop_update'] == 0:
 
-                self.optimizer.apply_gradients(grads_and_vars )
+                self.optimizer.step(grads_and_vars)
 
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
-                    self.optimizer.apply_gradients(zip(cal_grads, vars), )
+                    self.optimizer.step(grads_and_vars)
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
@@ -624,14 +619,14 @@ class Model(ModelBase):
     def log_gradient(self, grads=None):
         grad_dict = OrderedDict()
         for i in range(len(grads)):
-            g=grads[i]
-            grad_dict[str(i)] =to_numpy(g)
+            g = grads[i]
+            grad_dict[str(i)] = to_numpy(g)
         self.gradients_history.append(grad_dict)
 
     def log_weight(self, weghts=None):
         weight_dict = OrderedDict()
         if isinstance(self._model, Layer):
-            weights=self._model.get_weights()
+            weights = self._model.get_weights()
             for i in range(len(weights)):
                 w = weights[i]
                 weight_dict[str(i)] = w
@@ -651,16 +646,11 @@ class Model(ModelBase):
                                                                                                 'current_epoch']))
             folder, _, _ = split_path(save_path)
             self._model.eval()
-            save({
-                'state_dict': self._model.state_dict(),
-                'backend':'tensorflow',
-                'trident_version':__version__,
-                'tensorflow_version':tf.version.VERSION,
-                'signature':self.signature
-            },save_path)
+            save({'state_dict': self._model.state_dict(), 'backend': 'tensorflow', 'trident_version': __version__,
+                'tensorflow_version': tf.version.VERSION, 'signature': self.signature}, save_path)
             shutil.copy(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
 
-            #tf.saved_model.save(self._model, "new_models")
+            # tf.saved_model.save(self._model, "new_models")
             self._model.train()
 
 
@@ -709,14 +699,13 @@ class Model(ModelBase):
         if "state_dict" in pretrained_dict.keys():
             pretrained_dict = pretrained_dict['state_dict']
 
-            #pretrained_dict = remove_prefix(pretrained_dict, 'module.')
+            # pretrained_dict = remove_prefix(pretrained_dict, 'module.')
         if check_keys(self._model, pretrained_dict):
             self._model.load_state_dict(pretrained_dict, strict=False)
             print('Model loaded!')
 
         if self.signature is None:
             self.signature = get_signature(self._model.forward)
-
 
     def merge_grads(self, old_grads, new_grades):
         if isinstance(old_grads, list) and isinstance(new_grades, list) and len(old_grads) == len(new_grades):
@@ -782,7 +771,7 @@ class Model(ModelBase):
                 self.do_preparation_for_loss()
                 self.training_context['optimizer'] = self.optimizer
 
-            with tf.GradientTape() as g:
+            with self.optimizer.grad_tape as g:
                 g.watch(self._model.trainable_variables)
                 output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
 
@@ -851,15 +840,14 @@ class Model(ModelBase):
                             this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0)
                         elif 'output' in v.signature:
 
-                            this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) * ( 1 if self.training_context['stop_update'] < 1 else 0)
+                            this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) * (
+                                1 if self.training_context['stop_update'] < 1 else 0)
 
                         self.training_context['current_loss'] += this_loss  # self.training_context[
 
                         # 'current_loss'] + this_loss
                         if is_collect_data:
                             self.training_context['losses'][k + '_Loss'].append(float(to_numpy(this_loss)))
-
-
 
                     self.training_context['optimizer'] = self.optimizer
 
@@ -1091,7 +1079,7 @@ class ImageClassificationModel(Model):
 
     def infer_single_image(self, img, topk=1):
         if self._model.built:
-            if isinstance(self._model,Layer):
+            if isinstance(self._model, Layer):
                 self._model.eval()
             img = image2array(img)
             if img.shape[-1] == 4:
