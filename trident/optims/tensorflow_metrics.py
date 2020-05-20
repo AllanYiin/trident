@@ -4,6 +4,7 @@ from __future__ import print_function
 import numpy as np
 import math
 import itertools
+import copy
 import tensorflow as tf
 from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import nn_ops
@@ -24,6 +25,30 @@ def accuracy(output,target, topk=1, axis=-1, **kwargs):
         return reduce_mean(equal(argmax(target, axis), argmax(output, axis)))
     else:
         return reduce_mean(cast(tf.nn.in_top_k(predictions=output, targets=target, k=topk), tf.float32))
+
+def accuracy(output, target, topk=1,axis=-1,exclude_mask=False):
+    """Computes the precision@k for the specified values of k
+    prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+    """
+    input_tensor=copy.deepcopy(output)
+    target_tensor=copy.deepcopy(target)
+
+
+
+    batch_size = int_shape(target_tensor)[0]
+    if  topk==1:
+        input_tensor = cast(squeeze(argmax(input_tensor, axis)),'float32')
+        target_tensor = cast(squeeze(argmax(target_tensor, axis)),'float32')
+        if input_tensor.shape != target_tensor.shape and topk == 1:
+            raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,
+                                                                                              target_tensor.shape))
+
+        return mean(equal(input_tensor,target_tensor))
+    else:
+        _,pred = tf.nn.top_k(input_tensor,topk,  True)
+        target_tensor= expand_dims(argmax(target_tensor, axis),-1)
+        target_tensor=cast(tf.repeat(target_tensor,topk,axis=-1),'float32')
+        return reduce_mean(reduce_max(equal(cast(pred,'float32'),target_tensor),-1))
 
 
 
