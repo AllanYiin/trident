@@ -5,7 +5,7 @@ from __future__ import print_function
 import copy
 import math
 import warnings
-
+import builtins
 import numpy as np
 
 from trident.backend.common import *
@@ -15,10 +15,11 @@ from trident.data.image_common import *
 
 if get_backend()=='pytorch':
     import torch.nn as nn
-    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt
+    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape
     from trident.optims.pytorch_losses import CrossEntropyLoss
 elif get_backend()=='tensorflow':
-    from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt
+    import tensorflow as tf
+    from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like
     from trident.optims.tensorflow_losses import CrossEntropyLoss
 
 
@@ -66,26 +67,30 @@ class MixupCallback(RegularizationCallbacksBase):
             lam =to_tensor(np.random.beta(self.alpha, self.alpha))
         else:
             lam = 1
-        batch_size = x.shape[0]
-        index = cast(arange(batch_size),'long')
+        batch_size = int_shape(x)[0]
+        index = cast(arange(batch_size),'int64')
         index=shuffle(index)
-        mixed_x = lam * x + (1 - lam) * x[index, :]
 
+        mixed_x=None
+        if get_backend()=='pytorch':
+            mixed_x = lam * x + (1 - lam) * x[index, :]
+            pred = model(to_tensor(mixed_x, requires_grad=True))
+            y_a, y_b = y, y[index]
+            this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+        elif get_backend()=='tensorflow':
+            x1 = tf.gather(x, index)
+            y1 = tf.gather(y, index)
+            mixed_x = lam * x + (1 - lam) * x1
+            pred = model(to_tensor(mixed_x, requires_grad=True))
+            y_a, y_b = y, y1
+
+            this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
 
         if training_context['current_batch']==0:
             for item in mixed_x:
                 item=unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                 item=unnormalize(0, 255)(item)
                 array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
-
-        y_a, y_b = y, y[index]
-        pred=model(to_tensor(mixed_x,requires_grad=True))
-
-        if get_backend()=='pytorch':
-            this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
-        elif get_backend()=='tensorflow':
-            this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
-
 
         if 'mixup_loss' not in training_context['losses']:
             training_context['losses']['mixup_loss'] = []
@@ -125,18 +130,18 @@ class CutMixCallback(RegularizationCallbacksBase):
         """
         W = width
         H = height
-        cut_rat = sqrt(1. - lam)
-        cut_w = cast(W * cut_rat,'int32')
-        cut_h =cast(H * cut_rat,'int32')
+        cut_rat = math.sqrt(1. - lam)
+        cut_w = int(W * cut_rat)
+        cut_h =int(H * cut_rat)
 
         # uniform
-        cx = to_tensor(np.random.randint(W))
-        cy = to_tensor(np.random.randint(H))
+        cx = np.random.randint(W)
+        cy = np.random.randint(H)
 
-        bbx1 = clip(cx - cut_w // 2, 0, W)
-        bby1 = clip(cy - cut_h // 2, 0, H)
-        bbx2 = clip(cx + cut_w // 2, 0, W)
-        bby2 = clip(cy + cut_h // 2, 0, H)
+        bbx1 = np.clip(cx - cut_w // 2, 0, W)
+        bby1 = np.clip(cy - cut_h // 2, 0, H)
+        bbx2 = np.clip(cx + cut_w // 2, 0, W)
+        bby2 = np.clip(cy + cut_h // 2, 0, H)
 
         return bbx1, bby1, bbx2, bby2
 
@@ -150,29 +155,42 @@ class CutMixCallback(RegularizationCallbacksBase):
             y = train_data.value_list[1].clone()  # label
         elif get_backend() == 'tensorflow':
             x = copy.deepcopy(train_data.value_list[0])  # input
-            y = copy.deepcopy(train_data.value_list[1])  # label
+            y = copy.deepcopy(train_data.value_list[1]) # label
         model = training_context['current_model']
         if self.alpha > 0:
             lam = np.random.beta(self.alpha, self.alpha)
         else:
             lam = 1
 
-        batch_size = x.shape[0]
-        index = cast(arange(batch_size),'long')
+        batch_size = int_shape(x)[0]
+        index = cast(arange(batch_size),'int64')
         index=shuffle(index)
-        y_a, y_b = y, y[index]
 
-
+        pred = model(to_tensor(x, requires_grad=True))
+        this_loss=None
         if get_backend()=='pytorch':
+            y_a, y_b = y, y[index]
             bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[3], x.shape[2], lam)
             x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
-        if get_backend() == 'tensoflow':
+            this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+        elif get_backend() == 'tensorflow':
+
+            y1 = tf.gather(y,index)
+            x1= tf.gather(x,index)
+            y_a, y_b = y, y1
             bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
-            x[:, bbx1:bbx2, bby1:bby2, :] = x[index, bbx1:bbx2, bby1:bby2,:]
+            filter=np.zeros(int_shape(x))
+            filter[:, bbx1:bbx2, bby1:bby2, :] =1
+            filter=to_tensor(x)
+            x=x*(1-filter)+x1*filter
+            #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
+            loss1=self.loss_criterion(pred, y_a)
+            loss2=self.loss_criterion(pred, y_b)
+            this_loss = lam *loss1  + (1 - lam) * loss2
 
 
         if training_context['current_batch'] == 0:
@@ -181,11 +199,8 @@ class CutMixCallback(RegularizationCallbacksBase):
                 item = unnormalize(0, 255)(item)
                 array2image(item).save('Results/cutmix_{0}.jpg'.format(get_time_suffix()))
 
-        pred = model(to_tensor(x,requires_grad=True))
-        if get_backend()=='pytorch':
-            this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
-        elif get_backend()=='tensorflow':
-            this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
+
+
         if 'mixup_loss' not in training_context['losses']:
             training_context['losses']['cutmix_loss'] = []
         training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight

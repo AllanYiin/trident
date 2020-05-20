@@ -1,3 +1,4 @@
+"""Learning Rate Scheduler Callbacks"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -24,6 +25,7 @@ elif get_backend()=='tensorflow':
 __all__ = ['AdjustLRCallbackBase','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr']
 
 class AdjustLRCallbackBase(CallbackBase):
+    """Basic class for learning rate scheduler"""
     def __init__(self):
         super(AdjustLRCallbackBase, self).__init__()
         self.base_lr=1e-3
@@ -34,45 +36,45 @@ class AdjustLRCallbackBase(CallbackBase):
 
 
 class ReduceLROnPlateau(AdjustLRCallbackBase):
-    '''Reduce learning rate when a metric has stopped improving.
+    """
+    Reduce learning rate when a metric has stopped improving.
     Models often benefit from reducing the learning rate by a factor
     of 2-10 once learning stagnates. This callback monitors a
     quantity and if no improvement is seen for a 'patience' number
     of epochs, the learning rate is reduced.
-    Example
-    ```python
-    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2,
-                                  patience=5, min_lr=0.001)
-    model.fit(X_train, Y_train, callbacks=[reduce_lr])
-    ```
-    Arguments
-        monitor: quantity to be monitored.
-        factor: factor by which the learning rate will
-            be reduced. new_lr = lr * factor
-        patience: number of epochs that produced the monitored
-            quantity with no improvement after which training will
-            be stopped.
-            Validation quantities may not be produced for every
-            epoch, if the validation frequency
-            (`model.fit(validation_freq=5)`) is greater than one.
-        verbose: int. 0: quiet, 1: update messages.
-        mode: one of {auto, min, max}. In `min` mode,
-            lr will be reduced when the quantity
-            monitored has stopped decreasing; in `max`
-            mode it will be reduced when the quantity
-            monitored has stopped increasing; in `auto`
-            mode, the direction is automatically inferred
-            from the name of the monitored quantity.
-        min_delta: threshold for measuring the new optimum,
-            to only focus on significant changes.
-        cooldown: number of epochs to wait before resuming
-            normal operation after lr has been reduced.
-        min_lr: lower bound on the learning rate.
-    '''
+
+    """
 
     def __init__(self, monitor='total_losses', factor=0.1, patience=10,
                  verbose=0, mode='auto', min_delta=1e-4, cooldown=0, min_lr=0,
                  **kwargs):
+        """
+
+        Args:
+            monitor: quantity to be monitored.
+            factor: factor by which the learning rate will
+                be reduced. new_lr = lr * factor
+            patience: number of epochs that produced the monitored
+                quantity with no improvement after which training will
+                be stopped.
+                Validation quantities may not be produced for every
+                epoch, if the validation frequency
+                (`model.fit(validation_freq=5)`) is greater than one.
+            verbose: int. 0: quiet, 1: update messages.
+            mode: one of {auto, min, max}. In `min` mode,
+                lr will be reduced when the quantity
+                monitored has stopped decreasing; in `max`
+                mode it will be reduced when the quantity
+                monitored has stopped increasing; in `auto`
+                mode, the direction is automatically inferred
+                from the name of the monitored quantity.
+            min_delta: threshold for measuring the new optimum,
+                to only focus on significant changes.
+            cooldown: number of epochs to wait before resuming
+                normal operation after lr has been reduced.
+            min_lr: lower bound on the learning rate.
+
+        """
         super(ReduceLROnPlateau, self).__init__()
 
         self.monitor = monitor
@@ -90,7 +92,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
         self.patience = patience
         self.verbose = verbose
         self.cooldown = cooldown
-        self.cooldown_counter = 0  # Cooldown counter.
+        self.cooldown_counter = 0
         self.wait = 0
         self.best = 0
         self.mode = mode
@@ -202,8 +204,42 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
     def in_cooldown(self):
         return self.cooldown_counter > 0
 
-def reduce_lr_on_plateau(monitor='total_loss',base_lr=0.001 ,verbose=True, mode='min', factor=0.5, patience=5, threshold=1e-4, threshold_mode='rel', cooldown=0, min_lr=1e-8, eps=1e-9):
-   return ReduceLROnPlateau(monitor=monitor,mode=mode,factor=factor,patience=patience,verbose=int(verbose),min_delta=threshold,threshold_mode=threshold_mode,cooldown=cooldown,min_lr=min_lr)
+def reduce_lr_on_plateau(monitor='total_loss' ,verbose=True, mode='min', factor=0.5, patience=5, threshold=1e-4, cooldown=0, min_lr=1e-8, **kwargs):
+    """
+     The function to initialize ReduceLROnPlateau
+    Args:
+
+         monitor: quantity to be monitored.
+         factor: factor by which the learning rate will
+             be reduced. new_lr = lr * factor
+         patience: number of epochs that produced the monitored
+             quantity with no improvement after which training will
+             be stopped.
+             Validation quantities may not be produced for every
+             epoch, if the validation frequency
+             (`model.fit(validation_freq=5)`) is greater than one.
+         verbose: int. 0: quiet, 1: update messages.
+         mode: one of {auto, min, max}. In `min` mode,
+             lr will be reduced when the quantity
+             monitored has stopped decreasing; in `max`
+             mode it will be reduced when the quantity
+             monitored has stopped increasing; in `auto`
+             mode, the direction is automatically inferred
+             from the name of the monitored quantity.
+         threshold: threshold for measuring the new optimum,
+             to only focus on significant changes.
+
+         cooldown: number of epochs to wait before resuming
+             normal operation after lr has been reduced.
+         min_lr: lower bound on the learning rate.
+
+    Returns:
+
+    """
+    return ReduceLROnPlateau(monitor=monitor,
+                            mode=mode,factor=factor,patience=patience,verbose=verbose,
+                            min_delta=threshold,
+                            cooldown=cooldown,min_lr=min_lr)
 
 
 class LambdaLR(AdjustLRCallbackBase):
@@ -246,11 +282,16 @@ def random_cosine_lr(period=100,cosine_weight=0.2,noise_weight=0.3, random_start
 
 
 
-
-
-
-
 def get_lr_scheduler(lr_scheduler_name):
+    """
+    Initialize a learning rate scheduler by name
+
+    Args:
+        lr_scheduler_name (str):
+
+    Returns:
+
+    """
     if lr_scheduler_name is None:
         return None
     lr_scheduler_modules = ['trident.callbacks.lr_schedulers']

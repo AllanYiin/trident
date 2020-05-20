@@ -17,6 +17,14 @@ from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
 
+
+if get_backend()=='pytorch':
+    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape
+
+elif get_backend()=='tensorflow':
+    from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like
+
+
 if is_in_ipython() or is_in_colab():
     from IPython import display
 
@@ -276,38 +284,58 @@ class PrintGradientsCallback(VisualizationCallbackBase):
         self.lines = []
 
     def on_optimization_step_start(self, training_context):
-        if self.batch_inteval > 0 and (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
-            grad_dict = {}
-            if 'grads_state' not in training_context:
-                training_context['grads_state']=OrderedDict()
-                training_context['grads_state']['first_layer']=[]
-                training_context['grads_state']['last_layer'] = []
-            if self.first_layer != '' and self.last_layer != '':
-                for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
-                    if v is not None and v.requires_grad == True:
-                        if k == self.first_layer:
-                            training_context['grads_state']['first_layer'].append(
-                                np.abs(to_numpy(0 if v.grad is None else v.grad)).mean())
-                        elif k == self.last_layer:
-                            training_context['grads_state']['last_layer'].append(
-                                np.abs(to_numpy(0 if v.grad is None else v.grad)).mean())
-            else:
-                for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
-                    if v is not None and v.requires_grad==True:
-                        grad_dict[k] = np.abs(to_numpy(0 if v.grad is None else v.grad))
-                        if grad_dict[k].ndim > 1:
-                            if self.first_layer == '':
-                                self.first_layer = k
-                            self.last_layer = k
-                if self.first_layer!='' and self.first_layer in grad_dict:
-                    training_context['grads_state']['first_layer'].append(grad_dict[self.first_layer].mean())
-                if self.last_layer != '' and self.last_layer in grad_dict:
-                    training_context['grads_state']['last_layer'].append(grad_dict[self.last_layer].mean())
-            if len(training_context['grads_state']['first_layer'])>0 and len(training_context['grads_state']['last_layer'])>0:
-                self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
-                    training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
-                    training_context['grads_state']['last_layer'][-1]))
+        if get_backend()=='pytorch':
+            if self.batch_inteval > 0 and (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
+                grad_dict = {}
+                if 'grads_state' not in training_context:
+                    training_context['grads_state']=OrderedDict()
+                    training_context['grads_state']['first_layer']=[]
+                    training_context['grads_state']['last_layer'] = []
+                if self.first_layer != '' and self.last_layer != '':
+                    for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
+                        if v is not None and v.requires_grad == True:
+                            if k == self.first_layer:
+                                training_context['grads_state']['first_layer'].append(
+                                    np.abs(to_numpy(0 if v.grad is None else v.grad)).mean())
+                            elif k == self.last_layer:
+                                training_context['grads_state']['last_layer'].append(
+                                    np.abs(to_numpy(0 if v.grad is None else v.grad)).mean())
 
+                else:
+
+                    for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
+                        if v is not None and v.requires_grad==True:
+                            grad_dict[k] = np.abs(to_numpy(0 if v.grad is None else v.grad))
+                            if grad_dict[k].ndim > 1:
+                                if self.first_layer == '':
+                                    self.first_layer = k
+                                self.last_layer = k
+                    if self.first_layer!='' and self.first_layer in grad_dict:
+                        training_context['grads_state']['first_layer'].append(grad_dict[self.first_layer].mean())
+                    if self.last_layer != '' and self.last_layer in grad_dict:
+                        training_context['grads_state']['last_layer'].append(grad_dict[self.last_layer].mean())
+
+                if len(training_context['grads_state']['first_layer'])>0 and len(training_context['grads_state']['last_layer'])>0:
+                    self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
+                        training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
+                        training_context['grads_state']['last_layer'][-1]))
+    def on_optimization_step_end(self, training_context):
+        if get_backend() == 'tensoflow':
+            if self.batch_inteval > 0 and (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
+                grad_dict = {}
+                if 'grads_state' not in training_context:
+                    training_context['grads_state'] = OrderedDict()
+                    training_context['grads_state']['first_layer'] = []
+                    training_context['grads_state']['last_layer'] = []
+                grads_and_vars=training_context['optimizer'].grads_and_vars
+                training_context['grads_state']['first_layer'].append( np.abs(to_numpy(grads_and_vars[0][0])).mean())
+                training_context['grads_state']['last_layer'].append(np.abs(to_numpy(grads_and_vars[-1][0])).mean())
+
+                if len(training_context['grads_state']['first_layer']) > 0 and len(
+                        training_context['grads_state']['last_layer']) > 0:
+                    self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
+                        training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
+                        training_context['grads_state']['last_layer'][-1]))
     def on_overall_batch_end(self, training_context):
         if len(self.lines) > 0:
             sys.stdout.writelines(self.lines)
