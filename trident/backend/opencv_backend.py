@@ -75,7 +75,7 @@ def save_mask(arr, file_path):
 
 
 def image2array(img):
-    '''
+    """
     Parameters
         img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
 
@@ -83,7 +83,7 @@ def image2array(img):
         ndarray  (HWC / RGB)
 
 
-    '''
+    """
     if isinstance(img,str):
         if os.path.exists(img) and img.split('.')[-1] in ('jpg','jpeg','png','bmp','tiff'):
             img=plt.imread(img)[::-1]
@@ -107,7 +107,7 @@ def image2array(img):
         arr = np.ascontiguousarray(arr)
     return arr
 def array2image(arr:np.ndarray):
-    '''
+    """
     Parameters
         arr  ndarry  : array need to convert back to image
 
@@ -115,7 +115,7 @@ def array2image(arr:np.ndarray):
         pillow image
 
 
-    '''
+    """
     # confirm back to numpy
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
@@ -140,13 +140,13 @@ def array2image(arr:np.ndarray):
 
 
 def mask2array(img):
-    '''
+    """
     Args
         img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
     Returns
         ndarray  (HW / single channel)
 
-    '''
+    """
     arr = None
     if isinstance(img, str):
         if os.path.exists(img) and img.split('.')[-1] in ('jpg', 'jepg', 'png', 'bmp', 'tiff'):
@@ -165,13 +165,13 @@ def mask2array(img):
     return arr
 
 def array2mask(arr:np.ndarray):
-    '''
+    """
     Args
         arr  ndarry  : array need to convert back to image
 
     Returns
         pillow image
-    '''
+    """
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     arr=np.squeeze(arr)

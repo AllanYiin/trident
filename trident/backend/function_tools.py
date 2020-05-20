@@ -1,7 +1,7 @@
 
 
 class Record(dict):
-    '''
+    """
     Easy construction of a record (=immutable singleton class) from keyword arguments.
 
     Example:
@@ -14,7 +14,7 @@ class Record(dict):
 
     Returns:
         A singleton class instance that has all passed kw args as immutable class members.
-    '''
+    """
     def __init__(self, **args_dict):
         super(Record, self).__init__(args_dict)
         self.__dict__.update(args_dict)
@@ -25,7 +25,7 @@ class Record(dict):
     def __setattr__(self, key, value):
         raise AttributeError('record is immutable')
     def updated_with(self, **kwargs):
-        '''
+        """
         Create a new Record from an existing one with members modified or added.
 
         Example:
@@ -41,7 +41,7 @@ class Record(dict):
 
         Returns:
             A singleton class instance that has all passed kw args as immutable class members.
-        '''
+        """
         d = dict(**self)   # make it mutable
         d.update(kwargs)   # merge the new items
         return Record(**d) # lock it up again
@@ -49,9 +49,9 @@ class Record(dict):
 
 
 def get_python_function_arguments(f):
-    '''
+    """
     Helper to get the parameter names and annotations of a Python function.
-    '''
+    """
     # Note that we only return non-optional arguments (we assume that any optional args are not specified).
     # This allows to, e.g., accept max(a, b, *more, name='') as a binary function
     import sys
@@ -74,13 +74,13 @@ def get_python_function_arguments(f):
     return (arg_names, annotations)
 
 def map_function_arguments(params, params_dict, *args, **kwargs):
-    '''
+    """
     Helper to determine the argument map for use with various call operations.
     Returns a dictionary from parameters to whatever arguments are passed.
     Accepted are both positional and keyword arguments.
     This mimics Python's argument interpretation, except that keyword arguments are not optional.
     This does not require the arguments to be Variables or Functions. It is also called by train_minibatch() and @Signature.
-    '''
+    """
     # start with positional arguments
     arg_map = dict(zip(params, args))
 

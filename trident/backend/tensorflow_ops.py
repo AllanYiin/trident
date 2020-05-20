@@ -22,14 +22,14 @@ __all__ = ['is_tensor', 'to_numpy', 'to_tensor', 'ndim', 'int_shape','cast', 'is
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax', 'log_softmax', 'bert_gelu',
-           'gpt_gelu','moments','l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'meshgrid', 'reshape', 'permute', 'transpose',
-           'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix', 'shuffle', 'random_choice']
+           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax', 'log_softmax', 'gelu',
+           'gpt_gelu','moments','l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like','eye_like','arange', 'meshgrid', 'reshape', 'permute', 'transpose',
+           'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix', 'shuffle', 'random_choice','binary_crossentropy']
 
 
 
 def is_tensor(x):
-    '''Checks whether `x` is exactly a tensor
+    """Checks whether `x` is exactly a tensor
 
       If `is_tensor(x)` returns `True`, it is safe to assume that `x` is a tensor or
       can be converted to a tensor using `ops.convert_to_tensor(x)`.
@@ -49,7 +49,7 @@ def is_tensor(x):
       Returns:
         `True` if `x` is a tensor or "tensor-like", `False` if not.
 
-    '''
+    """
     if hasattr(x, 'numpy'):
         with context.eager_mode():
             return True
@@ -61,7 +61,7 @@ def is_tensor(x):
 
 
 def is_tensor_like(x):
-    '''Checks whether `x` is a "tensor-like".
+    """Checks whether `x` is a "tensor-like".
 
       If `is_tensor_like(x)` returns `True`, it is safe to assume that `x` is a tensor or
       can be converted to a tensor using `ops.convert_to_tensor(x)`.
@@ -83,12 +83,12 @@ def is_tensor_like(x):
     Returns:
         True` if `x` is a tensor or "tensor-like", `False` if not.
 
-    '''
+    """
     return tf.is_tensor(to_tensor(x))
 
 
 def to_numpy(x) -> np.ndarray:
-    '''
+    """
      Convert whatever to numpy array
 
      Args
@@ -106,7 +106,7 @@ def to_numpy(x) -> np.ndarray:
       array([[2, 4],
            [1, 3]])
 
-     '''
+     """
 
     if isinstance(x, np.ndarray):
         return x
@@ -141,7 +141,7 @@ def to_numpy(x) -> np.ndarray:
 
 
 def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
-    '''
+    """
      Convert input  to a tensor as possible
     Args:
         x (int,float,list,tuple,ndarray,tensor):
@@ -167,7 +167,7 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
         array([0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00],
         dtype=float32)>
 
-    '''
+    """
     if isinstance(x, int):
         return tf.constant(value=x, dtype=tf.int32)
     elif isinstance(x, float):
@@ -177,9 +177,6 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
 
             if requires_grad == False:
                 x = tf.constant(ops.convert_to_tensor_v2(x, dtype=dtype))
-            elif requires_grad == True:
-                x = tf.Variable(ops.convert_to_tensor_v2(x, dtype=dtype))
-
             else:
                 x = ops.convert_to_tensor_v2(x, dtype=dtype)
             return x
@@ -192,11 +189,19 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
 ###########################
 
 def ndim(x):
+    """The number of dimensions of input tensor.
+
+    Args:
+        x (tf.Tensor): input tensor
+
+    Returns: The number of dimensions
+
+    """
     return x.shape.rank
 
 
 def int_shape(x):
-    '''
+    """ Shape of input tensor in tuple of integer format
 
     Args:
         x : input tensor
@@ -207,15 +212,32 @@ def int_shape(x):
     >>> int_shape(ones((3,3,7)))
     [3, 3, 7]
 
-    '''
+    """
     return x.get_shape().as_list()
 
 
 def is_sparse(x):
+    """
+
+    Args:
+        x (tf.Tensor):
+
+    Returns: if True, mean the input tensor is a sparse tensor.
+
+    """
     return isinstance(x, tf.SparseTensor)
 
 
 def cast(x, dtype):
+    """
+
+    Args:
+        x (tf.Tensor): input tensor
+        dtype (dtype or string):
+
+    Returns:
+
+    """
     if isinstance(dtype, str):
         if 'float64' in dtype.lower() or 'double' in dtype.lower():
             dtype = tf.float64
@@ -235,7 +257,7 @@ def cast(x, dtype):
             dtype = tf.int32
         elif 'bool' in dtype.lower():
             dtype = tf.bool
-    if isinstance(dtype, tf.dtypes):
+    if isinstance(dtype, tf.DType):
         return tf.cast(x, dtype)
     else:
         return x
@@ -326,7 +348,7 @@ def any_abnormal_number(x):
 
 
 def less(left: tf.Tensor, right: tf.Tensor):
-    '''
+    """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
@@ -340,13 +362,13 @@ def less(left: tf.Tensor, right: tf.Tensor):
    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 0.0000e+00], dtype=float32)>
    >>> less(to_tensor([-1,0,1]), 0)
    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 0.0000e+00], dtype=float32)>
-    '''
+    """
 
     return tf.cast(tf.less(left, right), tf.float32)
 
 
 def equal(left: tf.Tensor, right: tf.Tensor):
-    '''
+    """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
         left: left side tensor
@@ -359,12 +381,12 @@ def equal(left: tf.Tensor, right: tf.Tensor):
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
     >>> equal(to_tensor([-1,0,1]), 1)
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
-    '''
+    """
     return tf.cast(tf.equal(left, right), tf.float32)
 
 
 def greater(left: tf.Tensor, right: tf.Tensor):
-    '''
+    """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
         left: left side tensor
@@ -377,12 +399,12 @@ def greater(left: tf.Tensor, right: tf.Tensor):
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
     >>> greater(to_tensor([-1,0,1]), 0)
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
-    '''
+    """
     return tf.cast(tf.greater(left, right), tf.float32)
 
 
 def greater_equal(left: tf.Tensor, right: tf.Tensor):
-    '''
+    """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
@@ -396,12 +418,12 @@ def greater_equal(left: tf.Tensor, right: tf.Tensor):
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 1.0000e+00], dtype=float32)>
     >>> greater_equal(to_tensor([-1,0,1]), 0)
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 1.0000e+00], dtype=float32)>
-    '''
+    """
     return tf.cast(tf.greater_equal(left, right), tf.float32)
 
 
 def not_equal(left: tf.Tensor, right: tf.Tensor):
-    '''
+    """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
@@ -415,12 +437,12 @@ def not_equal(left: tf.Tensor, right: tf.Tensor):
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
     >>> not_equal(to_tensor([-1,0,1]), 0)
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
-    '''
+    """
     return tf.cast(tf.not_equal(left, right), tf.float32)
 
 
 def less_equal(left: tf.Tensor, right: tf.Tensor):
-    '''
+    """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
@@ -435,7 +457,7 @@ def less_equal(left: tf.Tensor, right: tf.Tensor):
     >>> less_equal(to_tensor([-1,0,1]), 0)
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
 
-    '''
+    """
     return tf.cast(tf.less_equal(left, right), tf.float32)
 
 
@@ -455,14 +477,14 @@ def maximum(x: tf.Tensor, other: (tf.Tensor, int, float)) -> tf.Tensor:
     if isinstance(other, tf.Tensor):
         return tf.maximum(x, other)
     elif isinstance(other, (int, float)):
-        return clip(x, min_value=other)
+        return clip(x, min=other)
 
 
 def minimum(x: tf.Tensor, other: (tf.Tensor, int, float)) -> tf.Tensor:
     if isinstance(other, tf.Tensor):
         return tf.minimum(x, other)
     elif isinstance(other, (int, float)):
-        return clip(x, max_value=other)
+        return clip(x, max=other)
 
 
 ############################
@@ -478,7 +500,7 @@ def ceil(x: tf.Tensor):
 
 
 def round(x: tf.Tensor, digit: int = 0):
-    '''
+    """
 
     Args:
         x ():
@@ -499,7 +521,7 @@ def round(x: tf.Tensor, digit: int = 0):
     array([[0.0000e+00, 1.0000e+01, 1.0000e+01, 0.0000e+00, 1.0000e+01]],
           dtype=float32)>
 
-    '''
+    """
     if digit != 0:
         factor = float(math.pow(10, -1 * digit))
         return tf.math.round(x / factor) * factor
@@ -520,10 +542,10 @@ def dot(x, y):
     When attempting to multiply a nD tensor
     with a nD tensor, it reproduces the Theano behavior.
     (e.g. `(2, 3) * (4, 3, 5) -> (2, 4, 5)`)
-    # Arguments
+ Args
         x: Tensor or variable.
         y: Tensor or variable.
-    # Returns
+ Returns
         A tensor, dot product of `x` and `y`.
 
     ```
@@ -596,8 +618,8 @@ def prod(x):
     return tf.math.reduce_prod(x)
 
 
-def clip(x: tf.Tensor, min_value=-np.inf, max_value=np.inf):
-    return tf.clip_by_value(x, float(min_value), float(max_value))
+def clip(x: tf.Tensor, min=-np.inf, max=np.inf):
+    return tf.clip_by_value(x, float(min), float(max))
 
 
 def sin(x: tf.Tensor):
@@ -625,7 +647,7 @@ def atan(x: tf.Tensor):
 
 
 def sinh(x: tf.Tensor):
-    '''
+    """
     Computes the element-wise sinh
     Args:
         x (tensor):input tensor
@@ -638,12 +660,12 @@ def sinh(x: tf.Tensor):
     array([[1.1752e+00, 5.2110e-01],
            [-2.5261e-01, -8.2232e-01]], dtype=float32)>
 
-    '''
+    """
     return tf.sinh(x)
 
 
 def cosh(x: tf.Tensor):
-    '''
+    """
     Computes the element-wise cosh
     Args:
         x (tensor):input tensor
@@ -655,12 +677,12 @@ def cosh(x: tf.Tensor):
     <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
     array([[1.5431e+00, 1.1276e+00],
            [1.0314e+00, 1.2947e+00]], dtype=float32)>
-    '''
+    """
     return tf.cosh(x)
 
 
 def tanh(x: tf.Tensor):
-    '''
+    """
     Computes the element-wise tanh
     Args:
         x (tensor):input tensor
@@ -671,7 +693,7 @@ def tanh(x: tf.Tensor):
     >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
     tensor([[ 0.     ,  1.0472 ],
        [ 1.82348,  2.41886]])
-    '''
+    """
     return tf.tanh(x)
 
 
@@ -679,7 +701,7 @@ def tanh(x: tf.Tensor):
 ## element-wise operation
 ###########################
 def element_times(left, right):
-    '''
+    """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
 
@@ -699,12 +721,12 @@ def element_times(left, right):
     <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
     array([[5.0000e+00, 2.0000e+01],
            [4.5000e+01, 3.0000e+01]], dtype=float32)>
-    '''
+    """
     return left * right
 
 
 def element_max(left, right):
-    '''
+    """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
 
@@ -722,12 +744,12 @@ def element_max(left, right):
     <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.0000e+01, 2.0000e+01, 2.0000e+01, 3.0000e+01], dtype=float32)>
     >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
     <tf.Tensor: shape=(4,), dtype=float32, numpy=array([1.0000e+01, 1.0000e+01, 1.5000e+01, 3.0000e+01], dtype=float32)>
-    '''
+    """
     return maximum(left, right)
 
 
 def element_min(left, right):
-    '''
+    """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
 
@@ -745,12 +767,12 @@ def element_min(left, right):
     <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.0000e+00, 2.0000e+00, 2.0000e+00, 2.0000e+00], dtype=float32)>
     >>> element_min(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
     <tf.Tensor: shape=(4,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 1.0000e+00, 2.0000e+00], dtype=float32)>
-    '''
+    """
     return minimum(left, right)
 
 
 def element_divide(left, right):
-    '''
+    """
     The output of this operation is the element-wise divide of the two  input
     tensors. It supports broadcasting.
 
@@ -768,7 +790,7 @@ def element_divide(left, right):
     <tf.Tensor: shape=(4,), dtype=float32, numpy=array([2.5000e+00, 5.0000e+00, 7.5000e+00, 1.5000e+01], dtype=float32)>
     >>> element_divide(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
     <tf.Tensor: shape=(4,), dtype=float32, numpy=array([5.0000e+00, 5.0000e+00, 1.5000e+01, 1.5000e+01], dtype=float32)>
-    '''
+    """
     return true_divide(left, right)
 
 
@@ -780,7 +802,7 @@ def element_cosine_distance(v1, v2, axis=1):
 
 
 def where(flag, value_if_true, value_if_false):
-    '''
+    """
     return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
     If ``flag`` != 0 ``value_if_true`` is returned, otherwise ``value_if_false``.
     Behaves analogously to numpy.where(...).
@@ -798,7 +820,7 @@ def where(flag, value_if_true, value_if_false):
     <tf.Tensor: shape=(5,), dtype=float32, numpy=
     array([0.0000e+00, 9.0000e-01, 8.0000e-01, 0.0000e+00, 0.0000e+00],
           dtype=float32)>
-    '''
+    """
     return tf.where(flag, value_if_true, value_if_false)
 
 
@@ -823,7 +845,7 @@ def reduce_min(x: tf.Tensor, axis=None, keepdims=False):
 
 
 def reduce_logsumexp(x: tf.Tensor, axis=None, keepdims=False):
-    '''
+    """
 
     Args:
         x ():
@@ -839,7 +861,7 @@ def reduce_logsumexp(x: tf.Tensor, axis=None, keepdims=False):
     <tf.Tensor: shape=(3,), dtype=float32, numpy=array([6.9315e-01, 6.9315e-01, 6.9315e-01], dtype=float32)>
     >>> reduce_logsumexp(x, [0, 1])
     <tf.Tensor: shape=(), dtype=float32, numpy=1.7917595>
-    '''
+    """
     return tf.math.reduce_logsumexp(x, axis=axis, keepdims=keepdims)
 
 
@@ -863,6 +885,13 @@ min = reduce_min
 
 
 def identity(x):
+    """Identity activation Layer
+    A placeholder identity operator that is argument-insensitive.
+    Examples:
+        >>> Identity()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        tensor([-3.0, -1.0, 0.0, 2.0])
+
+    """
     return x
 
 
@@ -875,6 +904,15 @@ def tanh(x):
 
 
 def relu(x, upper_limit=None):
+    """Rectified Linear Unit activation function.
+      With default values, it returns element-wise `max(x, 0)`.
+      Otherwise, it follows:
+      ```
+        f(x) = max_value if x >= max_value
+        f(x) = x if threshold <= x < max_value
+        f(x) = negative_slope * (x - threshold) otherwise
+      ```
+    """
     if upper_limit is not None and upper_limit <= 0:
         raise ValueError('Upper limit should greater than 0!')
     elif upper_limit is not None:
@@ -883,20 +921,51 @@ def relu(x, upper_limit=None):
 
 
 def relu6(x):
+    """Rectified Linear Unit  6 activation function.
+      With default values, it returns element-wise `min(max(x, 0)`,6).
+      Otherwise, it follows:
+      ```
+        f(x) = 6 if x >= 6
+        f(x) = x if threshold <= x < 6
+        f(x) = negative_slope * (x - threshold) otherwise
+      ```
+    """
     return relu(x,6)
 
 
 def leaky_relu(x, alpha=0.02, upper_limit=None):
+    """Leaky version of a Rectified Linear Unit.
+        It allows a small gradient when the unit is not active:
+        ```
+        f(x) = alpha * x if x < 0
+        f(x) = x if x >= 0
+        ```
+    """
     if upper_limit is not None:
         return clip(tf.nn.leaky_relu(x, alpha), -np.inf, upper_limit)
     return tf.nn.leaky_relu(x, alpha)
 
 
 def leaky_relu6(x, alpha=0.01):
+    """Leaky version of a Rectified Linear Unit.6
+          It allows a small gradient when the unit is not active:
+          ```
+            f(x) = alpha * x if x < 0
+            f(x) = x if  6>=x >= 0
+            f(x) = 6 if  x > 6
+          ```
+    """
     return clip(tf.nn.leaky_relu(x, alpha), -6, 6)
 
 
 def elu(x, alpha=0.01, upper_limit=None):
+    """Exponential Linear Unit.
+         It follows:
+         ```
+           f(x) =  alpha * (exp(x) - 1.) for x < 0
+           f(x) = x for x >= 0
+         ```
+    """
     if upper_limit is not None:
         return clip(tf.nn.elu(x, alpha), -np.inf, upper_limit)
     return tf.nn.elu(x, alpha)
@@ -918,6 +987,21 @@ def p_relu(x, upper_limit=None):
 
 
 def swish(x):
+    """Self-Gated Activation Function.
+      it follows:
+      ```
+        f(x) =  x * sigmoid(x)
+
+      ```
+    References:
+        Swish: a Self-Gated Activation Function
+        https://arxiv.org/abs/1710.05941v1
+
+    Examples:
+        >>> swish(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
+
+    """
     return tf.nn.sigmoid(x) * x
 
 
@@ -942,7 +1026,7 @@ def hard_sigmoid(x):
 
 
 def hard_tanh(x):
-    return tf.keras.backend.clip(x, -1, 1)
+    return clip(x, -1, 1)
 
 
 def hard_swish(x):
@@ -954,6 +1038,21 @@ def logit(x):
 
 
 def log_log(x):
+    """LogLog Activation Function
+      it follows:
+      ```
+        f(x) =  1 - exp(-exp(x))
+
+      ```
+    References:
+        "Complementary Log-Log and Probit: Activation Functions Implemented in Artificial Neural Networks"
+        https://ieeexplore.ieee.org/document/4626755/
+
+    Examples:
+        >>> LogLog()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
+
+    """
     return 1 - tf.math.exp(-tf.math.exp(x))
 
 
@@ -978,14 +1077,28 @@ def mish(x):
     return x * tf.nn.tanh(tf.nn.softplus(x))
 
 
-def bert_gelu(x):
-    """Gaussian Error Linear Unit.
-    This is a smoother version of the RELU.
-    Original paper: https://arxiv.org/abs/1606.08415
-    Args:
-      x: float Tensor to perform activation.
-    Returns:
-      `x` with the GELU activation applied.
+def hard_mish(x):
+    return  x * hard_tanh(tf.nn.softplus(x))
+
+
+def gelu(x):
+    """
+    Gaussian Error Linear Unit.
+    it follows:
+        ```
+        f(x) =x∗Φ(x)
+        where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
+
+        ```
+
+    References:
+        Gaussian Error Linear Units (GELUs)
+        https://arxiv.org/abs/1606.08415
+
+    Examples:
+        >>> gelu(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
+
     """
     return x * 0.5 * (1.0 + tf.nn.tanh((np.sqrt(2 / np.pi) * (x + 0.044715 * tf.pow(x, 3)))))
 
@@ -1031,7 +1144,7 @@ def expand_dims(x: tf.Tensor, axis=None):
 
 
 def transpose(x: tf.Tensor, perm=None) -> tf.Tensor:
-    '''
+    """
     Transposes a. Permutes the dimensions according to perm.
     The returned tensor's dimension i will correspond to the input dimension perm[i]. If perm is not given,
     it is set to (n-1...0), where n is the rank of the input tensor. Hence by default, this operation performs a
@@ -1065,7 +1178,7 @@ def transpose(x: tf.Tensor, perm=None) -> tf.Tensor:
 
     Returns:
         A transposed Tensor.
-    '''
+    """
     if isinstance(perm, (list, tuple)):
         return tf.transpose(x, to_tensor(perm, dtype=tf.int32))
     elif perm is None:
@@ -1082,7 +1195,7 @@ def permute(x: tf.Tensor, perm=None) -> tf.Tensor:
 
 
 def depth_to_space(x: tf.Tensor, block_size=2):
-    '''
+    """
     Rearranges elements in the input tensor from the depth dimension into spatial blocks.
     The equivalent to Pixel-Shuffle
     Args:
@@ -1132,7 +1245,7 @@ def depth_to_space(x: tf.Tensor, block_size=2):
              3.0000e+00],
             [5.0000e+00, 7.0000e+00, 5.0000e+00, 7.0000e+00, 5.0000e+00,
              7.0000e+00]]], dtype=float32)>
-    '''
+    """
     if ndim(x) not in (3, 4):
         raise ValueError('Input tensort length of shape should be 3 or 4 ')
     elif x.shape[-1] % (block_size * block_size) != 0:
@@ -1148,7 +1261,7 @@ def depth_to_space(x: tf.Tensor, block_size=2):
 
 
 def space_to_depth(x: tf.Tensor, block_size=2):
-    '''
+    """
         Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
 
         This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing
@@ -1184,7 +1297,7 @@ def space_to_depth(x: tf.Tensor, block_size=2):
              5.0000e+00, 6.0000e+00, 7.0000e+00]]], dtype=float32)>
         >>> print(arr.shape)
         (2, 3, 8)
-        '''
+        """
     if ndim(x) not in (3, 4):
         raise ValueError('Input tensort length of shape should be 3 or 4 ')
     elif x.shape[-2] % block_size != 0 or x.shape[-3] % block_size != 0:
@@ -1205,24 +1318,96 @@ def space_to_depth(x: tf.Tensor, block_size=2):
 ## tensor generation
 ###########################
 
-def ones(shape, dtype=tf.float32, requires_grad=False):
-    return tf.ones(shape, dtype)
+def ones(shape, dtype=tf.float32, requires_grad=None):
+    t= tf.ones(shape, dtype)
+    if requires_grad==False:
+        return tf.constant(t)
+    else:
+        return t
 
 
-def ones_like(a, dtype=tf.float32, requires_grad=False):
-    return tf.ones_like(a, dtype)
+
+def ones_like(a, dtype=tf.float32, requires_grad=None):
+    t= tf.ones_like(a, dtype)
+    if requires_grad==False:
+        return tf.constant(t)
+    else:
+        return t
 
 
-def zeros(shape, dtype=tf.float32, requires_grad=False):
-    return tf.zeros(shape, dtype)
+def zeros(shape, dtype=tf.float32, requires_grad=None):
+    t= tf.zeros(shape, dtype)
+    if requires_grad==False:
+        return tf.constant(t)
+    else:
+        return t
 
 
-def zeros_like(a, dtype=tf.float32, requires_grad=False):
-    return tf.zeros_like(a, dtype)
+def zeros_like(a, dtype=tf.float32, requires_grad=None):
+    t= tf.zeros_like(a, dtype)
+    if requires_grad==False:
+        return tf.constant(t)
+    else:
+        return t
+
+def eye_like(a, dtype=tf.float32, requires_grad=None):
+    """
+    Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
+    matrix,
+     ``x`` must have exactly two axes (counting both dynamic and static axes).
+
+    Args:
+        a: numpy array or  that outputs a tensor of rank 2
+        requires_grad ():
+        dtype ():
+
+    Returns:
+        tensor
+
+    Example:
+    >>> eye_like(to_tensor(np.random.standard_normal((3,4))))
+    tensor([[1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.]])
+
+    """
+    if a.ndim == 2:
+        t= tf.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad)
+        if requires_grad == False:
+            return tf.constant(t)
+        else:
+            return t
+    else:
+        raise ValueError('input tensor must have exactly two axe.')
 
 
-def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
-    '''Return meshgrid in range x & y.
+def arange( *args,dtype=tf.int32, requires_grad=None):
+    """
+
+    Args:
+        *args (int): the start, end, step
+        dtype (dtype): dtype of the tensor
+        requires_grad (bool): wheather need require gradient.
+
+    Returns:
+
+    """
+    t=None
+    if len(args)==1:
+        t= tf.range(start=0,limit=args[0],dtype=dtype)
+    elif len(args) == 2:
+        t= tf.range(start=args[0],limit=args[1],dtype=dtype)
+    elif len(args) == 3:
+        t= tf.range(start=args[0],limit=args[1],delta=args[2],dtype=dtype)
+    else:
+        raise ValueError('only maximum  3 args in arange function ')
+    if requires_grad==False:
+        return tf.constant(t)
+    return t
+
+
+def meshgrid(x, y, normalized_coordinates=False, requires_grad=None):
+    """Return meshgrid in range x & y.
 
     Args:
       requires_grad ():
@@ -1276,13 +1461,19 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
            [[1.0000e+00, 0.0000e+00],
             [1.0000e+00, 1.0000e+00]]], dtype=float32)>
 
-    '''
+    """
 
     grid_x, grid_y = tf.meshgrid(np.arange(0, x), np.arange(0, y))
     if normalized_coordinates == True:
         grid_x, grid_y = tf.meshgrid(np.linspace(0, 1, int(x)), np.linspace(0, 1, int(y)))
 
-    return transpose(tf.cast(tf.stack([grid_y, grid_x], -1), tf.float32), [1, 0, 2])
+    t= transpose(tf.cast(tf.stack([grid_y, grid_x], -1), tf.float32), [1, 0, 2])
+    if requires_grad==False:
+        return tf.constant(t)
+    elif requires_grad==True:
+        return tf.Variable(t)
+    else:
+        return t
 
 
 ############################
@@ -1312,11 +1503,30 @@ def gram_matrix(x: tf.Tensor):
 
 
 def shuffle(x: tf.Tensor):
-    order = np.random.shuffle(np.array(range(x.size(0))))
-    x[np.array(range(x.size(0)))] = x[order]
-    return x
+    return tf.random.shuffle(x)
 
 
 def random_choice(x: tf.Tensor):
     idx = np.random.choice(np.array(range(x.size(0))))
     return x[idx]
+
+
+
+
+def binary_crossentropy(target, output, from_logits=False):
+  """
+  Binary crossentropy between an output tensor and a target tensor.
+  Args:
+      target: A tensor with the same shape as `output`.
+      output: A tensor.
+      from_logits: Whether `output` is expected to be a logits tensor.
+          By default, we consider that `output`
+          encodes a probability distribution.
+  Returns:
+      A tensor.
+  """
+
+  # Compute cross entropy from probabilities.
+  bce = target *log(output + epsilon())
+  bce += (1 - target) *log(1 - output + epsilon())
+  return -bce

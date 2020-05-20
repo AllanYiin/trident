@@ -4,13 +4,14 @@ from trident.backend.common import *
 
 _session = get_session()
 _backend = _session.backend
-if _backend == 'pytorch':
+if get_session() == 'pytorch':
     import torch
     import torch.nn as nn
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
 
-elif _backend == 'tensorflow':
+elif get_session() == 'tensorflow':
+    _backend= 'pytorch'
     import tensorflow as tf
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *

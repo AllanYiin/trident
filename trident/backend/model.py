@@ -1,3 +1,4 @@
+"""Modelbase"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -21,13 +22,10 @@ from trident.data.image_common import *
 _session = get_session()
 _backend = _session.backend
 if _backend == 'pytorch':
-    import torch
-    import torch.nn as nn
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
 
 elif _backend == 'tensorflow':
-    import tensorflow as tf
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
 
@@ -110,14 +108,16 @@ class ModelBase(object):
 
     @model.setter
     def model(self, value):
+
+        self._outputs = OrderedDict()
+        self._targets = OrderedDict()
         if isinstance(value, Layer):
             inp_shape = copy.deepcopy(self.inputs.value_list[0])
             self.inputs = OrderedDict()
-            self.targets = OrderedDict()
             self._initial_graph(output=value, input_shape=inp_shape)
-            self._signature = self._model.signature
         elif isinstance(value, np.ndarray) or 'tensor' in value.__name__.lower():
-            self._model = to_tensor(value)
+            self.inputs = OrderedDict()
+            self._initial_graph(output= to_tensor(value), input_shape= int_shape(value)[1:])
         else:
             raise ValueError('Only Layer, Module, Image and Tensor can be valid model')
 
@@ -205,18 +205,17 @@ class ModelBase(object):
             self._outputs = new_outputs
             self._targets = new_target
             if self.model is not None:
-                self._model.signature = get_signature(self._model.forward, 'model')
-                self._model.signature.inputs = copy.deepcopy(self.inputs)
-                self._model.signature.outputs = copy.deepcopy(self._outputs)
-                self._signatures
+                self._signature = get_signature(self._model.forward, 'model')
+                self._signature.inputs = copy.deepcopy(self.inputs)
+                self._signature.outputs = copy.deepcopy(self._outputs)
+                self.model.signature=self._signature
+
             print(self._model.signature)
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
-        elif len(self._signature.key_list) != len(arg_names):
+        elif len(self._signature) != len(arg_names):
             raise ValueError('data deed and arg_names should be the same length')
-        else:
-            #self.signature = namedtuple('signature', arg_names)
-            print(self.signature.key_list)
+
 
     @property
     def reverse_preprocess_flow(self):
@@ -560,7 +559,7 @@ class ModelBase(object):
                         if k in self.loss_weights:
                             loss_weight = self.loss_weights[k]
 
-                        this_loss = to_tensor(loss_weight)*try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else torch.tensor(0)# v.forward(output, target) if hasattr(v, 'forward') else v(
+                        this_loss = to_tensor(loss_weight)*try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)# v.forward(output, target) if hasattr(v, 'forward') else v(
                         # output, target)
 
                         if isinstance(this_loss, tuple):
@@ -595,7 +594,7 @@ class ModelBase(object):
                         self.training_context['losses'][k + '_Loss'] = []
                     this_loss=0
                     if 'model' in v.signature:
-                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else torch.tensor(0)
+                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0)
                     elif 'output' in v.signature:
 
                         this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
@@ -658,7 +657,7 @@ class ModelBase(object):
                         if not collect_history==False:
                             self.training_context['metrics'][k] = []
 
-                    this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else torch.tensor(0)
+                    this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
                     self.training_context['tmp_metrics'][k].append(to_numpy(this_metric).mean())
 
                     if test_data is not None and len(test_data) > 0 and collect_history!=False :
@@ -714,7 +713,7 @@ class ModelBase(object):
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
                 self.do_on_epoch_end()
 
-                slice_cnt = sum(self.sample_collect_history[-1 * total_batch:])
+                slice_cnt = np.sum(to_numpy(self.sample_collect_history[-1 * total_batch:]))
                 self.epoch_loss_history['total_losses'].append(
                     np.array(self.training_context['losses']['total_losses'][-1 * slice_cnt:]).mean())
                 for k, v in self.training_context['metrics'].items():

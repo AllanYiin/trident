@@ -9,7 +9,7 @@ import random
 import math
 import sys
 import uuid
-from collections import defaultdict,namedtuple
+from collections import defaultdict, namedtuple
 from functools import partial, wraps, update_wrapper
 from itertools import islice
 from typing import List
@@ -21,18 +21,20 @@ from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
 from tensorflow.python.module import module
 from tensorflow.python.util import object_identity
-from tensorflow.python.framework import func_graph,ops
-from trident.data.utils import pickle_it,unpickle
-from trident.backend.common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, format_time, \
-    get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_signature
+from tensorflow.python.framework import func_graph, ops
+from trident.data.utils import pickle_it, unpickle
+from trident.backend.common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, \
+    format_time, get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, \
+    OrderedDict, get_signature
 from trident.backend.tensorflow_ops import *
-from  trident.backend import tensorflow_serialization as serialization
+from trident.backend import tensorflow_serialization as serialization
 
-__all__ = [ 'Layer', 'get_flops','Sequential',  'ReplayBuffer','summary','normalize_padding','load','save']
+__all__ = ['Layer', 'get_flops', 'Sequential', 'ReplayBuffer', 'summary', 'normalize_padding', 'load', 'save']
 
 gpus = tf.config.list_physical_devices('GPU')
-def get_device():
 
+
+def get_device():
     if gpus:
         return gpus[0]
     else:
@@ -55,15 +57,15 @@ enable_eager_execution()
 tf.executing_eagerly()
 sys.stdout.write('executing_eagerly\n')
 
+
 def load(path):
-    item=serialization.load(path)
+    item = serialization.load(path)
     return item
 
-def save(obj,path,is_compressed=False):
-    serialization.save(obj,path,_use_new_zipfile_serialization=is_compressed)
+
+def save(obj, path, is_compressed=False):
+    serialization.save(obj, path, _use_new_zipfile_serialization=is_compressed)
     return True
-
-
 
 
 class RemovableHandle(object):
@@ -100,10 +102,6 @@ class RemovableHandle(object):
         self.remove()
 
 
-
-
-
-
 def get_flops(model):
     run_meta = tf.compat.v1.RunMetadata()
     opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
@@ -116,7 +114,7 @@ def get_flops(model):
 
 
 def _is_not_trainable_variable(obj):
-  return module._is_variable(obj) and not getattr(obj, "trainable", False)
+    return module._is_variable(obj) and not getattr(obj, "trainable", False)
 
 
 # The internal graph maintained by Keras and used by the symbolic Keras APIs
@@ -126,14 +124,16 @@ def _is_not_trainable_variable(obj):
 # across threads.
 _GRAPH = threading.local()
 
+
 def get_graph():
-  if context.executing_eagerly():
-    global _GRAPH
-    if not getattr(_GRAPH, 'graph', None):
-      _GRAPH.graph = func_graph.FuncGraph('trident_graph')
-    return _GRAPH.graph
-  else:
-    return ops.get_default_graph()
+    if context.executing_eagerly():
+        global _GRAPH
+        if not getattr(_GRAPH, 'graph', None):
+            _GRAPH.graph = func_graph.FuncGraph('trident_graph')
+        return _GRAPH.graph
+    else:
+        return ops.get_default_graph()
+
 
 # A global dictionary mapping graph objects to an index of counters used
 # for various layer/optimizer names in each graph.
@@ -141,28 +141,28 @@ def get_graph():
 PER_GRAPH_OBJECT_NAME_UIDS = weakref.WeakKeyDictionary()
 
 
-def reset_name(module:tf.Module, prefix_dict=None):
-    def get_uid(prefix,seq):
-        if prefix not in module._uid_prefixs or seq<module._uid_prefixs[prefix]:
-            module._uid_prefixs[prefix]=seq
+def reset_name(module: tf.Module, prefix_dict=None):
+    def get_uid(prefix, seq):
+        if prefix not in module._uid_prefixs or seq < module._uid_prefixs[prefix]:
+            module._uid_prefixs[prefix] = seq
         return module._uid_prefixs[prefix]
-    if not hasattr(module,'_uid_prefixs') or prefix_dict is not None:
-        module._uid_prefixs=prefix_dict
-    if not hasattr(module,'default_name'):
-        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
-    prefix,seq=module.default_name.rsplit('_', 1) #if '_' in module._default_name else
-    seq=int(seq)
-    module._default_name = prefix + '_' + str(seq-get_uid(prefix,seq)+1)
+
+    if not hasattr(module, '_uid_prefixs') or prefix_dict is not None:
+        module._uid_prefixs = prefix_dict
+    if not hasattr(module, 'default_name'):
+        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(
+            get_global_uid(camel2snake(module.__class__.__name__)))
+    prefix, seq = module.default_name.rsplit('_', 1)  # if '_' in module._default_name else
+    seq = int(seq)
+    module._default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
 
 
 _UID_PREFIX = defaultdict(int)
 
+
 def get_global_uid(prefix=''):
     _UID_PREFIX[prefix] += 1
     return _UID_PREFIX[prefix]
-
-
-
 
 
 class _IncompatibleKeys(namedtuple('IncompatibleKeys', ['missing_keys', 'unexpected_keys'])):
@@ -186,17 +186,17 @@ def _addindent(s_, numSpaces):
     return s
 
 
-
 class Layer(tf.Module):
     """
     Trident extened nn.Module
     """
     _version = 1
-    def __init__(self,name=None,**kwargs):
+
+    def __init__(self, name=None, **kwargs):
         super(Layer, self).__init__()
-        self.training=True
-        self._built= False
-        self._uid_prefixs={}
+        self.training = True
+        self._built = False
+        self._uid_prefixs = {}
         self._modules = OrderedDict()
         self._parameters = OrderedDict()
         self._buffers = OrderedDict()
@@ -207,13 +207,12 @@ class Layer(tf.Module):
         self._input_shape = None
         self._output_shape = None
 
+        self._output_tensor = None
+        self.keep_output = kwargs.get('keep_output', False)
+        self.signature = None
 
-        self._output_tensor =None
-        self.keep_output=kwargs.get('keep_output',False)
-        self.signature=None
-
-        self.input_filters =None
-        self.uuid=uuid.uuid4().node
+        self.input_filters = None
+        self.uuid = uuid.uuid4().node
         prefix = self.__class__.__name__
         self.default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
         reset_name(self, self._uid_prefixs)
@@ -221,35 +220,34 @@ class Layer(tf.Module):
 
         self.input_filters = None
 
-        self._name = kwargs.get('name',name)
+        self._name = kwargs.get('name', name)
         # self.dump_patches = True
 
         self.uuid = uuid.uuid4().node
 
         self._nodes = None
 
-        self._device='/cpu:0' if gpus is None or len(gpus)==0 else gpus[0]
-
+        self._device = '/cpu:0' if gpus is None or len(gpus) == 0 else gpus[0]
 
     @property
     def name(self):
-        return self._name if self._name is not None and len(self._name)>0 else self.default_name
+        return self._name if self._name is not None and len(self._name) > 0 else self.default_name
 
     @name.setter
-    def name(self,value):
-        self._name=value
-
+    def name(self, value):
+        self._name = value
 
     @property
     def nodes(self):
         return self._nodes
 
     @nodes.setter
-    def nodes(self,value):
-        if self._nodes!=value:
-            self._nodes=value
+    def nodes(self, value):
+        if self._nodes != value:
+            self._nodes = value
             for mod in self.modules():
-                mod._nodes=value
+                mod._nodes = value
+
     # @property
     # def nodes(self):
     #     return self._nodes
@@ -278,7 +276,7 @@ class Layer(tf.Module):
                 a handle that can be used to remove the added hook by calling
                 ``handle.remove()``
         """
-        handle =RemovableHandle(self._forward_pre_hooks)
+        handle = RemovableHandle(self._forward_pre_hooks)
         self._forward_pre_hooks[handle.id] = hook
         return handle
 
@@ -299,7 +297,7 @@ class Layer(tf.Module):
                 a handle that can be used to remove the added hook by calling
                 ``handle.remove()``
         """
-        handle =RemovableHandle(self._forward_hooks)
+        handle = RemovableHandle(self._forward_hooks)
         self._forward_hooks[handle.id] = hook
         return handle
 
@@ -326,8 +324,7 @@ class Layer(tf.Module):
 
         """
         if '_buffers' not in self.__dict__:
-            raise AttributeError(
-                "cannot assign buffer before Module.__init__() call")
+            raise AttributeError("cannot assign buffer before Module.__init__() call")
         elif not isinstance(name, str):
             raise TypeError("buffer name should be a string. "
                             "Got {}".format(type(name).__name__))
@@ -337,10 +334,9 @@ class Layer(tf.Module):
             raise KeyError("buffer name can't be empty string \"\"")
         elif hasattr(self, name) and name not in self._buffers:
             raise KeyError("attribute '{}' already exists".format(name))
-        elif tensor is not None and not isinstance(tensor,tf.Tensor) and not is_tensor(tensor):
+        elif tensor is not None and not isinstance(tensor, tf.Tensor) and not is_tensor(tensor):
             raise TypeError("cannot assign '{}' object to buffer '{}' "
-                            "(torch Tensor or None required)"
-                            .format(type(tensor).__name__, name))
+                            "(torch Tensor or None required)".format(type(tensor).__name__, name))
         else:
             self._buffers[name] = tensor
 
@@ -355,8 +351,7 @@ class Layer(tf.Module):
             param (Parameter): parameter to be added to the module.
         """
         if '_parameters' not in self.__dict__:
-            raise AttributeError(
-                "cannot assign parameter before Module.__init__() call")
+            raise AttributeError("cannot assign parameter before Module.__init__() call")
 
         elif not isinstance(name, str):
             raise TypeError("parameter name should be a string. "
@@ -372,8 +367,7 @@ class Layer(tf.Module):
             self._parameters[name] = None
         elif not isinstance(param, tf.Variable):
             raise TypeError("cannot assign '{}' object to parameter '{}' "
-                            "(tf.Variable or None required)"
-                            .format(type(param).__name__, name))
+                            "(tf.Variable or None required)".format(type(param).__name__, name))
         else:
 
             self._parameters[name] = param
@@ -388,10 +382,10 @@ class Layer(tf.Module):
                 accessed from this module using the given name
             module (Module): child module to be added to the module.
         """
-        if name is  None or len(name)==0:
-            name=module._name
+        if name is None or len(name) == 0:
+            name = module._name
 
-        if module is None :
+        if module is None:
             raise KeyError("module  can't be None")
         elif not isinstance(name, str):
             raise TypeError("module name should be a string. Got {}".format(type(name).__name__))
@@ -401,7 +395,7 @@ class Layer(tf.Module):
             raise KeyError("module name can't contain \".\"")
         elif name == '':
             raise KeyError("module name can't be empty string \"\"")
-        elif isinstance(module, Layer) :
+        elif isinstance(module, Layer):
             # nodes = self._nodes.copy()
             # for k, v in module.nodes.items():
             #     nodes[k] = v
@@ -421,45 +415,42 @@ class Layer(tf.Module):
                     mod.nodes = self.nodes
 
         elif inspect.isfunction(module) or callable(module):
-            module.__name__=name
+            module.__name__ = name
             self._modules[name] = module
 
         else:
-            raise  ValueError('Not valid module')
-
+            raise ValueError('Not valid module')
 
     def add(self, module):
-        if module is None :
+        if module is None:
             raise KeyError("module  can't be None")
-        elif isinstance(module, Layer) :
+        elif isinstance(module, Layer):
             # nodes = self._nodes.copy()
             # for k, v in module.nodes.items():
             #     nodes[k] = v
-            self.add_module(str(len(self._modules)),module)
-            # self.nodes = nodes
-            # for mod in self.modules():
-            #     mod.nodes = nodes
+            self.add_module(str(len(self._modules)),
+                            module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
 
         else:
-            raise  ValueError('Not valid module')
+            raise ValueError('Not valid module')
 
     def build(self, input_shape):
-        pass  #pass if no need shape infer
+        pass  # pass if no need shape infer
 
     def compute_output_shape(self, input_shape):
         """Computes the output shape of the layer.
         Assumes that the layer will be built
         to match that input shape provided.
-        # Arguments
+     Args
             input_shape: Shape tuple (tuple of integers)
                 or list of shape tuples (one per output tensor of the layer).
                 Shape tuples can include None for free dimensions,
                 instead of an integer.
-        # Returns
+     Returns
             An output shape tuple.
         """
         if not self._built:
-            self.input_shape=input_shape
+            self.input_shape = input_shape
         return self.output_shape
 
     def cuda(self, device=None):
@@ -469,14 +460,14 @@ class Layer(tf.Module):
         it should be called before constructing optimizer if the module will
         live on GPU while being optimized.
 
-        Arguments:
+        Args:
             device (int, optional): if specified, all parameters will be
                 copied to that device
 
         Returns:
             Module: self
         """
-        self._device='/cpu:0'
+        self._device = '/cpu:0'
 
     def cpu(self):
         r"""Moves all model parameters and buffers to the CPU.
@@ -484,22 +475,21 @@ class Layer(tf.Module):
         Returns:
             Module: self
         """
-        self._device='/cpu:0'
+        self._device = '/cpu:0'
         tf.device(self._device)
 
     def _apply(self, fn):
         for module in self.children():
             module._apply(fn)
 
-
         for key, param in self._parameters.items():
             if param is not None:
                 # Tensors stored in modules are graph leaves, and we don't want to
                 # track autograd history of `param_applied`, so we have to use
                 # `with torch.no_grad():`
-                #with torch.no_grad():
+                # with torch.no_grad():
                 param_applied = fn(param)
-                self._parameters[key] =  tf.Variable(param_applied, trainable=param.trainable)
+                self._parameters[key] = tf.Variable(param_applied, trainable=param.trainable)
 
         for key, buf in self._buffers.items():
             if buf is not None:
@@ -524,12 +514,8 @@ class Layer(tf.Module):
         fn(self)
         return self
 
-
-
-
     def get_config(self):
-        config = {'name': self.name,
-                  'trainable': self.trainable}
+        config = {'name': self.name, 'trainable': self.trainable}
 
         if hasattr(self, 'batch_input_shape'):
             config['batch_input_shape'] = self.batch_input_shape
@@ -551,41 +537,39 @@ class Layer(tf.Module):
     def input_shape(self):
         return self._input_shape
 
-
     @input_shape.setter
     def input_shape(self, value):
-        if isinstance(value, (list,tuple)) and len(value)>0:
-            value =tf.TensorShape(list(value))
+        if isinstance(value, (list, tuple)) and len(value) > 0:
+            value = tf.TensorShape(list(value))
         elif is_tensor(value):
-            value=to_numpy(value).tolist()
-        elif isinstance(value,int):#
-            value =tf.TensorShape(value)
+            value = to_numpy(value).tolist()
+        elif isinstance(value, int):  #
+            value = tf.TensorShape(value)
         elif isinstance(value, np.ndarray) and value.ndim <= 1:
-            value=tf.TensorShape(value.astype(np.uint8).tolist())
-        elif isinstance(value,tf.TensorShape):
+            value = tf.TensorShape(value.astype(np.uint8).tolist())
+        elif isinstance(value, tf.TensorShape):
             value = value
         else:
             raise ValueError('not valid input_shape')
 
-
-        if self._built == False :
-            self._input_shape =value
+        if self._built == False:
+            self._input_shape = value
             if len(self._input_shape) == 0:
                 self.input_filters = -1
             else:
-                self.input_filters =int(self._input_shape[-1])
+                self.input_filters = int(self._input_shape[-1])
 
             self.build(self._input_shape)
             self._built = True
 
 
-        elif self._input_shape is not None and self._input_shape==tuple(to_list(value)):
+        elif self._input_shape is not None and self._input_shape == tuple(to_list(value)):
             'input_shape is already assigned, and shape is the same.'
             pass
 
     @property
     def output_shape(self):
-        return  self._output_shape
+        return self._output_shape
 
     @output_shape.setter
     def output_shape(self, value):
@@ -593,11 +577,11 @@ class Layer(tf.Module):
             value = tf.TensorShape(list(value))
         elif is_tensor(value):
             value = tf.TensorShape(to_numpy(value).tolist())
-        elif isinstance(value,int):#
-            value =tf.TensorShape(value)
+        elif isinstance(value, int):  #
+            value = tf.TensorShape(value)
         elif isinstance(value, np.ndarray) and value.ndim <= 1:
             value = tf.TensorShape(value.astype(np.uint8).tolist())
-        elif isinstance(value,tf.TensorShape):
+        elif isinstance(value, tf.TensorShape):
             value = value
         else:
             raise ValueError('not valid input_shape')
@@ -605,23 +589,23 @@ class Layer(tf.Module):
 
     @property
     def input(self):
-        return  NotImplemented
+        return NotImplemented
 
     @property
     def output(self):
         """Retrieves the output tensor(s) of a layer.
-        for memory saving issue, we don'tb prefer to keep every input/output
-        tensor in every layer.You should set self.keep.output flag to True, and then
-        retrive the output tensor when the calll() is executing.
-        # Returns
-            Output tensor or list of output tensors.
-        # Raises
-            AttributeError: if the layer is connected to
-            more than one incoming layers.
+            for memory saving issue, we don'tb prefer to keep every input/output
+            tensor in every layer.You should set self.keep.output flag to True, and then
+            retrive the output tensor when the calll() is executing.
+        Returns
+                Output tensor or list of output tensors.
+     Raises
+                AttributeError: if the layer is connected to
+                more than one incoming layers.
         """
-        if self.keep_output==False:
+        if self.keep_output == False:
             raise ValueError('Layer {0} has not set self.keep.output  to True, cannot access output '.format(self.name))
-        return list(self._output_tensor) if isinstance(self._output_tensor,tuple) else self._output_tensor
+        return list(self._output_tensor) if isinstance(self._output_tensor, tuple) else self._output_tensor
 
     def reset_parameters(self):
         pass
@@ -635,7 +619,7 @@ class Layer(tf.Module):
         submodule in :meth:`Layer.state_dict`.
         In rare cases, subclasses can achieve class-specific behavior by
         overriding this method with custom logic.
-        Arguments:
+        Args:
             destination (dict): a dict where state will be stored
             prefix (str): the prefix for parameters and buffers used in this
                 module
@@ -647,7 +631,7 @@ class Layer(tf.Module):
             if buf is not None:
                 destination[prefix + name] = buf if keep_vars else tf.stop_gradient(buf)
 
-    def  state_dict(self, destination=None, prefix='', keep_vars=False):
+    def state_dict(self, destination=None, prefix='', keep_vars=False):
         r"""Returns a dictionary containing a whole state of the module.
         Both parameters and persistent buffers (e.g. running averages) are
         included. Keys are corresponding parameter and buffer names.
@@ -695,7 +679,7 @@ class Layer(tf.Module):
             :attr:`state_dict` is not the same object as the input
             :attr:`state_dict` to :meth:`~torch.nn.Module.load_state_dict`. So
             it can be modified.
-        Arguments:
+        Args:
             state_dict (dict): a dict containing parameters and
                 persistent buffers.
             prefix (str): the prefix for parameters and buffers used in this
@@ -735,15 +719,13 @@ class Layer(tf.Module):
                     continue
 
                 try:
-                    setattr(self, name,tf.Variable(to_numpy(input_param)))
-                    #param=input_param
+                    setattr(self, name, tf.Variable(to_numpy(input_param)))  # param=input_param
 
                 except Exception as ex:
                     error_msgs.append('While copying the parameter named "{}", '
                                       'whose dimensions in the model are {} and '
                                       'whose dimensions in the checkpoint are {}, '
-                                      'an exception occured : {}.'.format(key, param.shape, input_param.shape,
-                                                                          ex.args))
+                                      'an exception occured : {}.'.format(key, param.shape, input_param.shape, ex.args))
             elif strict:
                 missing_keys.append(key)
 
@@ -760,7 +742,7 @@ class Layer(tf.Module):
         this module and its descendants. If :attr:`strict` is ``True``, then
         the keys of :attr:`state_dict` must exactly match the keys returned
         by this module's :meth:`~torch.nn.Module.state_dict` function.
-        Arguments:
+        Args:
             state_dict (dict): a dict containing parameters and
                 persistent buffers.
             strict (bool, optional): whether to strictly enforce that the keys
@@ -784,7 +766,7 @@ class Layer(tf.Module):
         def load(module, prefix=''):
             local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
             module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys,
-                error_msgs)
+                                         error_msgs)
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + '.')
@@ -797,8 +779,8 @@ class Layer(tf.Module):
                 error_msgs.insert(0, 'Unexpected key(s) in state_dict: {}. '.format(
                     ', '.join('"{}"'.format(k) for k in unexpected_keys)))
             if len(missing_keys) > 0:
-                error_msgs.insert(0,
-                    'Missing key(s) in state_dict: {}. '.format(', '.join('"{}"'.format(k) for k in missing_keys)))
+                error_msgs.insert(0, 'Missing key(s) in state_dict: {}. '.format(
+                    ', '.join('"{}"'.format(k) for k in missing_keys)))
 
         if len(error_msgs) > 0:
             raise RuntimeError(
@@ -806,12 +788,11 @@ class Layer(tf.Module):
         return _IncompatibleKeys(missing_keys, unexpected_keys)
 
     def save(self, file_path=''):
-        #save({'state_dict': self.state_dict()}, file_path)
-        pickle_it(file_path,{'state_dict': self.state_dict()})
+        # save({'state_dict': self.state_dict()}, file_path)
+        pickle_it(file_path, {'state_dict': self.state_dict()})
 
-    def save_onnx(self,file_path=''):
+    def save_onnx(self, file_path=''):
         pass
-
 
     def forward(self, *input, **kwargs):
         r"""Defines the computation performed at every call.
@@ -827,25 +808,7 @@ class Layer(tf.Module):
         raise NotImplementedError
 
     def _slow_forward(self, *input, **kwargs):
-        pass
-        # tracing_state = torch._C._get_tracing_state()
-        # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):
-        #     return self.forward(*input, **kwargs)
-        # recording_scopes = torch.jit._trace_module_map is not None
-        # if recording_scopes:
-        #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None
-        #     if name:
-        #         cur_scope_name = tracing_state.current_scope()
-        #         tracing_state.push_scope(name)
-        #     else:
-        #         recording_scopes = False
-        # try:
-        #     result = self.forward(*input, **kwargs)
-        # finally:
-        #     if recording_scopes:
-        #         tracing_state.pop_scope()
-        # return result
-
+        pass  # tracing_state = torch._C._get_tracing_state()  # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):  #     return self.forward(*input, **kwargs)  # recording_scopes = torch.jit._trace_module_map is not None  # if recording_scopes:  #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None  #     if name:  #         cur_scope_name = tracing_state.current_scope()  #         tracing_state.push_scope(name)  #     else:  #         recording_scopes = False  # try:  #     result = self.forward(*input, **kwargs)  # finally:  #     if recording_scopes:  #         tracing_state.pop_scope()  # return result
 
     def __call__(self, *input, **kwargs):
         for hook in self._forward_pre_hooks.values():
@@ -853,18 +816,18 @@ class Layer(tf.Module):
         if self._built == False:
             inp = unpack_singleton(input)
             if isinstance(inp, (tuple, list)):
-                self.input_shape=inp[0].get_shape()[1:]
+                self.input_shape = inp[0].get_shape()[1:]
             elif is_tensor(inp):
-                self.input_shape =inp.get_shape()[1:]
-            elif isinstance(inp,np.ndarray):
-                self.input_shape =inp.shape[1:]
-                inp=to_tensor(inp)
+                self.input_shape = inp.get_shape()[1:]
+            elif isinstance(inp, np.ndarray):
+                self.input_shape = inp.shape[1:]
+                inp = to_tensor(inp)
             else:
                 print('input shou be tensor or tuple of tensor')
-                self.input_shape=tf.TensorShape(None)
+                self.input_shape = tf.TensorShape(None)
             self.build(self.input_shape)
 
-        #don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
+        # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
         try:
             result = self.forward(*input, **kwargs)
             result = unpack_singleton(result)
@@ -884,8 +847,6 @@ class Layer(tf.Module):
             print('{0} ({1} call failed.)'.format(self.name, self.default_name))
             print(e)
             raise e
-
-
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -910,8 +871,7 @@ class Layer(tf.Module):
             modules = self.__dict__['_modules']
             if name in modules:
                 return modules[name]
-        raise AttributeError("'{}' object has no attribute '{}'".format(
-            type(self).__name__, name))
+        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __setattr__(self, name, value):
         def remove_from(*dicts):
@@ -922,39 +882,35 @@ class Layer(tf.Module):
         params = self.__dict__.get('_parameters')
         if isinstance(value, tf.Variable):
             if params is None:
-                raise AttributeError(
-                    "cannot assign parameters before Module.__init__() call")
+                raise AttributeError("cannot assign parameters before Module.__init__() call")
             remove_from(self.__dict__, self._buffers, self._modules)
             self.register_parameter(name, value)
         elif params is not None and name in params:
             if value is not None:
                 raise TypeError("cannot assign '{}' as parameter '{}' "
-                                "(tf.Variable or None expected)"
-                                .format(type(value).__name__, name))
+                                "(tf.Variable or None expected)".format(type(value).__name__, name))
             self.register_parameter(name, value)
         else:
             modules = self.__dict__.get('_modules')
             if isinstance(value, Layer):
                 if modules is None:
-                    raise AttributeError(
-                        "cannot assign module before Module.__init__() call")
+                    raise AttributeError("cannot assign module before Module.__init__() call")
                 remove_from(self.__dict__, self._parameters, self._buffers)
                 modules[name] = value
             elif modules is not None and name in modules:
                 if value is not None:
                     raise TypeError("cannot assign '{}' as child module '{}' "
-                                    "(torch.nn.Module or None expected)"
-                                    .format(type(value).__name__, name))
+                                    "(torch.nn.Module or None expected)".format(type(value).__name__, name))
                 modules[name] = value
                 reset_name(value, self._uid_prefixs)
-                value.relative_name = name if not hasattr(value,'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+                value.relative_name = name if not hasattr(value,
+                                                          'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             else:
                 buffers = self.__dict__.get('_buffers')
                 if buffers is not None and name in buffers:
                     if value is not None and not is_tensor(value):
                         raise TypeError("cannot assign '{}' as buffer '{}' "
-                                        "(torch.Tensor or None expected)"
-                                        .format(type(value).__name__, name))
+                                        "(torch.Tensor or None expected)".format(type(value).__name__, name))
                     buffers[name] = value
                 else:
                     object.__setattr__(self, name, value)
@@ -969,7 +925,6 @@ class Layer(tf.Module):
         else:
             object.__delattr__(self, name)
 
-
     def _named_members(self, get_members_fn, prefix='', recurse=True):
         r"""Helper method for yielding various names + members of modules."""
         memo = set()
@@ -977,14 +932,13 @@ class Layer(tf.Module):
         for module_prefix, module in modules:
             members = get_members_fn(module)
             for k, v in members:
-                istensor=is_tensor(v)
-                key=v.ref() if istensor else v
+                istensor = is_tensor(v)
+                key = v.ref() if istensor else v
                 if v is None or key in memo:
                     continue
                 name = module_prefix + ('.' if module_prefix else '') + k
                 memo.add(key)
                 yield name, v
-
 
     def parameters(self, recurse=True):
         r"""Returns an iterator over module parameters.
@@ -1030,9 +984,7 @@ class Layer(tf.Module):
             >>>        print(param.size())
 
         """
-        gen = self._named_members(
-            lambda module: module._parameters.items(),
-            prefix=prefix, recurse=recurse)
+        gen = self._named_members(lambda module: module._parameters.items(), prefix=prefix, recurse=recurse)
         for elem in gen:
             yield elem
 
@@ -1078,9 +1030,7 @@ class Layer(tf.Module):
             >>>        print(buf.size())
 
         """
-        gen = self._named_members(
-            lambda module: module._buffers.items(),
-            prefix=prefix, recurse=recurse)
+        gen = self._named_members(lambda module: module._buffers.items(), prefix=prefix, recurse=recurse)
         for elem in gen:
             yield elem
 
@@ -1213,7 +1163,6 @@ class Layer(tf.Module):
         """
         return self.train(False)
 
-
     @property
     def trainable_weights(self) -> List[tf.Variable]:
         r"""The list of trainable variables (parameters) of the module.
@@ -1257,7 +1206,6 @@ class Layer(tf.Module):
         for p, w in weight_value_tuples:
             p.data = w.data
 
-
     @property
     def trainable(self):
         """
@@ -1265,37 +1213,37 @@ class Layer(tf.Module):
         Returns: Is the layer trainable?
 
         """
-        if len(self.weights)==0:
+        if len(self.weights) == 0:
             return False
-        elif len(self.weights)>0:
-            for k,v in self._parameters.items():
-                if v is not None and v.trainable==False:
+        elif len(self.weights) > 0:
+            for k, v in self._parameters.items():
+                if v is not None and v.trainable == False:
                     return False
             else:
                 return True
 
     @trainable.setter
-    def trainable(self,value:bool):
+    def trainable(self, value: bool):
         """
 
         Args:
             value (bool):  new value for the property "Trsainable"
 
         """
-        n=0
-        need_update=False
+        n = 0
+        need_update = False
         for name, para in self.named_parameters():
-            if para.trainable!=value:
+            if para.trainable != value:
                 para._trainable = value
-                n+=np.prod(to_numpy(int_shape(para)))
-                need_update=True
+
+                n += np.prod(to_numpy(int_shape(para)))
+                need_update = True
         if not need_update:
             print('no parameter trainable state is changed')
         elif value:
             print('{0} parameters have set trainable'.format(n))
         else:
             print('{0} parameters have set untrainable'.format(n))
-
 
     def extra_repr(self):
         r"""Set the extra representation of the module
@@ -1345,8 +1293,6 @@ class Layer(tf.Module):
         return sorted(keys)
 
 
-
-
 class Sequential(Layer):
     r"""A sequential container.
     Modules will be added to it in the order they are passed in the constructor.
@@ -1371,7 +1317,7 @@ class Sequential(Layer):
                 ]))
     """
 
-    def __init__(self, *args,name=None):
+    def __init__(self, *args, name=None):
         super(Sequential, self).__init__(name=name)
         self._built = False
         if len(args) == 1 and isinstance(args[0], OrderedDict):
@@ -1388,13 +1334,12 @@ class Sequential(Layer):
         # self.to(self.device)
 
     def build(self, input_shape):
-        if self._built==False and len(self._modules)>0:
-            self.__getitem__(0).input_shape=self.input_shape
-            self._built=True
-
+        if self._built == False and len(self._modules) > 0:
+            self.__getitem__(0).input_shape = self.input_shape
+            self._built = True
 
     def sync_build(self):
-        input_shape=None
+        input_shape = None
         # if self[:1] is Input:
         #     input_shape=self[:1].input_shape
         if input_shape is not None:
@@ -1403,9 +1348,8 @@ class Sequential(Layer):
             data = to_tensor(np.random.standard_normal(input_shape))
             out = self(data)
 
-    def remove_at(self,idx):
+    def remove_at(self, idx):
         self.__delitem__(idx)
-
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -1437,7 +1381,6 @@ class Sequential(Layer):
             key = self._get_item_by_idx(self._modules.keys(), idx)
             delattr(self, key)
 
-
     def __len__(self):
         return len(self._modules)
 
@@ -1445,7 +1388,6 @@ class Sequential(Layer):
         keys = super(Sequential, self).__dir__()
         keys = [key for key in keys if not key.isdigit()]
         return keys
-
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -1517,8 +1459,6 @@ class Combine(tf.keras.Model):
         return tuple(outputs)
 
 
-
-
 class ReplayBuffer:
     def __init__(self, max_size=1000):
         assert max_size > 0, "Empty buffer or trying to create a black hole. Be careful."
@@ -1539,14 +1479,13 @@ class ReplayBuffer:
                     self.data[i] = element
                 else:
                     to_return.append(element)
-        return tf.concat(to_return,axis=-1)
-
+        return tf.concat(to_return, axis=-1)
 
 
 def count_params(weights):
     """Count the total number of scalars composing the weights.
 
-    Arguments:
+    Args:
         weights: An iterable containing the weights on which to compute params
 
     Returns:
@@ -1555,7 +1494,7 @@ def count_params(weights):
     return int(sum(np.prod(p.shape.as_list()) for p in object_identity.ObjectIdentitySet(weights)))
 
 
-def calculate_flops(gen:Layer):
+def calculate_flops(gen: Layer):
     """
     Calculate the flops given a generator of pytorch model.
     It only compute the flops of forward pass.
@@ -1565,11 +1504,11 @@ def calculate_flops(gen:Layer):
         >>> calculate_flops(net.children())
     """
     flops = 0
-    mods=gen.named_modules()
-    mods=list(mods)[1:]
+    mods = gen.named_modules()
+    mods = list(mods)[1:]
     param_nums = []
     param_sizes = []
-    for mod_name,mod in mods:
+    for mod_name, mod in mods:
         p = list(mod.parameters())
         modsz = []
         all_params = 0
@@ -1588,47 +1527,46 @@ def calculate_flops(gen:Layer):
 # print(flops / 10 ** 9, 'G')  # 11.435429919 G
 
 
-
 def summary(model, input_size, batch_size=-1):
     def register_hook(module):
         def hook(module, input, output):
             class_name = str(module.__class__).split(".")[-1].split("'")[0]
             module_idx = len(summary)
 
-            m_key =module.name
+            m_key = module.name
             summary[m_key] = OrderedDict()
-            summary[m_key]["keep_output"]=module.keep_output
+            summary[m_key]["keep_output"] = module.keep_output
             summary[m_key]["input_shape"] = list(to_numpy(input[0]).shape)
             summary[m_key]["input_shape"][0] = batch_size
             if isinstance(output, (list, tuple)):
-                summary[m_key]["output_shape"] = [[-1] + list(o.size())[1:] for o in output ]
+                summary[m_key]["output_shape"] = [[-1] + list(o.size())[1:] for o in output]
             else:
                 summary[m_key]["output_shape"] = list(to_numpy(output).shape)
                 summary[m_key]["output_shape"][0] = batch_size
 
             params = 0
-            summary[m_key]["flops"]=np.array([0],dtype=np.float64)
+            summary[m_key]["flops"] = np.array([0], dtype=np.float64)
             summary[m_key]["macc"] = np.array([0], dtype=np.float64)
 
             if hasattr(module, "weight") and hasattr(module.weight, "shape"):
                 params += np.prod(np.array(to_numpy(module.weight.shape)))
-                summary[m_key]["weight"] =list(to_numpy(module.weight.shape))
+                summary[m_key]["weight"] = list(to_numpy(module.weight.shape))
                 summary[m_key]["trainable"] = module.weight.trainable
-                summary[m_key]["flops"] += (2*np.prod(np.array(summary[m_key]["weight"]).astype(np.float64))-1) * np.prod(np.array(summary[m_key]["output_shape"][1:-1]).astype(np.float64))
-                summary[m_key]["macc"] += np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][1:-1]).astype(np.float64))
+                summary[m_key]["flops"] += (2 * np.prod(
+                    np.array(summary[m_key]["weight"]).astype(np.float64)) - 1) * np.prod(
+                    np.array(summary[m_key]["output_shape"][1:-1]).astype(np.float64))
+                summary[m_key]["macc"] += np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) * np.prod(
+                    np.array(summary[m_key]["output_shape"][1:-1]).astype(np.float64))
 
             if hasattr(module, "bias") and module.bias is not None and hasattr(module.bias, "shape"):
                 params += np.prod(np.array(to_numpy(module.bias.shape)))
-                summary[m_key]["bias"] =list(to_numpy(module.bias.shape))
-                summary[m_key]["flops"]+=np.prod(np.array(summary[m_key]["bias"]).astype(np.float64))*np.prod(np.array( summary[m_key]["output_shape"][1:-1]).astype(np.float64))
+                summary[m_key]["bias"] = list(to_numpy(module.bias.shape))
+                summary[m_key]["flops"] += np.prod(np.array(summary[m_key]["bias"]).astype(np.float64)) * np.prod(
+                    np.array(summary[m_key]["output_shape"][1:-1]).astype(np.float64))
             summary[m_key]["nb_params"] = params
 
-        if (
-            not isinstance(module, Sequential)
-            and not (module == model)
-        ):
+        if (not isinstance(module, Sequential) and not (module == model)):
             hooks.append(module.register_forward_hook(hook))
-
 
     # multiple inputs to the network
 
@@ -1636,10 +1574,10 @@ def summary(model, input_size, batch_size=-1):
         input_size = [input_size]
 
     if isinstance(input_size, int):
-        x = [ to_tensor(np.random.standard_normal((1, *input_size)).astype(np.float32))]
+        x = [to_tensor(np.random.standard_normal((1, *input_size)).astype(np.float32))]
     else:
         # batch_size of 2 for batchnorm
-        x = [ to_tensor(np.random.standard_normal((1, *in_size)).astype(np.float32)) for in_size in input_size]
+        x = [to_tensor(np.random.standard_normal((1, *in_size)).astype(np.float32)) for in_size in input_size]
     # p    rint(type(x[0]))
 
     # create properties
@@ -1658,28 +1596,27 @@ def summary(model, input_size, batch_size=-1):
     for h in hooks:
         h.remove()
 
-    print("--------------------------------------------------------------------------------------------------------------------------------")
-    line_new = "{0:^40s} {1:^20s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^12s}".format("Layer (type)", "Output Shape","Weight ","Bias", "Param #", "FLOPS #")
+    print(
+        "--------------------------------------------------------------------------------------------------------------------------------")
+    line_new = "{0:^40s} {1:^20s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^12s}".format("Layer (type)", "Output Shape",
+                                                                               "Weight ", "Bias", "Param #", "FLOPS #")
     print(line_new)
     print("==============================================================================")
     total_params = 0
     total_output = 0
     trainable_params = 0
-    flops=np.array([0],dtype=np.float64)
-    macc=0
+    flops = np.array([0], dtype=np.float64)
+    macc = 0
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
-        is_keep='★' if summary[layer]["keep_output"] else ''
-        line_new = "{0:<40s} {1:<20s}  {2:^20s} {3:^8s}  {4:^8}  {5:^12}".format(
-            layer,
-            is_keep+str(summary[layer]["output_shape"]),
+        is_keep = '★' if summary[layer]["keep_output"] else ''
+        line_new = "{0:<40s} {1:<20s}  {2:^20s} {3:^8s}  {4:^8}  {5:^12}".format(layer,
+            is_keep + str(summary[layer]["output_shape"]),
             str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
-            str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
-            summary[layer]["nb_params"],
-            summary[layer]["flops"][0]
-        )
+            str(summary[layer]["bias"] if 'bias' in summary[layer] else ''), summary[layer]["nb_params"],
+            summary[layer]["flops"][0])
         total_params += summary[layer]["nb_params"]
-        flops+= float(summary[layer]["flops"])
+        flops += float(summary[layer]["flops"])
         macc += float(summary[layer]["macc"][0])
         total_output += np.prod(to_numpy(summary[layer]["output_shape"]))
         if "trainable" in summary[layer]:
@@ -1697,20 +1634,18 @@ def summary(model, input_size, batch_size=-1):
     print("Total params: {0:,}".format(total_params))
     print("Trainable params: {0:,}".format(trainable_params))
     print("Non-trainable params: {0:,}".format(total_params - trainable_params))
-    print("Total MACC: {0:,}".format(round(macc,0)))
-    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10.**9, 5)[0]))
+    print("Total MACC: {0:,}".format(round(macc, 0)))
+    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]))
     print("----------------------------------------------------------------")
     print("Input size (MB): %0.2f" % total_input_size)
     print("Forward/backward pass size (MB): %0.2f" % total_output_size)
     print("Params size (MB): %0.2f" % total_params_size)
     print("Estimated Total Size (MB): %0.2f" % total_size)
-    print("----------------------------------------------------------------")
-    # return summary
-
+    print("----------------------------------------------------------------")  # return summary
 
 
 def normalize_padding(padding, rank):
-    '''
+    """
     normalize different padding format to most comlete representaion.
     Tensorflow and Pytorch have totally different padding representation format and padding strategy.
     In Pytorch the complete format is 2* rank ex.: conv2d rank=2 NCHW , we only need to pad the last 2 dimentions
@@ -1748,85 +1683,83 @@ def normalize_padding(padding, rank):
    >>> normalize_padding((0,1 ,0, 1),2)
    ((0, 1), (0, 1))
 
-    '''
+    """
     if padding is None:
-        #None=>((0,0),(0,0))
-        padding=((0,0),)*rank
-    elif isinstance(padding,int):
+        # None=>((0,0),(0,0))
+        padding = ((0, 0),) * rank
+    elif isinstance(padding, int):
         # 1=>((1,1),(1,1))
-        padding = ((padding,padding),) * rank
-    elif isinstance(padding,(list,tuple)) and len(padding)==1 and padding[0]==int:
-        #(1)=>((1,1),(1,1))
-        padding =  ((padding[0],padding[0]),) * rank
-    elif isinstance(padding,(list,tuple)) and len(padding)==rank and  isinstance(padding[0],int):
+        padding = ((padding, padding),) * rank
+    elif isinstance(padding, (list, tuple)) and len(padding) == 1 and padding[0] == int:
+        # (1)=>((1,1),(1,1))
+        padding = ((padding[0], padding[0]),) * rank
+    elif isinstance(padding, (list, tuple)) and len(padding) == rank and isinstance(padding[0], int):
         # rank=2 (1,1)=>((1,1,), (1,1))   (1,0)=>((1,1),(0,0))
-        padding=list(padding)
-        return_padding=[]
+        padding = list(padding)
+        return_padding = []
         for i in range(rank):
-            return_padding.append((padding[i],padding[i]))
+            return_padding.append((padding[i], padding[i]))
         padding = tuple(return_padding)
-    elif isinstance(padding, (list,tuple)) and len(padding) == rank and isinstance(padding[0], (list,tuple)):
+    elif isinstance(padding, (list, tuple)) and len(padding) == rank and isinstance(padding[0], (list, tuple)):
         # rank=2  ((1,0),(1,0)=>(1,0,1,0)
-        pass
-        #padding= tuple(list(itertools.chain(*list(padding))))
-    elif isinstance(padding, (list,tuple)) and len(padding) == 2*rank and isinstance(padding[0], int):
-        padding=((padding[0],padding[1]),(padding[2],padding[3]))
+        pass  # padding= tuple(list(itertools.chain(*list(padding))))
+    elif isinstance(padding, (list, tuple)) and len(padding) == 2 * rank and isinstance(padding[0], int):
+        padding = ((padding[0], padding[1]), (padding[2], padding[3]))
     return padding
 
 
-
-def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
-    if isinstance(fn,tf.Tensor) or 'EagerTensor' in fn.__class__.__name__:
+def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
+    if isinstance(fn, tf.Tensor) or 'EagerTensor' in fn.__class__.__name__:
         return fn
     else:
         arg_map = OrderedDict()
-        if isinstance(fn,Layer) :
+        if isinstance(fn, Layer):
             for arg in fn.signature.inputs.key_list:
                 if arg in data:
                     arg_map[arg] = data[arg]
                 elif arg in data_feed:
-                    arg_map[arg]=data[data_feed[arg]]
+                    arg_map[arg] = data[data_feed[arg]]
 
                 else:
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-            #print('arg_map',arg_map.key_list)
-            if len(fn.signature.inputs.key_list)==1:
-                inp=unpack_singleton(arg_map.value_list)
+            # print('arg_map',arg_map.key_list)
+            if len(fn.signature.inputs.key_list) == 1:
+                inp = unpack_singleton(arg_map.value_list)
                 out = fn(inp)
                 return out
             else:
-                out=fn(*arg_map.value_list)
+                out = fn(*arg_map.value_list)
                 return out
-        elif hasattr(fn,'signature') and callable(fn):
+        elif hasattr(fn, 'signature') and callable(fn):
             for arg in fn.signature.inputs.key_list:
                 if arg in data:
-                    arg_map[arg]=data[arg]
+                    arg_map[arg] = data[arg]
                 elif arg in data_feed:
-                    arg_map[arg]=data[data_feed[arg]]
+                    arg_map[arg] = data[data_feed[arg]]
 
-                elif arg=='y_pred' and  'output' in data:
+                elif arg == 'y_pred' and 'output' in data:
                     arg_map[arg] = data['output']
-                elif arg=='y_true' and  'target' in data:
+                elif arg == 'y_true' and 'target' in data:
                     arg_map[arg] = data['target']
-                elif arg=='y_true' and  'label' in data:
+                elif arg == 'y_true' and 'label' in data:
                     arg_map[arg] = data['label']
-                elif arg=='label' and  'target' in data:
+                elif arg == 'label' and 'target' in data:
                     arg_map[arg] = data['target']
                 else:
 
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-            #print('arg_map', arg_map.key_list)
-            out=fn(*arg_map.value_list)
+            # print('arg_map', arg_map.key_list)
+            out = fn(*arg_map.value_list)
             return out
-        elif  callable(fn):
+        elif callable(fn):
 
-            args=get_signature(fn).inputs.key_list
+            args = get_signature(fn).inputs.key_list
             for arg in args:
-                if arg in  data_feed:
-                    arg_map[arg]=data[data_feed[arg]]
+                if arg in data_feed:
+                    arg_map[arg] = data[data_feed[arg]]
                 else:
                     arg_map[arg] = ''
-            #print('arg_map', arg_map.key_list)
+            # print('arg_map', arg_map.key_list)
             out = fn(*arg_map.value_list)
             return out
         else:

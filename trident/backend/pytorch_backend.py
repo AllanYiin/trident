@@ -22,7 +22,7 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList',  'get_device', 'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
+__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList',  'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -211,7 +211,7 @@ class Layer(nn.Module):
         pass  #pass if no need shape infer
 
     def compute_output_shape(self, input_shape):
-        '''
+        """
         Computes the output shape of the layer.Assumes that the layer will be builtto match that input shape provided.
         Args
             input_shape: Shape tuple (tuple of integers)
@@ -220,7 +220,7 @@ class Layer(nn.Module):
                 instead of an integer.
         Returns
             An output shape tuple.
-        '''
+        """
         if not self._built:
             self.input_shape=input_shape
         return self.output_shape
@@ -229,33 +229,33 @@ class Layer(nn.Module):
 
     @property
     def trainable_weights(self) -> List[nn.Parameter]:
-        '''The list of trainable variables (parameters) of the module.
+        """The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
         Notes:
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
-        '''
+        """
         return [x for x in self.parameters() if x.requires_grad]
 
     @property
     def non_trainable_weights(self) -> List[nn.Parameter]:
-        '''
+        """
         The list of trainable variables (parameters) of the module.Parameters of this module and all its submodules are included.
         Notes:
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
-        '''
+        """
         return [x for x in self.parameters() if x.requires_grad==False]
 
     @property
     def weights(self):
-        '''The list of all variables (parameters) of the module.Parameters of this module and all its submodules are included.'''
+        """The list of all variables (parameters) of the module.Parameters of this module and all its submodules are included."""
         return list(self.parameters())
 
     def get_weights(self):
-        '''The list of all numpy variables ndarray equivelent of the module.Parameters of this module and all its submodules are included.'''
+        """The list of all numpy variables ndarray equivelent of the module.Parameters of this module and all its submodules are included."""
         return [p.numpy() for p in list(self.parameters())]
 
     def set_weights(self, weights):
@@ -315,13 +315,13 @@ class Layer(nn.Module):
 
     @property
     def input_shape(self):
-        '''Shape of input tensor',not including the batch axis.'''
+        """Shape of input tensor',not including the batch axis."""
         return self._input_shape
 
 
     @input_shape.setter
     def input_shape(self, value):
-        ''' Setting the input_shape, means the layer get shape information and start to do the shape inferrence '''
+        """ Setting the input_shape, means the layer get shape information and start to do the shape inferrence """
         if isinstance(value, (list,tuple)) and len(value)>0:
             if isinstance(value[0], torch.Size):
                 value=to_tensor(to_numpy(list(value[0]))).int()
@@ -390,7 +390,7 @@ class Layer(nn.Module):
 
     @property
     def output(self):
-        '''
+        """
             Retrieves the output tensor(s) of a layer.
             for memory saving issue, we don'tb prefer to keep every input/output
             tensor in every layer.You should set self.keep.output flag to True, and then
@@ -398,7 +398,7 @@ class Layer(nn.Module):
         Returns
             Output tensor or list of output tensors.
 
-        '''
+        """
         if self.keep_output==False:
             raise ValueError('Layer {0} has not set self.keep.output  to True, cannot access output '.format(self.name))
         return list(self._output_tensor) if isinstance(self._output_tensor,tuple) else self._output_tensor
@@ -608,14 +608,14 @@ class Sequential(Layer):
         self.to(self.device)
 
     def build(self, input_shape):
-        '''
+        """
 
         Args:
             input_shape (torch.Size, tensor, list(int), tuple(int)): The input_shape information, not including batch axis.
 
         Returns:
 
-        '''
+        """
         if self._built==False and len(self._modules)>0:
             self.__getitem__(0).input_shape=self.input_shape
             self._built=True
@@ -714,7 +714,7 @@ class ModuleList(Layer):
     modules it contains are properly registered, and will be visible by all
     :class:`~torch.nn.Module` methods.
 
-    Arguments:
+    Args:
         modules (iterable, optional): an iterable of modules to add
 
     Example::
@@ -790,7 +790,7 @@ class ModuleList(Layer):
     def insert(self, index, module):
         r"""Insert a given module before a given index in the list.
 
-        Arguments:
+        Args:
             index (int): index to insert.
             module (nn.Module): module to insert
         """
@@ -801,7 +801,7 @@ class ModuleList(Layer):
     def append(self, module):
         r"""Appends a given module to the end of the list.
 
-        Arguments:
+        Args:
             module (nn.Module): module to append
         """
         self.add_module(str(len(self)), module)
@@ -810,7 +810,7 @@ class ModuleList(Layer):
     def extend(self, modules):
         r"""Appends modules from a Python iterable to the end of the list.
 
-        Arguments:
+        Args:
             modules (iterable): iterable of modules to append
         """
         if not isinstance(modules, container_abcs.Iterable):
@@ -1074,7 +1074,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
 
 
 def normalize_padding(padding, rank):
-    '''
+    """
     normalized format of padding should have length equal to rank+2
     And the order should follow the order of dimension
     ex. Conv2d (rank=2) it's normalized format length:2+2  ==>(left, right,top bottom)
@@ -1090,7 +1090,7 @@ def normalize_padding(padding, rank):
     (1, 0, 1, 0)
     >>> normalize_padding((1,0),2)
     (0, 0, 1, 1)
-    '''
+    """
     if padding is None:
         padding=(0,)*(2*rank)
     elif isinstance(padding,int):
@@ -1152,9 +1152,9 @@ import torch
 class ModelSummary(object):
 
     def __init__(self, model, mode='full'):
-        '''
+        """
         Generates summaries of model layers and dimensions.
-        '''
+        """
         self.model = model
         self.mode = mode
         self.in_sizes = []
@@ -1180,7 +1180,7 @@ class ModelSummary(object):
         return list(mods)
 
     def get_variable_sizes(self):
-        '''Run sample input through each layer to get output sizes'''
+        """Run sample input through each layer to get output sizes"""
         mods = self.named_modules()
         in_sizes = []
         out_sizes = []
@@ -1226,7 +1226,7 @@ class ModelSummary(object):
         return
 
     def get_layer_names(self):
-        '''Collect Layer Names'''
+        """Collect Layer Names"""
         mods = self.named_modules()
         names = []
         layers = []
@@ -1241,7 +1241,7 @@ class ModelSummary(object):
         return
 
     def get_parameter_sizes(self):
-        '''Get sizes of all parameters in `model`'''
+        """Get sizes of all parameters in `model`"""
         mods = self.named_modules()
         sizes = []
         for _, m in mods:
@@ -1255,7 +1255,7 @@ class ModelSummary(object):
         return
 
     def get_parameter_nums(self):
-        '''Get number of parameters in each layer'''
+        """Get number of parameters in each layer"""
         param_nums = []
         for mod in self.param_sizes:
             all_params = 0
@@ -1266,11 +1266,11 @@ class ModelSummary(object):
         return
 
     def make_summary(self):
-        '''
+        """
         Makes a summary listing with:
 
         Layer Name, Layer Type, Input Size, Output Size, Number of Parameters
-        '''
+        """
 
         cols = ['Name', 'Type', 'Params']
         if self.model.example_input_array is not None:

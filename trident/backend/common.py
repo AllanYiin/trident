@@ -178,6 +178,15 @@ def _initialize_session():
     """
     global _SESSION
     _SESSION.trident_dir = _get_trident_dir()
+    _SESSION.backend ='pytorch'
+
+    _SESSION.image_backend ='pillow'
+    _SESSION.epoch_equivalent =200
+    _SESSION.floatx = 'float32'
+    _SESSION.epsilon = 1e-8
+    _SESSION.plateform = get_plateform()
+    _SESSION.numpy_print_format = '{0:.4e}'
+
     _config_path = os.path.expanduser(os.path.join(_SESSION.trident_dir, 'trident.json'))
     if os.path.exists(_config_path):
         _config = {}
@@ -195,16 +204,11 @@ def _initialize_session():
         except ValueError as ve:
             print(ve)
 
-    _SESSION.backend =if_else(_SESSION.backend, 'pytorch')
-    _SESSION.image_backend =if_else(_SESSION.image_backend, 'pillow')
-    _SESSION.epoch_equivalent =if_else(_SESSION.epoch_equivalent,200)
-    _SESSION.floatx =if_else(_SESSION.floatx,'float32')
-    _SESSION.epsilon =if_else(_SESSION.epsilon, 1e-8)
-    _SESSION.plateform=get_plateform()
-    _SESSION.numpy_print_format =if_else(_SESSION.numpy_print_format, '{0:.4e}')
+    if 'TRIDENT_BACKEND' in os.environ:
+        if _SESSION.backend != os.environ['TRIDENT_BACKEND']:
+            _SESSION.backend = os.environ['TRIDENT_BACKEND']
     np.set_printoptions(formatter={'float_kind': lambda x: _SESSION.numpy_print_format.format(x)})
     _SESSION.device = None
-
 
 _initialize_session()
 
@@ -267,7 +271,7 @@ def floatx():
     """Returns the default float type, as a string.
     "e.g. 'float16', 'float32', 'float64').
 
-    # Returns
+ Returns
         String, the current default float type.
 
     # Example
@@ -403,45 +407,25 @@ def get_signature(fn,name=None):
 
     signature = Signature()
     func_code = fn.__code__
+    annotations = fn.__annotations__
+    sig=inspect.signature(fn)
+    paras=list(sig.parameters.items())
+
+    if sig.return_annotation is not  inspect._empty:
+        returns=sig.return_annotation.split(',')
+        for r in returns:
+            signature.outputs[r]=None
+
+
+    for p in paras:
+        if p[0] not in ['kwargs','self','args'] and p[1].default is inspect._empty:
+            signature.inputs[p[0]]=None
+
     if name is not None:
         signature.name=name
     else:
         signature.name=func_code.co_name
-    pos_count = func_code.co_argcount
-    arg_names = list(func_code.co_varnames)
-    if 'self' in arg_names:
-        arg_names.remove('self')
-    if 'kwargs' in arg_names:
-        idx=arg_names.index('kwargs' )
-        arg_names.remove('kwargs')
-        if idx<func_code.co_argcount:
-            pos_count-=1
 
-
-    keyword_only_count = func_code.co_kwonlyargcount
-    keyword_only = arg_names[pos_count:(pos_count + keyword_only_count)]
-    annotations = fn.__annotations__
-    defaults = fn.__defaults__
-    kwdefaults = fn.__kwdefaults__
-    defaults = fn.__defaults__
-    if defaults:
-        pos_default_count = len(defaults)
-    else:
-        pos_default_count = 0
-    non_default_count = pos_count - pos_default_count
-    positional = tuple(arg_names[:non_default_count])
-    for p in positional:
-        signature.inputs[p]=None if p not in annotations else annotations[p]
-    last_tuple=func_code.co_consts[-1]
-    if  pos_count-len(func_code.co_varnames)==0 :
-        output=[]
-    elif last_tuple is None or not isinstance(last_tuple,tuple) :
-        output = tuple(arg_names[pos_count:pos_count+1])
-    else:
-        output = tuple(arg_names[pos_count:pos_count +len(last_tuple)])
-
-    for p in output:
-        signature.outputs[p]=None
     return signature
 
 
@@ -457,9 +441,10 @@ def to_onehot(label, classes):
 
 
 def to_list(x):
-    '''
+    """
      Convert anything to a list.
      if input is a tensor or a ndarray, to_list only unfold the first dimention , its different to the numpy behavior.
+
     Args:
         x ():
 
@@ -484,7 +469,7 @@ def to_list(x):
         >>> to_list({'x':3,'y':5})
         [('x', 3), ('y', 5)]
 
-    '''
+    """
     if x is None:
         return None
     elif isinstance(x, list):
@@ -655,6 +640,7 @@ def get_time_suffix():
 def get_function(fn_name, module_paths=None):
     """
     Returns the function based on function name.
+
     Args:
         fn_name (str): Name or full path to the class.
         module_paths (list): Paths to candidate modules to search for the
@@ -664,9 +650,10 @@ def get_function(fn_name, module_paths=None):
 
     Returns:
         The target function.
+
     Raises:
-            ValueError: If class is not found based on :attr:`class_name` and
-                :attr:`module_paths`.
+        ValueError: If class is not found based on :attr:`class_name` and
+            :attr:`module_paths`.
 
     """
     if callable(fn_name):
@@ -685,6 +672,7 @@ def get_function(fn_name, module_paths=None):
 def get_class(class_name, module_paths=None):
     """
     Returns the class based on class name.
+
     Args:
         class_name (str): Name or full path to the class.
         module_paths (list): Paths to candidate modules to search for the
@@ -694,9 +682,11 @@ def get_class(class_name, module_paths=None):
 
     Returns:
         The target class.
+
     Raises:
-            ValueError: If class is not found based on :attr:`class_name` and
-                :attr:`module_paths`.
+        ValueError: If class is not found based on :attr:`class_name` and
+            :attr:`module_paths`.
+
     """
     class_ = locate(class_name)
     if (class_ is None) and (module_paths is not None):
@@ -1069,13 +1059,13 @@ def update_signature(fn: callable, args: list):
 
 
 def get_gpu_memory_map():
-    '''
+    """
 
     Returns:
         usage: dict
         Keys are device ids as integers.
         Values are memory usage as integers in MB.
-    '''
+    """
     pathes = [p for p in os.environ['path'].split(';') if 'NVIDIA' in p and 'Corporation' in p]
     nv_path = 'C:/Program Files/NVIDIA Corporation/'
     sp = subprocess.Popen(['{0}/NVSMI/nvidia-smi'.format(nv_path), '-q'], encoding='utf-8-sig', stdout=subprocess.PIPE,

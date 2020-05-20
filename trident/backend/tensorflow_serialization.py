@@ -133,7 +133,7 @@ def register_package(priority, tagger, deserializer):
 
 
 def check_module_version_greater_or_equal(module, req_version_tuple, error_if_malformed=True):
-    '''
+    """
     Check if a module's version satisfies requirements
 
     Usually, a module's version string will be like 'x.y.z', which would be represented
@@ -148,7 +148,7 @@ def check_module_version_greater_or_equal(module, req_version_tuple, error_if_ma
 
     Returns:
         requirement_is_met: bool
-    '''
+    """
     try:
         version_strs = module.__version__.split('.')
         # Cast module version fields to match the types of the required version
@@ -342,13 +342,13 @@ def _check_seekable(f):
         raise_err_msg(["seek", "tell"], e)
 
 def _check_dill_version(pickle_module):
-    '''Checks if using dill as the pickle module, and if so, checks if it is the correct version.
+    """Checks if using dill as the pickle module, and if so, checks if it is the correct version.
     If dill version is lower than 0.3.1, a ValueError is raised.
 
     Args:
         pickle_module: module used for pickling metadata and objects
 
-    '''
+    """
     if pickle_module.__name__ == 'dill':
         required_dill_version = (0, 3, 1)
         if not check_module_version_greater_or_equal(pickle_module, required_dill_version, False):

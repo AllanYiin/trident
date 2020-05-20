@@ -28,8 +28,8 @@ __all__ = ['is_tensor', 'to_numpy', 'to_tensor', 'ndim','cast', 'int_shape', 'is
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax', 'log_softmax', 'bert_gelu',
-           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'meshgrid', 'reshape',
+           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'softmax', 'log_softmax', 'gelu',
+           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like','eye_like','arange' ,'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix', 'shuffle',
            'random_choice', 'get_rotation_matrix2d', 'warp_affine']
 
@@ -90,7 +90,7 @@ def is_tensor_like(x):
 
 
 def to_numpy(*x) -> np.ndarray:
-    '''
+    """
     Convert whatever to numpy array
 
     Args
@@ -108,7 +108,7 @@ def to_numpy(*x) -> np.ndarray:
         array([[2, 4],
            [1, 3]])
 
-    '''
+    """
     x = unpack_singleton(x)
     if isinstance(x, np.ndarray):
         return x
@@ -127,7 +127,7 @@ def to_numpy(*x) -> np.ndarray:
 
 
 def to_tensor(x, dtype=torch.float32, requires_grad=None) -> torch.Tensor:
-    ''''
+    """'
      Convert input  to a tensor as possible
 
     Args:
@@ -151,7 +151,7 @@ def to_tensor(x, dtype=torch.float32, requires_grad=None) -> torch.Tensor:
         >>> to_tensor(np.arange(0,5))
         tensor([0, 1, 2, 3, 4])
 
-    '''
+    """
     if isinstance(x, torch.Tensor):
         x = x.clone().detach()
         x = x.to(_get_device())
@@ -373,7 +373,7 @@ def any_abnormal_number(x):
 
 
 def less(left: torch.Tensor, right: torch.Tensor):
-    '''
+    """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
@@ -388,13 +388,13 @@ def less(left: torch.Tensor, right: torch.Tensor):
        >>> less(to_tensor([-1,0,1]), 0)
        tensor([1., 0., 0.])
 
-    '''
+    """
 
     return left.lt(right).float()
 
 
 def equal(left: torch.Tensor, right: torch.Tensor):
-    '''
+    """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
         left: left side tensor
@@ -408,12 +408,12 @@ def equal(left: torch.Tensor, right: torch.Tensor):
         >>> equal(to_tensor([-1,0,1]), 1)
         tensor([0., 0., 1.])
 
-    '''
+    """
     return left.eq(right).float()
 
 
 def greater(left: torch.Tensor, right: torch.Tensor):
-    '''
+    """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
         left: left side tensor
@@ -427,12 +427,12 @@ def greater(left: torch.Tensor, right: torch.Tensor):
         >>> greater(to_tensor([-1,0,1]), 0)
         tensor([0., 0., 1.])
 
-    '''
+    """
     return left.gt(right).float()
 
 
 def greater_equal(left: torch.Tensor, right: torch.Tensor):
-    '''
+    """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
@@ -447,12 +447,12 @@ def greater_equal(left: torch.Tensor, right: torch.Tensor):
         >>> greater_equal(to_tensor([-1,0,1]), 0)
         tensor([0., 1., 1.])
 
-    '''
+    """
     return left.ge(right).float()
 
 
 def not_equal(left: torch.Tensor, right: torch.Tensor):
-    '''
+    """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
@@ -467,12 +467,12 @@ def not_equal(left: torch.Tensor, right: torch.Tensor):
         >>> not_equal(to_tensor([-1,0,1]), 0)
         tensor([1., 0., 1.])
 
-    '''
+    """
     return 1 - (left.eq(right).float())
 
 
 def less_equal(left: torch.Tensor, right: torch.Tensor):
-    '''
+    """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
@@ -487,7 +487,7 @@ def less_equal(left: torch.Tensor, right: torch.Tensor):
         >>> less_equal(to_tensor([-1,0,1]), 0)
         tensor([1., 1., 0.])
 
-    '''
+    """
     return left.le(right).float()
 
 
@@ -573,7 +573,7 @@ def ceil(x: (torch.Tensor, float)):
 
 
 def round(x: (torch.Tensor, float), digit: int = 0):
-    '''
+    """
 
     Args:
         x ():
@@ -589,7 +589,7 @@ def round(x: (torch.Tensor, float), digit: int = 0):
      >>> round(to_tensor([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
      tensor([[ 0., 10., 10.,  0., 10.]])
 
-    '''
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     if digit != 0:
@@ -640,7 +640,7 @@ def clip(x: torch.Tensor, min=-np.inf, max=np.inf):
 
 
 def sin(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise sine
     Args:
         x (tensor):input tensor
@@ -652,12 +652,12 @@ def sin(x: torch.Tensor):
         tensor([[ 0.8415,  0.4794],
                 [-0.2474, -0.6816]])
 
-    '''
+    """
     return torch.sin(x.float())
 
 
 def cos(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise cosine
     Args:
         x (tensor):input tensor
@@ -669,12 +669,12 @@ def cos(x: torch.Tensor):
         tensor([[0.5403, 0.8776],
                 [0.9689, 0.7317]])
 
-    '''
+    """
     return torch.cos(x.float())
 
 
 def tan(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise tan
 
     Args:
@@ -687,12 +687,12 @@ def tan(x: torch.Tensor):
         tensor([[ 1.5574,  0.5463],
                 [-0.2553, -0.9316]])
 
-    '''
+    """
     return torch.tan(x.float())
 
 
 def asin(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise arcsin (inverse sine)
 
     Args:
@@ -705,12 +705,12 @@ def asin(x: torch.Tensor):
         tensor([[ 1.5708,  0.5236],
                 [-0.2527, -0.8481]])
 
-    '''
+    """
     return torch.asin(x.float())
 
 
 def acos(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise arccos (inverse cosine)
 
     Args:
@@ -723,12 +723,12 @@ def acos(x: torch.Tensor):
         tensor([[0.0000, 1.0472],
                 [1.8235, 2.4189]])
 
-    '''
+    """
     return torch.acos(x.float())
 
 
 def atan(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise arctan (inverse tan)
 
     Args:
@@ -740,12 +740,12 @@ def atan(x: torch.Tensor):
         >>> atan(to_tensor([-1, 0, 1])).cpu()
         tensor([-0.7854,  0.0000,  0.7854])
 
-    '''
+    """
     return torch.atan(x.float())
 
 
 def sinh(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise sinh
 
     Args:
@@ -758,12 +758,12 @@ def sinh(x: torch.Tensor):
         tensor([[ 1.1752,  0.5211],
                 [-0.2526, -0.8223]])
 
-    '''
+    """
     return torch.sinh(x.float())
 
 
 def cosh(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise cosh
 
     Args:
@@ -776,12 +776,12 @@ def cosh(x: torch.Tensor):
         tensor([[1.5431, 1.1276],
                 [1.0314, 1.2947]])
 
-    '''
+    """
     return torch.cosh(x.float())
 
 
 def tanh(x: torch.Tensor):
-    '''
+    """
     Computes the element-wise tanh
 
     Args:
@@ -794,7 +794,7 @@ def tanh(x: torch.Tensor):
         tensor([[ 0.7616,  0.4621],
                 [-0.2449, -0.6351]])
 
-    '''
+    """
     return torch.tanh(x.float())
 
 
@@ -803,7 +803,7 @@ def tanh(x: torch.Tensor):
 ###########################
 
 def element_times(left, right):
-    '''
+    """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
 
@@ -822,12 +822,12 @@ def element_times(left, right):
     >>> element_times(to_tensor([[5., 10.], [15., 30.]]), to_tensor([[1., 2.], [3.,1.]]))
     tensor([[ 5., 20.],
             [45., 30.]])
-    '''
+    """
     return left * right
 
 
 def element_max(left, right):
-    '''
+    """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
 
@@ -845,12 +845,12 @@ def element_max(left, right):
     tensor([20., 20., 20., 30.])
     >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
     tensor([10., 10., 15., 30.])
-    '''
+    """
     return torch.max(left, right)
 
 
 def element_min(left, right):
-    '''
+    """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
 
@@ -868,12 +868,12 @@ def element_min(left, right):
     tensor([2., 2., 2., 2.])
     >>> element_min(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
     tensor([1., 2., 1., 2.])
-    '''
+    """
     return torch.min(left, right)
 
 
 def element_divide(left, right):
-    '''
+    """
     The output of this operation is the element-wise divide of the two  input
     tensors. It supports broadcasting.
 
@@ -891,7 +891,7 @@ def element_divide(left, right):
     tensor([ 2.5000,  5.0000,  7.5000, 15.0000])
     >>> element_divide(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
     tensor([ 5.,  5., 15., 15.])
-    '''
+    """
     return torch.true_divide(left, right)
 
 
@@ -904,7 +904,7 @@ def element_cosine_distance(v1, v2, axis=-1):
 
 
 def where(flag, value_if_true, value_if_false):
-    '''
+    """
     return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
     If ``flag`` != 0 ``value_if_true`` is returned, otherwise ``value_if_false``.
     Behaves analogously to numpy.where(...).
@@ -920,7 +920,7 @@ def where(flag, value_if_true, value_if_false):
     >>> x=to_tensor([0.1, 0.9, 0.8, 0.4, 0.5])
     >>> where(x>0.5, x, zeros_like(x))
     tensor([0.0000, 0.9000, 0.8000, 0.0000, 0.0000])
-    '''
+    """
     return torch.where(flag, value_if_true, value_if_false)
 
 
@@ -1151,8 +1151,58 @@ def reduce_prod(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
 
 mean = reduce_mean
 sum = reduce_sum
-max = reduce_max
-min = reduce_min
+
+
+
+def max(*args,**kwargs):
+    """
+
+    Args:
+        *args ():
+
+    Returns:
+
+    """
+    if len(args)>1 and all([str(a).isnumeric() for a in args]):
+        return builtins.max(*args)
+    elif len(args)>1 :
+        new_args=[to_tensor(a) for a in args]
+        return torch.max(*new_args)
+    elif len(args) ==1 and  isinstance(args[0],np.ndarray):
+        axis=kwargs.get('axis',kwargs.get('dim',None))
+        keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
+        return np.max(args[0],axis=axis,keepdims=keepdims)
+    elif len(args) ==1 and is_tensor(args[0]):
+        axis = kwargs.get('axis', kwargs.get('dim', None))
+        keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
+        return reduce_max(args[0], axis=axis, keepdims=keepdims)
+
+
+def min(*args,**kwargs):
+    """
+
+    Args:
+        *args ():
+
+    Returns:
+
+    """
+    if len(args)>1 and all([str(a).isnumeric() for a in args]):
+        return builtins.min(*args)
+    elif len(args)>1 :
+        new_args=[to_tensor(a) for a in args]
+        return torch.min(*new_args)
+    elif len(args) ==1 and  isinstance(args[0],np.ndarray):
+        axis=kwargs.get('axis',kwargs.get('dim',None))
+        keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
+        return np.min(args[0],axis=axis,keepdims=keepdims)
+    elif len(args) ==1 and is_tensor(args[0]):
+        axis = kwargs.get('axis', kwargs.get('dim', None))
+        keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
+        return reduce_min(args[0], axis=axis, keepdims=keepdims)
+
+
+
 
 
 ############################
@@ -1161,67 +1211,114 @@ min = reduce_min
 
 
 def identity(x):
+    """Identity activation Layer
+    A placeholder identity operator that is argument-insensitive.
+    Examples:
+        >>> identity(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        tensor([-3.0, -1.0, 0.0, 2.0])
+
+    """
     return x
 
 
 def relu(x):
-    '''relu activation function
-    '''
+    """Rectified Linear Unit activation function.
+      With default values, it returns element-wise `max(x, 0)`.
+      Otherwise, it follows:
+      ```
+        f(x) = max_value if x >= max_value
+        f(x) = x if threshold <= x < max_value
+        f(x) = negative_slope * (x - threshold) otherwise
+      ```
+    """
     return torch.relu(x)
 
 
 def relu6(x):
-    '''relu6 activation function
-    '''
+    """Rectified Linear Unit  6 activation function.
+      With default values, it returns element-wise `min(max(x, 0)`,6).
+      Otherwise, it follows:
+      ```
+        f(x) = 6 if x >= 6
+        f(x) = x if threshold <= x < 6
+        f(x) = negative_slope * (x - threshold) otherwise
+      ```
+    """
     return F.relu6(x)
 
 
 def leaky_relu(x, slope=0.2):
-    '''leaky_relu activation function
-    '''
+    """Leaky version of a Rectified Linear Unit.
+        It allows a small gradient when the unit is not active:
+        ```
+        f(x) = alpha * x if x < 0
+        f(x) = x if x >= 0
+        ```
+    """
     return F.leaky_relu(x, negative_slope=slope)
 
 
 def leaky_relu6(x, slope=0.2):
-    '''leaky_relu6 activation function
-    '''
+    """Leaky version of a Rectified Linear Unit.6
+          It allows a small gradient when the unit is not active:
+          ```
+            f(x) = alpha * x if x < 0
+            f(x) = x if  6>=x >= 0
+            f(x) = 6 if  x > 6
+          ```
+    """
     return torch.clamp(F.leaky_relu(x, negative_slope=slope), -6, 6)
 
 
 def smooth_relu(x):
-    '''smooth_relu activation function
-    '''
+    """smooth_relu activation function
+    """
     return torch.log(1 + torch.exp(x))
 
 
-'''p_relu activation function 
-'''
 
 
 def p_relu(x, weight):
-    '''
+    """Parametric Rectified Linear Unit.
+      It follows:
+      ```
+        f(x) = alpha * x for x < 0
+        f(x) = x for x >= 0
+      ```
+      where `alpha` is a learned parameters , it's a 1-D array, the length equal 1 or input_filters.
 
     Args:
-        x ():
-        weight ():
+        num_parameters:(1 or None)  if None num_parameters will equal to input_filters .
+        init (float): initial value of the parameters
 
-    Returns:
-
-    '''
+    """
     return torch.prelu(x, weight=weight)
 
 
 def sigmoid(x):
-    '''softmax activation function
-    '''
+    """softmax activation function
+    """
     return torch.sigmoid(x)
 
 
-'''swish activation function 
-'''
 
 
 def swish(x):
+    """Self-Gated Activation Function.
+      it follows:
+      ```
+        f(x) =  x * sigmoid(x)
+
+      ```
+    References:
+        Swish: a Self-Gated Activation Function
+        https://arxiv.org/abs/1710.05941v1
+
+    Examples:
+        >>> swish(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00])
+
+    """
     return x * sigmoid(x)
 
 
@@ -1230,6 +1327,22 @@ def hard_sigmoid(x, inplace=False):
 
 
 def hard_swish(x, inplace=False):
+    """Hard swish Activation Function.
+      Memory saving version of swish
+      it follows:
+      ```
+        f(x) =  x * hard_sigmoid(x)
+
+      ```
+    References:
+        Searching for MobileNetV3
+        https://arxiv.org/abs/1905.02244
+
+    Examples:
+        >>> hard_swish(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
+        tensor([-0.0000, -0.3333,  0.0000,  1.6667])
+
+    """
     return x * hard_sigmoid(x, inplace)
 
 
@@ -1238,7 +1351,7 @@ def hard_tanh(x):
 
 
 def selu(x):
-    '''
+    """
     selu activation function
     Scaled exponential linear unit operation. Computes the element-wise exponential linear
     of ``x``: ``scale * x`` for ``x >= 0`` and ``x``: ``scale * alpha * (exp(x)-1)`` otherwise.
@@ -1255,11 +1368,18 @@ def selu(x):
     Example:
         >>> selu(to_tensor([[-1, -0.5, 0, 1, 2]]))
         tensor([[-1.1113, -0.6918,  0.0000,  1.0507,  2.1014]])
-    '''
+    """
     return torch.selu(x)
 
 
 def elu(x):
+    """Exponential Linear Unit.
+         It follows:
+         ```
+           f(x) =  alpha * (exp(x) - 1.) for x < 0
+           f(x) = x for x >= 0
+         ```
+    """
     return F.elu(x)
 
 
@@ -1280,11 +1400,28 @@ def logit(x):
 
 
 def log_log(x):
+    """LogLog Activation Function
+          it follows:
+          ```
+            f(x) =  1 - exp(-exp(x))
+
+          ```
+        References:
+            "Complementary Log-Log and Probit: Activation Functions Implemented in Artificial Neural Networks"
+            https://ieeexplore.ieee.org/document/4626755/
+
+        Examples:
+            >>> LogLog()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+            tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
+
+    """
     return 1 - torch.exp(-torch.exp(x))
 
 
+
+
 def mish(x):
-    '''
+    """
         mish activation function
         Mish - "Mish: A Self Regularized Non-Monotonic Neural Activation Function"
         https://arxiv.org/abs/1908.08681v1
@@ -1293,12 +1430,12 @@ def mish(x):
 
     Returns:
 
-    '''
+    """
     return x * (torch.tanh(F.softplus(x)))
 
 
 def softmax(x, axis=1):
-    '''
+    """
     Computes the gradient of :math:`f(z)=\log\sum_i\exp(z_i)` at ``z = x``. Concretely,
     :math:`\mathrm{softmax}(x)=\left[\frac{\exp(x_1)}{\sum_i\exp(x_i)}\quad\frac{\exp(x_1)}{\sum_i\exp(
     x_i)}\quad\ldots\quad\frac{\exp(x_1)}{\sum_i\exp(x_i)}\right]`
@@ -1330,14 +1467,14 @@ def softmax(x, axis=1):
     tensor([[[0.1192, 0.0180],
              [0.8808, 0.9820]]])
 
-    '''
+    """
     if x.ndim == 1:
         return x.exp().true_divide(x.exp().sum().clamp(min=epsilon()))
     return torch.softmax(x.float(), dim=axis)
 
 
 def log_softmax(x, axis=1):
-    '''
+    """
     Computes the logsoftmax normalized values of x. That is, y = x - log(reduce_sum(exp(x), axis))
     (the implementation uses an equivalent formula for numerical stability).
     It is also possible to use `x - reduce_log_sum_exp(x, axis)` instead of log_softmax:
@@ -1348,11 +1485,29 @@ def log_softmax(x, axis=1):
 
     Returns:
         :output tensor
-    '''
+    """
     return x - reduce_logsumexp(x)
 
 
-def bert_gelu(x):
+def gelu(x):
+    """
+    Gaussian Error Linear Unit.
+    it follows:
+        ```
+        f(x) =x∗Φ(x)
+        where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
+
+        ```
+
+    References:
+        Gaussian Error Linear Units (GELUs)
+        https://arxiv.org/abs/1606.08415
+
+    Examples:
+        >>> gelu(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
+
+    """
     return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 
@@ -1407,7 +1562,7 @@ def expand_dims(t: torch.Tensor, axis=0):
 
 
 def depth_to_space(x: torch.Tensor, block_size=2):
-    '''
+    """
     Rearranges elements in the input tensor from the depth dimension into spatial blocks.
     The equivalent to Pixel-Shuffle
 
@@ -1457,7 +1612,7 @@ def depth_to_space(x: torch.Tensor, block_size=2):
              [4., 5., 4., 5., 4., 5.],
              [6., 7., 6., 7., 6., 7.]]])
 
-    '''
+    """
     if ndim(x) not in (3, 4):
         raise ValueError('Input tensort length of shape should be 3 or 4 ')
     elif x.shape[-3] % (block_size * block_size) != 0:
@@ -1473,7 +1628,7 @@ def depth_to_space(x: torch.Tensor, block_size=2):
 
 
 def space_to_depth(x: torch.Tensor, block_size=2):
-    '''
+    """
     Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
 
     This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing
@@ -1518,7 +1673,7 @@ def space_to_depth(x: torch.Tensor, block_size=2):
              [7., 7., 7.]]])
     >>> print(arr.shape)
     torch.Size([8, 2, 3])
-    '''
+    """
     if ndim(x) not in (3, 4):
         raise ValueError('Input tensort length of shape should be 3 or 4 ')
     elif x.shape[-2] % block_size != 0 or x.shape[-1] % block_size != 0:
@@ -1559,7 +1714,7 @@ def zeros_like(a, dtype=torch.float32, requires_grad=False):
 
 
 def eye_like(a, dtype=torch.float32, requires_grad=False):
-    '''
+    """
     Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
     matrix,
      ``x`` must have exactly two axes (counting both dynamic and static axes).
@@ -1578,7 +1733,7 @@ def eye_like(a, dtype=torch.float32, requires_grad=False):
             [0., 1., 0., 0.],
             [0., 0., 1., 0.]])
 
-    '''
+    """
     if a.ndim == 2:
         return torch.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad).to(_get_device())
     else:
@@ -1586,7 +1741,7 @@ def eye_like(a, dtype=torch.float32, requires_grad=False):
 
 
 def one_hot(a, num_classes, axis=-1):
-    '''
+    """
     Create one hot tensor based on the input tensor
     Args:
         a: input tensor, the value must be positive integer and less than num_class
@@ -1602,7 +1757,7 @@ def one_hot(a, num_classes, axis=-1):
             [[0., 0., 0., 0.],
              [0., 0., 0., 0.]]])
 
-    '''
+    """
 
     one_hot_shape = list(a.size())
     flattend_a = a.view(-1)
@@ -1612,8 +1767,29 @@ def one_hot(a, num_classes, axis=-1):
     return target
 
 
+def arange( *args,dtype=torch.int32, requires_grad=False):
+    """
+
+    Args:
+        *args (int): the start, end, step
+        dtype (dtype): dtype of the tensor
+        requires_grad (bool): wheather need require gradient.
+
+    Returns:
+
+    """
+    if len(args)==1:
+        return torch.arange(end=args[0],dtype=dtype,requires_grad=requires_grad).to(_get_device())
+    elif len(args) == 2:
+        return torch.arange(start=args[0],end=args[1],dtype=dtype,requires_grad=requires_grad).to(_get_device())
+    elif len(args) == 3:
+        return torch.arange(start=args[0],end=args[1],step=args[2],dtype=dtype,requires_grad=requires_grad).to(_get_device())
+    else:
+        raise ValueError('only maximum  3 args in arange function ')
+
+
 def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
-    '''Return meshgrid in range x & y.
+    """Return meshgrid in range x & y.
 
     Args:
       requires_grad ():
@@ -1655,7 +1831,7 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
              [1.0000, 1.0000]]])
     >>> grid1.shape
     torch.Size([3, 2, 2])
-    '''
+    """
     xs = torch.linspace(0, int(x - 1), int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
     ys = torch.linspace(0, int(y - 1), int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
     if normalized_coordinates:
