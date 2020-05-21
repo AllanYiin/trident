@@ -28,12 +28,113 @@ from trident.backend.optimizer import OptimizerBase
 
 __all__ = ['Adam','SGD','LBFGS','Adadelta','Adagrad','RMSprop','RAdam','PlainRAdam','AdamW','Lookahead','Ranger','get_optimizer']
 
+
+def _filter_grads(grads_and_vars, gradient_centralization=None):
+    """Filter out iterable with grad equal to None or abnormal grad and do the gradient centralization."""
+    grads_and_vars = tuple(grads_and_vars)
+    if not grads_and_vars:
+        return grads_and_vars
+    filtered = []
+    vars_with_empty_grads = []
+    for grad, var in grads_and_vars:
+        if grad is None or any_abnormal_number(grad) or var._trainable == False:
+            vars_with_empty_grads.append(var)
+        else:
+            if gradient_centralization is None:
+                filtered.append((grad, var))
+            elif gradient_centralization == 'gc':
+                if len(int_shape(grad)) > 1:
+                    grad.add_(-reduce_mean(grad, axis=list(range(1, len(int_shape(grad)))), keepdims=True))
+                filtered.append((grad, var))
+            elif gradient_centralization == 'gcc':
+                if len(int_shape(grad)) > 3:
+                    grad.add_(-reduce_mean(grad, axis=list(range(1, len(int_shape(grad)))), keepdims=True))
+                filtered.append((grad, var))
+
+    filtered = tuple(filtered)
+    if not filtered:
+        raise ValueError("No gradients provided for any variable: %s." % ([v.name for _, v in grads_and_vars],))
+
+    return filtered
+
+
 class Adam(optim.Adam, OptimizerBase):
+    """Implements Adam algorithm.
+
+    It has been proposed in `Adam: A Method for Stochastic Optimization`_.
+
+    Args:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float, optional): learning rate (default: 1e-3)
+        betas (Tuple[float, float], optional): coefficients used for computing
+            running averages of gradient and its square (default: (0.9, 0.999))
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-8)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
+            algorithm from the paper `On the Convergence of Adam and Beyond`_
+            (default: False)
+
+    References
+        .. _Adam\: A Method for Stochastic Optimization:
+            https://arxiv.org/abs/1412.6980
+        .. _On the Convergence of Adam and Beyond:
+            https://openreview.net/forum?id=ryQu7f-RZ
+
+    """
     pass
 
 
 
 class SGD(optim.SGD, OptimizerBase):
+    r"""Implements stochastic gradient descent (optionally with momentum).
+
+    Nesterov momentum is based on the formula from
+    `On the importance of initialization and momentum in deep learning`__.
+
+    Args:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float): learning rate
+        momentum (float, optional): momentum factor (default: 0)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        dampening (float, optional): dampening for momentum (default: 0)
+        nesterov (bool, optional): enables Nesterov momentum (default: False)
+
+    Example:
+        >>> SGD(lr=0.1, momentum=0.9)
+
+
+    __ http://www.cs.toronto.edu/%7Ehinton/absps/momentum.pdf
+
+    .. note::
+        The implementation of SGD with Momentum/Nesterov subtly differs from
+        Sutskever et. al. and implementations in some other frameworks.
+
+        Considering the specific case of Momentum, the update can be written as
+
+        .. math::
+            \begin{aligned}
+                v_{t+1} & = \mu * v_{t} + g_{t+1}, \\
+                p_{t+1} & = p_{t} - \text{lr} * v_{t+1},
+            \end{aligned}
+
+        where :math:`p`, :math:`g`, :math:`v` and :math:`\mu` denote the
+        parameters, gradient, velocity, and momentum respectively.
+
+        This is in contrast to Sutskever et. al. and
+        other frameworks which employ an update of the form
+
+        .. math::
+            \begin{aligned}
+                v_{t+1} & = \mu * v_{t} + \text{lr} * g_{t+1}, \\
+                p_{t+1} & = p_{t} - v_{t+1}.
+            \end{aligned}
+
+        The Nesterov version is analogously modified.
+    """
+
     pass
 
 class LBFGS(get_class('LBFGS',['torch.optim']), OptimizerBase):
@@ -46,12 +147,90 @@ class Adagrad(get_class('Adagrad',['torch.optim']), OptimizerBase):
     pass
 
 class RMSprop(get_class('RMSprop',['torch.optim']), OptimizerBase):
+    r"""Implements RMSprop algorithm.
+
+    Proposed by G. Hinton in his
+    `course <http://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf>`_.
+
+    The centered version first appears in `Generating Sequences
+    With Recurrent Neural Networks <https://arxiv.org/pdf/1308.0850v5.pdf>`_.
+
+    The implementation here takes the square root of the gradient average before
+    adding epsilon (note that TensorFlow interchanges these two operations). The effective
+    learning rate is thus :math:`\alpha/(\sqrt{v} + \epsilon)` where :math:`\alpha`
+    is the scheduled learning rate and :math:`v` is the weighted moving average
+    of the squared gradient.
+
+    Args:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float, optional): learning rate (default: 1e-2)
+        momentum (float, optional): momentum factor (default: 0)
+        alpha (float, optional): smoothing constant (default: 0.99)
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-8)
+        centered (bool, optional) : if ``True``, compute the centered RMSProp,
+            the gradient is normalized by an estimation of its variance
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+
+    """
     pass
 
 
 
 class RAdam(Optimizer, OptimizerBase):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True):
+    """Variant of the Adam optimizer whose adaptive learning rate is rectified
+        so as to have a consistent variance.
+        It implements the Rectified Adam (a.k.a. RAdam) proposed by
+        Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
+        And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
+
+        Example of usage:
+        ```python
+        opt = tfa.optimizers.RectifiedAdam(lr=1e-3)
+        ```
+
+        Note: `amsgrad` is not described in the original paper. Use it with
+              caution.
+        RAdam is not a placement of the heuristic warmup, the settings should be
+        kept if warmup has already been employed and tuned in the baseline method.
+        You can enable warmup by setting `total_steps` and `warmup_proportion`:
+        ```python
+        opt = RAdam(lr=1e-3, betas=(0.9,0.999))
+
+        ```
+        In the above example, the learning rate will increase linearly
+        from 0 to `lr` in 1000 steps, then decrease linearly from `lr` to `min_lr`
+        in 9000 steps.
+        Lookahead, proposed by Michael R. Zhang et.al in the paper
+        [Lookahead Optimizer: k steps forward, 1 step back]
+        (https://arxiv.org/abs/1907.08610v1), can be integrated with RAdam,
+        which is announced by Less Wright and the new combined optimizer can also
+        be called "Ranger". The mechanism can be enabled by using the lookahead
+        wrapper. For example:
+
+        ```python
+
+        radam =RAdam()
+        ranger = Lookahead(radam)
+
+        ```
+        """
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0,N_sma_threshhold=5, degenerated_to_sgd=True):
+        """Construct a new RAdam optimizer.
+        Args:
+            params: trainable parameters from model
+
+            lr (float): The learning rate.
+            betas:  beta1 means the exponential decay rate for the 1st moment estimates.
+                beta_2 means he exponential decay rate for the 2nd moment estimates.
+            eps: A small constant for numerical stability.
+            weight_decay: A floating point value. Weight decay for each param.
+
+            N_sma_threshhold. A float value.
+                The threshold for simple mean average.
+
+        """
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -62,6 +241,7 @@ class RAdam(Optimizer, OptimizerBase):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
 
         self.degenerated_to_sgd = degenerated_to_sgd
+        self.N_sma_threshhold=N_sma_threshhold
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
             for param in params:
                 if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
@@ -72,6 +252,12 @@ class RAdam(Optimizer, OptimizerBase):
     def __setstate__(self, state):
         super(RAdam, self).__setstate__(state)
     def step(self, closure=None):
+        """Performs a single optimization step.
+
+        Args:
+            closure (callable): call for get loss backward
+
+        """
         loss = None
         if closure is not None:
             loss = closure()
@@ -113,7 +299,7 @@ class RAdam(Optimizer, OptimizerBase):
                     buffered[1] = N_sma
 
                     # more conservative since it's an approximated value
-                    if N_sma >= 5:
+                    if N_sma >= self.N_sma_threshhold:
                         step_size = math.sqrt(
                             (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                                         N_sma_max - 2)) / (1 - beta1 ** state['step'])
@@ -124,7 +310,7 @@ class RAdam(Optimizer, OptimizerBase):
                     buffered[2] = step_size
 
                 # more conservative since it's an approximated value
-                if N_sma >= 5:
+                if N_sma >= self.N_sma_threshhold:
                     if group['weight_decay'] != 0:
                         p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
@@ -158,7 +344,12 @@ class PlainRAdam(Optimizer, OptimizerBase):
         super(PlainRAdam, self).__setstate__(state)
 
     def step(self, closure=None):
+        """Performs a single optimization step.
 
+        Args:
+            closure (callable): call for get loss backward
+
+        """
         loss = None
         if closure is not None:
             loss = closure()
@@ -216,6 +407,24 @@ class PlainRAdam(Optimizer, OptimizerBase):
 
 
 class AdamW(Optimizer, OptimizerBase):
+    """Optimizer that implements the Adam algorithm with weight decay.
+
+    This is an implementation of the AdamW optimizer described in "Decoupled
+    Weight Decay Regularization" by Loshch ilov & Hutter
+    (https://arxiv.org/abs/1711.05101)
+    ([pdf])(https://arxiv.org/pdf/1711.05101.pdf).
+
+    It computes the update step of `tf.keras.optimizers.Adam` and additionally
+    decays the variable. Note that this is different from adding L2
+    regularization on the variables to the loss: it regularizes variables with
+    large gradients more than L2 regularization would, which was shown to yield
+    better training loss and generalization error in the paper above.
+    For further information see the documentation of the Adam Optimizer.
+
+    Example:
+        >>> AdamW(lr=0.001, betas=(0.9, 0.999))
+
+    """
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, warmup=0):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -233,6 +442,12 @@ class AdamW(Optimizer, OptimizerBase):
         super(AdamW, self).__setstate__(state)
 
     def step(self, closure=None):
+        """Performs a single optimization step.
+
+        Args:
+            closure (callable): call for get loss backward
+
+        """
         loss = None
         if closure is not None:
             loss = closure()
@@ -313,6 +528,12 @@ class Lookahead(Optimizer, OptimizerBase):
             self.update(group)
 
     def step(self, closure=None):
+        """Performs a single optimization step.
+
+        Args:
+            closure (callable): call for get loss backward
+
+        """
         loss = self.optimizer.step(closure)
         for group in self.param_groups:
             if group["counter"] == 0:
@@ -341,9 +562,9 @@ class Lookahead(Optimizer, OptimizerBase):
         self.optimizer.add_param_group(param_group)
 
 class Ranger(Optimizer, OptimizerBase):
-    '''
+    """
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
-    '''
+    """
     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95,0.999), eps=1e-5, weight_decay=0):
         #parameter checks
         if not 0.0 <= alpha <= 1.0:
@@ -399,12 +620,16 @@ class Ranger(Optimizer, OptimizerBase):
 
 
     def step(self, closure=None):
-        loss = None
-        #note - below is commented out b/c I have other work that passes back the loss as a float, and thus not a callable closure.
-        #Uncomment if you need to use the actual closure...
+        """Performs a single optimization step.
 
-        #if closure is not None:
-            #loss = closure()
+        Args:
+            closure (callable): call for get loss backward
+
+        """
+        loss = None
+
+        if closure is not None:
+            loss = closure()
 
         #Evaluate averages and grad, update param tensors
         for group in self.param_groups:
