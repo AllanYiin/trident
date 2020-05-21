@@ -37,7 +37,7 @@ class Sampler(object):
 class SequentialSampler(Sampler):
     r"""Samples elements sequentially, always in the same order.
 
-    Arguments:
+    Args:
         data_source (Dataset): dataset to sample from
     """
 
@@ -55,7 +55,7 @@ class RandomSampler(Sampler):
     r"""Samples elements randomly. If without replacement, then sample from a shuffled dataset.
     If with replacement, then user can specify ``num_samples`` to draw.
 
-    Arguments:
+    Args:
         data_source (Dataset): dataset to sample from
         num_samples (int): number of samples to draw, default=len(dataset)
         replacement (bool): samples are drawn with replacement if ``True``, default=False

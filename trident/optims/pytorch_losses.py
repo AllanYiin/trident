@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 from math import *
-
+import builtins
 import numpy as np
 import torch
 import torch.nn as nn
@@ -19,36 +19,60 @@ from trident.layers.pytorch_activations import sigmoid
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-__all__ = ['MSELoss', 'CrossEntropyLoss', 'NllLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
+__all__ = ['MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
            'ExponentialLoss','ItakuraSaitoLoss', 'make_onehot', 'MS_SSIMLoss', 'CrossEntropyLabelSmooth', 'mixup_criterion', 'DiceLoss',
-           'IouLoss', 'focal_loss_with_logits', 'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss',
-           'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
+           'IouLoss',  'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss',
+           'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss','_ClassificationLoss']
 
+
+
+def make_onehot(labels, classes,axis=1):
+    """
+
+    Args:
+        labels ():
+        classes ():
+        axis ():
+
+    Returns:
+
+    """
+    one_hot_shape = list(labels.size())
+    if axis==-1:
+        one_hot_shape.append(classes)
+    else:
+        one_hot_shape.insert(axis, classes)
+    one_hot = torch.zeros(tuple(one_hot_shape)).to(_device)
+    target = one_hot.scatter_(axis, labels.unsqueeze(axis).data, 1)
+    return target
 
 class _ClassificationLoss(Layer):
-    '''Calculate loss for classification task.
-
-    '''
+    """Calculate loss for  complex classification task."""
     def __init__(self,axis=1,loss_weights=None, from_logits=False, ignore_index=-100,cutoff=None ,label_smooth=False, reduction='mean',name=None,**kwargs):
-        '''
+        """
 
         Args:
             axis (int): the position where the classes is.
-            loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as number of classes.
+            loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+            number of classes.
             from_logits (bool): wheather the output tensor is normalized as a probability (total equal to 1)
             ignore_index (int or list of int):
-            cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number less than 1..
+            cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+            less than 1..
             is_target_onehot (bool): Is the target tensor in onehot format?
             label_smooth (bool): Should use label smoothing?
             reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
-                'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then summation them.
+                'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+                summation them.
 
-        '''
+        """
         super(_ClassificationLoss, self).__init__(name=name)
         self.need_target_onehot = False
+        self.is_target_onehot =False
         self.reduction = reduction
         self.axis=axis
         self.from_logits=from_logits
+        self.is_logsoftmax = False
         self.loss_weights=loss_weights
         self.ignore_index=ignore_index
         if cutoff is not None and not 0<cutoff<1:
@@ -60,10 +84,40 @@ class _ClassificationLoss(Layer):
 
 
     def preprocess(self, output:torch.Tensor, target:torch.Tensor,**kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+        #check num_clases
         #check num_clases
         if self.num_classes is None:
             self.num_classes=output.shape[self.axis]
 
+        output_exp = exp(output)
+
+        if self.is_logsoftmax:
+            output = clip(output,max=-1e-8)
+        elif self.from_logits:
+            output = clip(output, min=1e-8, max=1 - 1e-8)
+        elif (reduce_min(output) >= 0 and reduce_max(output) <= 1 and reduce_mean(
+                abs(reduce_sum(output, self.axis) - 1)) < 1e-4):
+            self.from_logits = True
+            output = clip(output, min=1e-8, max=1 - 1e-8)
+        elif (reduce_min(output_exp) >= 0 and reduce_max(output_exp) <= 1 and reduce_mean(
+                abs(reduce_sum(output_exp, self.axis) - 1)) < 1e-4):
+            self.is_logsoftmax = True
+            self.from_logits = True
+            output = clip(output, max=-1e-8)
+        else:
+            output = clip(softmax(output, self.axis), epsilon(), 1.0 - epsilon())
+            self.from_logits = True
+            output = clip(output, min=1e-8, max=1 - 1e-8)
 
         #initilize weight
         if self.loss_weights is not None and len(self.loss_weights)!=self.num_classes:
@@ -87,25 +141,36 @@ class _ClassificationLoss(Layer):
             target = make_onehot(target, classes=self.num_classes, axis=self.axis).to(output.device)
             if self.label_smooth:
                 target=target*(torch.Tensor(target.size()).uniform_(0.9,1).to(output.device))
+                self.is_target_onehot = True
 
-        #check is logit
-        if  self.from_logits!= False and (all(0<=output<=1) and float(abs(reduce_sum(output.sum,self.axis)-1).mean())<1e-4):
-            self.from_logits=True
-        else:
-            # avoid numerical instability with epsilon clipping
-            output = clip(softmax(output,self.axis), epsilon(), 1.0 - epsilon())
-            self.from_logits=False
 
-            #setting cutoff
-            if self.cutoff is not None:
-                mask= (output > self.cutoff).float()
-                output=output*mask
+
+        #setting cutoff
+        if self.cutoff is not None:
+            mask= (output > self.cutoff).float()
+            output=output*mask
         return output, target
 
     def calculate_loss(self,output, target,**kwargs):
+        """ Calculate the unaggregate loss.
+        The loss function calculation logic should define here., please dont't aggregate the loss in this phase.
+
+        Args:
+            output (tf.Tensor):
+            target (tf.Tensor):
+        """
         ##dont do aggregation
         raise NotImplementedError
     def postprocess(self,loss):
+        """Process the final losss aggregation
+
+        Args:
+            loss (tf.Tensor): the unaggregate loss.
+
+        Returns:
+            aggregated loss.
+
+        """
         if self.reduction=='mean':
             return loss.mean()
         elif self.reduction=='sum':
@@ -113,7 +178,17 @@ class _ClassificationLoss(Layer):
         elif self.reduction == 'batch_mean':
             return loss.mean(0).sum()
 
-    def forward(self, output, target,**kwargs):
+    def forward(self, output, target)->'loss':
+        """
+
+            Args:
+                output (tf.Tensor):
+                target (tf.Tensor):
+
+            Returns:
+                calculated loss
+
+            """
         loss=self.calculate_loss(*self.preprocess(output, target))
         loss=self.postprocess(loss)
         return loss
@@ -121,8 +196,74 @@ class _ClassificationLoss(Layer):
 
 
 class CrossEntropyLoss(_ClassificationLoss):
-    '''
-    Calculate the cross entropy loss
+    r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
+
+    It is useful when training a classification problem with `C` classes.
+    If provided, the optional argument :attr:`weight` should be a 1D `Tensor`
+    assigning weight to each of the classes.
+    This is particularly useful when you have an unbalanced training set.
+
+    The `input` is expected to contain raw, unnormalized scores for each class.
+
+    `input` has to be a Tensor of size either :math:`(minibatch, C)` or
+    :math:`(minibatch, C, d_1, d_2, ..., d_K)`
+    with :math:`K \geq 1` for the `K`-dimensional case (described later).
+
+    This criterion expects a class index in the range :math:`[0, C-1]` as the
+    `target` for each value of a 1D tensor of size `minibatch`; if `ignore_index`
+    is specified, this criterion also accepts this class index (this index may not
+    necessarily be in the class range).
+
+    The loss can be described as:
+
+    .. math::
+        \text{loss}(x, class) = -\log\left(\frac{\exp(x[class])}{\sum_j \exp(x[j])}\right)
+                       = -x[class] + \log\left(\sum_j \exp(x[j])\right)
+
+    or in the case of the :attr:`weight` argument being specified:
+
+    .. math::
+        \text{loss}(x, class) = weight[class] \left(-x[class] + \log\left(\sum_j \exp(x[j])\right)\right)
+
+    The losses are averaged across observations for each minibatch.
+
+    Can also be used for higher dimension inputs, such as 2D images, by providing
+    an input of size :math:`(minibatch, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`,
+    where :math:`K` is the number of dimensions, and a target of appropriate shape
+    (see below).
+
+
+    Args:
+        weight (Tensor, optional): a manual rescaling weight given to each class.
+            If given, has to be a Tensor of size `C`
+        size_average (bool, optional): Deprecated (see :attr:`reduction`). By default,
+            the losses are averaged over each loss element in the batch. Note that for
+            some losses, there are multiple elements per sample. If the field :attr:`size_average`
+            is set to ``False``, the losses are instead summed for each minibatch. Ignored
+            when reduce is ``False``. Default: ``True``
+        ignore_index (int, optional): Specifies a target value that is ignored
+            and does not contribute to the input gradient. When :attr:`size_average` is
+            ``True``, the loss is averaged over non-ignored targets.
+
+        reduction (string, optional): Specifies the reduction to apply to the output:
+            ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction will be applied,
+            ``'mean'``: the sum of the output will be divided by the number of
+            elements in the output, ``'sum'``: the output will be summed. Note: :attr:`size_average`
+            and :attr:`reduce` are in the process of being deprecated, and in the meantime,
+            specifying either of those two args will override :attr:`reduction`. Default: ``'mean'``
+
+    Shape:
+        - Input: :math:`(N, C)` where `C = number of classes`, or
+          :math:`(N, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`
+          in the case of `K`-dimensional loss.
+        - Target: :math:`(N)` where each value is :math:`0 \leq \text{targets}[i] \leq C-1`, or
+          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of
+          K-dimensional loss.
+        - Output: scalar.
+          If :attr:`reduction` is ``'none'``, then the same size as the target:
+          :math:`(N)`, or
+          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case
+          of K-dimensional loss.
 
     Examples:
     >>> output=to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]]).float()
@@ -136,7 +277,7 @@ class CrossEntropyLoss(_ClassificationLoss):
     >>> CrossEntropyLoss(reduction='sum')(output,target).cpu()
     tensor(4.4136)
     >>> CrossEntropyLoss(label_smooth=True,reduction='mean')(output,target).cpu()
-    tensor(1.1034)
+    tensor(0.3453)
     >>> CrossEntropyLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
     tensor(0.8259)
     >>> CrossEntropyLoss(ignore_index=2,reduction='mean')(output,target).cpu()
@@ -145,44 +286,284 @@ class CrossEntropyLoss(_ClassificationLoss):
 
 
 
-    '''
+    """
     def __init__(self, axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='CrossEntropyLoss'):
+        """
+
+        Args:
+            axis (int): the axis where the class label is.
+            loss_weights ():
+            from_logits ():
+            ignore_index ():
+            cutoff ():
+            label_smooth ():
+            reduction (string):
+            name (stringf):
+        """
         super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
         self._built = True
     def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
         if not self.need_target_onehot:
-            loss=torch.nn.functional.cross_entropy(output,target,self.loss_weights,reduction= 'none')
+            if self.is_logsoftmax==False:
+                loss=torch.nn.functional.cross_entropy(output,target,self.loss_weights,reduction= 'none')
+            else:
+                loss = torch.nn.functional.nll_loss(output, target, self.loss_weights, reduction='none')
         else:
-            reshape_shape=list(ones(len(output.shape)))
-            reshape_shape[self.axis]=self.num_classes
-            loss = -target *nn.LogSoftmax(dim=self.axis)(output) * reshape(self.loss_weights,reshape_shape)
+            reshape_shape = [1] * ndim(output)
+            reshape_shape[self.axis] = self.num_classes
+            if self.is_logsoftmax==False:
+                loss = -reduce_sum(target *nn.LogSoftmax(dim=self.axis)(output) * reshape(self.loss_weights,tuple(reshape_shape)),axis=self.axis)
+            else:
+                loss = -reduce_sum(target * output * reshape(self.loss_weights, tuple(reshape_shape)),axis=self.axis)
+        return loss
+
+
+class NLLLoss(_ClassificationLoss):
+    r"""The negative log likelihood loss. It is useful to train a classification
+    problem with `C` classes.
+
+    If provided, the optional argument :attr:`weight` should be a 1D Tensor assigning
+    weight to each of the classes. This is particularly useful when you have an
+    unbalanced training set.
+
+    The `input` given through a forward call is expected to contain
+    log-probabilities of each class. `input` has to be a Tensor of size either
+    :math:`(minibatch, C)` or :math:`(minibatch, C, d_1, d_2, ..., d_K)`
+    with :math:`K \geq 1` for the `K`-dimensional case (described later).
+
+    Obtaining log-probabilities in a neural network is easily achieved by
+    adding a  `LogSoftmax`  layer in the last layer of your network.
+    You may use `CrossEntropyLoss` instead, if you prefer not to add an extra
+    layer.
+
+    The `target` that this loss expects should be a class index in the range :math:`[0, C-1]`
+    where `C = number of classes`; if `ignore_index` is specified, this loss also accepts
+    this class index (this index may not necessarily be in the class range).
+
+    The unreduced (i.e. with :attr:`reduction` set to ``'none'``) loss can be described as:
+
+    .. math::
+        \ell(x, y) = L = \{l_1,\dots,l_N\}^\top, \quad
+        l_n = - w_{y_n} x_{n,y_n}, \quad
+        w_{c} = \text{weight}[c] \cdot \mathbb{1}\{c \not= \text{ignore\_index}\},
+
+    where :math:`x` is the input, :math:`y` is the target, :math:`w` is the weight, and
+    :math:`N` is the batch size. If :attr:`reduction` is not ``'none'``
+    (default ``'mean'``), then
+
+    .. math::
+        \ell(x, y) = \begin{cases}
+            \sum_{n=1}^N \frac{1}{\sum_{n=1}^N w_{y_n}} l_n, &
+            \text{if reduction} = \text{'mean';}\\
+            \sum_{n=1}^N l_n,  &
+            \text{if reduction} = \text{'sum'.}
+        \end{cases}
+
+    Can also be used for higher dimension inputs, such as 2D images, by providing
+    an input of size :math:`(minibatch, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`,
+    where :math:`K` is the number of dimensions, and a target of appropriate shape
+    (see below). In the case of images, it computes NLL loss per-pixel.
+
+    Args:
+        weight (Tensor, optional): a manual rescaling weight given to each
+            class. If given, it has to be a Tensor of size `C`. Otherwise, it is
+            treated as if having all ones.
+        size_average (bool, optional): Deprecated (see :attr:`reduction`). By default,
+            the losses are averaged over each loss element in the batch. Note that for
+            some losses, there are multiple elements per sample. If the field :attr:`size_average`
+            is set to ``False``, the losses are instead summed for each minibatch. Ignored
+            when reduce is ``False``. Default: ``True``
+        ignore_index (int, optional): Specifies a target value that is ignored
+            and does not contribute to the input gradient. When
+            :attr:`size_average` is ``True``, the loss is averaged over
+            non-ignored targets.
+        reduce (bool, optional): Deprecated (see :attr:`reduction`). By default, the
+            losses are averaged or summed over observations for each minibatch depending
+            on :attr:`size_average`. When :attr:`reduce` is ``False``, returns a loss per
+            batch element instead and ignores :attr:`size_average`. Default: ``True``
+        reduction (string, optional): Specifies the reduction to apply to the output:
+            ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction will be applied,
+            ``'mean'``: the sum of the output will be divided by the number of
+            elements in the output, ``'sum'``: the output will be summed. Note: :attr:`size_average`
+            and :attr:`reduce` are in the process of being deprecated, and in the meantime,
+            specifying either of those two args will override :attr:`reduction`. Default: ``'mean'``
+
+    Shape:
+        - Input: :math:`(N, C)` where `C = number of classes`, or
+          :math:`(N, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`
+          in the case of `K`-dimensional loss.
+        - Target: :math:`(N)` where each value is :math:`0 \leq \text{targets}[i] \leq C-1`, or
+          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of
+          K-dimensional loss.
+        - Output: scalar.
+          If :attr:`reduction` is ``'none'``, then the same size as the target: :math:`(N)`, or
+          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case
+          of K-dimensional loss.
+
+    Examples:
+    >>> output=to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]]).float()
+    >>> print(output.shape)
+    torch.Size([4, 3])
+    >>> target=to_tensor([1,0,1,2]).long()
+    >>> print(target.shape)
+    torch.Size([4])
+    >>> NLLLoss(reduction='mean')(output,target).cpu()
+    tensor(1.1034)
+    >>> NLLLoss(reduction='sum')(output,target).cpu()
+    tensor(4.4136)
+    >>> NLLLoss(label_smooth=True,reduction='mean')(output,target).cpu()
+    tensor(1.1034)
+    >>> NLLLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
+    tensor(0.8259)
+    >>> NLLLoss(ignore_index=2,reduction='mean')(output,target).cpu()
+    tensor(0.8259)
+
+
+    """
+    def __init__(self, axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='NllLoss'):
+        super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
+        self._built = True
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+        if not self.need_target_onehot:
+            target = argmax(target, axis=self.axis)
+
+        loss = F.nll_loss(output, target, weight=self.loss_weights, ignore_index=self.ignore_index, reduction=None)
         return loss
 
 
 
+class F1ScoreLoss(_ClassificationLoss):
+    """
+    This operation computes the f-measure between the output and target. If beta is set as one,
+    its called the f1-scorce or dice similarity coefficient. f1-scorce is monotonic in jaccard distance.
 
-class NllLoss(_Loss):
-    def __init__(self, weight=None, with_logits=True, ignore_index=-100, reduction='mean', name='CrossEntropyLoss'):
-        super().__init__(reduction=reduction)
-        self.name = name
-        self.weight = weight
-        self.ignore_index = ignore_index
-        self.with_logits = with_logits
+    f-measure = (1 + beta ** 2) * precision * recall / (beta ** 2 * precision + recall)
 
-    def forward(self, output, target):
-        if not self.with_logits:
-            output = torch.log_softmax(output, dim=1)
-        if len(output.size()) == len(target.size()):
-            target = argmax(target, 1)
-        return F.nll_loss(output, target, weight=self.weight, ignore_index=self.ignore_index, reduction=self.reduction)
+    This loss function is frequently used in semantic segmentation of images. Works with imbalanced classes, for
+    balanced classes you should prefer cross_entropy instead.
+    This operation works with both binary and multiclass classification.
 
-    #     if len(output.shape)==2 and len(target.shape)==1:  #         return F.cross_entropy(output, target.long(),
-    #     ignore_index=self.ignore_index,reduction=self.reduction)  #     elif len(output.shape)==2 and len(
-    #     target.shape)==2:  #         return super().forward(output, argmax(target,1))  #     elif len(
-    #     output.shape)>2 and len(target.shape)==len(output.shape)-1:  #         return super().forward(output.view(
-    #     -1,output.size(1)), target.long().view(-1))  #     elif len(output.shape)>2 and len(target.shape)==len(
-    #     output.shape):  #         return super().forward(output.view(-1,output.size(1)), argmax(target,1).view(-1))
-NullLoss=NllLoss
+    Args:
+        output: the output values from the network
+        target: it is usually a one-hot vector where the hot bit corresponds to the label index
+        beta: greater than one weights recall higher than precision, less than one for the opposite.
+        Commonly chosen values are 0.5, 1 or 2.
+
+    Returns:
+        :class:`~cntk.ops.functions.Function`
+
+    Examples:
+    >>> output=to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]]).float()
+    >>> print(output.shape)
+    torch.Size([4, 3])
+    >>> target=to_tensor([1,0,1,2]).long()
+    >>> print(target.shape)
+    torch.Size([4])
+    >>> F1ScoreLoss(reduction='mean')(output,target).cpu()
+    tensor(0.6670)
+    >>> F1ScoreLoss(reduction='sum')(output,target).cpu()
+    tensor(2.6680)
+    >>> F1ScoreLoss(label_smooth=True,reduction='mean')(output,target).cpu()
+    tensor(0.6740)
+    >>> F1ScoreLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
+    tensor(0.6670)
+    >>> F1ScoreLoss(ignore_index=2,reduction='mean')(output,target).cpu()
+    tensor(0.6670)
+
+
+
+    """
+
+    def __init__(self, beta=1,axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='CrossEntropyLoss'):
+        super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
+        self.beta = beta
+        self._built = True
+
+    def calculate_loss(self, output, target, **kwargs):
+        reshape_shape = list(ones(len(output.shape)))
+        reshape_shape[self.axis] = self.num_classes
+
+        if self.is_target_onehot == False:
+            target=make_onehot(target,self.num_classes,self.axis)
+        correct_predictions = reduce_sum(output * target, axis=self.axis, keepdims=True)
+        precision = correct_predictions / reduce_sum(output, axis=self.axis, keepdims=True)
+        recall = correct_predictions / reduce_sum(target, axis=self.axis, keepdims=True)
+        return 1 - (1 + self.beta ** 2) * precision * recall / (self.beta ** 2 * precision + recall)
+
+
+
+class FocalLoss(_ClassificationLoss):
+    """
+    Compute binary focal loss between target and output logits.
+    See :class:`~pytorch_toolbelt.losses.FocalLoss` for details.
+
+    References::
+
+        https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/loss/losses.py
+    """
+    def __init__(self, alpha=0.5, gamma=2, normalized=False,threshold=None,axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,
+                 label_smooth=False, reduction='mean', name='FocalLoss'):
+        super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
+        self.alpha = alpha
+        self.gamma = gamma
+        self.threshold=threshold
+        self.normalized=normalized
+
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+
+        Args:
+            output: Tensor of arbitrary shape
+            target: Tensor of the same shape as input
+
+            normalized (bool): Compute normalized focal loss (https://arxiv.org/pdf/1909.07829.pdf).
+            threshold (float, optional): Compute reduced focal loss (https://arxiv.org/abs/1903.01347).
+
+        Returns:
+
+            """
+
+        logpt = -F.binary_cross_entropy_with_logits(output, target, reduction="none")
+        pt = exp(logpt)
+
+        # compute the loss
+        if self.threshold is None:
+            focal_term = (1 - pt).pow(self.gamma)
+        else:
+            focal_term = ((1.0 - pt) / self.threshold).pow(self.gamma)
+            focal_term[pt < self.threshold] = 1
+
+        loss = -focal_term * logpt
+
+        if self.alpha is not None:
+            loss = loss * (self.alpha * target + (1 - self.alpha) * (1 - target))
+        if self.normalized:
+            norm_factor = sum(focal_term)
+            loss = loss / norm_factor
+
+        return loss
+
 
 class BCELoss(_Loss):
     def __init__(self, weight=None, reduction='mean', with_logit=False, name='BCELoss'):
@@ -192,7 +573,7 @@ class BCELoss(_Loss):
         self.loss_weight = weight
         self.with_logit = with_logit
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         if not self.with_logits:
             output = torch.softmax(output, dim=1)
         target1 = to_numpy(target)
@@ -217,7 +598,7 @@ class L1Loss(_Loss):
         self.name = name
         self.reduction = reduction
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         if output.shape == target.shape:
             return  F.l1_loss(output, target, reduction=self.reduction)
         else:
@@ -230,7 +611,7 @@ class L2Loss(_Loss):
         self.name = name
         self.reduction = reduction
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         if output.shape == target.shape:
             return 0.5 * F.mse_loss(output, target,reduction=self.reduction)
         else:
@@ -243,7 +624,7 @@ class SmoothL1Loss(_Loss):
         self.reduction = reduction
         self.huber_delta = 0.5
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         if output.shape == target.shape:
             return F.smooth_l1_loss(output, target, reduction=self.reduction)
         else:
@@ -256,7 +637,7 @@ class MSELoss(_Loss):
         self.name = name
         self.reduction = reduction
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         return F.mse_loss(output, target, reduction=self.reduction)
 
 
@@ -266,7 +647,7 @@ class ExponentialLoss(_Loss):
         self.name = name
         self.reduction = reduction
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
 
         if output.shape == target.shape:
             error = (output - target) ** 2
@@ -288,7 +669,7 @@ class ItakuraSaitoLoss(_Loss):
         self.name = name
         self.reduction = reduction
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         #  y_true/(y_pred+1e-12) - log(y_true/(y_pred+1e-12)) - 1;
         if output.shape == target.shape:
             if -1<=output.min()<0 and -1<=target.min()<0:
@@ -309,20 +690,10 @@ class CosineSimilarityLoss(_Loss):
     def __init__(self, ):
         super(CosineSimilarityLoss, self).__init__()
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         return 1 - torch.cosine_similarity(output, target)
 
 
-
-def make_onehot(labels, classes,axis=1):
-    one_hot_shape = list(labels.size())
-    if axis==-1:
-        one_hot_shape.append(classes)
-    else:
-        one_hot_shape.insert(axis, classes)
-    one_hot = torch.zeros(tuple(one_hot_shape)).to(_device)
-    target = one_hot.scatter_(axis, labels.unsqueeze(axis).data, 1)
-    return target
 
 
 def gaussian(window_size, sigma=1.5):
@@ -424,7 +795,7 @@ class MS_SSIMLoss(_Loss):
         self.window_size = window_size
         self.channel = 3
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         return 1-msssim(output, target, window_size=self.window_size,normalize=True)
 
 
@@ -446,7 +817,7 @@ class CrossEntropyLabelSmooth(_Loss):
             raise ValueError('weight should be 1-D tensor')
 
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         log_probs = self.logsoftmax(output)
         target = make_onehot(target, classes=self.num_classes, axis=self.axis)
 
@@ -487,7 +858,7 @@ class DiceLoss(_Loss):
         else:
             raise ValueError('weight should be 1-D tensor')
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         if self.weight is not None and len(self.weight) != output.size(self.axis):
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
 
@@ -552,7 +923,7 @@ class IouLoss(_Loss):
         super(IouLoss, self).__init__(reduction=reduction)
         self.ignore_index = ignore_index
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         output = argmax(output, 1)
         output_flat = output.reshape(-1)
         target_flat = target.reshape(-1)
@@ -566,105 +937,7 @@ class IouLoss(_Loss):
         return loss
 
 
-def focal_loss_with_logits(input: torch.Tensor, target: torch.Tensor, gamma=2.0, alpha=0.25, reduction="mean",
-                           normalized=False, threshold=None, ) -> torch.Tensor:
-    '''Compute binary focal loss between target and output logits.
 
-    See :class:`~pytorch_toolbelt.losses.FocalLoss` for details.
-
-    Args:
-        input: Tensor of arbitrary shape
-        target: Tensor of the same shape as input
-        reduction (string, optional): Specifies the reduction to apply to the output:
-            'none' | 'mean' | 'sum' | 'batchwise_mean'. 'none': no reduction will be applied,
-            'mean': the sum of the output will be divided by the number of
-            elements in the output, 'sum': the output will be summed. Note: :attr:`size_average`
-            and :attr:`reduce` are in the process of being deprecated, and in the meantime,
-            specifying either of those two args will override :attr:`reduction`.
-            'batchwise_mean' computes mean loss per sample in batch. Default: 'mean'
-        normalized (bool): Compute normalized focal loss (https://arxiv.org/pdf/1909.07829.pdf).
-        threshold (float, optional): Compute reduced focal loss (https://arxiv.org/abs/1903.01347).
-    References::
-
-        https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/loss/losses.py
-    '''
-    if len(target.shape) == len(input.shape):
-        target = target.type(input.type())
-    elif len(target.shape) + 1 == len(input.shape) and target.shape[0] == input.shape[0]:
-        num_classes = None
-        if input.shape[1:-1] == target.shape[1:]:
-            num_classes = input.shape[-1]
-        elif input.shape[2:] == target.shape[1:]:
-            num_classes = input.shape[1]
-        target = make_onehot(target, num_classes)
-        if target.shape != input.shape:
-            target = target.reshape(input.shape)
-
-    target = target.type(input.type())
-
-    logpt = -F.binary_cross_entropy_with_logits(input, target, reduction="none")
-    pt = torch.exp(logpt)
-
-    # compute the loss
-    if threshold is None:
-        focal_term = (1 - pt).pow(gamma)
-    else:
-        focal_term = ((1.0 - pt) / threshold).pow(gamma)
-        focal_term[pt < threshold] = 1
-
-    loss = -focal_term * logpt
-
-    if alpha is not None:
-        loss = loss * (alpha * target + (1 - alpha) * (1 - target))
-
-    if normalized:
-        norm_factor = focal_term.sum()
-        loss = loss / norm_factor
-
-    if reduction == "mean":
-        loss = loss.mean()
-    if reduction == "sum":
-        loss = loss.sum()
-    if reduction == "batchwise_mean":
-        loss = loss.sum(0)
-    return loss
-
-
-class FocalLoss(_Loss):
-    def __init__(self, with_logits=False,alpha=0.5, gamma=2, ignore_index=None, reduction="mean"):
-        super().__init__()
-        self.alpha = alpha
-        self.gamma = gamma
-        self.ignore_index = ignore_index
-        self.reduction = reduction
-        self.with_logits=with_logits
-
-
-    def forward(self, output, target):
-        if not self.with_logits:
-            output=F.softmax(output,dim=1)
-
-        num_classes = output.size(1)
-        if target.dtype == torch.int64:
-            target_tensor = make_onehot(target, num_classes)
-        loss = 0
-
-        # Filter anchors with -1 label from loss computation
-        not_ignored = target
-        if self.ignore_index is not None:
-            not_ignored = target != self.ignore_index
-
-        for cls in range(num_classes):
-            cls_target = (target == cls).long()
-            cls_input = output[:, cls, ...]
-
-            if self.ignore_index is not None:
-                cls_target = cls_target[not_ignored]
-                cls_input = cls_input[not_ignored]
-            loss += focal_loss_with_logits(cls_input, cls_target, gamma=self.gamma, alpha=self.alpha,
-                                           reduction=self.reduction)
-
-        return loss / output.size(0) if self.reduction == 'mean' else loss
 
 
 class SoftIoULoss(_Loss):
@@ -674,7 +947,7 @@ class SoftIoULoss(_Loss):
         self.reduction = reduction
         self.reduced = reduced
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         # logit => N x Classes x H x W
         # target => N x H x W
 
@@ -700,10 +973,10 @@ class SoftIoULoss(_Loss):
 
 
 def _lovasz_grad(gt_sorted):
-    '''
+    """
     Computes gradient of the Lovasz extension w.r.t sorted errors
     See Alg. 1 in paper
-    '''
+    """
     p = len(gt_sorted)
     gts = gt_sorted.sum()
     intersection = gts - gt_sorted.float().cumsum(0)
@@ -757,10 +1030,10 @@ class LovaszSoftmax(_Loss):
         return loss
 
     def flatten_binary_scores(self, scores, labels, ignore=None):
-        '''
+        """
         Flattens predictions in the batch (binary case)
         Remove labels equal to 'ignore'
-        '''
+        """
         scores = scores.view(-1)
         labels = labels.view(-1)
         if ignore is None:
@@ -771,13 +1044,13 @@ class LovaszSoftmax(_Loss):
         return vscores, vlabels
 
     def lovasz_hinge(self, logits, labels, per_image=True, ignore=None):
-        '''
+        """
         Binary Lovasz hinge loss
           logits: [B, H, W] Variable, logits at each pixel (between -\infty and +\infty)
           labels: [B, H, W] Tensor, binary ground truth masks (0 or 1)
           per_image: compute the loss per image instead of per batch
           ignore: void class id
-        '''
+        """
         if per_image:
             loss = (self.lovasz_hinge_flat(*self.flatten_binary_scores(log.unsqueeze(0), lab.unsqueeze(0), ignore)) for
                     log, lab in zip(logits, labels)).mean()
@@ -786,12 +1059,12 @@ class LovaszSoftmax(_Loss):
         return loss
 
     def lovasz_hinge_flat(self, logits, labels):
-        '''
+        """
         Binary Lovasz hinge loss
           logits: [P] Variable, logits at each prediction (between -\infty and +\infty)
           labels: [P] Tensor, binary ground truth labels (0 or 1)
           ignore: label to ignore
-        '''
+        """
         if len(labels) == 0:
             # only void pixels, the gradients should be 0
             return logits.sum() * 0.
@@ -804,7 +1077,7 @@ class LovaszSoftmax(_Loss):
         loss = torch.dot(F.relu(errors_sorted),grad)
         return loss
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         # print(output.shape, target.shape) # (batch size, class_num, x,y,z), (batch size, 1, x,y,z)
         self.num_classes = output.size(1)
         output, target = self.prob_flatten(output, target)
@@ -817,14 +1090,14 @@ class LovaszSoftmax(_Loss):
 
 
 class TripletLoss(_Loss):
-    '''Triplet loss with hard positive/negative mining.
+    """Triplet loss with hard positive/negative mining.
     Reference:
         Hermans et al. In Defense of the Triplet Loss for Person Re-Identification. arXiv:1703.07737.
     Imported from `<https://github.com/Cysu/open-reid/blob/master/reid/loss/triplet.py>`_.
 
     Args:
         margin (float, optional): margin for triplet. Default is 0.3.
-    '''
+    """
 
     def __init__(self, global_feat, labels, margin=0.3, reduction="mean", reduced=False):
         super(TripletLoss, self).__init__()
@@ -833,12 +1106,12 @@ class TripletLoss(_Loss):
         self.margin = margin
         self.ranking_loss = nn.MarginRankingLoss(margin=margin, reduction=reduction)
 
-    def forward(self, output, target):
-        '''
+    def forward(self, output, target) ->'loss':
+        """
         Args:
             output (torch.Tensor): feature matrix with shape (batch_size, feat_dim).
             target (torch.LongTensor): ground truth labels with shape (num_classes).
-        '''
+        """
         n = output.size(0)
         # Compute pairwise distance, replace by the official when merged
         dist = torch.pow(output, 2).sum(dim=1, keepdim=True).expand(n, n)
@@ -862,14 +1135,14 @@ class TripletLoss(_Loss):
 
 
 class CenterLoss(_Loss):
-    '''Center loss.
+    """Center loss.
     Reference:
     Wen et al. A Discriminative Feature Learning Approach for Deep Face Recognition. ECCV 2016.
 
     Args:
         num_classes (int): number of classes.
         feat_dim (int): feature dimension.
-    '''
+    """
 
     def __init__(self, num_classes=751, feat_dim=2048, reduction="mean", reduced=False):
         super(CenterLoss, self).__init__()
@@ -881,13 +1154,13 @@ class CenterLoss(_Loss):
         init.kaiming_uniform_(self.centers, a=sqrt(5))
         self.to(_device)
 
-    def forward(self, output, target):
-        '''
+    def forward(self, output, target) ->'loss':
+        """
         Args:
             output: feature matrix with shape (batch_size, feat_dim).
             target: ground truth labels with shape (num_classes).
 
-        '''
+        """
         assert output.size(0) == target.size(0), "features.size(0) is not equal to labels.size(0)"
         batch_size = output.size(0)
         distmat = torch.pow(output, 2).sum(dim=1, keepdim=True).expand(batch_size, self.num_classes) + torch.pow(
@@ -914,7 +1187,7 @@ class StyleLoss(nn.Module):
         super(StyleLoss, self).__init__()
         self.to(_device)
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         target.detach()
         img_size = list(output.size())
         G = gram_matrix(output)
@@ -941,7 +1214,7 @@ class PerceptionLoss(_Loss):
 
 
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         target_features = OrderedDict()
         output_features = OrderedDict()
         _ = self.ref_model(self.preprocess(output))
@@ -979,7 +1252,7 @@ class EdgeLoss(_Loss):
         else:
             return None
 
-    def forward(self, output, target):
+    def forward(self, output, target) ->'loss':
         loss = MSELoss(reduction=self.reduction)(self.first_order(output, 2), self.first_order(target, 2)) + MSELoss(
             reduction=self.reduction)(self.first_order(output, 3), self.first_order(target, 3))
         return loss
@@ -1034,78 +1307,6 @@ class GPLoss(nn.Module):
         gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
         gradient_penalty = ((gradients_norm - 1) ** 2).mean() * self.l
 
-
-class F1ScoreLoss(_Loss):
-    '''
-    This operation computes the f-measure between the output and target. If beta is set as one,
-    its called the f1-scorce or dice similarity coefficient. f1-scorce is monotonic in jaccard distance.
-
-    f-measure = (1 + beta ** 2) * precision * recall / (beta ** 2 * precision + recall)
-
-    This loss function is frequently used in semantic segmentation of images. Works with imbalanced classes, for
-    balanced classes you should prefer cross_entropy instead.
-    This operation works with both binary and multiclass classification.
-
-    Args:
-        output: the output values from the network
-        target: it is usually a one-hot vector where the hot bit corresponds to the label index
-        beta: greater than one weights recall higher than precision, less than one for the opposite.
-        Commonly chosen values are 0.5, 1 or 2.
-
-    Returns:
-        :class:`~cntk.ops.functions.Function`
-
-    '''
-
-    def __init__(self, reduction='mean', num_class=2, ignore_index=-100, beta=1):
-        super(F1ScoreLoss, self).__init__(reduction=reduction)
-        self.num_class = num_class
-        self.ignore_index = ignore_index
-        self.beta = beta
-
-    def forward(self, output, target):
-        num_class = self.num_class
-        output_class = None
-        if target.ndim == 2:
-            target = target.view(-1)
-            if output.ndim == 2:
-                output = output.view(-1)
-            else:
-                output = output.view(-1, output.size(2)).argmax(dim=1)
-
-        if (target.ndim == 1 and (output.ndim == 1 or output.ndim == 2)):
-            if output.ndim == 2:
-                output_class = output.size(1)
-                output = output.argmax(dim=1)
-
-            if output_class is not None and output_class != self.num_class:
-                num_class = output_class
-            f1 = 0
-            n = 0
-            for k in range(num_class):
-                if k != self.ignore_index:
-                    k_output = torch.eq(output, k).float()
-                    k_target = torch.eq(target, k).float()
-                    if num_class >= 3 and 0 <= self.ignore_index < num_class:
-                        k_output = torch.eq(output[target != self.ignore_index], k).float()
-                        k_target = torch.eq(target[target != self.ignore_index], k).float()
-                    tp = (k_target * k_output).sum().to(torch.float32)
-                    tn = ((1 - k_target) * (1 - k_output)).sum().to(torch.float32)
-                    fp = ((1 - k_target) * k_output).sum().to(torch.float32)
-                    fn = (k_target * (1 - k_output)).sum().to(torch.float32)
-                    precision = tp / (tp + fp + 1e-8)
-                    recall = tp / (tp + fn + 1e-8)
-
-                    f1 = f1 + (1 - (1 + self.beta ** 2) * (precision * recall) / (
-                                self.beta ** 2 * precision + recall + 1e-8))
-                    n += 1
-            if self.reduction == 'mean':
-                f1 = f1 / n
-            return f1
-        else:
-            raise ValueError(
-                'target.ndim:{0}  output.ndim:{1} is not valid for F1 score calculation'.format(target.ndim,
-                                                                                                output.ndim))
 
 
 def get_loss(loss_name):

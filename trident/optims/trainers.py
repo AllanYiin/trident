@@ -59,7 +59,10 @@ class TrainingPlan(object):
 
         self._is_optimizer_warmup = False
 
-        self.callbacks = []  # if self.callbacks is None:  #     self.callbacks = [  # NumberOfEpochsStoppingCriterionCallback(1)]  # elif not any([issubclass(type(cb),  # StoppingCriterionCallback) for cb in self.callbacks]):  #  #     self.callbacks.append(  # NumberOfEpochsStoppingCriterionCallback(1))
+        self.callbacks = []  # if self.callbacks is None:  #     self.callbacks = [  #
+        # NumberOfEpochsStoppingCriterionCallback(1)]  # elif not any([issubclass(type(cb),
+        # StoppingCriterionCallback) for cb in self.callbacks]):  #  #     self.callbacks.append(  #
+        # NumberOfEpochsStoppingCriterionCallback(1))
 
     @property
     def minibatch_size(self):
@@ -288,7 +291,7 @@ class TrainingPlan(object):
                             # data provider have 1 or 2 data items (1 data item just like autoencoder)
                             if 1 <= len(data_loader.signature.outputs) <= 2:
                                 data_feed[trainingitem.signature.inputs.key_list[0]] = \
-                                data_loader.signature.outputs.key_list[0]
+                                    data_loader.signature.outputs.key_list[0]
                                 for loss in trainingitem._losses.value_list:
                                     args = loss.signature.inputs
                                     if len(args) == 2:
@@ -302,9 +305,6 @@ class TrainingPlan(object):
                                             else:
                                                 data_feed[args.key_list[1]] = data_loader.signature.outputs.key_list[
                                                     -1]  # -1 is for handel autoencoder scenario
-                                    else:
-                                        raise ValueError(
-                                            'loss shoud only 2 argments when one-input-one-output model with 2 dataset items in data loaders')
 
                                 trainingitem.training_context['data_feed'] = data_feed
                                 print('data_feed for {0} :{1}'.format(trainingitem.name,
@@ -312,7 +312,8 @@ class TrainingPlan(object):
 
                     else:
                         raise RuntimeError(
-                            'the number of models input plus the numbers of  targets should equal to the numbers of dataset items')
+                            'the number of models input plus the numbers of  targets should equal to the numbers of '
+                            'dataset items')
                 else:
                     raise RuntimeError('Multiple data loader data_feed auto-generation is not support Now.')
 
@@ -363,21 +364,26 @@ class TrainingPlan(object):
                         if only_steps == False and self.out_sample_evaluation_on_epoch_end == True and mbs == len(
                                 data_loader.batch_sampler) - 1:
                             need_out_sample_evaluation = True
-                        elif only_steps == True and self.out_sample_evaluation_on_epoch_end == True and num_batches == max_batches - 1:
+                        elif only_steps == True and self.out_sample_evaluation_on_epoch_end == True and num_batches \
+                                == max_batches - 1:
                             need_out_sample_evaluation = True
-                        elif only_steps == False and self.out_sample_evaluation_unit == 'batch' and mbs > 0 and mbs % self.out_sample_evaluation_frequency == 0:
+                        elif only_steps == False and self.out_sample_evaluation_unit == 'batch' and mbs > 0 and mbs %\
+                                self.out_sample_evaluation_frequency == 0:
                             need_out_sample_evaluation = True
-                        elif only_steps == True and self.out_sample_evaluation_unit == 'batch' and num_batches > 0 and num_batches % self.out_sample_evaluation_frequency == 0:
+                        elif only_steps == True and self.out_sample_evaluation_unit == 'batch' and num_batches > 0 \
+                                and num_batches % self.out_sample_evaluation_frequency == 0:
                             need_out_sample_evaluation = True
                         elif only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
                                 data_loader.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
                             need_out_sample_evaluation = True
-                        elif only_steps == True and self.out_sample_evaluation_unit == 'epoch' and num_batches == max_batches - 1:
+                        elif only_steps == True and self.out_sample_evaluation_unit == 'epoch' and num_batches == \
+                                max_batches - 1:
                             need_out_sample_evaluation = True
 
                         iter_testdata = None
                         if isinstance(data_loader,
-                                      DataProviderV2) and data_loader.testdata is not None and need_out_sample_evaluation:
+                                      DataProviderV2) and data_loader.testdata is not None and \
+                                need_out_sample_evaluation:
                             return_test = data_loader.next_test()
                             if return_test is not None:
                                 iter_testdata = OrderedDict()
@@ -400,7 +406,8 @@ class TrainingPlan(object):
                                                   self.num_epochs if only_steps == False else 1, len(
                                     data_loader.batch_sampler) if only_steps == False else max_batches,
                                                   is_collect_data=mbs % collect_data_inteval == 0,
-                                                  is_print_batch_progress=self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0,
+                                                  is_print_batch_progress=self.print_progress_unit == 'batch' and mbs
+                                                                          % self.print_progress_frequency == 0,
                                                   is_print_epoch_progress=self.print_progress_unit == 'epoch' and (
                                                           epoch + 1) % self.print_progress_frequency == 0,
                                                   log_gradients=keep_gradient_history, log_weights=keep_weights_history,
@@ -414,7 +421,8 @@ class TrainingPlan(object):
                             if callback.is_shared == True:
                                 callback.on_overall_batch_end(self.__dict__)
 
-                        if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and mbs % self.save_model_frequency == 0:
+                        if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and mbs % \
+                                self.save_model_frequency == 0:
                             for k, trainitem in self.training_items.items():
                                 trainitem.save_model()
 

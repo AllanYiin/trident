@@ -8,7 +8,7 @@ from trident.backend.common import get_session,set_session,get_plateform, get_tr
 
 #from trident.backend.load_backend import get_backend, get_image_backend
 from trident.backend.model import *
-from trident.backend.optimizer import *
+
 
 from trident.data import *
 from trident.data.data_loaders import *
@@ -18,6 +18,7 @@ from trident.misc import *
 if get_backend()=='pytorch':
     from trident.backend.pytorch_ops import *
     from trident.backend.pytorch_backend import *
+    from trident.optims.pytorch_optimizers import *
     from trident.layers.pytorch_activations import *
     from trident.layers.pytorch_layers import *
     from trident.layers.pytorch_pooling import *
@@ -29,13 +30,14 @@ if get_backend()=='pytorch':
     from trident.optims.pytorch_regularizers import *
     from trident.optims.pytorch_losses import *
     from trident.optims.pytorch_metrics import *
-    from trident.optims.pytorch_optimizers import *
+
     from trident.optims.pytorch_trainer import *
 
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import *
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_serialization import *
+    from trident.optims.tensorflow_optimizers import *
 
     from trident.layers.tensorflow_activations import *
     from trident.layers.tensorflow_layers import *
@@ -48,7 +50,7 @@ elif get_backend()=='tensorflow':
     from trident.optims.tensorflow_regularizers import *
     from trident.optims.tensorflow_losses import *
     from trident.optims.tensorflow_metrics import *
-    from trident.optims.tensorflow_optimizers import *
+
     from trident.optims.tensorflow_trainer import *
 
 from trident.callbacks import *

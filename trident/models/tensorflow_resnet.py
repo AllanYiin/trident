@@ -133,10 +133,10 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=T
     resnet = Sequential()
     resnet.add_module('conv1',Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',name='first_block'))
     resnet.add_module('maxpool',(MaxPool2d((3,3),strides=2,auto_pad=True,padding_mode='zero')))
-    resnet.add_module('conv2_block',(_make_layer(block, 64, layers[0],strides=1, dilate=None,use_bias=use_bias,layer_name='conv2_block' )))
-    resnet.add_module('conv3_block',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='conv3_block' )))
-    resnet.add_module('conv4_block',(_make_layer(block, 256, layers[2], strides=2, dilate=None,use_bias=use_bias,layer_name='conv4_block' )))
-    resnet.add_module('conv5_block' ,(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='conv5_block' )))
+    resnet.add_module('layer1',(_make_layer(block, 64, layers[0],strides=1, dilate=None,use_bias=use_bias,layer_name='conv2_block' )))
+    resnet.add_module('layer2',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='conv3_block' )))
+    resnet.add_module('layer3',(_make_layer(block, 256, layers[2], strides=2, dilate=None,use_bias=use_bias,layer_name='conv4_block' )))
+    resnet.add_module('layer4' ,(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='conv5_block' )))
     resnet.add_module('avg_pool',GlobalAvgPool2d(name='avg_pool'))
     if include_top:
         resnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
@@ -189,8 +189,6 @@ def ResNet50(include_top=True,
 
 
         resnet50.model=recovery_model
-        resnet50.rebinding_input_output(input_shape)
-        resnet50.signature = get_signature(resnet50.model.forward)
     return resnet50
 
 def ResNet101(include_top=True,
@@ -214,8 +212,6 @@ def ResNet101(include_top=True,
                 recovery_model.fc = Dense(classes, activation=None, name='fc')
 
         resnet101.model=recovery_model
-        resnet101.rebinding_input_output(input_shape)
-        resnet101.signature = get_signature(resnet101.model.forward)
     return resnet101
 
 
@@ -241,8 +237,6 @@ def ResNet152(include_top=True,
                 recovery_model.fc = Dense(classes, activation=None, name='fc')
 
         resnet152.model=recovery_model
-        resnet152.rebinding_input_output(input_shape)
-        resnet152.signature = get_signature(resnet152.model.forward)
     return resnet152
 
 

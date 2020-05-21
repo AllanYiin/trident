@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import numbers
 import math
 import inspect
 import numpy as np
@@ -15,7 +15,7 @@ from trident.backend.common import epsilon, get_function, get_session, enforce_s
 from trident.backend.pytorch_backend import Layer,get_device
 from trident.backend.pytorch_ops import *
 
-__all__ = ['InstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm2d','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
+__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
 _session = get_session()
 _epsilon=_session.epsilon
 
@@ -36,18 +36,73 @@ def group_std(x, groups, eps = 1e-5):
 
 
 class BatchNorm(Layer):
-    def __init__(self,  momentum=0.1, affine=True, track_running_stats=True, eps=1e-5, **kwargs):
-        """
-        http://pytorch.org/docs/stable/nn.html#batchnorm1d
+    """Applies Batch Normalization over a 4D input (a mini-batch of 2D inputs
+    with additional channel dimension) as described in the paper
+    `Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`_ .
 
-        Args:
-            dim: 1d, 2d, or 3d BatchNorm
-         eps: nn.BatchNorm parameter
-            momentum: nn.BatchNorm parameter
-            affine: nn.BatchNorm parameter
-            track_running_stats: nn.BatchNorm parameter
+    .. math::
+
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The mean and standard-deviation are calculated per-dimension over
+    the mini-batches and :math:`\gamma` and :math:`\beta` are learnable parameter vectors
+    of size `C` (where `C` is the input size). By default, the elements of :math:`\gamma` are set
+    to 1 and the elements of :math:`\beta` are set to 0.
+
+    Also by default, during training this layer keeps running estimates of its
+    computed mean and variance, which are then used for normalization during
+    evaluation. The running estimates are kept with a default :attr:`momentum`
+    of 0.1.
+
+    If :attr:`track_running_stats` is set to ``False``, this layer then does not
+    keep running estimates, and batch statistics are instead used during
+    evaluation time as well.
+
+    .. note::
+        This :attr:`momentum` argument is different from one used in optimizer
+        classes and the conventional notion of momentum. Mathematically, the
+        update rule for running statistics here is
+        :math:`\hat{x}_\text{new} = (1 - \text{momentum}) \times \hat{x} + \text{momentum} \times x_t`,
+        where :math:`\hat{x}` is the estimated statistic and :math:`x_t` is the
+        new observed value.
+
+    Because the Batch Normalization is done over the `C` dimension, computing statistics
+    on `(N, H, W)` slices, it's common terminology to call this Spatial Batch Normalization.
+
+    Shape:
+        - Input: :math:`(N, C, H, W)`
+        - Output: :math:`(N, C, H, W)` (same shape as input)
+
+    References:
+    .. _`Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`:
+        https://arxiv.org/abs/1502.03167
+
+    """
+
+    def __init__(self,  momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,name=None, **kwargs):
         """
-        super().__init__()
+        Args:
+        eps: a value added to the denominator for numerical stability.
+            Default: 1e-5
+        momentum: the value used for the running_mean and running_var
+            computation. Can be set to ``None`` for cumulative moving average
+            (i.e. simple average). Default: 0.1
+        affine: a boolean value that when set to ``True``, this module has
+            learnable affine parameters. Default: ``True``
+        track_running_stats: a boolean value that when set to ``True``, this
+            module tracks the running mean and variance, and when set to ``False``,
+            this module does not track such statistics and always uses batch
+            statistics in both training and eval modes. Default: ``True``
+
+        Examples:
+            >>> bn=BatchNorm2d(affine=False)
+            >>> input = torch.randn(2, 64, 128, 128)
+            >>> print(int_shape(bn(input)))
+            (2, 64, 128, 128)
+
+        """
+
+        super().__init__(name=name)
 
         self.eps = eps
         self.momentum = momentum
@@ -134,14 +189,49 @@ BatchNorm3d=BatchNorm
 
 
 class GroupNorm(Layer):
-    def __init__(self, num_groups,affine=True, eps=1e-5, **kwargs):
-        super().__init__()
+    """Applies Group Normalization over a mini-batch of inputs as described in
+    the paper `Group Normalization`_ .
+
+    .. math::
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The input channels are separated into :attr:`num_groups` groups, each containing
+    ``num_channels / num_groups`` channels. The mean and standard-deviation are calculated
+    separately over the each group. :math:`\gamma` and :math:`\beta` are learnable
+    per-channel affine transform parameter vectors of size :attr:`num_channels` if
+    :attr:`affine` is ``True``.
+
+    This layer uses statistics computed from input data in both training and
+    evaluation modes.
+
+    Shape:
+        - Input: :math:`(N, C, *)` where :math:`C=\text{num\_channels}`
+        - Output: :math:`(N, C, *)` (same shape as input)
+
+    References:
+    .. _`Group Normalization`: https://arxiv.org/abs/1803.08494
+
+    """
+    def __init__(self, num_groups=16,affine=True, eps=1e-5,name=None, **kwargs):
+        """
+        Args:
+            num_groups (int): number of groups to separate the channels into
+            eps: a value added to the denominator for numerical stability. Default: 1e-5
+            affine: a boolean value that when set to ``True``, this module
+                has learnable per-channel affine parameters initialized to ones (for weights)
+                and zeros (for biases). Default: ``True``.
+
+        Examples:
+            >>> gn=GroupNorm(affine=False)
+            >>> input = torch.randn(2, 64, 128, 128)
+            >>> print(int_shape(gn(input)))
+            (2, 64, 128, 128)
+
+        """
+        super().__init__(name=name)
         self.affine=affine
         self.num_groups = num_groups
-        self.num_filters = None
         self.eps = eps
-        self.affine = affine
-
 
     def build(self, input_shape):
         if self._built == False :
@@ -164,22 +254,80 @@ GroupNorm3d=GroupNorm
 
 
 class InstanceNorm(Layer):
-    def __init__(self,momentum=0.1, affine=True, track_running_stats=True, eps=1e-5, **kwargs):
-        """
-        http://pytorch.org/docs/stable/nn.html#batchnorm1d
+    """Applies Instance Normalization over a 4D input (a mini-batch of 2D inputs
+    with additional channel dimension) as described in the paper
+    `Instance Normalization: The Missing Ingredient for Fast Stylization`_ .
 
-        Args:
-            dim: 1d, 2d, or 3d BatchNorm
-         eps: nn.BatchNorm parameter
-            momentum: nn.BatchNorm parameter
-            affine: nn.BatchNorm parameter
-            track_running_stats: nn.BatchNorm parameter
+    .. math::
+
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The mean and standard-deviation are calculated per-dimension separately
+    for each object in a mini-batch. :math:`\gamma` and :math:`\beta` are learnable parameter vectors
+    of size `C` (where `C` is the input size) if :attr:`affine` is ``True``.
+
+    By default, this layer uses instance statistics computed from input data in
+    both training and evaluation modes.
+
+    If :attr:`track_running_stats` is set to ``True``, during training this
+    layer keeps running estimates of its computed mean and variance, which are
+    then used for normalization during evaluation. The running estimates are
+    kept with a default :attr:`momentum` of 0.1.
+
+    .. note::
+        This :attr:`momentum` argument is different from one used in optimizer
+        classes and the conventional notion of momentum. Mathematically, the
+        update rule for running statistics here is
+        :math:`\hat{x}_\text{new} = (1 - \text{momentum}) \times \hat{x} + \text{momemtum} \times x_t`,
+        where :math:`\hat{x}` is the estimated statistic and :math:`x_t` is the
+        new observed value.
+
+    .. note::
+        :class:`InstanceNorm2d` and :class:`LayerNorm` are very similar, but
+        have some subtle differences. :class:`InstanceNorm2d` is applied
+        on each channel of channeled data like RGB images, but
+        :class:`LayerNorm` is usually applied on entire sample and often in NLP
+        tasks. Additionally, :class:`LayerNorm` applies elementwise affine
+        transform, while :class:`InstanceNorm2d` usually don't apply affine
+        transform.
+
+    Shape:
+        - Input: :math:`(N, C, H, W)`
+        - Output: :math:`(N, C, H, W)` (same shape as input)
+
+    References:
+    .. _`Instance Normalization: The Missing Ingredient for Fast Stylization`:
+        https://arxiv.org/abs/1607.08022
+    """
+
+    def __init__(self,momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,axis=1,name=None, **kwargs):
         """
-        super().__init__()
+        Args:
+            num_features: :math:`C` from an expected input of size
+                :math:`(N, C, H, W)`
+            eps: a value added to the denominator for numerical stability. Default: 1e-5
+            momentum: the value used for the running_mean and running_var computation. Default: 0.1
+            affine: a boolean value that when set to ``True``, this module has
+                learnable affine parameters, initialized the same way as done for batch normalization.
+                Default: ``False``.
+            track_running_stats: a boolean value that when set to ``True``, this
+                module tracks the running mean and variance, and when set to ``False``,
+                this module does not track such statistics and always uses batch
+                statistics in both training and eval modes. Default: ``False``
+
+        Examples::
+            >>> innorm=InstanceNorm(affine=False)
+            >>> input = torch.randn(2, 64, 128, 128)
+            >>> print(int_shape(innorm(input)))
+            (2, 64, 128, 128)
+
+        """
+        super().__init__(name=name)
         self.eps = _epsilon
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
+        self.axis=axis
 
     def reset_running_stats(self):
         if self.track_running_stats:
@@ -220,44 +368,101 @@ InstanceNorm2d=InstanceNorm
 InstanceNorm3d=InstanceNorm
 
 
-class LayerNorm2d(Layer):
+class LayerNorm(Layer):
+    """Applies Layer Normalization over a mini-batch of inputs as described in
+    the paper `Layer Normalization`_ .
+
+    .. math::
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The mean and standard-deviation are calculated separately over the last
+    certain number dimensions which have to be of the shape specified by
+    :attr:`normalized_shape`.
+    :math:`\gamma` and :math:`\beta` are learnable affine transform parameters of
+    :attr:`normalized_shape` if :attr:`elementwise_affine` is ``True``.
+
+    .. note::
+        Unlike Batch Normalization and Instance Normalization, which applies
+        scalar scale and bias for each entire channel/plane with the
+        :attr:`affine` option, Layer Normalization applies per-element scale and
+        bias with :attr:`elementwise_affine`.
+
+    This layer uses statistics computed from input data in both training and
+    evaluation modes.
+
+    Shape:
+        - Input: :math:`(N, *)`
+        - Output: :math:`(N, *)` (same shape as input)
+
+
+
+    References:
+    .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
+
     """
-    Layer Normalization (https://arxiv.org/pdf/1607.06450.pdf).
-
-    http://pytorch.org/docs/stable/nn.html#batchnorm1d
-
+    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True,name=None, **kwargs):
+        """
     Args:
+        normalized_shape (int or list or torch.Size): input shape from an expected input
+            of size
 
-        eps: nn.BatchNorm parameter
-        momentum: nn.BatchNorm parameter
-        affine: nn.BatchNorm parameter
-        axis: 1d, 2d, or 3d BatchNorm
-    """
-    def __init__(self, momentum=0.1, affine=True, axis=-1,  eps=_epsilon):
-        super().__init__()
-        self.momentum=momentum
-        self.affine=affine
-        self.eps=eps
-        self.axis=axis
+            .. math::
+                [* \times \text{normalized\_shape}[0] \times \text{normalized\_shape}[1]
+                    \times \ldots \times \text{normalized\_shape}[-1]]
+
+            If a single integer is used, it is treated as a singleton list, and this module will
+            normalize over the last dimension which is expected to be of that specific size.
+        eps: a value added to the denominator for numerical stability. Default: 1e-5
+        elementwise_affine: a boolean value that when set to ``True``, this module
+            has learnable per-element affine parameters initialized to ones (for weights)
+            and zeros (for biases). Default: ``True``.
+
+    Examples::
+
+        >>> input = torch.randn(20, 5, 10, 10)
+        >>> # With Learnable Parameters
+        >>> m = LayerNorm(input.size()[1:])
+        >>> # Without Learnable Parameters
+        >>> m = LayerNorm(input.size()[1:], elementwise_affine=False)
+        >>> # Normalize over last two dimensions
+        >>> m = LayerNorm([10, 10])
+        >>> # Normalize over last dimension of size 10
+        >>> m = LayerNorm(10)
+        >>> # Activating the module
+        >>> output = m(input)
+
+        """
+        super().__init__(name=name)
+        if isinstance(normalized_shape, numbers.Integral):
+            normalized_shape = (normalized_shape,)
+        self.normalized_shape = tuple(normalized_shape)
+        self.eps = eps
+        self.elementwise_affine = elementwise_affine
+
     def build(self, input_shape):
         if self._built == False :
             if self.affine:
-                self.weight = Parameter(torch.Tensor(self.input_filters))
-                self.bias = Parameter(torch.Tensor(self.input_filters))
-                init.ones_(self.weight)
-                init.zeros_(self.bias)
+                self.weight = Parameter(ones((self.normalized_shape)))
+                self.bias = Parameter(zeros((self.normalized_shape)))
             self._built=True
     def forward(self, *x):
         x = enforce_singleton(x)
-        mean = x.mean(dim=self.axis, keepdim=True).detach()
-        std = x.std(dim=self.axis, keepdim=True).detach()
-        return self.weight * (x - mean) / (std + self._eps) +self.bias
+        return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps)
+        # mean = x.mean(dim=self.axis, keepdim=True).detach()
+        # std = x.std(dim=self.axis, keepdim=True).detach()
+        # return self.weight * (x - mean) / (std + self._eps) +self.bias
 
 
+LayerNorm2d=LayerNorm
+LayerNorm3d=LayerNorm
 
 
+class PixelNorm(Layer):
+    def __init__(self,name=None, **kwargs):
+        super(PixelNorm, self).__init__(name=name)
 
-
+    def forward(self, x):
+        return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8)
 
 
 class SpectralNorm(Layer):

@@ -185,7 +185,6 @@ def VGG16(include_top=True,
                 recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
         recovery_model.to(_device)
         vgg16.model=recovery_model
-        vgg16.signature = get_signature(densenet121.model.forward)
     return vgg16
 
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)

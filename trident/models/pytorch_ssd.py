@@ -35,7 +35,7 @@ __all__ = ['Ssd', 'encode', 'decode', 'SsdBboxDataset', 'SsdBboxDatasetV2', 'Ssd
 
 
 def intersect(box_a, box_b):
-    ''' We resize both tensors to [A,B,2] without new malloc:
+    """ We resize both tensors to [A,B,2] without new malloc:
     [A,2] -> [A,1,2] -> [A,B,2]
     [B,2] -> [1,B,2] -> [A,B,2]
     Then we compute the area of intersect between box_a and box_b.
@@ -44,7 +44,7 @@ def intersect(box_a, box_b):
       box_b: (tensor) bounding boxes, Shape: [B,4].
     Return:
       (tensor) intersection area, Shape: [A,B].
-    '''
+    """
     A = box_a.size(0)
     B = box_b.size(0)
     max_xy = torch.min(box_a[:, 2:4].unsqueeze(1).expand(A, B, 2), box_b[:, 2:4].unsqueeze(0).expand(A, B, 2))
@@ -54,7 +54,7 @@ def intersect(box_a, box_b):
 
 
 def jaccard(box_a, box_b):
-    '''Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
+    """Compute the jaccard overlap of two sets of boxes.  The jaccard overlap
     is simply the intersection over union of two boxes.  Here we operate on
     ground truth boxes and default boxes.
     E.g.:
@@ -64,7 +64,7 @@ def jaccard(box_a, box_b):
         box_b: (tensor) Prior boxes from priorbox layers, Shape: [num_priors,4]
     Return:
         jaccard overlap: (tensor) Shape: [box_a.size(0), box_b.size(0)]
-    '''
+    """
     inter = intersect(box_a, box_b)
     area_a = ((box_a[:, 2] - box_a[:, 0]) * (box_a[:, 3] - box_a[:, 1])).unsqueeze(1).expand_as(inter)  # [A,B]
     area_b = ((box_b[:, 2] - box_b[:, 0]) * (box_b[:, 3] - box_b[:, 1])).unsqueeze(0).expand_as(inter)  # [A,B]
@@ -73,7 +73,7 @@ def jaccard(box_a, box_b):
 
 
 def match(truths, priors, variances, labels, threshold=0.3):
-    '''Match each prior box with the ground truth box of the highest jaccard
+    """Match each prior box with the ground truth box of the highest jaccard
     overlap, encode the bounding boxes, then return the matched indices
     corresponding to both confidence and location preds.
     Args:
@@ -90,7 +90,7 @@ def match(truths, priors, variances, labels, threshold=0.3):
 
     Return:
         The matched indices corresponding to 1)location and 2)confidence preds.
-    '''
+    """
     # jaccard index
     priors2 = priors.clone()
     num_priors = len(priors)
@@ -126,7 +126,7 @@ def match(truths, priors, variances, labels, threshold=0.3):
     return loc, conf
 
 def encode(matched, priors, variances):
-    '''
+    """
 
     Args:
         matched (tensor): Coords of ground truth for each prior in xyxy Shape: [num_priors, 4].
@@ -136,7 +136,7 @@ def encode(matched, priors, variances):
     Returns:
         encoded boxes and landmarks (tensor), Shape: [num_priors, 14]
 
-    '''
+    """
 
     # dist b/t match center and prior's center
     priors = priors.clone()
@@ -160,7 +160,7 @@ def encode(matched, priors, variances):
 
 
 def decode(loc, priors, variances):
-    '''Decode locations from predictions using priors to undo
+    """Decode locations from predictions using priors to undo
     the encoding we did for offset regression at train time.
     Adapted from https://github.com/Hakuyume/chainer-ssd
 
@@ -174,7 +174,7 @@ def decode(loc, priors, variances):
     Return:
         decoded bounding box predictions
 
-    '''
+    """
     boxes = torch.cat([priors.unsqueeze(0)[:, :, 0:2] + loc[:, :, 0:2] * variances[0] * priors.unsqueeze(0)[:, :, 2:4],
                        priors.unsqueeze(0)[:, :, 2:4] * torch.exp(loc[:, :, 2:4] * variances[1])], -1)
     boxes[:, :, 0:2] -= boxes[:, :, 2:4] / 2
@@ -241,7 +241,7 @@ class SsdBboxDatasetV2(BboxDataset):
         self.bbox_post_transform_funcs = []
 
     def area_of(self, left_top, right_bottom):
-        '''Compute the areas of rectangles given two corners.
+        """Compute the areas of rectangles given two corners.
 
         Args:
             left_top (N, 2): left top corner.
@@ -249,12 +249,12 @@ class SsdBboxDatasetV2(BboxDataset):
 
         Returns:
             area (N): return the area.
-        '''
+        """
         hw = np.clip(right_bottom - left_top, 0.0, None)
         return hw[..., 0] * hw[..., 1]
 
     def iou_of(self, boxes0, boxes1, eps=1e-5):
-        '''Return intersection-over-union (Jaccard index) of boxes.
+        """Return intersection-over-union (Jaccard index) of boxes.
 
         Args:
             boxes0 (N, 4): ground truth boxes.
@@ -262,7 +262,7 @@ class SsdBboxDatasetV2(BboxDataset):
             eps: a small number to avoid 0 as denominator.
         Returns:
             iou (N): IoU values.
-        '''
+        """
         overlap_left_top = np.maximum(boxes0[..., :2], boxes1[..., :2])
         overlap_right_bottom = np.minimum(boxes0[..., 2:], boxes1[..., 2:])
 
@@ -280,7 +280,7 @@ class SsdBboxDatasetV2(BboxDataset):
                               axis=len(center_form_boxes.shape) - 1)
 
     def assign_priors(self, gt_boxes, gt_labels, center_form_priors, iou_threshold):
-        # '''Assign ground truth boxes and targets to priors.
+        # """Assign ground truth boxes and targets to priors.
         #
         # Args:
         #     gt_boxes (num_targets, 4): ground truth boxes.
@@ -289,7 +289,7 @@ class SsdBboxDatasetV2(BboxDataset):
         # Returns:
         #     boxes (num_priors, 4): real values for priors.
         #     labels (num_priros): labels for priors.
-        # '''
+        # """
         # # size: num_priors x num_targets
         # # if gt_boxes is not None :
         #
@@ -357,7 +357,7 @@ class SsdBboxDatasetV2(BboxDataset):
 
 
 def hard_negative_mining(loss, labels, neg_pos_ratio):
-    '''
+    """
     It used to suppress the presence of a large number of negative prediction.
     It works on image level not batch level.
     For any example/image, it keeps all the positive predictions and
@@ -369,7 +369,7 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
         loss (N, num_priors): the loss for each example.
         labels (N, num_priors): the labels.
         neg_pos_ratio:  the ratio between the negative examples and positive examples.
-    '''
+    """
     pos_mask = labels > 0
 
     num_pos = pos_mask.long().sum()
@@ -384,11 +384,11 @@ def hard_negative_mining(loss, labels, neg_pos_ratio):
 
 class MultiBoxLoss(nn.Module):
     def __init__(self, priors, neg_pos_ratio, center_variance, size_variance):
-        '''Implement SSD Multibox Loss.
+        """Implement SSD Multibox Loss.
 
         Basically, Multibox loss combines classification loss
          and Smooth L1 regression loss.
-        '''
+        """
         super(MultiBoxLoss, self).__init__()
         self.neg_pos_ratio = neg_pos_ratio
         self.center_variance = center_variance
@@ -396,14 +396,14 @@ class MultiBoxLoss(nn.Module):
         self.priors = to_tensor(priors)
 
     def forward(self, confidence, locations, target_confidence, target_locations):
-        '''Compute classification loss and smooth l1 loss.
+        """Compute classification loss and smooth l1 loss.
 
         Args:
             confidence (batch_size, num_priors, num_classes): class predictions.
             locations (batch_size, num_priors, 4): predicted locations.
             labels (batch_size, num_priors): real labels of all the priors.
             boxes (batch_size, num_priors, 4): real boxes corresponding all the priors.
-        '''
+        """
         num_classes = confidence.size(2)
 
         # derived from cross_entropy=sum(log(p))
@@ -427,11 +427,11 @@ class MultiBoxLoss(nn.Module):
 
 class MultiBoxLossV2(nn.Module):
     def __init__(self, priors, neg_pos_ratio, center_variance, size_variance):
-        '''Implement SSD Multibox Loss.
+        """Implement SSD Multibox Loss.
 
         Basically, Multibox loss combines classification loss
          and Smooth L1 regression loss.
-        '''
+        """
         super(MultiBoxLossV2, self).__init__()
         self.neg_pos_ratio = neg_pos_ratio
         self.center_variance = center_variance
@@ -439,14 +439,14 @@ class MultiBoxLossV2(nn.Module):
         self.priors = to_tensor(priors)
 
     def forward(self, confidence, locations, target_confidence, target_locations):
-        '''Compute classification loss and smooth l1 loss.
+        """Compute classification loss and smooth l1 loss.
 
         Args:
             confidence (batch_size, num_priors, num_classes): class predictions.
             locations (batch_size, num_priors, 4): predicted locations.
             target_confidence (batch_size, num_priors): real labels of all the priors.
             target_locations (batch_size, num_priors, 4): real boxes corresponding all the priors.
-        '''
+        """
         num_classes = confidence.size(2)
         # derived from cross_entropy=sum(log(p))
         with torch.no_grad():
@@ -463,25 +463,25 @@ class MultiBoxLossV2(nn.Module):
 
 class IouLoss(nn.Module):
     def __init__(self, priors,  center_variance, size_variance):
-        '''Implement SSD Multibox Loss.
+        """Implement SSD Multibox Loss.
 
         Basically, Multibox loss combines classification loss
          and Smooth L1 regression loss.
-        '''
+        """
         super(IouLoss, self).__init__()
         self.center_variance = center_variance
         self.size_variance = size_variance
         self.priors = to_tensor(priors)
 
     def forward(self, confidence, locations, target_confidence, target_locations):
-        '''Compute classification loss and smooth l1 loss.
+        """Compute classification loss and smooth l1 loss.
 
         Args:
             confidence (batch_size, num_priors, num_classes): class predictions.
             locations (batch_size, num_priors, 4): predicted locations.
             target_confidence (batch_size, num_priors): real labels of all the priors.
             target_locations (batch_size, num_priors, 4): real boxes corresponding all the priors.
-        '''
+        """
         num_classes = confidence.size(2)
         num_batch= confidence.size(0)
 
@@ -524,12 +524,12 @@ class IouLoss(nn.Module):
 class Ssd(Layer):
     def __init__(self, backbond, base_filters=16, num_classes=5, num_regressors=14, iou_threshold=0.3,
                  variance=(0.1, 0.2), name='tiny_mobile_rfbnet', **kwargs):
-        '''
+        """
 
         Parameters
         ----------
         layer_defs : object
-        '''
+        """
         super(Ssd, self).__init__(name=name)
         self.base_filters = base_filters
 
@@ -707,7 +707,7 @@ class SsdDetectionModel(ImageDetectionModel):
         self.palette = {}
 
     def area_of(self, left_top, right_bottom):
-        '''Compute the areas of rectangles given two corners.
+        """Compute the areas of rectangles given two corners.
 
         Args:
             left_top (N, 2): left top corner.
@@ -715,12 +715,12 @@ class SsdDetectionModel(ImageDetectionModel):
 
         Returns:
             area (N): return the area.
-        '''
+        """
         hw = np.clip(right_bottom - left_top, 0.0, None)
         return hw[..., 0] * hw[..., 1]
 
     def iou_of(self, boxes0, boxes1, eps=1e-5):
-        '''Return intersection-over-union (Jaccard index) of boxes.
+        """Return intersection-over-union (Jaccard index) of boxes.
 
         Args:
             boxes0 (N, 4): ground truth boxes.
@@ -728,7 +728,7 @@ class SsdDetectionModel(ImageDetectionModel):
             eps: a small number to avoid 0 as denominator.
         Returns:
             iou (N): IoU values.
-        '''
+        """
         overlap_left_top = np.maximum(boxes0[..., :2], boxes1[..., :2])
         overlap_right_bottom = np.minimum(boxes0[..., 2:], boxes1[..., 2:])
 
@@ -738,7 +738,7 @@ class SsdDetectionModel(ImageDetectionModel):
         return overlap_area / (area0 + area1 - overlap_area + eps)
 
     def hard_nms(self, box_scores, iou_threshold, top_k=-1, candidate_size=200):
-        '''
+        """
 
         Args:
             box_scores (N, 5): boxes in corner-form and probabilities.
@@ -747,7 +747,7 @@ class SsdDetectionModel(ImageDetectionModel):
             candidate_size: only consider the candidates with the highest scores.
         Returns:
              picked: a list of indexes of the kept boxes
-        '''
+        """
         if box_scores is None or len(box_scores) == 0:
             return None, None
         scores = box_scores[:, -1]

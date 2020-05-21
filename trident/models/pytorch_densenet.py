@@ -50,7 +50,7 @@ if not os.path.exists(dirname):
 
 
 def DenseLayer(growth_rate,name=''):
-    '''
+    """
     The basic normalization, convolution and activation combination for dense connection
 
     Args:
@@ -60,7 +60,7 @@ def DenseLayer(growth_rate,name=''):
     Returns:
         An instrance of dense layer.
 
-    '''
+    """
     items = OrderedDict()
     items['norm']=BatchNorm2d()
     items['relu']=Relu()
@@ -71,7 +71,7 @@ def DenseLayer(growth_rate,name=''):
 
 class DenseBlock(Layer):
     def __init__(self, num_layers,  growth_rate=32, drop_rate=0,keep_output=False,name=''):
-        '''
+        """
         The dense connected block.
         Feature-maps of eachconvolution layer are used as inputs into all subsequent layers
 
@@ -85,7 +85,7 @@ class DenseBlock(Layer):
         Returns:
             An instrance of dense block.
 
-        '''
+        """
         super(DenseBlock, self).__init__()
         if len(name)>0:
             self.name=name
@@ -102,7 +102,7 @@ class DenseBlock(Layer):
 
 
 def Transition(reduction,name=''):
-    '''
+    """
      The block for transition-down, down-sampling by average pooling
     Args:
         reduction (float): The depth_multiplier to transition-down the dense features
@@ -112,7 +112,7 @@ def Transition(reduction,name=''):
         An instrance of transition-down .
 
 
-    '''
+    """
     items=OrderedDict()
     items['norm']=BatchNorm2d()
     items['relu']=Relu()
@@ -122,7 +122,7 @@ def Transition(reduction,name=''):
 
 
 def TransitionDown(reduction,name=''):
-    '''
+    """
      The block for transition-down, down-sampling by using depthwise convolution with strides==2
 
     Args:
@@ -132,7 +132,7 @@ def TransitionDown(reduction,name=''):
     Returns:
         An instrance of transition-down .
 
-    '''
+    """
     return DepthwiseConv2d_Block((3,3),depth_multiplier=reduction,strides=2,activation='leaky_relu',normalization='batch', dropout_rate=0.2)
 
 def TransitionUp(output_idx=None,num_filters=None,name=''):
@@ -147,7 +147,7 @@ def DenseNet(blocks,
              num_classes=1000,
              name='',
              **kwargs):
-    ''''
+    """'
     Instantiates the DenseNet architecture.
     Optionally loads weights pre-trained on ImageNet.
 
@@ -169,7 +169,7 @@ def DenseNet(blocks,
     Returns
         A trident image classification model instance.
 
-    '''
+    """
     densenet=Sequential()
     densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
     densenet.add_module('maxpool', (MaxPool2d((3, 3), strides=2, auto_pad=True, padding_mode='zero')))
@@ -207,7 +207,7 @@ def DenseNetFcn(blocks=(4, 5, 7, 10, 12),
              num_classes=10,
              name='',
              **kwargs):
-    '''
+    """
     Instantiates the DenseNet FCN architecture.
     Optionally loads weights pre-trained on ImageNet.
 
@@ -229,7 +229,7 @@ def DenseNetFcn(blocks=(4, 5, 7, 10, 12),
     Returns
         A trident image segmentation model instance.
 
-    '''
+    """
 
     model = ImageSegmentationModel(input_shape=input_shape, output=_DenseNetFcn2(blocks=blocks,
              growth_rate=growth_rate,
@@ -299,7 +299,7 @@ def DenseNet121(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
-    '''
+    """
     Constructor the image classicication model with DenseNet121 as backbond
 
     Args:
@@ -319,7 +319,7 @@ def DenseNet121(include_top=True,
         >>> 'n02124075' in dense121.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
         True
 
-    '''
+    """
 
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
@@ -349,7 +349,7 @@ def DenseNet161(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
-    '''
+    """
     Constructor the image classicication model with DenseNet161 as backbond
 
     Args:
@@ -369,7 +369,7 @@ def DenseNet161(include_top=True,
         >>> 'n02124075' in dense161.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
         True
 
-    '''
+    """
 
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
@@ -400,7 +400,7 @@ def DenseNet169(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
-    '''
+    """
     Constructor the image classicication model with DenseNet169 as backbond
 
     Args:
@@ -420,7 +420,7 @@ def DenseNet169(include_top=True,
         >>> 'n02124075' in dense169.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
         True
 
-    '''
+    """
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
 
@@ -449,7 +449,7 @@ def DenseNet201(include_top=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
-    '''
+    """
     Constructor the image classicication model with DenseNet201 as backbond
 
     Args:
@@ -469,7 +469,7 @@ def DenseNet201(include_top=True,
         >>> 'n02124075' in dense201.infer_single_image(get_image_from_google_drive('1SwablQsZO8mBuB84xnr1IoOisE3pm03l'),1).key_list[0]
         True
 
-    '''
+    """
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
 

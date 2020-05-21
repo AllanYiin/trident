@@ -174,7 +174,7 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
             return False
 
 def get_image_from_google_drive(file_id):
-    '''Download a Google Drive image  and place it in root.
+    """Download a Google Drive image  and place it in root.
 
     Args:
         file_id (str): id of file to be downloaded
@@ -182,7 +182,7 @@ def get_image_from_google_drive(file_id):
     Returns:
         the file path of this downloaded image
 
-    '''
+    """
 
     import requests
     url = 'https://drive.google.com/uc?export=download'
@@ -329,7 +329,7 @@ def _save_response_content(response, destination, chunk_size=32768):
 def extract_archive(file_path, target_folder=None, archive_format='auto'):
   """Extracts an archive if it matches tar, tar.gz, tar.bz, or zip formats.
 
-  Arguments:
+  Args:
       file_path: path to the archive file
       target_folder: path to extract the archive file
       archive_format: Archive format to try for extracting the file.

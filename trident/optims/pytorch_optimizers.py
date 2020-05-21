@@ -2,31 +2,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import itertools as it
 import math
-import os
-import sys
-import time
-import uuid
-from collections import OrderedDict, defaultdict
-from functools import partial
-from shutil import copyfile
+from collections import defaultdict
 
-import numpy as np
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-import torch.utils.hooks as hooks
-from torch.autograd import Variable
-from torch.optim.optimizer import Optimizer
 
-from trident.backend.common import get_session, addindent, get_time_suffix, get_class, format_time, get_terminal_size, snake2camel, camel2snake
-from trident.backend.pytorch_backend import *
+from trident.backend.common import get_class, snake2camel
 from trident.backend.pytorch_ops import *
-from trident.backend.optimizer import OptimizerBase
 
-__all__ = ['Adam','SGD','LBFGS','Adadelta','Adagrad','RMSprop','RAdam','PlainRAdam','AdamW','Lookahead','Ranger','get_optimizer']
+__all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'PlainRAdam', 'AdamW', 'Lookahead',
+           'Ranger', 'get_optimizer']
 
 
 def _filter_grads(grads_and_vars, gradient_centralization=None):
@@ -58,7 +44,75 @@ def _filter_grads(grads_and_vars, gradient_centralization=None):
     return filtered
 
 
-class Adam(optim.Adam, OptimizerBase):
+class Optimizer(optim.optimizer):
+    """Base class for all optimizers.
+
+    .. warning::
+        Parameters need to be specified as collections that have a deterministic
+        ordering that is consistent between runs. Examples of objects that don't
+        satisfy those properties are sets and iterators over values of dictionaries.
+
+    Args:
+        params (iterable): an iterable of :class:`tf.Variable` s or
+            :class:`dict` s. Specifies what Tensors should be optimized.
+        defaults: (dict): a dict containing default values of optimization
+            options (used when a parameter group doesn't specify them).
+
+
+    """
+
+    def __init__(self, params, defaults):
+        super().__init__(params, defaults)
+
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
+
+
+class Adam(optim.Adam):
     """Implements Adam algorithm.
 
     It has been proposed in `Adam: A Method for Stochastic Optimization`_.
@@ -83,11 +137,60 @@ class Adam(optim.Adam, OptimizerBase):
             https://openreview.net/forum?id=ryQu7f-RZ
 
     """
-    pass
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
+                 gradient_centralization=None):
+        super().__init__(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
+
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
 
 
-
-class SGD(optim.SGD, OptimizerBase):
+class SGD(optim.SGD):
     r"""Implements stochastic gradient descent (optionally with momentum).
 
     Nesterov momentum is based on the formula from
@@ -135,18 +238,202 @@ class SGD(optim.SGD, OptimizerBase):
         The Nesterov version is analogously modified.
     """
 
-    pass
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
 
-class LBFGS(get_class('LBFGS',['torch.optim']), OptimizerBase):
-    pass
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
 
-class Adadelta(get_class('Adadelta',['torch.optim']), OptimizerBase):
-    pass
+        """
 
-class Adagrad(get_class('Adagrad',['torch.optim']), OptimizerBase):
-    pass
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
-class RMSprop(get_class('RMSprop',['torch.optim']), OptimizerBase):
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
+
+
+class LBFGS(get_class('LBFGS', ['torch.optim'])):
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
+
+
+class Adadelta(get_class('Adadelta', ['torch.optim'])):
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
+
+
+class Adagrad(get_class('Adagrad', ['torch.optim'])):
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
+
+
+class RMSprop(get_class('RMSprop', ['torch.optim'])):
     r"""Implements RMSprop algorithm.
 
     Proposed by G. Hinton in his
@@ -174,11 +461,56 @@ class RMSprop(get_class('RMSprop',['torch.optim']), OptimizerBase):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
 
     """
-    pass
+
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self.param_groups[0]['lr']
+        if old_lr != new_lr:
+            self.param_groups[0]['lr'] = new_lr
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return self.param_groups['params']
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self.param_groups[0]['lr']
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self.lr
+            new_lr = value
+            self.param_groups[0]['lr'] = new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
 
 
-
-class RAdam(Optimizer, OptimizerBase):
+class RAdam(Optimizer):
     """Variant of the Adam optimizer whose adaptive learning rate is rectified
         so as to have a consistent variance.
         It implements the Rectified Adam (a.k.a. RAdam) proposed by
@@ -216,7 +548,9 @@ class RAdam(Optimizer, OptimizerBase):
 
         ```
         """
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0,N_sma_threshhold=5, degenerated_to_sgd=True):
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, N_sma_threshhold=5,
+                 degenerated_to_sgd=True):
         """Construct a new RAdam optimizer.
         Args:
             params: trainable parameters from model
@@ -241,7 +575,7 @@ class RAdam(Optimizer, OptimizerBase):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
 
         self.degenerated_to_sgd = degenerated_to_sgd
-        self.N_sma_threshhold=N_sma_threshhold
+        self.N_sma_threshhold = N_sma_threshhold
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
             for param in params:
                 if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
@@ -249,8 +583,10 @@ class RAdam(Optimizer, OptimizerBase):
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
                         buffer=[[None, None, None] for _ in range(10)])
         super(RAdam, self).__init__(params, defaults)
+
     def __setstate__(self, state):
         super(RAdam, self).__setstate__(state)
+
     def step(self, closure=None):
         """Performs a single optimization step.
 
@@ -302,7 +638,7 @@ class RAdam(Optimizer, OptimizerBase):
                     if N_sma >= self.N_sma_threshhold:
                         step_size = math.sqrt(
                             (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                        N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                                    N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     elif self.degenerated_to_sgd:
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     else:
@@ -324,7 +660,8 @@ class RAdam(Optimizer, OptimizerBase):
 
         return loss
 
-class PlainRAdam(Optimizer, OptimizerBase):
+
+class PlainRAdam(Optimizer):
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -392,7 +729,7 @@ class PlainRAdam(Optimizer, OptimizerBase):
                         p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
                     step_size = group['lr'] * math.sqrt(
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                    N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                                N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
                     p_data_fp32.addcdiv_(-step_size, exp_avg, denom)
                     p.data.copy_(p_data_fp32)
@@ -406,7 +743,7 @@ class PlainRAdam(Optimizer, OptimizerBase):
         return loss
 
 
-class AdamW(Optimizer, OptimizerBase):
+class AdamW(Optimizer):
     """Optimizer that implements the Adam algorithm with weight decay.
 
     This is an implementation of the AdamW optimizer described in "Decoupled
@@ -425,6 +762,7 @@ class AdamW(Optimizer, OptimizerBase):
         >>> AdamW(lr=0.001, betas=(0.9, 0.999))
 
     """
+
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, warmup=0):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -502,7 +840,7 @@ class AdamW(Optimizer, OptimizerBase):
         return loss
 
 
-class Lookahead(Optimizer, OptimizerBase):
+class Lookahead(Optimizer):
     def __init__(self, optimizer, k=5, alpha=0.5):
         self.optimizer = optimizer
         self.k = k
@@ -561,12 +899,15 @@ class Lookahead(Optimizer, OptimizerBase):
         param_group["counter"] = 0
         self.optimizer.add_param_group(param_group)
 
-class Ranger(Optimizer, OptimizerBase):
+
+class Ranger(Optimizer):
     """
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95,0.999), eps=1e-5, weight_decay=0):
-        #parameter checks
+
+    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
+                 weight_decay=0):
+        # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
         if not 1 <= k:
@@ -576,48 +917,45 @@ class Ranger(Optimizer, OptimizerBase):
         if not eps > 0:
             raise ValueError('Invalid eps: {eps}')
 
-        #parameter comments:
+        # parameter comments:
         # beta1 (momentum) of .95 seems to work better than .90...
-        #N_sma_threshold of 5 seems better in testing than 4.
-        #In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
+        # N_sma_threshold of 5 seems better in testing than 4.
+        # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
 
-        #prep defaults and init torch.optim base
-        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold, eps=eps, weight_decay=weight_decay)
-        super().__init__(params,defaults)
+        # prep defaults and init torch.optim base
+        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,
+                        eps=eps, weight_decay=weight_decay)
+        super().__init__(params, defaults)
 
-        #adjustable threshold
+        # adjustable threshold
         self.N_sma_threshhold = N_sma_threshhold
 
-        #now we can get to work...
-        #removed as we now use step from RAdam...no need for duplicate step counting
-        #for group in self.param_groups:
+        # now we can get to work...
+        # removed as we now use step from RAdam...no need for duplicate step counting
+        # for group in self.param_groups:
         #    group["step_counter"] = 0
-            #print("group step counter init")
+        # print("group step counter init")
 
-        #look ahead params
+        # look ahead params
         self.alpha = alpha
         self.k = k
 
-        #radam buffer for state
-        self.radam_buffer = [[None,None,None] for ind in range(10)]
+        # radam buffer for state
+        self.radam_buffer = [[None, None, None] for ind in range(10)]
 
-        #self.first_run_check=0
+        # self.first_run_check=0
 
-        #lookahead weights
-        #9/2/19 - lookahead param tensors have been moved to state storage.
-        #This should resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
+        # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
+        # resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
 
-        #self.slow_weights = [[p.clone().detach() for p in group['params']]
-        #                     for group in self.param_groups]
+        # self.slow_weights = [[p.clone().detach() for p in group['params']]  #                     for group in
+        # self.param_groups]
 
-        #don't use grad for lookahead weights
-        #for w in it.chain(*self.slow_weights):
-        #    w.requires_grad = False
+        # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
 
     def __setstate__(self, state):
         print("set state called")
         super(Ranger, self).__setstate__(state)
-
 
     def step(self, closure=None):
         """Performs a single optimization step.
@@ -631,7 +969,7 @@ class Ranger(Optimizer, OptimizerBase):
         if closure is not None:
             loss = closure()
 
-        #Evaluate averages and grad, update param tensors
+        # Evaluate averages and grad, update param tensors
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None:
@@ -642,17 +980,17 @@ class Ranger(Optimizer, OptimizerBase):
 
                 p_data_fp32 = p.data.float()
 
-                state = self.state[p]  #get state dict for this param
+                state = self.state[p]  # get state dict for this param
 
-                if len(state) == 0:   #if first time to run...init dictionary with our desired entries
-                    #if self.first_run_check==0:
-                        #self.first_run_check=1
-                        #print("Initializing slow buffer...should not see this at load from saved model!")
+                if len(state) == 0:  # if first time to run...init dictionary with our desired entries
+                    # if self.first_run_check==0:
+                    # self.first_run_check=1
+                    # print("Initializing slow buffer...should not see this at load from saved model!")
                     state['step'] = 0
                     state['exp_avg'] = torch.zeros_like(p_data_fp32)
                     state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)
 
-                    #look ahead weight storage now in state dict
+                    # look ahead weight storage now in state dict
                     state['slow_buffer'] = torch.empty_like(p.data)
                     state['slow_buffer'].copy_(p.data)
 
@@ -660,17 +998,16 @@ class Ranger(Optimizer, OptimizerBase):
                     state['exp_avg'] = state['exp_avg'].type_as(p_data_fp32)
                     state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data_fp32)
 
-                #begin computations
+                # begin computations
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
 
-                #compute variance mov avg
+                # compute variance mov avg
                 exp_avg_sq.mul_(beta2).addcmul_(1 - beta2, grad, grad)
-                #compute mean moving avg
+                # compute mean moving avg
                 exp_avg.mul_(beta1).add_(1 - beta1, grad)
 
                 state['step'] += 1
-
 
                 buffered = self.radam_buffer[int(state['step'] % 10)]
                 if state['step'] == buffered[0]:
@@ -682,7 +1019,9 @@ class Ranger(Optimizer, OptimizerBase):
                     N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
                     buffered[1] = N_sma
                     if N_sma > self.N_sma_threshhold:
-                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                        step_size = math.sqrt(
+                            (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
+                                        N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     else:
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
@@ -698,19 +1037,19 @@ class Ranger(Optimizer, OptimizerBase):
 
                 p.data.copy_(p_data_fp32)
 
-                #integrated look ahead...
-                #we do it at the param level instead of group level
+                # integrated look ahead...
+                # we do it at the param level instead of group level
                 if state['step'] % group['k'] == 0:
-                    slow_p = state['slow_buffer'] #get access to slow param tensor
-                    slow_p.add_(self.alpha, p.data - slow_p)  #(fast weights - slow weights) * alpha
-                    p.data.copy_(slow_p)  #copy interpolated weights to RAdam param tensor
+                    slow_p = state['slow_buffer']  # get access to slow param tensor
+                    slow_p.add_(self.alpha, p.data - slow_p)  # (fast weights - slow weights) * alpha
+                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
         return loss
 
 
 def get_optimizer(optimizer_name):
     if optimizer_name is None:
         return None
-    optimizer_modules = ['trident.optims.pytorch_optimizers','torch.optim']
+    optimizer_modules = ['trident.optims.pytorch_optimizers', 'torch.optim']
     if optimizer_name in __all__:
         optimizer_class = get_class(optimizer_name, optimizer_modules)
         return optimizer_class
@@ -718,7 +1057,6 @@ def get_optimizer(optimizer_name):
         try:
             optimizer_class = get_class(snake2camel(optimizer_name), optimizer_modules)
             return optimizer_class
-        except Exception :
+        except Exception:
             optimizer_class = get_class(optimizer_name, optimizer_modules)
         return optimizer_class
-

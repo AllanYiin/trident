@@ -162,7 +162,7 @@ class Flatten(Layer):
 
 
 class Concate(Layer):
-    '''Concate layer to splice  tensors .'''
+    """Concate layer to splice  tensors ."""
 
     def __init__(self, axis=-1):
         super(Concate, self).__init__()
@@ -192,7 +192,7 @@ Concatenate = Concate
 
 
 class Add(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self):
         super(Add, self).__init__()
@@ -214,7 +214,7 @@ class Add(Layer):
 
 
 class Subtract(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self):
         super(Subtract, self).__init__()
@@ -236,7 +236,7 @@ class Subtract(Layer):
 
 
 class Dot(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self, axis=1):
         super(Dot, self).__init__()
@@ -258,7 +258,7 @@ class Dot(Layer):
 
 
 class SoftMax(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self, axis=-1, add_noise=False, noise_intensity=0.005, name=None, **kwargs):
         super(SoftMax, self).__init__(name=name)
@@ -275,9 +275,9 @@ class SoftMax(Layer):
             if self.add_noise == True:
                 noise = self.noise_intensity * tf.random.normal(shape=x.get_shape(), mean=1, stddev=1)
                 x = x + noise
-            x = tf.math.log(tf.math.softmax(x, -1))
+            x = tf.math.log(tf.math.softmax(x, self.axis))
         else:
-            x = tf.math.softmax(x, -1)
+            x = tf.math.softmax(x, self.axis)
         return x
 
 
@@ -306,7 +306,7 @@ class SoftMax(Layer):
 #     return static_padding
 
 def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None):
-    ''' Calcualte the actual padding we need in different rank and different convlution settings.
+    """ Calcualte the actual padding we need in different rank and different convlution settings.
 
     Args:
         rank (int):
@@ -330,7 +330,7 @@ def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None)
     ((1, 0), (1, 0))
     >>> get_static_padding(3,(5,5,5),(1,1,1),(2,2,2))
     ((4, 4), (4, 4), (4, 4))
-    '''
+    """
     if input_shape is None:
         input_shape = [224] * rank
     if isinstance(kernal_shape, int):
@@ -532,100 +532,100 @@ class Conv1d(_ConvNd):
 
 
 class Conv2d(_ConvNd):
-    '''Applies to create a 2D convolution layer
+    """
+    Applies to create a 2D convolution layer
 
-        Args:
-            kernel_size :(int or tupleof ints)
-                shape (spatial extent) of the receptive field
+    Args:
+        kernel_size :(int or tupleof ints)
+            shape (spatial extent) of the receptive field
 
-            num_filters :(int  or None, default to None)
-                number of output channel (filters)`, sometimes in backbond design output channel is propotional
-                to input channel.
-                But in trident all layer is shape  delay inferred
+        num_filters :(int  or None, default to None)
+            number of output channel (filters), sometimes in backbond design output channel is propotional
+            to input channel, so setting depth_multiplier instead of num_filters (num_filters=depth_multiplier*input_filters).
 
-            strides:(int or tupleof ints ,default to 1)
-                 stride of the convolution (increment when sliding the filter over the input)
+        strides:(int or tupleof ints ,default to 1)
+             strides of the convolution (increment when sliding the filter over the input)
 
-            auto_pad:bool
-                if `False`, then the filter will be shifted over the "valid" area of input, that is,
-                no value outside the area is used. If ``pad=True`` means 'same
+        auto_pad:bool
+            if `False`, then the filter will be shifted over the "valid" area of input, that is,
+            no value outside the area is used. If ``pad=True`` means 'same
 
-            *padding (optional)
-                auto_pad can help you calculate the pad you need.
-                if you have special need , you still can use the paddding
-                implicit paddings on both sides of the input. Can be a single number or a double tuple (padH, padW)
-                or quadruple(pad_left, pad_right, pad_top, pad_btm )
+        *padding (optional)
+            auto_pad can help you calculate the pad you need.
+            if you have special need , you still can use the paddding
+            implicit paddings on both sides of the input. Can be a single number or a double tuple (padH, padW)
+            or quadruple(pad_left, pad_right, pad_top, pad_btm )
 
-            padding_mode:string (default is 'zero', available option are 'reflect', 'replicate','constant',
-            'circular')
-            mode: One of "CONSTANT", "REFLECT", or "SYMMETRIC" (case-insensitive)
+        padding_mode:string (default is 'zero', available option are 'reflect', 'replicate','constant',
+        'circular')
+        mode: One of "CONSTANT", "REFLECT", or "SYMMETRIC" (case-insensitive)
 
-            activation: (None, string, function or Layer)
-                activation function after the convolution operation for apply non-linearity.
+        activation: (None, string, function or Layer)
+            activation function after the convolution operation for apply non-linearity.
 
-            use_bias:bool
-                the layer will have no bias if `False` is passed here
+        use_bias:bool
+            the layer will have no bias if `False` is passed here
 
-            dilation:(int or tupleof ints)
-                the spacing between kernel elements. Can be a single number or a tuple (dH, dW). Default: 1
+        dilation:(int or tupleof ints)
+            the spacing between kernel elements. Can be a single number or a tuple (dH, dW). Default: 1
 
-            groups
-                split input into groups, \text{in\_channels}in_channels should be divisible by the number of
-                groups. Default: 1
-            depth_multiplier: (int of decimal)
+        groups
+            split input into groups, \text{in\_channels}in_channels should be divisible by the number of
+            groups. Default: 1
+        depth_multiplier: (int of decimal)
 
-            name
-                name of the layer
+        name
+            name of the layer
 
-        Shape:
-            - Input: :math:`(N, *, H_{in})` where :math:`*` means any number of
-              additional dimensions and :math:`H_{in} = \text{in\_features}`
-            - Output: :math:`(N, *, H_{out})` where all but the last dimension
-              are the same shape as the input and :math:`H_{out} = \text{out\_features}`.
+    Shape:
+        - Input: :math:`(N, *, H_{in})` where :math:`*` means any number of
+          additional dimensions and :math:`H_{in} = \text{in\_features}`
+        - Output: :math:`(N, *, H_{out})` where all but the last dimension
+          are the same shape as the input and :math:`H_{out} = \text{out\_features}`.
 
-        Attributes:
-            weight: the learnable weights of the module of shape
-                :math:`(\text{out\_features}, \text{in\_features})`. The values are
-                initialized from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})`, where
+    Attributes:
+        weight: the learnable weights of the module of shape
+            :math:`(\text{out\_features}, \text{in\_features})`. The values are
+            initialized from :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})`, where
+            :math:`k = \frac{1}{\text{in\_features}}`
+        bias:   the learnable bias of the module of shape :math:`(\text{out\_features})`.
+                If :attr:`bias` is ``True``, the values are initialized from
+                :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
                 :math:`k = \frac{1}{\text{in\_features}}`
-            bias:   the learnable bias of the module of shape :math:`(\text{out\_features})`.
-                    If :attr:`bias` is ``True``, the values are initialized from
-                    :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
-                    :math:`k = \frac{1}{\text{in\_features}}`
 
-     Examples::
-        >>> input =to_tensor(np.random.random((1,128,128,32)))
-        >>> conv1= Conv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
-        >>> output = conv1(input)
-        >>> print(output.shape)
-        (1, 64, 64, 64)
-        >>> print(conv1.weight.shape)
-        (3, 3, 32, 64)
-        >>> print(conv1.padding)
-        [1, 1, 1, 1]
-        >>> conv2= Conv2d((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)))
-        >>> output = conv2(input)
-        >>> print(output.shape)
-        (1, 64, 64, 256)
-        >>> print(conv2.weight.shape)
-        (3, 3, 32, 256)
-        >>> print(conv2.padding)
-        (1, 0, 1, 0)
-        >>> conv3= Conv2d((3,5),64,strides=(1,2),activation=mish, auto_pad=True,use_bias=False,dilation=4,groups=16)
-        >>> output = conv3(input)
-        >>> print(output.shape)
-        (1, 136, 60, 4)
-        >>> print(conv3.weight.shape)
-        (3, 5, 32, 4)
-        >>> print(conv3.padding)
-        [8, 8, 4, 4]
-        >>> input = to_tensor(np.random.random((1,37,37,32)))
-        >>> conv4= Conv2d((3,3),64,strides=2,activation=mish, auto_pad=True,use_bias=False)
-        >>> output = conv4(input)
-        >>> print(output.shape)
-        (1, 19, 19, 64)
+    Examples::
+    >>> input =to_tensor(np.random.random((1,128,128,32)))
+    >>> conv1= Conv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
+    >>> output = conv1(input)
+    >>> print(output.shape)
+    (1, 64, 64, 64)
+    >>> print(conv1.weight.shape)
+    (3, 3, 32, 64)
+    >>> print(conv1.padding)
+    [1, 1, 1, 1]
+    >>> conv2= Conv2d((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)))
+    >>> output = conv2(input)
+    >>> print(output.shape)
+    (1, 64, 64, 256)
+    >>> print(conv2.weight.shape)
+    (3, 3, 32, 256)
+    >>> print(conv2.padding)
+    (1, 0, 1, 0)
+    >>> conv3= Conv2d((3,5),64,strides=(1,2),activation=mish, auto_pad=True,use_bias=False,dilation=4,groups=16)
+    >>> output = conv3(input)
+    >>> print(output.shape)
+    (1, 136, 60, 4)
+    >>> print(conv3.weight.shape)
+    (3, 5, 32, 4)
+    >>> print(conv3.padding)
+    [8, 8, 4, 4]
+    >>> input = to_tensor(np.random.random((1,37,37,32)))
+    >>> conv4= Conv2d((3,3),64,strides=2,activation=mish, auto_pad=True,use_bias=False)
+    >>> output = conv4(input)
+    >>> print(output.shape)
+    (1, 19, 19, 64)
 
-    '''
+    """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero',
                  activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
@@ -1105,11 +1105,11 @@ class Upsampling2d(Layer):
 
 
 class Lambda(Layer):
-    '''
+    """
     Applies a lambda function on forward()
     Args:
         lamb (fn): the lambda function
-    '''
+    """
 
     def __init__(self, function, name=''):
         super(Lambda, self).__init__(name=name)

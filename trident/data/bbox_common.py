@@ -42,7 +42,7 @@ def plot_one_box(x, img, color=None, label=None, line_thickness=None):
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 def xywh2xyxy(boxes,image_size=None):
-    '''
+    """
     Args:
         boxes (tensor or ndarray):
             boxes  with xywh  (centerx,centery,width, height) format
@@ -50,8 +50,8 @@ def xywh2xyxy(boxes,image_size=None):
         image_size (size): (height, width)
     Returns
         xyxy (x1,y1,x2,y2)
-    '''
-    '''Convert [x1 y1 w h] box format to [x1 y1 x2 y2] format.'''
+    """
+    """Convert [x1 y1 w h] box format to [x1 y1 x2 y2] format."""
     if isinstance(boxes, (list, tuple)):
         # Single box given as a list of coordinates
         assert len(boxes) == 4
@@ -84,7 +84,7 @@ def xywh2xyxy(boxes,image_size=None):
 
 
 def xyxy2xywh(boxes):
-    '''Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format.'''
+    """Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format."""
     if isinstance(boxes, (list, tuple)):
         # Single box given as a list of coordinates
         assert len(boxes) == 4
@@ -104,7 +104,7 @@ def xyxy2xywh(boxes):
 
 def clip_boxes_to_image(boxes, size):
 
-    '''
+    """
     Clip boxes so that they lie inside an image of size `size`.
 
     Args:
@@ -113,7 +113,7 @@ def clip_boxes_to_image(boxes, size):
     Returns:
         clipped_boxes (Tensor[N, 4])
 
-    '''
+    """
     height,width=size
     boxes[:,0]= clip(boxes[:,0],min=0, max=width)
     boxes[:,1]= clip(boxes[:,1],min=0, max=height)
@@ -123,7 +123,7 @@ def clip_boxes_to_image(boxes, size):
 
 
 def nms(boxes, threshold):
-    '''
+    """
         non max suppression
 
     Args
@@ -136,7 +136,7 @@ def nms(boxes, threshold):
 
     Returns:
         index array of the selected bbox
-    '''
+    """
     # if there are no boxes, return an empty list
 
 
@@ -198,9 +198,9 @@ def nms(boxes, threshold):
 
 
 def matrix_iou(a, b):
-    '''
+    """
     return iou of a and b, numpy version for data augenmentation
-    '''
+    """
     lt = np.maximum(a[:, np.newaxis, 0:2], b[:, 0:2])
     rb = np.minimum(a[:, np.newaxis, 2:4], b[:, 2:4])
 
@@ -211,9 +211,9 @@ def matrix_iou(a, b):
 
 
 def matrix_iof(a, b):
-    '''
+    """
     return iof of a and b, numpy version for data augenmentation
-    '''
+    """
     lt = np.maximum(a[:, np.newaxis, 0:2], b[:, 0:2])
     rb = np.minimum(a[:, np.newaxis, 2:4], b[:, 2:4])
 
@@ -224,7 +224,7 @@ def matrix_iof(a, b):
 
 
 def bbox_overlaps(bboxes1, bboxes2, mode='iou', allow_neg=False):
-    '''Calculate the ious between each bbox of bboxes1 and bboxes2.
+    """Calculate the ious between each bbox of bboxes1 and bboxes2.
 
     Args:
         allow_neg ():
@@ -235,7 +235,7 @@ def bbox_overlaps(bboxes1, bboxes2, mode='iou', allow_neg=False):
 
     Returns:
         ious(ndarray): shape (n, k)
-    '''
+    """
 
     assert mode in ['iou', 'iof']
 
@@ -279,7 +279,7 @@ def bbox_overlaps(bboxes1, bboxes2, mode='iou', allow_neg=False):
     return ious
 
 def bbox_giou_numpy(bboxes1, bboxes2):
-    '''Calculate the gious between each bbox of bboxes1 and bboxes2.
+    """Calculate the gious between each bbox of bboxes1 and bboxes2.
 
     Args:
         bboxes1(ndarray): shape (n, 4)
@@ -287,7 +287,7 @@ def bbox_giou_numpy(bboxes1, bboxes2):
 
     Returns:
         gious(ndarray): shape (n, k)
-    '''
+    """
 
 
     bboxes1 = bboxes1.astype(np.float32)
@@ -327,7 +327,7 @@ def bbox_giou_numpy(bboxes1, bboxes2):
     return ious
 
 def bbox_giou(bboxes1, bboxes2):
-    '''
+    """
         Calculate GIoU loss on anchor boxes
         Reference Paper:
             "Generalized Intersection over Union: A Metric and A Loss for Bounding Box Regression"
@@ -340,7 +340,7 @@ def bbox_giou(bboxes1, bboxes2):
     Returns:
         giou: tensor, shape=(batch, feat_w, feat_h, anchor_num, 1)
 
-    '''
+    """
 
 
     bboxes1 = bboxes1.float()
@@ -378,7 +378,7 @@ def bbox_giou(bboxes1, bboxes2):
     return ious
 
 def bbox_diou(bboxes1, bboxes2):
-    '''
+    """
     Calculate DIoU loss on anchor boxes
     Reference Paper:
         "Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression"
@@ -391,7 +391,7 @@ def bbox_diou(bboxes1, bboxes2):
     Returns:
         diou: tensor, shape=(batch, feat_w, feat_h, anchor_num, 1)
 
-    '''
+    """
 
     b1_mins =  bboxes1[..., :2]
     b1_maxes =  bboxes1[..., 2:4]
@@ -434,7 +434,7 @@ def bbox_diou(bboxes1, bboxes2):
 
 #
 # def soft_nms(boxes, sigma=0.5, overlap_threshold=0.3, score_threshold=0.001, method='linear'):
-#     '''Apply the soft NMS algorithm from https://arxiv.org/abs/1704.04503.'''
+#     """Apply the soft NMS algorithm from https://arxiv.org/abs/1704.04503."""
 #     if boxes.shape[0] == 0:
 #         return boxes, []
 #

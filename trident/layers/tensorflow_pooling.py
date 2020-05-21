@@ -78,8 +78,7 @@ class _PoolNd(Layer):
 
 
 class MaxPool1d(_PoolNd):
-    '''Applies a 1D max pooling over an input signal composed of several input
-    planes.
+    """Applies a 1D max pooling over an input signal composed of several inputplanes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, L)`
     and output :math:`(N, C, L_{out})` can be precisely described as:
@@ -118,7 +117,7 @@ class MaxPool1d(_PoolNd):
 
     .. _link:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
-    '''
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate', name='', **kwargs):
         super(MaxPool1d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -135,7 +134,7 @@ class MaxPool1d(_PoolNd):
 
 
 class MaxPool2d(_PoolNd):
-    '''Applies a 2D max pooling over an input signal composed of several input
+    """Applies a 2D max pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, H, W)`,
@@ -191,7 +190,7 @@ class MaxPool2d(_PoolNd):
 
     .. _link:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
-    '''
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', name='', **kwargs):
         super(MaxPool2d, self).__init__(kernel_size, strides, auto_pad, padding_mode, 1, name, **kwargs)
@@ -211,7 +210,7 @@ class MaxPool2d(_PoolNd):
 
 
 class MaxPool3d(_PoolNd):
-    '''Applies a 3D max pooling over an input signal composed of several input
+    """Applies a 3D max pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,
@@ -273,7 +272,7 @@ class MaxPool3d(_PoolNd):
 
     .. _link:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
-    '''  # noqa: E501
+    """  # noqa: E501
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
         super(MaxPool3d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -290,7 +289,7 @@ class MaxPool3d(_PoolNd):
 
 
 class MaxUnpool2d(_PoolNd):
-    '''Computes a partial inverse of :class:`MaxPool2d`.
+    """Computes a partial inverse of :class:`MaxPool2d`.
 
     :class:`MaxPool2d` is not fully invertible, since the non-maximal values are lost.
 
@@ -349,7 +348,7 @@ class MaxUnpool2d(_PoolNd):
                   [  0.,   0.,   0.,  14.,   0.],
                   [ 16.,   0.,   0.,   0.,   0.],
                   [  0.,   0.,   0.,   0.,   0.]]]])
-    '''
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
         super(MaxUnpool2d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -364,7 +363,7 @@ class MaxUnpool2d(_PoolNd):
 
 
 class AvgPool1d(_PoolNd):
-    '''Applies a 1D average pooling over an input signal composed of several
+    """Applies a 1D average pooling over an input signal composed of several
     input planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, L)`,
@@ -403,7 +402,7 @@ class AvgPool1d(_PoolNd):
         >>> m = AvgPool1d(3, strides=2)
         >>> m(to_tensor([[[1.,2,3,4,5,6,7]]]))
         tensor([[[ 2.,  4.,  6.]]])
-    '''
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
         super(AvgPool1d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -419,7 +418,7 @@ class AvgPool1d(_PoolNd):
 
 
 class AvgPool2d(_PoolNd):
-    '''Applies a 2D average pooling over an input signal composed of several input
+    """Applies a 2D average pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, H, W)`,
@@ -471,7 +470,7 @@ class AvgPool2d(_PoolNd):
         >>> print(int_shape(output))
         [1, 64, 128, 32]
 
-    '''
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True,count_include_pad=True, divisor_override=None, name='', **kwargs):
         super(AvgPool2d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -490,7 +489,7 @@ class AvgPool2d(_PoolNd):
 
 
 class AvgPool3d(_PoolNd):
-    '''Applies a 3D average pooling over an input signal composed of several input
+    """Applies a 3D average pooling over an input signal composed of several input
     planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,
@@ -550,7 +549,7 @@ class AvgPool3d(_PoolNd):
         [1, 64, 128, 64, 32]
 
 
-    '''
+    """
     __constants__ = ['kernel_size', 'stride', 'padding', 'ceil_mode', 'count_include_pad', 'divisor_override']
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):

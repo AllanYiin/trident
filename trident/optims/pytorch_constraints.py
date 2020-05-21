@@ -16,7 +16,7 @@ _session=get_session()
 _epsilon=_session.epsilon
 
 def max_norm(model, max_value=3,axis=0):
-    '''
+    """
     MaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have a norm less than or equal to a desired value.
     Args:
@@ -24,7 +24,7 @@ def max_norm(model, max_value=3,axis=0):
         max_value (float):the maximum norm value for the incoming weights
         axis (int):axis along which to calculate weight norms.
 
-    '''
+    """
     for name, param in model.named_parameters():
         if 'bias' not in name:
             norm = param.norm(2, dim=axis, keepdim=True)
@@ -32,31 +32,31 @@ def max_norm(model, max_value=3,axis=0):
             param = param * (desired / (_epsilon + norm))
 
 def non_neg_norm(model):
-    '''
+    """
     Constrains the weights to be non-negative.
     Args:
         model : the model contains  weights need to setting the constraints.
 
-    '''
+    """
     for name, param in model.named_parameters():
         if 'bias' not in name:
             param = torch.clamp(param, 0, torch.inf)
 
 def unit_norm(model,axis=0):
-    '''
+    """
     Constrains the weights incident to each hidden unit to have unit norm.
     Args:
         axis (int):axis along which to calculate weight norms.
         model : the model contains  weights need to setting the constraints.
 
-    '''
+    """
     for name, param in model.named_parameters():
         if 'bias' not in name:
             norm = param.norm(2, dim=axis, keepdim=True)
             param = param/ (_epsilon + norm)
 
 def min_max_norm(model,min_value=0, max_value=1, rate=3.0, axis=0):
-    '''
+    """
     MinMaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have the norm between a lower bound and an upper bound.
 
@@ -68,7 +68,7 @@ def min_max_norm(model,min_value=0, max_value=1, rate=3.0, axis=0):
         axis (int): axis along which to calculate weight norms
 
 
-    '''
+    """
     for name, param in model.named_parameters():
         if 'bias' not in name:
             norm = param.norm(2, dim=axis, keepdim=True)

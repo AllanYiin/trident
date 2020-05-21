@@ -9,7 +9,6 @@ import math
 import tensorflow as tf
 
 from trident.backend.common import get_session, get_class, snake2camel
-from trident.backend.optimizer import OptimizerBase
 from trident.backend.tensorflow_ops import *
 
 _session = get_session()

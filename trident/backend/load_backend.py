@@ -6,7 +6,6 @@ import os
 from sys import stderr
 from trident.backend.common import *
 from trident.backend.model import *
-from trident.backend.optimizer import *
 
 
 _session=get_session()

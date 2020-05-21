@@ -109,7 +109,7 @@ if not os.path.exists(dirname):
 
 
 def efficientnet_params(model_name):
-    ''' Map EfficientNet model name to parameter coefficients. '''
+    """ Map EfficientNet model name to parameter coefficients. """
     params_dict = {  # Coefficients:   width,depth,res,dropout
         'efficientnet-b0': (1.0, 1.0, 224, 0.2), 'efficientnet-b1': (1.0, 1.1, 240, 0.2),
         'efficientnet-b2': (1.1, 1.2, 260, 0.3), 'efficientnet-b3': (1.2, 1.4, 300, 0.3),
@@ -120,7 +120,7 @@ def efficientnet_params(model_name):
 
 def EfficientNet(width_coefficient, depth_coefficient, default_size, dropout_rate=0.2, drop_connect_rate=0.2,
                  depth_divisor=8, model_name='efficientnet', include_top=True, num_classes=1000, **kwargs):
-    '''Instantiates the EfficientNet architecture using given scaling coefficients.
+    """Instantiates the EfficientNet architecture using given scaling coefficients.
         Optionally loads weights pre-trained on ImageNet.
         Note that the data format convention used by the model is
         the one specified in your Keras config at `~/.keras/keras.json`.
@@ -151,11 +151,11 @@ def EfficientNet(width_coefficient, depth_coefficient, default_size, dropout_rat
         A Efficientnet model instance.
 
 
-    '''
+    """
     default_block_args = deepcopy(DEFAULT_BLOCKS_ARGS)
 
     def round_filters(filters, divisor=depth_divisor):
-        '''Round number of filters based on depth multiplier.'''
+        """Round number of filters based on depth multiplier."""
         filters *= width_coefficient
         new_filters = builtins.max(divisor, int(filters + divisor / 2) // divisor * divisor)
         # Make sure that round down does not go down by more than 10%.
@@ -164,7 +164,7 @@ def EfficientNet(width_coefficient, depth_coefficient, default_size, dropout_rat
         return int(new_filters)
 
     def round_repeats(repeats):
-        '''Round number of repeats based on depth multiplier.'''
+        """Round number of repeats based on depth multiplier."""
         return int(math.ceil(depth_coefficient * repeats))
 
     flow_list = []

@@ -89,11 +89,11 @@ if not os.path.exists(dirname):
 
 
 def efficientnet_params(model_name):
-    '''Map EfficientNet model name to parameter coefficients.
+    """Map EfficientNet model name to parameter coefficients.
 
     'Coefficients:
         width,depth,res,dropout
-    '''
+    """
     params_dict = {
         'efficientnet-b0': (1.0, 1.0, 224, 0.2),
         'efficientnet-b1': (1.0, 1.1, 240, 0.2),
@@ -155,7 +155,7 @@ def EfficientNet(width_coefficient,
         return int(new_filters)
 
     def round_repeats(repeats):
-        '''Round number of repeats based on depth multiplier.'''
+        """Round number of repeats based on depth multiplier."""
         return int(math.ceil(depth_coefficient * repeats))
 
     flow_list=[]

@@ -15,8 +15,8 @@ import uuid
 import json
 import numpy as np
 from trident.backend.common import to_list,get_signature, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need
-from trident.backend.optimizer import OptimizerBase,Signature
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need,Signature
+
 from trident.data.image_common import *
 
 _session = get_session()

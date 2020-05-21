@@ -4,9 +4,9 @@ import torch
 from torch.autograd import Function
 from torch.autograd import Variable
 
-'''
+"""
 https://raw.githubusercontent.com/zhuwenxi/pytorch-profiling-tool/master/profiling.py
-'''
+"""
 
 class Profiling(object):
     def __init__(self, model):

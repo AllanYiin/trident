@@ -37,6 +37,7 @@ class DataProvider(object):
     def __init__(self, dataset_name='',data=None,labels=None,masks=None,scenario=None,minibatch_size=8,**kwargs):
         self.__name__=dataset_name
         self.__initialized = False
+        self._signature=None
         self.data = {}
         self.labels = {}
         self.annotations = {}

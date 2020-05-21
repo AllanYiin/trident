@@ -24,7 +24,6 @@ from tensorflow.python.ops.losses import util as tf_losses_utils
 from trident import __version__
 from trident.backend.common import *
 from trident.backend.model import ModelBase, progress_bar
-from trident.backend.optimizer import OptimizerBase
 from trident.backend.tensorflow_backend import Sequential, Layer, try_map_args_and_call, summary
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_serialization import save, load
@@ -582,17 +581,13 @@ class Model(ModelBase):
 
             # Gradients does not exist for variables during training using gradienttape
             # for handling this issue, need filter
-            new_vars = []
-            new_grads = []
+            # new_vars = []
+            # new_grads = []
 
             vars = grads.watched_variables()
             cal_grads = grads.gradient(self.training_context['current_loss'], vars)
-            for i in range(len(vars)):
-                if cal_grads[i] is not None and not any_abnormal_number(cal_grads[i]):
-                    new_vars.append(vars[i])
-                    new_grads.append(cal_grads[i])
 
-            grads_and_vars = zip(new_grads, new_vars)
+            grads_and_vars = zip(cal_grads, vars)
 
             if self.training_context['stop_update'] == 0:
 
@@ -772,6 +767,8 @@ class Model(ModelBase):
                 self.training_context['optimizer'] = self.optimizer
 
             with self.optimizer.grad_tape as g:
+                # if g.watched_variables() is None or len(g.watched_variables())!=len(self._model.trainable_variables):
+                g.reset()
                 g.watch(self._model.trainable_variables)
                 output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
 

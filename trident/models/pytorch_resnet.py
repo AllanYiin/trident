@@ -87,7 +87,7 @@ def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bia
 def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=False, zero_init_residual=False,
            width_per_group=64, replace_stride_with_dilation=None, include_top=True, model_name='',
            **kwargs):
-    '''Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
+    """Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
     Optionally loads weights pre-trained on ImageNet.
     Note that the data format convention used by the model is
     the one specified in your Keras config at `~/.keras/keras.json`.
@@ -131,7 +131,7 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
     Raises
         ValueError: in case of invalid argument for `weights`,
             or invalid input shape.
-    '''
+    """
 
     def _make_layer(block, num_filters, blocklayers, strides=1, dilate=False,use_bias=use_bias,layer_name=''):
         conv_shortcut=False
@@ -210,7 +210,6 @@ def ResNet50(include_top=True,
 
 
         resnet50.model=recovery_model
-        resnet50.signature = get_signature(resnet50.model.forward)
     return resnet50
 
 def ResNet101(include_top=True,
@@ -236,8 +235,6 @@ def ResNet101(include_top=True,
                 recovery_model.fc = Dense(classes, activation=None, name='fc')
 
         resnet101.model=recovery_model
-
-        resnet101.signature = get_signature(resnet101.model.forward)
     return resnet101
 
 
@@ -264,7 +261,6 @@ def ResNet152(include_top=True,
                 recovery_model.fc = Dense(classes, activation=None, name='fc')
 
         resnet152.model=recovery_model
-        resnet152.signature = get_signature(resnet152.model.forward)
     return resnet152
 
 

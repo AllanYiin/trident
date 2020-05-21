@@ -14,7 +14,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F  # import torch functions
 import torch.utils.hooks as hooks
-import torchvision
+
 from torch._jit_internal import List
 from torch._six import container_abcs
 from torch.nn import Module
@@ -53,7 +53,7 @@ _quadruple = _ntuple(4)
 
 
 class Dense(Layer):
-    '''Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
+    """Applies a linear transformation to the incoming data: :math:`y = xA^T + b`
 
     Args:
         in_features: size of each input sample
@@ -84,7 +84,7 @@ class Dense(Layer):
         >>> output = m(input)
         >>> print(output.size())
         torch.Size([2, 30])
-    '''
+    """
 
     def __init__(self, output_shape, use_bias=True, activation=None,keep_output=False, name=None, **kwargs):
         super(Dense, self).__init__()
@@ -135,7 +135,7 @@ class Dense(Layer):
 
 
 class Flatten(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self):
         super(Flatten, self).__init__()
@@ -145,7 +145,7 @@ class Flatten(Layer):
 
 
 class Concate(Layer):
-    '''Concate layer to splice  tensors .'''
+    """Concate layer to splice  tensors ."""
 
     def __init__(self, axis=1):
         super(Concate, self).__init__()
@@ -173,7 +173,7 @@ Concatenate = Concate
 
 
 class Add(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self, axis=1):
         super(Add, self).__init__()
@@ -195,7 +195,7 @@ class Add(Layer):
 
 
 class Subtract(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self, axis=1):
         super(Subtract, self).__init__()
@@ -217,7 +217,7 @@ class Subtract(Layer):
 
 
 class Dot(Layer):
-    '''Flatten layer to flatten a tensor after convolution.'''
+    """Flatten layer to flatten a tensor after convolution."""
 
     def __init__(self, axis=1):
         super(Dot, self).__init__()
@@ -239,7 +239,7 @@ class Dot(Layer):
 
 
 class SoftMax(Layer):
-    '''SoftMax layer to accelerate  classification model training'''
+    """SoftMax layer to accelerate  classification model training"""
 
     def __init__(self, axis=1, add_noise=False, noise_intensity=0.005, **kwargs):
         super(SoftMax, self).__init__()
@@ -268,7 +268,7 @@ _isprime = isprime
 
 
 def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None,transpose=False):
-    ''' Calcualte the actual padding we need in different rank and different convlution settings.
+    """ Calcualte the actual padding we need in different rank and different convlution settings.
 
     Args:
         rank (int):
@@ -295,7 +295,7 @@ def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None,tran
     (1, 0, 1, 0)
     >>> get_static_padding(3,(5,5,5),(1,1,1),(2,2,2))
     (4, 4, 4, 4, 4, 4)
-    '''
+    """
     if input_shape is None:
         input_shape=[224]*rank
     if isinstance(kernal_shape,int):
@@ -461,7 +461,7 @@ class _ConvNd(Layer):
 
 
 class Conv1d(_ConvNd):
-    '''Applies to create a 1D convolution layer
+    """Applies to create a 1D convolution layer
 
         Args:
             kernel_size :(int or tupleof ints)
@@ -550,7 +550,7 @@ class Conv1d(_ConvNd):
             >>> print(output.size())
             torch.Size([1, 64, 19])
 
-        '''
+        """
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 1
@@ -589,7 +589,7 @@ class Conv1d(_ConvNd):
 
 
 class Conv2d(_ConvNd):
-    '''Applies to create a 2D convolution layer
+    """Applies to create a 2D convolution layer
 
         Args:
             kernel_size :(int or tupleof ints)
@@ -679,7 +679,7 @@ class Conv2d(_ConvNd):
             >>> print(conv4.padding)
             (1, 1, 1, 1)
 
-        '''
+        """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
@@ -810,7 +810,7 @@ class TransConv1d(_ConvNd):
 
 
 class TransConv2d(_ConvNd):
-    '''
+    """
     Examples:
         >>> input = to_tensor(torch.randn(1,32,128,128))
         >>> conv1= TransConv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
@@ -822,7 +822,7 @@ class TransConv2d(_ConvNd):
         >>> print(output.size())
         torch.Size([1, 64, 256, 256])
 
-    '''
+    """
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
         rank = 2
@@ -1096,7 +1096,7 @@ class DepthwiseConv1d(_ConvNd):
 
 
 class DepthwiseConv2d(_ConvNd):
-    '''
+    """
     Applies to create a 2D  Depthwise convolution layer
     Depthwise convolution performs just the first step of a depthwise spatial convolution (which acts on each input channel separately).
 
@@ -1169,7 +1169,7 @@ class DepthwiseConv2d(_ConvNd):
          >>> print(conv1.num_filters)
          64
 
-     '''
+     """
 
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None,padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, name=None, **kwargs):
@@ -1354,13 +1354,13 @@ class DeformConv2d(Layer):
         return F.conv2d(x, self.weight, self.bias, self.strides, self.padding, self.dilation, self.groups)
 
     def forward(self, *x):
-        '''
-        Arguments:
+        """
+        Args:
             input (Tensor[batch_size, in_channels, in_height, in_width]): input tensor
             offset (Tensor[batch_size, 2 * offset_groups * kernel_height * kernel_width,
                 out_height, out_width]): offsets to be applied for each position in the
                 convolution kernel.
-        '''
+        """
         x = enforce_singleton(x)
         # B 2*input,H,W
         offset = self.offetconv2d_forward(x).round_()
@@ -1679,11 +1679,11 @@ class GcdConv2d(_ConvNd):
 
 class Lambda(Layer):
     def __init__(self, function, name=None):
-        '''
+        """
         Applies a lambda function on forward()
         Args:
             function (fn): the lambda function
-        '''
+        """
         super(Lambda, self).__init__(name=name)
         self.function = function
 
@@ -1693,12 +1693,12 @@ class Lambda(Layer):
 
 class Reshape(Layer):
     def __init__(self, target_shape, name=None):
-        '''
+        """
         Reshape the input volume
         Args:
             *shape (ints): new shape, WITHOUT specifying batch size as first
             dimension, as it will remain unchanged.
-        '''
+        """
         super(Reshape, self).__init__(name=name)
         if isinstance(target_shape, tuple):
             self.target_shape = to_tensor([target_shape[i] for i in range(len(target_shape))])
@@ -1714,7 +1714,7 @@ class Reshape(Layer):
 
 
 class SelfAttention(Layer):
-    ''' Self attention Laye'''
+    """ Self attention Laye"""
 
     def __init__(self, reduction_factor=8, name=None):
         super(SelfAttention, self).__init__(name=name)
@@ -1740,13 +1740,13 @@ class SelfAttention(Layer):
         self.to(self.device)
 
     def forward(self, *x):
-        '''
+        """
             inputs :
                 x : input feature maps( B X C X W X H)
             returns :
                 out : self attention value + input feature
                 attention: B X N X N (N is Width*Height)
-        '''
+        """
         x = enforce_singleton(x)
         B, C, width, height = x.size()
         proj_query = self.query_conv(x).view(B, -1, width * height).permute(0, 2, 1)  # B X CX(N)
@@ -1766,10 +1766,10 @@ class SelfAttention(Layer):
 
 
 def _append_coords(input_tensor, with_r=False):
-    '''
+    """
     An alternative implementation for PyTorch with auto-infering the x-y dimensions.
     https://github.com/mkocabas/CoordConv-pytorch/blob/master/CoordConv.py
-    '''
+    """
     batch_size, _, x_dim, y_dim = input_tensor.size()
 
     xx_channel = torch.arange(x_dim).repeat(1, y_dim, 1)
@@ -1798,9 +1798,9 @@ def _append_coords(input_tensor, with_r=False):
 
 
 class CoordConv2d(Layer):
-    '''
+    """
     Implementation of the CoordConv modules from https://arxiv.org/abs/1807.03247
-    '''
+    """
     def __init__(self, kernel_size, num_filters, strides, auto_pad=True, activation=None, use_bias=False, group=1,
                  dilation=1, with_r=False, name=None, **kwargs):
         super().__init__(name=name)
@@ -1878,9 +1878,9 @@ class Dropout(Layer):
 
 
 class AlphaDropout(Layer):
-    '''
+    """
      .. _Self-Normalizing Neural Networks: https://arxiv.org/abs/1706.02515
-    '''
+    """
 
     def __init__(self, dropout_rate=0, name=None):
         super(AlphaDropout, self).__init__(name=name)

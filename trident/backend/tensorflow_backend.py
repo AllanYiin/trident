@@ -1499,9 +1499,7 @@ def calculate_flops(gen: Layer):
     Calculate the flops given a generator of pytorch model.
     It only compute the flops of forward pass.
 
-    Example:
-        >>> net = torchvision.models.resnet18()
-        >>> calculate_flops(net.children())
+
     """
     flops = 0
     mods = gen.named_modules()
@@ -1522,9 +1520,7 @@ def calculate_flops(gen: Layer):
     return np.array(param_nums).sum()
 
 
-# net = torchvision.models.resnet18()
-# flops = calculate_flops(net.children())
-# print(flops / 10 ** 9, 'G')  # 11.435429919 G
+
 
 
 def summary(model, input_size, batch_size=-1):

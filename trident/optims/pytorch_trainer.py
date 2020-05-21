@@ -23,10 +23,9 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.backend.model import ModelBase, progress_bar
-from trident.backend.optimizer import OptimizerBase
-
+from trident.layers.pytorch_layers import SoftMax
 from trident.optims.pytorch_constraints import get_constraint
-from trident.optims.pytorch_losses import get_loss
+from trident.optims.pytorch_losses import get_loss,_ClassificationLoss
 from trident.optims.pytorch_metrics import get_metric
 from trident.optims.pytorch_optimizers import get_optimizer
 from trident.optims.pytorch_regularizers import get_reg
@@ -119,10 +118,15 @@ class Model(ModelBase):
                     mod.nodes = output.nodes
 
             # output.cpu()
-            if  output.built and hasattr(output,'_output_shape') and  is_tensor(output._output_shape):
+            if  output.built and hasattr(output,'_output_shape') and  output._output_shape is not None:
                 self._model = output
                 self._outputs['output'] = to_list(output._output_shape)
                 self._targets['target'] = to_list(output._output_shape)
+
+                self._model.signature = get_signature(self._model.forward, 'model')
+                self._model.signature.inputs = copy.deepcopy(self.inputs)
+                self._model.signature.outputs = copy.deepcopy(self._outputs)
+                self._signature = self._model.signature
             else:
                 output.input_shape = input_shape
 
@@ -251,7 +255,7 @@ class Model(ModelBase):
             if  alias in self._losses:
                 dup_keys=[key for  key in self._losses.key_list if alias+'_' in key]
                 alias = alias + '_' + str(len(dup_keys)+1)
-            self._losses[alias] = loss_class(**kwargs)
+            self._losses[alias] = loss_class(**kwargs) if len(kwargs)>0 else loss_class()
             if hasattr(loss, 'forward'):
                 argnames = get_signature(self._losses[alias].forward,alias)
             else:
@@ -262,8 +266,8 @@ class Model(ModelBase):
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys)+1)
 
-            self._losses[alias] = loss(**kwargs)
-            if hasattr(loss, 'forward'):
+            self._losses[alias] = loss(**kwargs) if len(kwargs)>0 else loss()
+            if hasattr(self._losses[alias] , 'forward'):
                 argnames = get_signature(self._losses[alias].forward,alias)
             else:
                 argnames = get_signature(self._losses[alias].__call__,alias)
@@ -282,8 +286,7 @@ class Model(ModelBase):
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
             spec = inspect.getfullargspec(loss)
-            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 and (
-                    spec.args[0] in ['output', 'y_pred', 'pred'] or 'target_' + spec.args[0] == spec.args[1]):
+            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 :
                 self._losses[alias] = loss
             else:
                 self._losses[alias] = partial(loss, **kwargs)
@@ -295,6 +298,16 @@ class Model(ModelBase):
         else:
             self._losses[alias].signature=argnames
         self._losses[alias].signature.name=alias
+        if (len(self._losses[alias].signature.outputs) == 1 and self._losses[alias].signature.outputs.value_list[0] is None) or len(self._losses[alias].signature.outputs) == 0 :
+            self._losses[alias].signature.outputs = OrderedDict()
+            self._losses[alias].signature.outputs[alias] = None
+        print(self._losses[alias].signature)
+        if hasattr(self._losses[alias],'is_logsoftmax'):
+            if isinstance(self._model,Layer):
+                last_module=list(self._model.modules())[-1]
+                if isinstance(last_module,SoftMax):
+                    self._losses[alias].is_logsoftmax=True
+
         print(self._losses[alias].signature)
 
         self.loss_weights[alias] = loss_weight
@@ -346,7 +359,7 @@ class Model(ModelBase):
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric_class(**kwargs)
+            self._metrics[alias] = metric_class(**kwargs)  if len(kwargs)>0 else metric_class()
             if hasattr(metric, 'forward'):
                 argnames = get_signature(self._metrics[alias].forward,alias)
             else:
@@ -356,8 +369,8 @@ class Model(ModelBase):
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
-            self._metrics[alias] = metric(**kwargs)
-            if hasattr(metric, 'forward'):
+            self._metrics[alias] = metric(**kwargs) if len(kwargs)>0 else metric()
+            if hasattr(self._metrics[alias], 'forward'):
                 argnames = get_signature(self._metrics[alias].forward,alias)
             else:
                 argnames = get_signature(self._metrics[alias].__call__,alias)
@@ -376,8 +389,7 @@ class Model(ModelBase):
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
             spec = inspect.getfullargspec(metric)
-            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2 and (
-                    spec.args[0] in ['output', 'y_pred', 'pred'] or 'target_' + spec.args[0] == spec.args[1]):
+            if len(spec.args) >= 2 and len(spec.args) - 0 if spec.defaults is None else len(spec.defaults) == 2:
                 self._metrics[alias] = metric
             else:
                 self._metrics[alias] = partial(metric, **kwargs)
@@ -389,34 +401,11 @@ class Model(ModelBase):
         else:
             self._metrics[alias].signature = argnames
         self._metrics[alias].signature.name = alias
+
+        if (len(self._metrics[alias].signature.outputs) == 1 and self._metrics[alias].signature.outputs.value_list[0] is None) or len(self._metrics[alias].signature.outputs) == 0 :
+            self._metrics[alias].signature.outputs = OrderedDict()
+            self._metrics[alias].signature.outputs[alias] = None
         print(self._metrics[alias].signature)
-        # outputs = self.outputs
-        # targets = self.targets
-        # if all([k  in targets.key_list or k  in outputs.key_list  for k  in argnames.key_list]):
-        #     pass
-        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2 and argnames.key_list[0] in ['input', 'output', 'y_pred'] and argnames.key_list[1] in ['target', 'label', 'y_true']:
-        #     argnames = OrderedDict()
-        #     argnames[outputs.key_list[0]] = outputs[outputs.key_list[0]]
-        #     argnames[targets.key_list[0]] = targets[targets.key_list[0]]
-        # elif outputs is not None and len(outputs) == 1 and len(argnames) == 2:
-        #     argnames[argnames.key_list[0]] = outputs[outputs.key_list[0]]
-        #     argnames[argnames.key_list[1]] = targets[targets.key_list[0]]
-        # elif outputs is not None and len(outputs) > 1:
-        #     output_idx = list(output_idx) if isinstance(output_idx, (list, tuple)) else [output_idx]
-        #     if len(output_idx) == 1 and len(argnames) == 2:
-        #         argnames = OrderedDict()
-        #         out = outputs.key_list[output_idx[0]]
-        #         target = targets.key_list[output_idx[0]]
-        #         argnames[argnames.key_list[0]] = outputs[out]
-        #         argnames[argnames.key_list[1]] = targets[target]
-        #     elif len(output_idx) > 1 and len(argnames) == 2 * len(output_idx):
-        #         for idx in output_idx:
-        #             out = outputs.key_list[idx]
-        #             target = targets.key_list[idx]
-        #             if out in argnames:
-        #                 argnames[out] = outputs[out]
-        #             if target in argnames:
-        #                 argnames[target] = targets[target]
         self._metrics[alias].__name__ = alias
         #self._metrics[alias].signature = argnames
         self._metrics[alias].collect_history=collect_history

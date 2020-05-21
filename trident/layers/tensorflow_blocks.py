@@ -503,7 +503,7 @@ class SeparableConv2d_Block(Layer):
 
 
 def For(what_range, constructor):
-    '''
+    """
     For(what_range, constructor, name='')
     Layer factory function to create a composite through a pattern similar to Python's `for` statement.
     This layer factory loops over the given range and passes each value to the constructor function.
@@ -525,7 +525,7 @@ def For(what_range, constructor):
      >>> model = For(range(3), lambda i: Dense(200, name='dense_{0}'.format(i+1)))
      >>> print(model[2].name)
      dense_3
-    '''
+    """
     # Python 2.7 support requires us to use getargspec() instead of inspect
     takes_arg = len(inspect.getfullargspec(constructor).args) > 0
 

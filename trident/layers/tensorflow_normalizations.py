@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import inspect
+import numbers
 import tensorflow as tf
 import numpy as np
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
@@ -9,7 +10,7 @@ from trident.backend.common import get_session, addindent, enforce_singleton, un
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['BatchNorm','BatchNorm2d','BatchNorm3d','get_normalization']
+__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','PixelNorm','EvoNormB0','EvoNormS0','get_normalization']
 
 _session = get_session()
 
@@ -41,17 +42,70 @@ def group_std(x, groups, eps = 1e-5):
 
 
 class BatchNorm(Layer):
+    """Applies Batch Normalization over a 4D input (a mini-batch of 2D inputs
+    with additional channel dimension) as described in the paper
+    `Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`_ .
+
+    .. math::
+
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The mean and standard-deviation are calculated per-dimension over
+    the mini-batches and :math:`\gamma` and :math:`\beta` are learnable parameter vectors
+    of size `C` (where `C` is the input size). By default, the elements of :math:`\gamma` are set
+    to 1 and the elements of :math:`\beta` are set to 0.
+
+    Also by default, during training this layer keeps running estimates of its
+    computed mean and variance, which are then used for normalization during
+    evaluation. The running estimates are kept with a default :attr:`momentum`
+    of 0.1.
+
+    If :attr:`track_running_stats` is set to ``False``, this layer then does not
+    keep running estimates, and batch statistics are instead used during
+    evaluation time as well.
+
+    .. note::
+        This :attr:`momentum` argument is different from one used in optimizer
+        classes and the conventional notion of momentum. Mathematically, the
+        update rule for running statistics here is
+        :math:`\hat{x}_\text{new} = (1 - \text{momentum}) \times \hat{x} + \text{momentum} \times x_t`,
+        where :math:`\hat{x}` is the estimated statistic and :math:`x_t` is the
+        new observed value.
+
+    Because the Batch Normalization is done over the `C` dimension, computing statistics
+    on `(N, H, W)` slices, it's common terminology to call this Spatial Batch Normalization.
+
+    Shape:
+        - Input: :math:`(N, H, W, C)`
+        - Output: :math:`(N, H, W, C)` (same shape as input)
+
+    References:
+    .. _`Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`:
+        https://arxiv.org/abs/1502.03167
+
+    """
     def __init__(self, momentum=0.1, affine=True, track_running_stats=True, axis=-1,renorm=False,eps=1e-5,name=None, **kwargs):
         """
-        http://pytorch.org/docs/stable/nn.html#batchnorm1d
+         Args:
+         eps: a value added to the denominator for numerical stability.
+             Default: 1e-5
+         momentum: the value used for the running_mean and running_var
+             computation. Can be set to ``None`` for cumulative moving average
+             (i.e. simple average). Default: 0.1
+         affine: a boolean value that when set to ``True``, this module has
+             learnable affine parameters. Default: ``True``
+         track_running_stats: a boolean value that when set to ``True``, this
+             module tracks the running mean and variance, and when set to ``False``,
+             this module does not track such statistics and always uses batch
+             statistics in both training and eval modes. Default: ``True``
 
-        Args:
-            dim: 1d, 2d, or 3d BatchNorm
-         eps: nn.BatchNorm parameter
-            momentum: nn.BatchNorm parameter
-            affine: nn.BatchNorm parameter
-            track_running_stats: nn.BatchNorm parameter
-        """
+         Examples:
+             >>> bn=BatchNorm2d(affine=False)
+             >>> input = to_tensor(np.random.standard_normal((2, 128, 128, 64)))
+             >>> print(int_shape(bn(input)))
+             (2, 64, 128, 128)
+
+         """
         super().__init__(name=name)
         if isinstance(axis, (list, tuple)):
             self.axis = axis[:]
@@ -180,256 +234,285 @@ class BatchNorm(Layer):
 BatchNorm2d=BatchNorm
 BatchNorm3d=BatchNorm
 
-#
-# class GroupNorm(tf.keras.layers.Layer):
-#     def __init__(self,  num_groups=32, affine=True, **kwargs):
-#         super(GroupNorm, self).__init__(**kwargs)
-#         self.supports_masking = True
-#         self.groups = num_groups
-#         self.axis = -1
-#         self.epsilon = _epsilon
-#         self.center = affine
-#         self.scale = affine
-#         self.affine=affine
-#         self.beta_initializer = tf.keras.initializers.get(kwargs.get('beta_initializer'))
-#         self.gamma_initializer =  tf.keras.initializers.get(kwargs.get('gamma_initializer'))
-#         self.beta_regularizer = tf.keras.regularizers.get(kwargs.get('beta_regularizer'))
-#         self.gamma_regularizer = tf.keras.regularizers.get(kwargs.get('gamma_regularizer'))
-#         self.beta_constraint = tf.keras.constraints.get(kwargs.get('beta_constraint'))
-#         self.gamma_constraint = tf.keras.constraints.get(kwargs.get('gamma_constraint'))
-#
-#     def build(self, input_shape):
-#         dim = input_shape[self.axis]
-#
-#         if dim is None:
-#             raise ValueError('Axis ' + str(self.axis) + ' of '
-#                              'input tensor should have a defined dimension '
-#                              'but the layer received an input with shape ' +
-#                              str(input_shape) + '.')
-#
-#         if dim < self.groups:
-#             raise ValueError('Number of groups (' + str(self.groups) + ') cannot be '
-#                              'more than the number of channels (' +
-#                              str(dim) + ').')
-#
-#         if dim % self.groups != 0:
-#             raise ValueError('Number of groups (' + str(self.groups) + ') must be a '
-#                              'multiple of the number of channels (' +
-#                              str(dim) + ').')
-#
-#         self.input_spec = tf.keras.Input(ndim=len(input_shape),axes={self.axis: dim})
-#         shape = (dim,)
-#
-#         if self.scale:
-#             self.gamma = self.add_weight(shape=shape,
-#                                          name='gamma',
-#                                          initializer=self.gamma_initializer,
-#                                          regularizer=self.gamma_regularizer,
-#                                          constraint=self.gamma_constraint)
-#         else:
-#             self.gamma = None
-#         if self.center:
-#             self.beta = self.add_weight(shape=shape,
-#                                         name='beta',
-#                                         initializer=self.beta_initializer,
-#                                         regularizer=self.beta_regularizer,
-#                                         constraint=self.beta_constraint)
-#         else:
-#             self.beta = None
-#         self.built = True
-#
-#     def call(self, inputs, **kwargs):
-#         input_shape = K.int_shape(inputs)
-#         tensor_input_shape = K.shape(inputs)
-#
-#         # Prepare broadcasting shape.
-#         reduction_axes = list(range(len(input_shape)))
-#         del reduction_axes[self.axis]
-#         broadcast_shape = [1] * len(input_shape)
-#         broadcast_shape[self.axis] = input_shape[self.axis] // self.groups
-#         broadcast_shape.insert(1, self.groups)
-#
-#         reshape_group_shape = K.shape(inputs)
-#         group_axes = [reshape_group_shape[i] for i in range(len(input_shape))]
-#         group_axes[self.axis] = input_shape[self.axis] // self.groups
-#         group_axes.insert(1, self.groups)
-#
-#         # reshape inputs to new group shape
-#         group_shape = [group_axes[0], self.groups] + group_axes[2:]
-#         group_shape = K.stack(group_shape)
-#         inputs = K.reshape(inputs, group_shape)
-#
-#         group_reduction_axes = list(range(len(group_axes)))
-#         group_reduction_axes = group_reduction_axes[2:]
-#
-#         mean = K.mean(inputs, axis=group_reduction_axes, keepdims=True)
-#         variance = K.var(inputs, axis=group_reduction_axes, keepdims=True)
-#
-#         inputs = (inputs - mean) / (K.sqrt(variance + self.epsilon))
-#
-#         # prepare broadcast shape
-#         inputs = K.reshape(inputs, group_shape)
-#         outputs = inputs
-#
-#         # In this case we must explicitly broadcast all parameters.
-#         if self.scale:
-#             broadcast_gamma = K.reshape(self.gamma, broadcast_shape)
-#             outputs = outputs * broadcast_gamma
-#
-#         if self.center:
-#             broadcast_beta = K.reshape(self.beta, broadcast_shape)
-#             outputs = outputs + broadcast_beta
-#
-#         outputs = K.reshape(outputs, tensor_input_shape)
-#
-#         return outputs
-#
-#     def get_config(self):
-#         config = {
-#             'groups': self.groups,
-#             'axis': self.axis,
-#             'epsilon': self.epsilon,
-#             'center': self.center,
-#             'scale': self.scale,
-#             'beta_initializer': tf.keras.initializers.serialize(self.beta_initializer),
-#             'gamma_initializer': tf.keras.initializers.serialize(self.gamma_initializer),
-#             'beta_regularizer': tf.keras.regularizers.serialize(self.beta_regularizer),
-#             'gamma_regularizer': tf.keras.regularizers.serialize(self.gamma_regularizer),
-#             'beta_constraint': tf.keras.constraints.serialize(self.beta_constraint),
-#             'gamma_constraint': tf.keras.constraints.serialize(self.gamma_constraint)
-#         }
-#         base_config = super(GroupNorm, self).get_config()
-#         return dict(list(base_config.items()) + list(config.items()))
-#
-#     def compute_output_shape(self, input_shape):
-#         return input_shape
-# GroupNorm2d=GroupNorm
-# GroupNorm3d=GroupNorm
-#
-# class InstanceNorm(tf.keras.layers.Layer):
-#     """Instance normalization layer (Lei Ba et al, 2016, Ulyanov et al., 2016).
-#     Normalize the activations of the previous layer at each step,
-#     i.e. applies a transformation that maintains the mean activation
-#     close to 0 and the activation standard deviation close to 1.
-#     # Arguments
-#         axis: Integer, the axis that should be normalized
-#             (typically the features axis).
-#             For instance, after a `Conv2D` layer with
-#             `data_format="channels_first"`,
-#             set `axis=1` in `InstanceNormalization`.
-#             Setting `axis=None` will normalize all values in each instance of the batch.
-#             Axis 0 is the batch dimension. `axis` cannot be set to 0 to avoid errors.
-#         epsilon: Small float added to variance to avoid dividing by zero.
-#         center: If True, add offset of `beta` to normalized tensor.
-#             If False, `beta` is ignored.
-#         scale: If True, multiply by `gamma`.
-#             If False, `gamma` is not used.
-#             When the next layer is linear (also e.g. `nn.relu`),
-#             this can be disabled since the scaling
-#             will be done by the next layer.
-#         beta_initializer: Initializer for the beta weight.
-#         gamma_initializer: Initializer for the gamma weight.
-#         beta_regularizer: Optional regularizer for the beta weight.
-#         gamma_regularizer: Optional regularizer for the gamma weight.
-#         beta_constraint: Optional constraint for the beta weight.
-#         gamma_constraint: Optional constraint for the gamma weight.
-#     # Input shape
-#         Arbitrary. Use the keyword argument `input_shape`
-#         (tuple of integers, does not include the samples axis)
-#         when using this layer as the first layer in a model.
-#     # Output shape
-#         Same shape as input.
-#     # References
-#         - [Layer Normalization](https://arxiv.org/abs/1607.06450)
-#         - [Instance Normalization: The Missing Ingredient for Fast Stylization](https://arxiv.org/abs/1607.08022)
-#     """
-#     def __init__(self,momentum=0.1, affine=True, **kwargs):
-#         super(InstanceNorm, self).__init__(**kwargs)
-#         self.supports_masking = True
-#         self.axis = -1
-#         self.epsilon = _epsilon
-#         self.center = affine
-#         self.scale = affine
-#         self.affine = affine
-#         self.beta_initializer = tf.keras.initializers.get(kwargs.get('beta_initializer'))
-#         self.gamma_initializer = tf.keras.initializers.get(kwargs.get('gamma_initializer'))
-#         self.beta_regularizer = tf.keras.regularizers.get(kwargs.get('beta_regularizer'))
-#         self.gamma_regularizer = tf.keras.regularizers.get(kwargs.get('gamma_regularizer'))
-#         self.beta_constraint = tf.keras.constraints.get(kwargs.get('beta_constraint'))
-#         self.gamma_constraint = tf.keras.constraints.get(kwargs.get('gamma_constraint'))
-#
-#     def build(self, input_shape):
-#         ndim = len(input_shape)
-#         if self.axis == 0:
-#             raise ValueError('Axis cannot be zero')
-#
-#         if (self.axis is not None) and (ndim == 2):
-#             raise ValueError('Cannot specify axis for rank 1 tensor')
-#
-#         self.input_spec = tf.keras.Input(ndim=ndim)
-#         if self.axis is None:
-#             shape = (1,)
-#         else:
-#             shape = (input_shape[self.axis],)
-#
-#         if self.scale:
-#             self.gamma = self.add_weight(shape=shape,
-#                                          name='gamma',
-#                                          initializer=self.gamma_initializer,
-#                                          regularizer=self.gamma_regularizer,
-#                                          constraint=self.gamma_constraint)
-#         else:
-#             self.gamma = None
-#         if self.center:
-#             self.beta = self.add_weight(shape=shape,
-#                                         name='beta',
-#                                         initializer=self.beta_initializer,
-#                                         regularizer=self.beta_regularizer,
-#                                         constraint=self.beta_constraint)
-#         else:
-#             self.beta = None
-#         self.built = True
-#
-#     def call(self, inputs, training=None, **kwargs):
-#         input_shape = K.int_shape(inputs)
-#         reduction_axes = list(range(0, len(input_shape)))
-#
-#         if (self.axis is not None):
-#             del reduction_axes[self.axis]
-#
-#         del reduction_axes[0]
-#
-#         mean = K.mean(inputs, reduction_axes, keepdims=True)
-#         stddev = K.std(inputs, reduction_axes, keepdims=True) + self.epsilon
-#         normed = (inputs - mean) / stddev
-#
-#         broadcast_shape = [1] * len(input_shape)
-#         if self.axis is not None:
-#             broadcast_shape[self.axis] = input_shape[self.axis]
-#
-#         if self.scale:
-#             broadcast_gamma = K.reshape(self.gamma, broadcast_shape)
-#             normed = normed * broadcast_gamma
-#         if self.center:
-#             broadcast_beta = K.reshape(self.beta, broadcast_shape)
-#             normed = normed + broadcast_beta
-#         return normed
-#
-#     def get_config(self):
-#         config = {
-#             'axis': self.axis,
-#             'epsilon': self.epsilon,
-#             'center': self.center,
-#             'scale': self.scale,
-#             'beta_initializer': tf.keras.initializers.serialize(self.beta_initializer),
-#             'gamma_initializer': tf.keras.initializers.serialize(self.gamma_initializer),
-#             'beta_regularizer': tf.keras.regularizers.serialize(self.beta_regularizer),
-#             'gamma_regularizer': tf.keras.regularizers.serialize(self.gamma_regularizer),
-#             'beta_constraint': tf.keras.constraints.serialize(self.beta_constraint),
-#             'gamma_constraint': tf.keras.constraints.serialize(self.gamma_constraint)
-#         }
-#         base_config = super(InstanceNorm, self).get_config()
-#         return dict(list(base_config.items()) + list(config.items()))
+
+
+
+class GroupNorm(Layer):
+    """Applies Group Normalization over a mini-batch of inputs as described in
+    the paper `Group Normalization`_ .
+
+    .. math::
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The input channels are separated into :attr:`num_groups` groups, each containing
+    ``num_channels / num_groups`` channels. The mean and standard-deviation are calculated
+    separately over the each group. :math:`\gamma` and :math:`\beta` are learnable
+    per-channel affine transform parameter vectors of size :attr:`num_channels` if
+    :attr:`affine` is ``True``.
+
+    This layer uses statistics computed from input data in both training and
+    evaluation modes.
+
+    Shape:
+        - Input: :math:`(N, *, C)` where :math:`C=\text{num\_channels}`
+        - Output: :math:`(N, *, C)` (same shape as input)
+
+    References:
+    .. _`Group Normalization`: https://arxiv.org/abs/1803.08494
+
+    """
+    def __init__(self, num_groups=16,affine=True,axis=-1, eps=1e-5, **kwargs):
+        """
+        Args:
+            num_groups (int): number of groups to separate the channels into
+            eps: a value added to the denominator for numerical stability. Default: 1e-5
+            affine: a boolean value that when set to ``True``, this module
+                has learnable per-channel affine parameters initialized to ones (for weights)
+                and zeros (for biases). Default: ``True``.
+
+        Examples:
+            >>> gn=GroupNorm(affine=False)
+            >>> input = to_tensor(np.random.standard_normal((2,  128, 128, 64)))
+            >>> print(int_shape(gn(input)))
+            (2, 64, 128, 128)
+
+        """
+        super().__init__()
+        self.affine=affine
+        self.num_groups = num_groups
+        self.eps = eps
+        self.axis=axis
+
+
+    def build(self, input_shape):
+        if self._built == False :
+            assert  self.input_filters % self.num_groups == 0, 'number of groups {} must divide number of channels {}'.format(self.num_groups,  self.input_filters)
+            if self.affine:
+                self.weight = tf.Variable(ones((self.input_filters)))
+                self.bias =  tf.Variable(zeros((self.input_filters)))
+
+            else:
+                self.register_parameter('weight', None)
+                self.register_parameter('bias', None)
+
+                self._built = True
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        # Prepare broadcasting shape.
+        origin_shape=list(int_shape(x))
+        group_shape =list(int_shape(x))
+        last_dim=group_shape[self.axis]
+
+        group_shape[self.axis]=last_dim//self.num_groups
+        group_shape.insert(self.axis, self.groups)
+        x=reshape(x,group_shape)
+        x_mean,x_variance=moments(x,axis=self.axis,keepdims=True)
+        x=(x-x_mean)/(sqrt(x_variance)+self.eps)
+        x = reshape(x,origin_shape)
+        if self.affine:
+            x=x*self.weight+self.bias
+        return x
+GroupNorm2d=GroupNorm
+GroupNorm3d=GroupNorm
+
+
+
+
+class InstanceNorm(GroupNorm):
+    """Applies Instance Normalization
+
+    `Instance Normalization: The Missing Ingredient for Fast Stylization`_ .
+
+    .. math::
+
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The mean and standard-deviation are calculated per-dimension separately
+    for each object in a mini-batch. :math:`\gamma` and :math:`\beta` are learnable parameter vectors
+    of size `C` (where `C` is the input size) if :attr:`affine` is ``True``.
+
+    Instance Normalization is an specific case of ```GroupNormalization```since
+    it normalizes all features of one channel. The Groupsize is equal to the
+    channel size. Empirically, its accuracy is more stable than batch norm in a
+    wide range of small batch sizes, if learning rate is adjusted linearly
+    with batch sizes.
+
+    By default, this layer uses instance statistics computed from input data in
+    both training and evaluation modes.
+
+    If :attr:`track_running_stats` is set to ``True``, during training this
+    layer keeps running estimates of its computed mean and variance, which are
+    then used for normalization during evaluation. The running estimates are
+    kept with a default :attr:`momentum` of 0.1.
+
+    .. note::
+        This :attr:`momentum` argument is different from one used in optimizer
+        classes and the conventional notion of momentum. Mathematically, the
+        update rule for running statistics here is
+        :math:`\hat{x}_\text{new} = (1 - \text{momentum}) \times \hat{x} + \text{momemtum} \times x_t`,
+        where :math:`\hat{x}` is the estimated statistic and :math:`x_t` is the
+        new observed value.
+
+    .. note::
+        :class:`InstanceNorm2d` and :class:`LayerNorm` are very similar, but
+        have some subtle differences. :class:`InstanceNorm2d` is applied
+        on each channel of channeled data like RGB images, but
+        :class:`LayerNorm` is usually applied on entire sample and often in NLP
+        tasks. Additionally, :class:`LayerNorm` applies elementwise affine
+        transform, while :class:`InstanceNorm2d` usually don't apply affine
+        transform.
+
+    Shape:
+        - Input: :math:`(N, C, H, W)`
+        - Output: :math:`(N, C, H, W)` (same shape as input)
+
+    References:
+    .. _`Instance Normalization: The Missing Ingredient for Fast Stylization`:
+        https://arxiv.org/abs/1607.08022
+    """
+
+    def __init__(self,num_groups=16,affine=True,eps=1e-5, axis=-1,**kwargs):
+        """
+        Args:
+            num_features: :math:`C` from an expected input of size
+                :math:`(N, C, H, W)`
+            eps: a value added to the denominator for numerical stability. Default: 1e-5
+            momentum: the value used for the running_mean and running_var computation. Default: 0.1
+            affine: a boolean value that when set to ``True``, this module has
+                learnable affine parameters, initialized the same way as done for batch normalization.
+                Default: ``False``.
+            track_running_stats: a boolean value that when set to ``True``, this
+                module tracks the running mean and variance, and when set to ``False``,
+                this module does not track such statistics and always uses batch
+                statistics in both training and eval modes. Default: ``False``
+
+        Examples::
+            >>> innorm=InstanceNorm(affine=False)
+            >>> input = to_tensor(np.random.standard_normal((2, 128, 128,64)))
+            >>> print(int_shape(innorm(input)))
+            (2, 64, 128, 128)
+
+        """
+        super().__init__(self, num_groups=1,affine=affine,axis=axis, eps=eps, **kwargs)
+
+    def build(self, input_shape):
+        if self._built == False:
+            self.num_groups=self.input_filters
+            if self.affine:
+                self.weight = tf.Variable(ones((self.input_filters)))
+                self.bias = tf.Variable(zeros((self.input_filters)))
+
+            else:
+                self.register_parameter('weight', None)
+                self.register_parameter('bias', None)
+
+                self._built = True
+
+
+
+InstanceNorm2d=InstanceNorm
+InstanceNorm3d=InstanceNorm
+
+
+class LayerNorm(Layer):
+    """Applies Layer Normalization over a mini-batch of inputs as described in
+    the paper `Layer Normalization`_ .
+
+    .. math::
+        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+
+    The mean and standard-deviation are calculated separately over the last
+    certain number dimensions which have to be of the shape specified by
+    :attr:`normalized_shape`.
+    :math:`\gamma` and :math:`\beta` are learnable affine transform parameters of
+    :attr:`normalized_shape` if :attr:`elementwise_affine` is ``True``.
+
+    .. note::
+        Unlike Batch Normalization and Instance Normalization, which applies
+        scalar scale and bias for each entire channel/plane with the
+        :attr:`affine` option, Layer Normalization applies per-element scale and
+        bias with :attr:`elementwise_affine`.
+
+    This layer uses statistics computed from input data in both training and
+    evaluation modes.
+
+    Shape:
+        - Input: :math:`(N, *)`
+        - Output: :math:`(N, *)` (same shape as input)
+
+
+
+    References:
+    .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
+
+    """
+    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True,name=None, **kwargs):
+        """
+    Args:
+        normalized_shape (int or list or torch.Size): input shape from an expected input
+            of size
+
+            .. math::
+                [* \times \text{normalized\_shape}[0] \times \text{normalized\_shape}[1]
+                    \times \ldots \times \text{normalized\_shape}[-1]]
+
+            If a single integer is used, it is treated as a singleton list, and this module will
+            normalize over the last dimension which is expected to be of that specific size.
+        eps: a value added to the denominator for numerical stability. Default: 1e-5
+        elementwise_affine: a boolean value that when set to ``True``, this module
+            has learnable per-element affine parameters initialized to ones (for weights)
+            and zeros (for biases). Default: ``True``.
+
+    Examples::
+
+        >>> input = to_tensor(np.random.standard_normal((2, 128, 128,64)))
+        >>> # With Learnable Parameters
+        >>> m = LayerNorm(int_shape(input)[1:])
+        >>> # Without Learnable Parameters
+        >>> m = LayerNorm(int_shape(input)[1:], elementwise_affine=False)
+        >>> # Normalize over last two dimensions
+        >>> m = LayerNorm([10, 10])
+        >>> # Normalize over last dimension of size 10
+        >>> m = LayerNorm(10)
+        >>> # Activating the module
+        >>> output = m(input)
+
+        """
+        super().__init__(name=name)
+        if isinstance(normalized_shape, numbers.Integral):
+            normalized_shape = (normalized_shape,)
+        self.normalized_shape = tuple(normalized_shape)
+        self.eps = eps
+        self.elementwise_affine = elementwise_affine
+
+
+    def build(self, input_shape):
+        if self._built == False :
+            if self.elementwise_affine:
+                self.weight = tf.Variable(tf.ones(shape=self.normalized_shape), name='weight') #gamma//scale
+                self.bias = tf.Variable(tf.zeros(shape=self.normalized_shape), name='bias') #beta/ offset
+            self._built=True
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        mean = x.mean(dim=self.axis, keepdim=True).detach()
+        std = x.std(dim=self.axis, keepdim=True).detach()
+        return self.weight * (x - mean) / (std + self._eps) +self.bias
+
+
+LayerNorm2d=LayerNorm
+LayerNorm3d=LayerNorm
+
+
+class PixelNorm(Layer):
+    def __init__(self,eps=1e-5, axis=-1, name=None,**kwargs):
+        super(PixelNorm, self).__init__(name=name)
+        self.eps=eps
+        self.axis=axis
+
+    def forward(self, x):
+        return x /sqrt(mean(x ** 2, axis=self.axis, keepdims=True) + self.eps)
+
+
 
 
 class EvoNormB0(Layer):
@@ -464,7 +547,7 @@ class EvoNormB0(Layer):
         else:
             var = self.running_var
         if self.nonlinear:
-            den = torch.max((var+self.eps).sqrt(), self.v * x + instance_std(x))
+            den = max((var+self.eps).sqrt(), self.v * x + instance_std(x))
             return x / den * self.weight + self.bias
         else:
             return x * self.weight + self.bias

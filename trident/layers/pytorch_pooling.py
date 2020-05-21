@@ -24,7 +24,7 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, Sequential
 
-__all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
+__all__ = [ 'MaxPool1d','MaxPool2d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
            'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d','get_pooling']
 
 _session = get_session()
@@ -100,9 +100,7 @@ class MaxPool1d(_PoolNd):
     Shape:
         - Input: :math:`(N, C, L_{in})`
         - Output: :math:`(N, C, L_{out})`, where
-
-          .. math::
-              L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}\times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
+        : :math:'L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}\times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor'
 
     Examples::
 
@@ -111,8 +109,9 @@ class MaxPool1d(_PoolNd):
         >>> input = torch.randn(20, 16, 50)
         >>> output = m(input)
 
-    .. _link:
+    References:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate', name='', **kwargs):
@@ -129,7 +128,7 @@ class MaxPool1d(_PoolNd):
         return F.max_pool1d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
                             self.return_indices)
 
-nn.MaxPool2d
+
 class MaxPool2d(_PoolNd):
     r"""Applies a 2D max pooling over an input signal composed of several input
     planes.
