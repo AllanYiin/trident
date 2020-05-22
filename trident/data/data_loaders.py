@@ -1,3 +1,4 @@
+"""data_loader: The ready-to-use data provider"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -34,77 +35,21 @@ if not os.path.exists(_trident_dir):
         pass
 
 
-def to_onehot(arr):
-    if isinstance(arr, list):
-        arr = np.array(arr)
-    elif not isinstance(arr, np.ndarray):
-        raise ValueError('You should input a list of integer or ndarray.')
-    items = np.unique(arr)
-    items = np.argsort(items)
-    if np.min(items) < 0:
-        raise ValueError('Negative value cannot convert to onhot.')
-    elif np.sum(np.abs(np.round(arr) - arr)) > 0:
-        raise ValueError('Only integer value can convert to onhot.')
-    else:
-        max_value = int(np.max(items))
 
-        output_shape = list(arr.shape)
-        output_shape.append(max_value + 1)
-        output = np.zeros(output_shape, dtype=floatx())
-        arr = arr.astype(np.uint8)
-        for i in range(max_value):
-            onehot = np.zeros(max_value + 1, dtype=floatx())
-            onehot[i] = 1
-            output[arr == i] = onehot
-        return output
-
-
-#
-# def download_image(image, temproot, imageroot, flog=None):
-#     # Check existing file.
-#     try:
-#         temppath, imagepath = (os.path.join(root, image['path']) for root in (temproot, imageroot))
-#
-#     except Exception as e:
-#         sys.stderr('Unexpected exception before attempting download of image {0}.'.format(e))
-#
-#
-#     # GET and save to temp location.
-#     try:
-#         r = requests.get(image['url'])
-#         if r.status_code == 200:
-#             ensure_parent_dir(temppath)
-#             with open(temppath, 'wb') as fout:
-#                 for chunk in r.iter_content(1024): fout.write(chunk)
-#             logmsg('Saved  {}.'.format(temppath), flog=flog)
-#         else:
-#             logmsg('Status code {} when requesting {}.'.format(r.status_code, image['url']))
-#             return DownloadResult.DOWNLOAD_FAILED
-#     except Exception as e:
-#         stderr('Unexpected exception when downloading image {!r}.'.format(image), e, flog=flog)
-#         return DownloadResult.DOWNLOAD_FAILED
-#     # Check contents.
-#     try:
-#         if check_image(image, temppath):
-#             stderr('Image contents look good.)
-#         else:
-#             stderr('Image contents are wrong.')
-#             return DownloadResult.MD5_FAILED
-#     except Exception as e:
-#         stderr('Unexpected exception when checking file contents for image {!r}.'.format(image), e)
-#         return DownloadResult.MYSTERY_FAILED
-#     # Move image to final location.
-#     try:
-#         ensure_parent_dir(imagepath)
-#         os.rename(temppath, imagepath)
-#     except Exception as e:
-#         stderr('Unexpected exception when moving file from {} to {} for image {!r}.'.format(temppath, imagepath,
-#         image), e, flog=flog)
-#         return DownloadResult.MYSTERY_FAILED
-#     return DownloadResult.NEW_OK
 
 
 def load_mnist(dataset_name='mnist', **kwargs):
+    """data loader for mnist data
+
+    Args:
+        dataset_name (string): if 'minist'  will return the traditional mnist data/ label,
+            if 'fashion-mnist' will return the fashion-mnist' data
+
+
+    Returns:
+        a tuple of data and label
+
+    """
     dataset_name = dataset_name.strip().lower().replace('minist', 'mnist')
 
     if dataset_name.lower() not in ['mnist', 'fashion-mnist']:
@@ -171,6 +116,17 @@ def load_mnist(dataset_name='mnist', **kwargs):
 
 
 def load_cifar(dataset_name='cifar10'):
+    """data loader for mnist data
+
+    Args:
+        dataset_name (string): if 'cifar10'  will return the traditional cifar10 data/ label,
+            if 'cifar100' will return the cifar100 data
+
+
+    Returns:
+        a tuple of data and label
+
+    """
     dataset_name = dataset_name.strip().lower().replace(' ', '')
 
     if dataset_name.lower() not in ['cifar10', 'cifar100']:
@@ -436,6 +392,30 @@ def load_lfw(kind='train', is_flatten=None, is_onehot=None):
 
 
 def load_examples_data(dataset_name):
+    """data loader for AllanYiin deep learning course exsample data
+
+    Args:
+        dataset_name (string):
+            'pokemon': pokemon images for autoencoder
+            hanzi': Chinese hanzi hand writing recognition data
+            'animals': Challenging animals recognition data
+            'nsfw': porn detection data
+            'simpsons': simpson images for gan
+            'horse2zebra' : horse2zebra cyclegan training data
+            'people': Supervisely human segmentation data
+            autodrive':Streetview segmentation data
+            'superresolution': Collections of high resolution images for superresolution model
+            'anpr': Automatic number-plate recognition data
+            'beauty':beauty detection data
+
+    Returns:
+        a tuple of data and label
+
+    References
+        If you want know more how to use these data to build model, please go to my github repository:
+        https://github.com/AllanYiin/DeepBelief_Course5_Examples
+
+    """
     dataset_name = dataset_name.strip().lower()
     if dataset_name.lower() not in ['pokemon', 'hanzi', 'animals', 'nsfw', 'simpsons', 'horse2zebra', 'people',
                                     'autodrive', 'superresolution', 'anpr', 'beauty']:
