@@ -679,6 +679,9 @@ class Model(ModelBase):
                 self.lr_scheduler.step(np.array(self.training_context['metrics'][list(self._metrics.keys())[0]]).mean())
                 self.training_context['current_lr'] = self.optimizer.lr
 
+    def do_on_excution_exception(self):
+        pass
+
     def log_gradient(self, grads=None):
         grad_dict =OrderedDict()
         if isinstance(self._model, nn.Module):
@@ -703,6 +706,8 @@ class Model(ModelBase):
 
         if isinstance(self._model,nn.Module):
             save_path=self.get_save_path(save_path,default_folder='Models',default_file_name= '{0}_epoch{1}.pth.tar_'.format(self._model.name,self.training_context['current_epoch']))
+            save_path=sanitize_path(save_path)
+            self.current_save_path = save_path
             self._model.eval()
 
             torch.save({
@@ -714,14 +719,17 @@ class Model(ModelBase):
             }, save_path)
             self._model.train()
             shutil.copy(save_path, save_path.replace('.pth.tar_','.pth.tar'))
+            os.remove(save_path)
 
         elif isinstance(self._model,torch.Tensor):
             save_path = self.get_save_path(save_path, default_folder='Models',default_file_name='{0}_epoch{1}.npy_'.format(self._model.name, self.training_context[ 'current_epoch']))
-
+            save_path = sanitize_path(save_path)
+            self.current_save_path =save_path
             numpy_model=to_numpy(self._model)
-            np.save( sanitize_path(save_path),numpy_model)
+            np.save(save_path,numpy_model)
             shutil.copy(save_path, save_path.replace('.npy_', '.npy'))
-            os.strerror('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
+            os.remove(save_path)
+            sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
         else:
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
@@ -738,6 +746,8 @@ class Model(ModelBase):
                 file_path = os.path.join(file, '.onnx')
             self._model.to(get_device())
             outputs = self._model(dummy_input)
+            save_path=sanitize_path(save_path)
+            self.current_save_path =save_path
 
             # if dynamic_axes is None:
             #     dynamic_axes = {}
@@ -757,6 +767,7 @@ class Model(ModelBase):
                                 self.outputs.key_list[0]: {0 : 'batch_size'}})
             self._model.train()
             shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
+            os.remove(save_path)
         else:
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 

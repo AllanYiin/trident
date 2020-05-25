@@ -1,35 +1,33 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+import os
 import copy
-import threading
 import inspect
 import itertools
 import random
-import math
 import sys
+import threading
 import uuid
+import weakref
 from collections import defaultdict, namedtuple
-from functools import partial, wraps, update_wrapper
 from itertools import islice
 from typing import List
-import weakref
+
 import numpy as np
 import tensorflow as tf
-from distutils.version import LooseVersion
 from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
+from tensorflow.python.framework import func_graph, ops
 from tensorflow.python.module import module
 from tensorflow.python.util import object_identity
-from tensorflow.python.framework import func_graph, ops
-from trident.data.utils import pickle_it, unpickle
-from trident.backend.common import floatx, addindent, OrderedDict, camel2snake, get_signature, get_time_suffix, \
-    format_time, get_terminal_size, snake2camel, PrintException, to_list, unpack_singleton, enforce_singleton, \
-    OrderedDict, get_signature
-from trident.backend.tensorflow_ops import *
-from trident.backend import tensorflow_serialization as serialization
 
-__all__ = ['Layer', 'get_flops', 'Sequential', 'ReplayBuffer', 'summary', 'normalize_padding', 'load', 'save']
+from trident.backend import tensorflow_serialization as serialization
+from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_signature
+from trident.backend.tensorflow_ops import *
+from trident.data.utils import pickle_it
+
+__all__ = ['Layer', 'get_flops', 'Sequential', 'ReplayBuffer', 'summary', 'normalize_padding', 'load', 'save','try_map_args_and_call']
 
 gpus = tf.config.list_physical_devices('GPU')
 
@@ -186,16 +184,17 @@ def _addindent(s_, numSpaces):
     return s
 
 
+
 class Layer(tf.Module):
-    """
-    Trident extened nn.Module
-    """
+    """Trident extened tf.Module as base layer class."""
     _version = 1
 
-    def __init__(self, name=None, **kwargs):
+    def __init__(self, name=None, keep_output=False,**kwargs):
         super(Layer, self).__init__()
         self.training = True
         self._built = False
+        self.rank = kwargs.get('rank', None)
+
         self._uid_prefixs = {}
         self._modules = OrderedDict()
         self._parameters = OrderedDict()
@@ -204,33 +203,30 @@ class Layer(tf.Module):
         self._forward_pre_hooks = OrderedDict()
         self._state_dict_hooks = OrderedDict()
         self._load_state_dict_pre_hooks = OrderedDict()
-        self._input_shape = None
-        self._output_shape = None
 
+        self._input_shape = None
+        self.input_filters = None
+        self._output_shape = None
+        self.keep_output = keep_output
         self._output_tensor = None
-        self.keep_output = kwargs.get('keep_output', False)
         self.signature = None
 
-        self.input_filters = None
+        self._name = kwargs.get('name', name)
         self.uuid = uuid.uuid4().node
         prefix = self.__class__.__name__
         self.default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
         reset_name(self, self._uid_prefixs)
         self.relative_name = ''
 
-        self.input_filters = None
 
-        self._name = kwargs.get('name', name)
         # self.dump_patches = True
-
-        self.uuid = uuid.uuid4().node
-
         self._nodes = None
-
         self._device = '/cpu:0' if gpus is None or len(gpus) == 0 else gpus[0]
+
 
     @property
     def name(self):
+        """If not assign name , it will return the default_name"""
         return self._name if self._name is not None and len(self._name) > 0 else self.default_name
 
     @name.setter
@@ -239,6 +235,7 @@ class Layer(tf.Module):
 
     @property
     def nodes(self):
+        """The whole tree structured OrderedDict {uuid: module} , for module to access any node in this structures, ex. Shortcut"""
         return self._nodes
 
     @nodes.setter
@@ -248,16 +245,76 @@ class Layer(tf.Module):
             for mod in self.modules():
                 mod._nodes = value
 
-    # @property
-    # def nodes(self):
-    #     return self._nodes
-    #
-    # @nodes.setter
-    # def nodes(self,value):
-    #     if self._nodes!=value:
-    #         self._nodes=value
-    #         for mod in self.modules():
-    #             mod._nodes=value
+
+    def add_module(self, name, module):
+        """Adds a child module to the current module.
+
+        The module can be accessed as an attribute using the given name.
+        1) add module as child
+        2) generate default_name and relative_name
+        3) update the nodes
+
+        Args:
+            name (string): name of the child module. The child module can be
+                accessed from this module using the given name
+            module (Module): child module to be added to the module.
+
+        """
+        if name is None or len(name) == 0:
+            name = module._name
+
+        if module is None:
+            raise KeyError("module  can't be None")
+        elif not isinstance(name, str):
+            raise TypeError("module name should be a string. Got {}".format(type(name).__name__))
+        elif hasattr(self, name) and name not in self._modules:
+            raise KeyError("attribute '{}' already exists".format(name))
+        elif '.' in name:
+            raise KeyError("module name can't contain \".\"")
+        elif name == '':
+            raise KeyError("module name can't be empty string \"\"")
+        elif isinstance(module, Layer):
+            self._modules[name] = module
+            if isinstance(module, Layer):
+                reset_name(module, self._uid_prefixs)
+                module.relative_name = name if module.relative_name == '' else name + '.' + module.relative_name
+                for mod in module.modules():
+                    if isinstance(mod, Layer) and mod.uuid != module.uuid:
+                        mod.nodes = self.nodes
+                        reset_name(mod, self._uid_prefixs)
+                        mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
+
+            self.nodes = OrderedDict([(mod.uuid, mod) for mod in list(self.modules()) if isinstance(mod, Layer)])
+            for mod in module.modules():
+                if isinstance(mod, Layer):
+                    mod.nodes = self.nodes
+
+        elif inspect.isfunction(module) or callable(module):
+            module.__name__ = name
+            self._modules[name] = module
+
+        else:
+            raise ValueError('Not valid module')
+
+    def add(self, module):
+        """Simplified 'add_module'
+
+        The module name will retrieve from module can be accessed as an attribute using the given name.
+
+        Args:
+            module (Module): child module to be added to the module.
+
+        """
+        if module is None:
+            raise KeyError("module  can't be None")
+        elif isinstance(module, Layer):
+            # nodes = self._nodes.copy()
+            # for k, v in module.nodes.items():
+            #     nodes[k] = v
+            self.add_module(str(len(self._modules)),module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
+
+        else:
+            raise ValueError('Not valid module')
 
     def register_forward_pre_hook(self, hook):
         r"""Registers a forward pre-hook on the module.
@@ -318,7 +375,7 @@ class Layer(tf.Module):
                 from this module using the given name
             tensor (Tensor): buffer to be registered.
 
-        Example::
+        Examples::
 
             >>> self.register_buffer('running_mean', tf.zeros([5]))
 
@@ -349,6 +406,7 @@ class Layer(tf.Module):
             name (string): name of the parameter. The parameter can be accessed
                 from this module using the given name
             param (Parameter): parameter to be added to the module.
+
         """
         if '_parameters' not in self.__dict__:
             raise AttributeError("cannot assign parameter before Module.__init__() call")
@@ -372,69 +430,18 @@ class Layer(tf.Module):
 
             self._parameters[name] = param
 
-    def add_module(self, name, module):
-        r"""Adds a child module to the current module.
 
-        The module can be accessed as an attribute using the given name.
 
-        Args:
-            name (string): name of the child module. The child module can be
-                accessed from this module using the given name
-            module (Module): child module to be added to the module.
-        """
-        if name is None or len(name) == 0:
-            name = module._name
-
-        if module is None:
-            raise KeyError("module  can't be None")
-        elif not isinstance(name, str):
-            raise TypeError("module name should be a string. Got {}".format(type(name).__name__))
-        elif hasattr(self, name) and name not in self._modules:
-            raise KeyError("attribute '{}' already exists".format(name))
-        elif '.' in name:
-            raise KeyError("module name can't contain \".\"")
-        elif name == '':
-            raise KeyError("module name can't be empty string \"\"")
-        elif isinstance(module, Layer):
-            # nodes = self._nodes.copy()
-            # for k, v in module.nodes.items():
-            #     nodes[k] = v
-            self._modules[name] = module
-            if isinstance(module, Layer):
-                reset_name(module, self._uid_prefixs)
-                module.relative_name = name if module.relative_name == '' else name + '.' + module.relative_name
-                for mod in module.modules():
-                    if isinstance(mod, Layer) and mod.uuid != module.uuid:
-                        mod.nodes = self.nodes
-                        reset_name(mod, self._uid_prefixs)
-                        mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
-
-            self.nodes = OrderedDict([(mod.uuid, mod) for mod in list(self.modules()) if isinstance(mod, Layer)])
-            for mod in module.modules():
-                if isinstance(mod, Layer):
-                    mod.nodes = self.nodes
-
-        elif inspect.isfunction(module) or callable(module):
-            module.__name__ = name
-            self._modules[name] = module
-
-        else:
-            raise ValueError('Not valid module')
-
-    def add(self, module):
-        if module is None:
-            raise KeyError("module  can't be None")
-        elif isinstance(module, Layer):
-            # nodes = self._nodes.copy()
-            # for k, v in module.nodes.items():
-            #     nodes[k] = v
-            self.add_module(str(len(self._modules)),
-                            module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
-
-        else:
-            raise ValueError('Not valid module')
 
     def build(self, input_shape):
+        """
+
+        Args:
+            input_shape ():
+
+        Returns:
+
+        """
         pass  # pass if no need shape infer
 
     def compute_output_shape(self, input_shape):
@@ -514,16 +521,7 @@ class Layer(tf.Module):
         fn(self)
         return self
 
-    def get_config(self):
-        config = {'name': self.name, 'trainable': self.trainable}
 
-        if hasattr(self, 'batch_input_shape'):
-            config['batch_input_shape'] = self.batch_input_shape
-
-        if hasattr(self, 'dtype'):
-            config['dtype'] = self.dtype
-
-        return config
 
     @property
     def device(self):
@@ -555,7 +553,7 @@ class Layer(tf.Module):
         if self._built == False:
             self._input_shape = value
             if len(self._input_shape) == 0:
-                self.input_filters = -1
+                self.input_filters =  int(self._input_shape)
             else:
                 self.input_filters = int(self._input_shape[-1])
 
@@ -638,7 +636,7 @@ class Layer(tf.Module):
         Returns:
             dict:
                 a dictionary containing a whole state of the module
-        Example::
+        Examples::
             >>> module.state_dict().keys()
             ['bias', 'weight']
         """
@@ -794,6 +792,8 @@ class Layer(tf.Module):
     def save_onnx(self, file_path=''):
         pass
 
+    def save_weight(self, file_path=''):
+        pass
     def forward(self, *input, **kwargs):
         r"""Defines the computation performed at every call.
 
@@ -953,7 +953,7 @@ class Layer(tf.Module):
         Yields:
             Parameter: module parameter
 
-        Example::
+        Examples::
 
             >>> for param in model.parameters():
             >>>     print(type(param.data), param.size())
@@ -977,7 +977,7 @@ class Layer(tf.Module):
         Yields:
             (string, Parameter): Tuple containing the name and parameter
 
-        Example::
+        Examples::
 
             >>> for name, param in self.named_parameters():
             >>>    if name in ['bias']:
@@ -999,7 +999,7 @@ class Layer(tf.Module):
         Yields:
             torch.Tensor: module buffer
 
-        Example::
+        Examples::
 
             >>> for buf in model.buffers():
             >>>     print(type(buf.data), buf.size())
@@ -1023,7 +1023,7 @@ class Layer(tf.Module):
         Yields:
             (string, torch.Tensor): Tuple containing the name and buffer
 
-        Example::
+        Examples::
 
             >>> for name, buf in self.named_buffers():
             >>>    if name in ['running_var']:
@@ -1050,7 +1050,7 @@ class Layer(tf.Module):
         Yields:
             (string, Module): Tuple containing a name and child module
 
-        Example::
+        Examples::
 
             >>> for name, module in model.named_children():
             >>>     if name in ['conv4', 'conv5']:
@@ -1073,7 +1073,7 @@ class Layer(tf.Module):
             Duplicate modules are returned only once. In the following
             example, ``l`` will be returned only once.
 
-        Example::
+        Examples::
 
             >>> l = nn.Linear(2, 2)
             >>> net = nn.Sequential(l, l)
@@ -1101,7 +1101,7 @@ class Layer(tf.Module):
             Duplicate modules are returned only once. In the following
             example, ``l`` will be returned only once.
 
-        Example::
+        Examples::
 
             >>> l = nn.Linear(2, 2)
             >>> net = nn.Sequential(l, l)
@@ -1761,6 +1761,22 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
         else:
 
             print('uncomplete arg_map', arg_map.key_list)
+
+
+def force_deterministic(seed):
+    """ Force most of the computation nodes to run deterministically.
+
+    Args:
+        seed (int): set the random seed for all random ops in the graph and readers.
+
+    """
+
+    set_seed(seed)
+    os.environ['TF_CUDNN_DETERMINISTIC'] = True
+    os.environ['TF_CUDNN_USE_AUTOTUNE'] = False
+    tf.config.threading.set_intra_op_parallelism_threads(1)
+    tf.config.threading.set_inter_op_parallelism_threads(1)
+
 
 
 

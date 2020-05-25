@@ -382,7 +382,7 @@ class TrainingPlan(object):
 
                         iter_testdata = None
                         if isinstance(data_loader,
-                                      DataProviderV2) and data_loader.testdata is not None and \
+                                      DataProvider) and data_loader.testdata is not None and \
                                 need_out_sample_evaluation:
                             return_test = data_loader.next_test()
                             if return_test is not None:

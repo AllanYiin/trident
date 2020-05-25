@@ -66,6 +66,7 @@ class ModelBase(object):
         self.sample_collect_history = []
         self.preprocess_flow = []
 
+        self.current_save_path=None
         self.epoch_loss_history = OrderedDict()
         self.epoch_loss_history['total_losses'] = []
         self.epoch_metric_history = OrderedDict()
@@ -395,6 +396,9 @@ class ModelBase(object):
         # zero grad
         pass
 
+    def do_on_excution_exception(self):
+        pass
+
     def log_gradient(self, grads=None):
         raise NotImplementedError
 
@@ -555,11 +559,13 @@ class ModelBase(object):
                     if k not in self.training_context['losses']:
                         self.training_context['losses'][k] = []
                     try:
-                        loss_weight = 1
+                        loss_weight = 1.0
                         if k in self.loss_weights:
                             loss_weight = self.loss_weights[k]
-
-                        this_loss = to_tensor(loss_weight)*try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)# v.forward(output, target) if hasattr(v, 'forward') else v(
+                        loss_weight=to_tensor(loss_weight,'float32')
+                        this_loss = loss_weight*try_map_args_and_call(v, train_data, self.training_context['data_feed']) # v.forward(output, target) if hasattr(v, 'forward') else v(
+                        if self.training_context['stop_update'] >=1 :
+                            this_loss=to_tensor(0.0)
                         # output, target)
 
                         if isinstance(this_loss, tuple):
@@ -593,9 +599,9 @@ class ModelBase(object):
                     if k + '_Loss' not in self.training_context['losses']:
                         self.training_context['losses'][k + '_Loss'] = []
                     this_loss=0
-                    if 'model' in v.signature:
+                    if 'model' in v.signature.inputs:
                         this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0)
-                    elif 'output' in v.signature:
+                    elif 'output' in v.signature.inputs:
 
                         this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
 
@@ -740,6 +746,7 @@ class ModelBase(object):
                     for callback in self.training_context['callbacks']:
                         callback.on_training_end(self.training_context)
         except Exception:
+            self.do_on_excution_exception()
             PrintException()
 
     def summary(self):
