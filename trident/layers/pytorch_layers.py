@@ -86,15 +86,17 @@ class Dense(Layer):
         torch.Size([2, 30])
     """
 
-    def __init__(self, output_shape, use_bias=True, activation=None,keep_output=False, name=None, **kwargs):
+    def __init__(self, num_filters, use_bias=True, activation=None,keep_output=False, name=None, **kwargs):
         super(Dense, self).__init__()
         self.rank=0
-        if isinstance(output_shape, int):
-            self.output_shape = _single(output_shape)
-        elif isinstance(output_shape, list):
-            self.output_shape = tuple(output_shape)
-        elif isinstance(output_shape, tuple):
-            self.output_shape = output_shape
+        if isinstance(num_filters, int):
+            self.num_filters = num_filters
+        elif isinstance(num_filters, tuple):
+            self.num_filters=unpack_singleton(num_filters)
+            #elif isinstance(num_filters, list):
+        #    self.num_filters= tuple(num_filters)
+        #elif isinstance(num_filters, tuple):
+        #    self.num_filters = num_filters
         else:
             raise ValueError('output_shape should be integer, list of integer or tuple of integer...')
         self.name = name
@@ -106,11 +108,11 @@ class Dense(Layer):
 
     def build(self, input_shape):
         if self._built == False:
-            self.weight = Parameter(torch.Tensor(*self.output_shape.tolist(), self.input_filters))
+            self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters))
             init.kaiming_uniform_(self.weight, a=math.sqrt(5))
             # self._parameters['weight'] =self.weight
             if self.use_bias:
-                self.bias = Parameter(torch.Tensor(self.output_shape.tolist()[0]))
+                self.bias = Parameter(torch.Tensor(self.num_filters))
                 init.zeros_(self.bias)  # self._parameters['bias']=self.bias
             self.to(self.device)
             self._built = True
@@ -239,11 +241,30 @@ class Dot(Layer):
 
 
 class SoftMax(Layer):
-    """SoftMax layer to accelerate  classification model training"""
+    """SoftMax layer
 
-    def __init__(self, axis=1, add_noise=False, noise_intensity=0.005, **kwargs):
-        super(SoftMax, self).__init__()
+    SoftMax layer is designed for accelerating  classification model training
+    In training stage, it will process the log_softmax transformation (get log-likelihood for a single instance ).
+    In testing/ evaluation/ infer stage, it will process the 'so-called' softmax transformation.
+    All transformation is processed across 'asix (default=1)'
+
+    And you also can setting add_noise and noise_intensity arugments to imprement output noise.
+    output noise can force model make every output probability should large enough or small enough, otherwise it will confused within output noise.
+    It;s a regularzation technique for classification model training.
+
+    """
+    def __init__(self, axis=1, add_noise=False, noise_intensity=0.005, name=None ,**kwargs):
+        """
+        Args:
+            axis (int,default=1): The axis all the transformation processed across.
+            add_noise (bool, default=False): If True, will add (output) noise  in this layer.
+            noise_intensity (float, default=0.005): The noise intensity (is propotional to mean of actual output.
+
+        """
+        super(SoftMax, self).__init__(name=name)
         self.axis = kwargs.get('dim', axis)
+        self.add_noise=add_noise
+        self.noise_intensity=noise_intensity
 
     def forward(self, *x) -> torch.Tensor:
         x = enforce_singleton(x)
@@ -443,14 +464,17 @@ class _ConvNd(Layer):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
             elif isinstance(self.__dict__['activation'], nn.Module):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
-        s += ',auto_pad={auto_pad},use_bias={use_bias} ,dilation={dilation}'
+        s += ',auto_pad={auto_pad}'
+        if hasattr(self,'padding') and self.padding is not None:
+            s += ', padding={0}, padding_mode={1}'.format(self.padding, self.padding_mode)
+        s += ',use_bias={use_bias} ,dilation={dilation}'
         if self.groups != 1:
             s += ', groups={groups}'
-        if self._input_shape is not None:
+        if hasattr(self,'_input_shape') and self._input_shape is not None:
             s += ', input_shape={0}, input_filter={1}'.format(to_numpy(self._input_shape).tolist(), self.input_filters)
-        if self.output_shape is not None:
-            s += ', output_shape={0}'.format(self.output_shape if isinstance(self.output_shape, (
-            list, tuple)) else self.output_shape.clone().tolist())
+        if hasattr(self,'_output_shape') and self._output_shape is not None:
+            s += ', output_shape={0}'.format(self._output_shape if isinstance(self._output_shape, (
+            list, tuple)) else self._output_shape.clone().tolist())
         #     if self.bias is None:
         #         s += ', use_bias=False'
         return s.format(**self.__dict__)

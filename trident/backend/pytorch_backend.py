@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import os
 import copy
 import itertools
 import logging
@@ -22,7 +22,7 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','print_network','summary','Layer', 'Sequential','ModuleList',  'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
+__all__ = ['get_device','set_device','Layer', 'Sequential','ModuleList' ,'print_network','summary', 'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
 
 version=torch.__version__
 sys.stderr.write('Pytorch version:{0}.\n'.format(version))
@@ -109,45 +109,57 @@ def get_global_uid(prefix=''):
     return _UID_PREFIX[prefix]
 
 class Layer(nn.Module):
-    """
-    Trident extened nn.Module
-    """
+    """Trident extened nn.Module as base layer class.
+    Your models should also subclass this class.
+    Layer contains :
+        modules: another child layer(module) in it.
+        parameters: the trainable parameters in the layer.
+        buffers: the other non_trainable tensor in the layer.
 
-    def __init__(self,name=None,**kwargs):
-        self._built = False
-        self._uid_prefixs = {}
+    """
+    def __init__(self,name=None,keep_output=False,**kwargs):
         super(Layer, self).__init__()
-        self._name = name
         self.training = True
-
-
+        self._built = False
         self.rank= kwargs.get('rank',None)
-        self._input_shape = None
-        self._output_shape = None
-        self._output_tensor =None
-        self.keep_output= kwargs.get('keep_output',False)
-        self.signature=None
+
+        self.uuid=uuid.uuid4().node
+        self._nodes = None
+        self._uid_prefixs = {}
+        self._name = name
 
         prefix = self.__class__.__name__
         self._default_name= camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
         self.default_name=self._default_name
         self.relative_name=''
         reset_name(self, self._uid_prefixs)
-        # self._input_shape=None
-        # self._output_shape = None
-        self.input_filters =None
+
+        self._input_shape = None
+        self.input_filters = None
+        self._output_shape = None
+        self.keep_output = keep_output
+        self._output_tensor =None
+
+        self.signature=None
 
         #self.dump_patches = True
 
-        self.uuid=uuid.uuid4().node
+    def forward(self, *input):
+        r"""Defines the computation performed at every call.
 
-        self._nodes = None
+        Should be overridden by all subclasses.
 
-
-
+        .. note::
+            Although the recipe for forward pass needs to be defined within
+            this function, one should call the :class:`Module` instance afterwards
+            instead of this since the former takes care of running the
+            registered hooks while the latter silently ignores them.
+        """
+        raise NotImplementedError
 
     @property
     def name(self):
+        """If not assign name , it will return the default_name"""
         return self._name if self._name is not None and len(self._name)>0 else self.default_name
 
     @name.setter
@@ -157,10 +169,9 @@ class Layer(nn.Module):
 
 
 
-
-
     @property
     def nodes(self):
+        """The whole tree structured OrderedDict {uuid: module} , for module to access any node in this structures, ex. Shortcut"""
         return self._nodes
 
     @nodes.setter
@@ -171,14 +182,18 @@ class Layer(nn.Module):
                 mod._nodes=value
 
     def add_module(self, name, module):
-        r"""Adds a child module to the current module.
+        """Adds a child module to the current module.
 
         The module can be accessed as an attribute using the given name.
+        1) add module as child
+        2) generate default_name and relative_name
+        3) update the nodes
 
         Args:
             name (string): name of the child module. The child module can be
                 accessed from this module using the given name
             module (Module): child module to be added to the module.
+
         """
         if not isinstance(module, (nn.Module,Layer)) and module is not None:
             raise TypeError("{} is not a Module subclass".format(
@@ -206,6 +221,8 @@ class Layer(nn.Module):
         for mod in self.modules():
             if isinstance(mod,Layer):
                 mod.nodes =self.nodes
+
+
 
     def build(self, input_shape):
         pass  #pass if no need shape infer
@@ -344,7 +361,7 @@ class Layer(nn.Module):
         if self._built == False :
             self._input_shape =value
             if self._input_shape.ndim == 0:
-                self.input_filters = -1
+                self.input_filters = int(self._input_shape.data)
             elif len(self._input_shape) == 1:
                 self.input_filters = self._input_shape.item()
             else:
@@ -717,7 +734,7 @@ class ModuleList(Layer):
     Args:
         modules (iterable, optional): an iterable of modules to add
 
-    Example::
+    Examples::
 
         class MyModule(nn.Module):
             def __init__(self):
@@ -1443,6 +1460,22 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
         else:
 
             print('uncomplete arg_map', arg_map.key_list)
+
+
+
+
+def force_deterministic(seed):
+    """ Force most of the computation nodes to run deterministically.
+
+    Args:
+        seed (int): set the random seed for all random ops in the graph and readers.
+
+    """
+
+    set_seed(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 
 

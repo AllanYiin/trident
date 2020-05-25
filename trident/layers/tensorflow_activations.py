@@ -22,6 +22,7 @@ __all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','
 class Identity(Layer):
     """Identity activation Layer
     A placeholder identity operator that is argument-insensitive.
+
     Examples:
         >>> Identity()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
         tensor([-3.0, -1.0, 0.0, 2.0])
@@ -29,6 +30,8 @@ class Identity(Layer):
     """
     def __init__(self,name=None):
         super(Identity, self).__init__(name=name)
+        self._built = True
+
     def forward(self, x):
         return x
 
@@ -41,6 +44,7 @@ class Sigmoid(Layer):
 
     def __init__(self,name=None):
         super(Sigmoid, self).__init__(name=name)
+        self._built = True
     def forward(self, x):
         return sigmoid(x)
 
@@ -48,7 +52,16 @@ class Sigmoid(Layer):
 class Tanh(Layer):
     def __init__(self,name=None):
         super(Tanh, self).__init__(name=name)
+        self._built = True
     def forward(self, x):
+        """
+
+        Args:
+            x ():
+
+        Returns:
+
+        """
         return tanh(x)
 
 
@@ -65,6 +78,7 @@ class Relu(Layer):
     """
     def __init__(self,name=None):
         super(Relu, self).__init__(name=name)
+        self._built = True
     def forward(self, x):
         return relu(x)
 
@@ -82,6 +96,7 @@ class Relu6(Layer):
     """
     def __init__(self,name=None):
         super(Relu6, self).__init__(name=name)
+        self._built = True
     def forward(self, x):
         return relu6(x)
 
@@ -100,6 +115,7 @@ class LeakyRelu(Layer):
     def __init__(self,alpha=0.02,name=None):
         super(LeakyRelu, self).__init__(name=name)
         self.alpha=alpha
+        self._built = True
 
     def forward(self, x):
         return leaky_relu(x,alpha=self.alpha)
@@ -117,6 +133,7 @@ class LeakyRelu6(Layer):
     def __init__(self,alpha=0.02,name=None):
         super(LeakyRelu6, self).__init__(name=name)
         self.alpha = alpha
+        self._built = True
     def forward(self, x):
         return leaky_relu6(x,alpha=self.alpha)
 
@@ -132,12 +149,14 @@ class Elu(Layer):
     """
     def __init__(self,name=None):
         super(Elu, self).__init__(name=name)
+        self._built = True
     def forward(self, x):
         return elu(x)
 
 class SmoothRelu(Layer):
     def __init__(self,name=None):
         super(SmoothRelu, self).__init__(name=name)
+        self._built = True
     def forward(self, x):
         return smooth_relu(x)
 
@@ -172,6 +191,7 @@ class PRelu(Layer):
                 self.num_parameters=self.input_filters
             self.weight=tf.Variable(ones((self.num_parameters))*self.init, name='weight')
             self._built = True
+            self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
 
@@ -203,6 +223,7 @@ class Swish(Layer):
     """
     def __init__(self,name=None):
         super(Swish, self).__init__(name=name)
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -228,13 +249,14 @@ class Selu(Layer):
         Self-Normalizing Neural Networks
         Günter Klambauer, Thomas Unterthiner, Andreas Mayr, Sepp Hochreiter
 
-    Example:
+    Examples:
         >>> Selu()(to_tensor([[-1, -0.5, 0, 1, 2]]))
         tensor([[-1.1113, -0.6918,  0.0000,  1.0507,  2.1014]])
 
     """
     def __init__(self,name=None):
         super(Selu, self).__init__(name=name)
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -245,6 +267,7 @@ class Selu(Layer):
 class LecunTanh(Layer):
     def __init__(self,name=None):
         super(LecunTanh, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return lecun_tanh(x)
@@ -255,6 +278,7 @@ class LecunTanh(Layer):
 class SoftSign(Layer):
     def __init__(self,name=None):
         super(SoftSign, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return soft_sign(x)
@@ -264,6 +288,7 @@ class SoftSign(Layer):
 class SoftPlus(Layer):
     def __init__(self,name=None):
         super(SoftPlus, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return soft_plus(x)
@@ -286,6 +311,7 @@ class HardSigmoid(Layer):
 
     def __init__(self,name=None):
         super(HardSigmoid, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return hard_sigmoid(x)
@@ -294,6 +320,7 @@ class HardSigmoid(Layer):
 class HardTanh(Layer):
     def __init__(self,name=None):
         super(HardTanh, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return hard_tanh(x)
@@ -301,6 +328,7 @@ class HardTanh(Layer):
 class HardSwish(Layer):
     def __init__(self,name=None):
         super(HardSwish, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return hard_swish(x)
@@ -310,6 +338,7 @@ class HardSwish(Layer):
 class Logit(Layer):
     def __init__(self,name=None):
         super(Logit, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return logit(x)
@@ -333,6 +362,7 @@ class LogLog(Layer):
     """
     def __init__(self,name=None):
         super(LogLog, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return log_log(x)
@@ -343,6 +373,7 @@ class LogLog(Layer):
 class Softmax(Layer):
     def __init__(self):
         super(Softmax, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -354,6 +385,7 @@ class Softmax(Layer):
 class LogSoftmax(Layer):
     def __init__(self):
         super(LogSoftmax, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -382,6 +414,7 @@ class Mish(Layer):
     """
     def __init__(self,name=None):
         super(Mish, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return mish(x)
@@ -405,6 +438,7 @@ class HardMish(Layer):
     """
     def __init__(self,name=None):
         super(Mish, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return mish(x)
@@ -432,6 +466,7 @@ class Gelu(Layer):
     """
     def __init__(self,name=None):
         super(Gelu, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return gelu(x)
@@ -456,6 +491,7 @@ class GptGelu(Layer):
     """
     def __init__(self,name=None):
         super(GptGelu, self).__init__(name=name)
+        self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
         return gpt_gelu(x)
@@ -496,11 +532,11 @@ def get_activation(fn_name):
                  return activation_fn
             else:
                 try:
-                    activation_fn =  get_function(camel2snake(fn_name), fn_modules)
+                    activation_fn =  get_class(snack2camel(fn_name), fn_modules)
                     return activation_fn()
                 except Exception:
                     activation_fn = tf.keras.activations.get(fn_name)
-                    return activation_fn
+                    return activation_fn()
 
         elif getattr(fn_name, '__module__', None) == 'trident.layers.tensorflow_activations':
             if inspect.isfunction(fn_name):

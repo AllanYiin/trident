@@ -518,7 +518,7 @@ def For(what_range, constructor):
         cntk.ops.functions.Function:
         A function that accepts one argument and applies the layers as constructed by ``constructor`` one after another.
 
-    Example:
+    Examples:
      >>> # stack of 3 Dense relu layers
      >>> model = For(range(3), lambda: Dense(200, activation=relu))
      >>> # version of the above that has no activation for the last layer
@@ -664,6 +664,12 @@ class ShortCut2d(Layer):
         if self.activation is not None:
             x = self.activation(x)
         return x
+    def extra_repr(self):
+        s = ('mode={mode}, keep_output={keep_output}, activation={activation.__name__},axis={axis}')
+        if hasattr(self, 'branch_from') and self.branch_from is not None:
+            s += ', branch_from={0}, branch_from_uuid={1}'.format(self.branch_from, self.branch_from_uuid)
+        return s.format(**self.__dict__)
+
 
 
 

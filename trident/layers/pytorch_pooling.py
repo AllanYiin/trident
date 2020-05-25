@@ -347,7 +347,7 @@ class MaxUnpool1d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Example::
+    Examples::
 
         >>> pool = nn.MaxPool1d(2, strides=2, return_indices=True)
         >>> unpool = nn.MaxUnpool1d(2, strides=2)
@@ -414,7 +414,7 @@ class MaxUnpool2d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Example::
+    Examples::
 
         >>> pool = nn.MaxPool2d(2, strides=2, return_indices=True)
         >>> unpool = nn.MaxUnpool2d(2, strides=2)
@@ -490,7 +490,7 @@ class MaxUnpool3d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Example::
+    Examples::
 
         >>> # pool of square window of size=3, strides=2
         >>> pool = nn.MaxPool3d(3, strides=2, return_indices=True)

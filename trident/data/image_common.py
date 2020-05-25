@@ -364,10 +364,16 @@ def to_rgb():
             return image
 
         elif len(image.shape) == 3:
-            if image.shape[0] == 3 and image.shape[0] == 4:
+            if image.shape[0] in (1,3, 4) and image.shape[-1] >4:
                 image = image.transpose([1, 2, 0])
-            if image.shape[-1] == 4:
-                image = image[:, :, :3]
+            if image[-1].shape in (3, 4):
+                if image[0].shape == 4:
+                    image = image[:, :,:3]
+                image = image[..., ::-1]
+            elif  image[-1].shape ==1:
+               image = np.concatenate([image, image, image], -1)
+            return image
+
         return image
 
     return img_op
@@ -375,15 +381,21 @@ def to_rgb():
 
 def to_bgr():
     def img_op(image: np.ndarray):
-        if image.ndim == 3:
-            if image.shape[0] in (3, 4) and image.shape[-1] not in (3, 4):
-                if image[0].shape == 4:
-                    image = image[:3, :, :]
+        if len(image.shape) == 2 :
+            image = np.expand_dims(image, -1)
+            image = np.concatenate([image, image, image], -1)
+            return image
+        elif image.ndim == 3:
+            if image.shape[0] in (1,3, 4) and image.shape[-1] >4:
                 image = image.transpose([1, 2, 0])
             if image[-1].shape in (3, 4):
-                if image[-1].shape == 4:
-                    image = image[:, :, :3]
+                if image[0].shape == 4:
+                    image = image[:, :,:3]
                 image = image[..., ::-1]
+            elif  image[-1].shape ==1:
+               image = np.concatenate([image, image, image], -1)
+            return image
+
         return image
 
     return img_op

@@ -5,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from trident.backend.common import get_session, get_function, camel2snake, snake2camel
+from  trident.backend.tensorflow_backend import Layer
 from  trident.backend.tensorflow_ops import *
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
@@ -13,17 +14,17 @@ _session=get_session()
 _epsilon=_session.epsilon
 
 
-def l1_reg(model:tf.Module,reg_weight=1e-6):
+def l1_reg(model:Layer,reg_weight=1e-6):
     loss=0
     for  param in model.weights:
             loss = loss + (reg_weight * reduce_sum(abs(param)))
     return loss
 
 
-def l2_reg(model:tf.Module,reg_weight=1e-6):
+def l2_reg(model:Layer ,reg_weight=1e-6):
     loss = 0
     for param in model.weights:
-        loss = loss + (0.5 * reg_weight * reduce_sum(pow(param, 2)))
+        loss = loss +  reg_weight * tf.norm(param)
     return loss
 
 

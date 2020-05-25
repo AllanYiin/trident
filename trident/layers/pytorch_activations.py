@@ -16,7 +16,7 @@ import torch.nn.functional as F
 import torch.nn.modules.activation as af
 from torch.nn.parameter import Parameter
 
-from trident.backend.common import get_function, get_class, camel2snake, enforce_singleton
+from trident.backend.common import get_function, get_class, camel2snake,snake2camel, enforce_singleton
 from trident.backend.pytorch_backend import Layer
 from trident.backend.pytorch_ops import *
 
@@ -35,19 +35,19 @@ class Identity(Layer):
         tensor([-3.0, -1.0, 0.0, 2.0])
 
     """
-
     def __init__(self, name=None):
         super(Identity, self).__init__(name=name)
+        self._built = True
 
     def forward(self, x):
         return x
 
 
 class Relu(Layer):
-    """
-        Rectified Linear Unit activation function.
-        With default values, it returns element-wise max(x, 0).
-        Otherwise, it follows:
+    """Rectified Linear Unit activation function.
+
+    With default values, it returns element-wise max(x, 0).
+    Otherwise, it follows:
 
         ```
         f(x) = max_value if x >= max_value
@@ -63,6 +63,7 @@ class Relu(Layer):
 
     def __init__(self, name=None):
         super(Relu, self).__init__(name=name)
+        self._built = True
 
     def forward(self, *x):
         """
@@ -77,10 +78,10 @@ class Relu(Layer):
 
 
 class Relu6(Layer):
-    """
-        Rectified Linear Unit  6 activation function.
-        With default values, it returns element-wise min(max(x, 0),6).
-        Otherwise, it follows:
+    """Rectified Linear Unit  6 activation function.
+
+    With default values, it returns element-wise min(max(x, 0),6).
+    Otherwise, it follows:
 
             ```
             f(x) = 6 if x >= 6
@@ -96,6 +97,7 @@ class Relu6(Layer):
 
     def __init__(self, name=None):
         super(Relu6, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -103,8 +105,8 @@ class Relu6(Layer):
 
 
 class LeakyRelu(Layer):
-    """
-    Leaky version of a Rectified Linear Unit.
+    """Leaky version of a Rectified Linear Unit.
+
     It allows a small gradient when the unit is not active:
 
           ```
@@ -121,6 +123,7 @@ class LeakyRelu(Layer):
     def __init__(self, alpha=0.2, name=None):
         super(LeakyRelu, self).__init__()
         self.alpha = alpha
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -132,8 +135,7 @@ class LeakyRelu(Layer):
 
 
 class LeakyRelu6(Layer):
-    """
-    Leaky version of a Rectified Linear Unit.6
+    """Leaky version of a Rectified Linear Unit.6
     It allows a small gradient when the unit is not active:
           ```
             f(x) = alpha * x if x < 0
@@ -149,6 +151,7 @@ class LeakyRelu6(Layer):
 
     def __init__(self, name=None):
         super(LeakyRelu6, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -160,8 +163,7 @@ class LeakyRelu6(Layer):
 
 
 class SmoothRelu(Layer):
-    """
-    smooth_relu activation Layer
+    """Smooth_relu activation Layer
 
     Examples:
         >>> SmoothRelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
@@ -170,6 +172,7 @@ class SmoothRelu(Layer):
 
     def __init__(self, name=None):
         super(SmoothRelu, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -177,8 +180,8 @@ class SmoothRelu(Layer):
 
 
 class PRelu(Layer):
-    """
-    Parametric Rectified Linear Unit.
+    """Parametric Rectified Linear Unit.
+
     It follows:
         ```
         f(x) = alpha * x for x < 0
@@ -219,8 +222,7 @@ class PRelu(Layer):
 
 
 class Sigmoid(Layer):
-    """
-    Sigmoid activation layer.
+    """Sigmoid activation layer.
 
     Examples:
         >>> Sigmoid()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
@@ -229,6 +231,7 @@ class Sigmoid(Layer):
 
     def __init__(self, name=None):
         super(Sigmoid, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         """
@@ -243,8 +246,7 @@ class Sigmoid(Layer):
 
 
 class Tanh(Layer):
-    """
-    Tanh activation layer.
+    """ Tanh activation layer.
 
     Examples:
         >>> Tanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
@@ -253,6 +255,7 @@ class Tanh(Layer):
 
     def __init__(self, name=None):
         super(Tanh, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -260,8 +263,7 @@ class Tanh(Layer):
 
 
 class Swish(Layer):
-    """
-    Self-Gated Activation Function.
+    """ Self-Gated Activation Function.
     it follows:
         ```
         f(x) =  x * sigmoid(x)
@@ -279,6 +281,7 @@ class Swish(Layer):
 
     def __init__(self, name=None):
         super(Swish, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -286,15 +289,12 @@ class Swish(Layer):
 
 
 class HardSigmoid(Layer):
-    """
-    Hard sigmoid activation layer.
+    """ Hard sigmoid activation layer.
     it follows:
         ```
         f(x) = relu6(x + 3) / 6
 
         ```
-
-
     Examples:
         >>> HardSigmoid()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
 
@@ -304,6 +304,7 @@ class HardSigmoid(Layer):
         super(HardSigmoid, self).__init__()
 
         self.inplace = inplace
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -312,12 +313,15 @@ class HardSigmoid(Layer):
 
 class HardSwish(Layer):
     """Hard swish Activation Function.
-      Memory saving version of swish
-      it follows:
+
+    Memory saving version of swish
+    it follows:
+
       ```
         f(x) =  x * hard_sigmoid(x)
 
       ```
+
     References:
         Searching for MobileNetV3
         https://arxiv.org/abs/1905.02244
@@ -331,6 +335,7 @@ class HardSwish(Layer):
     def __init__(self, inplace=False, name=None):
         super(HardSwish, self).__init__()
         self.inplace = inplace
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -338,13 +343,15 @@ class HardSwish(Layer):
 
 
 class HardTanh(Layer):
-    """
+    """Hard tanh Activation Function.
+
     Examples:
         >>> HardTanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
     """
 
     def __init__(self, name=None):
         super(HardTanh, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -352,17 +359,31 @@ class HardTanh(Layer):
 
 
 class Selu(Layer):
-    """
+    """Selu activation function
+
+    Scaled exponential linear unit operation. Computes the element-wise exponential linear
+    of ``x``: ``scale * x`` for ``x >= 0`` and ``x``: ``scale * alpha * (exp(x)-1)`` otherwise.
+    scale=1.0507009873554804934193349852946, alpha=1.6732632423543772848170429916717
+
+    Args:
+        x (tensor): input tensor
+        name(string, None): name of the layer.
+
+    Returns:The output tensor has the same shape as ``x``
+
     Examples:
-        >>> Selu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> selu(to_tensor([[-1, -0.5, 0, 1, 2]]))
+        tensor([[-1.1113, -0.6918,  0.0000,  1.0507,  2.1014]])
 
+    References:
+        paper: https://arxiv.org/abs/1706.02515
+        Self-Normalizing Neural Networks
+        Günter Klambauer, Thomas Unterthiner, Andreas Mayr, Sepp Hochreiter
 
     """
-
-    def __init__(self, inplace=False, name=None):
+    def __init__(self,  name=None):
         super(Selu, self).__init__()
-
-        self.inplace = inplace
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -380,6 +401,7 @@ class Elu(Layer):
 
     def __init__(self, name=None):
         super(Elu, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -389,6 +411,7 @@ class Elu(Layer):
 class LecunTanh(Layer):
     def __init__(self, name=None):
         super(LecunTanh, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -407,6 +430,7 @@ class SoftSign(Layer):
 class SoftPlus(Layer):
     def __init__(self, name=None):
         super(SoftPlus, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -416,6 +440,7 @@ class SoftPlus(Layer):
 class Logit(Layer):
     def __init__(self, name=None):
         super(Logit, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -440,6 +465,7 @@ class LogLog(Layer):
     """
     def __init__(self, name=None):
         super(LogLog, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -465,6 +491,7 @@ class Mish(Layer):
 
     def __init__(self, name=None):
         super().__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -486,6 +513,7 @@ class Softmax(Layer):
 
     def __init__(self, name=None):
         super(Softmax, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -495,6 +523,7 @@ class Softmax(Layer):
 class LogSoftmax(Layer):
     def __init__(self, name=None):
         super(LogSoftmax, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -502,8 +531,8 @@ class LogSoftmax(Layer):
 
 
 class Gelu(Layer):
-    """
-    Gaussian Error Linear Unit.
+    """Gaussian Error Linear Unit.
+
     it follows:
         ```
         f(x) =x∗Φ(x)
@@ -522,6 +551,7 @@ class Gelu(Layer):
     """
     def __init__(self, name=None):
         super(Gelu, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -535,6 +565,7 @@ class GptGelu(Layer):
 
     def __init__(self, name=None):
         super(GptGelu, self).__init__()
+        self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -569,12 +600,12 @@ def get_activation(fn_name):
                 return activation_fn
             else:
                 try:
-                    activation_fn = get_function(camel2snake(fn_name), fn_modules)
+                    activation_fn = get_class(snake2camel(fn_name), fn_modules)
                     return activation_fn()
                 except Exception:
                     activation_fn = get_class(fn_name, ['trident.backend.pytorch_ops',
                         'trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
-                    return activation_fn
+                    return activation_fn()
         elif getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
             if inspect.isfunction(fn_name):
                 return fn_name

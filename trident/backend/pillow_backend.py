@@ -127,10 +127,10 @@ def image2array(img):
         if arr.ndim == 3:
             if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
                 pass
-            elif arr.shape[0] in [3, 4]:
+            elif arr.shape[0] in [1,3, 4]:
                 arr = arr.transpose([1, 2, 0])
             else:
-                raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
+                raise ValueError('3d image should be 1, 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
         arr=img.astype(_session.floatx)
     if arr.flags['C_CONTIGUOUS'] == False:
         arr = np.ascontiguousarray(arr)

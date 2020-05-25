@@ -380,7 +380,7 @@ def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, _use_ne
 
         Please use something like :class:`io.BytesIO` instead.
 
-    Example:
+    Examples:
         >>> # Save to file
         >>> x = torch.tensor([0, 1, 2, 3, 4])
         >>> torch.save(x, 'tensor.pt')
@@ -588,7 +588,7 @@ def load(f, map_location=None, pickle_module=pickle, **pickle_load_args):
         to strings using ``latin1`` encoding, and :attr:`encoding='bytes'` keeps them
         as byte arrays which can be decoded later with ``byte_array.decode(...)``.
 
-    Example:
+    Examples:
         >>> load('tensors.pt')
         # Load all tensors onto the CPU
         >>> load('tensors.pt', map_location=torch.device('cpu'))

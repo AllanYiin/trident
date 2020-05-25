@@ -1,11 +1,11 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+from functools import reduce
 import collections
 import copy
 import math
-
+import scipy.optimize as sciopt
 import tensorflow as tf
 
 from trident.backend.common import get_session, get_class, snake2camel
@@ -15,7 +15,7 @@ _session = get_session()
 _epsilon = _session.epsilon
 _backend = _session.backend
 
-__all__ = ['Adam', 'RMSprop', 'SGD', 'Adagrad', 'Adadelta', 'RAdam', 'Lookahead', 'Ranger', 'get_optimizer']
+__all__ = ['Adam', 'RMSprop', 'SGD',  'RAdam', 'Lookahead', 'Ranger', 'get_optimizer']
 
 from collections import defaultdict
 
@@ -200,17 +200,18 @@ class Optimizer(object):
     def zero_grad(self):
         r"""Clears the gradients of all optimized :class:`tf.Variable` s."""
         self.grad_tape.reset()
+        if hasattr(self,'grads_and_vars') and self.grads_and_vars is not None:
+            for g,p in self.grads_and_vars:
+                g=zeros_like(g)
 
-    def step(self, closure):
+
+    def step(self, grads_and_vars=None):
         r"""Performs a single optimization step (parameter update).
 
         Arguments:
-            closure (callable): A closure that reevaluates the model and
+            grads_and_vars (callable): A closure that reevaluates the model and
                 returns the loss. Optional for most optimizers.
 
-        .. note::
-            Unless otherwise specified, this function should not modify the
-            ``.grad`` field of the parameters.
         """
         raise NotImplementedError
 
@@ -552,7 +553,7 @@ class SGD(Optimizer):
         dampening (float, optional): dampening for momentum (default: 0)
         nesterov (bool, optional): enables Nesterov momentum (default: False)
 
-    Example:
+    Examples:
         >>> SGD(lr=0.1, momentum=0.9)
 
 
@@ -650,53 +651,465 @@ class SGD(Optimizer):
 
         return True
 
+# 
+# class Adagrad(Optimizer):
+#     """Implements Adagrad algorithm.
+# 
+#      It has been proposed in `Adaptive Subgradient Methods for Online Learning
+#      and Stochastic Optimization`_.
+# 
+#      Arguments:
+#          params (iterable): iterable of parameters to optimize or dicts defining
+#              parameter groups
+#          lr (float, optional): learning rate (default: 1e-2)
+#          lr_decay (float, optional): learning rate decay (default: 0)
+#          weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+#          eps (float, optional): term added to the denominator to improve
+#              numerical stability (default: 1e-10)
+# 
+#      .. _Adaptive Subgradient Methods for Online Learning and Stochastic
+#          Optimization: http://jmlr.org/papers/v12/duchi11a.html
+#      """
+#     def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-10,gradient_centralization=None):
+#         if not 0.0 <= lr:
+#             raise ValueError("Invalid learning rate: {}".format(lr))
+#         if not 0.0 <= lr_decay:
+#             raise ValueError("Invalid lr_decay value: {}".format(lr_decay))
+#         if not 0.0 <= weight_decay:
+#             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+#         if not 0.0 <= initial_accumulator_value:
+#             raise ValueError("Invalid initial_accumulator_value value: {}".format(initial_accumulator_value))
+#         if not 0.0 <= eps:
+#             raise ValueError("Invalid epsilon value: {}".format(eps))
+#         self.gradient_centralization=gradient_centralization
+#         self.eps = eps
+# 
+#         defaults = dict(lr=lr, lr_decay=lr_decay, eps=eps, weight_decay=weight_decay,
+#                         initial_accumulator_value=initial_accumulator_value)
+#         super(Adagrad, self).__init__(params, defaults)
+# 
+#         for group in self.param_groups:
+#             for p in group['params']:
+#                 state = self.state[p]
+#                 state['step'] = 0
+#                 state['sum'] =ones_like(p)*initial_accumulator_value
+# 
+#     def share_memory(self):
+#         pass
+#         # for group in self.param_groups:
+#         #     for p in group['params']:
+#         #         state = self.state[p]
+#         #         state['sum'].share_memory_()
+# 
+#     def __setstate__(self, state):
+#         super(Adagrad, self).__setstate__(state)
+# 
+#     def step(self, grads_and_vars=None):
+#         """Performs a single optimization step.
+# 
+#         Args:
+#             grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+# 
+#         """
+#         self.grads_and_vars = self._filter_grads(grads_and_vars)
+#         # grads_and_vars=zip(new_grads, new_vars)
+# 
+#         group = self.param_groups[0]
+#         dampening = group['dampening']
+#         nesterov = group['nesterov']
+#         for grad, p in self.grads_and_vars:
+#             if grad is None or not p.trainable:
+#                 continue
+# 
+#             if is_sparse(grad):
+#                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+# 
+#             state = self.state[p.ref()]
+#             state['step'] += 1
+#             lr = group['lr']
+# 
+#             if group['weight_decay'] != 0:
+#                 grad = grad + p * group['weight_decay']
+# 
+#             clr = group['lr'] / (1 + (state['step'] - 1) * group['lr_decay'])
+# 
+#             if is_sparse(grad):
+#                 grad = grad.coalesce()  # the update is non-linear so indices must be unique
+#                 grad_indices = grad._indices()
+#                 grad_values = grad._values()
+#                 size = grad.size()
+# 
+#                 def make_sparse(values):
+#                     constructor = grad.new
+#                     if grad_indices.dim() == 0 or values.dim() == 0:
+#                         return constructor().resize_as_(grad)
+#                     return constructor(grad_indices, values, size)
+# 
+#                 state['sum'].add_(make_sparse(grad_values.pow(2)))
+#                 std = state['sum'].sparse_mask(grad)
+#                 std_values = std._values().sqrt_().add_(group['eps'])
+#                 p.add_(make_sparse(grad_values / std_values), alpha=-clr)
+#             else:
+#                 state['sum'].addcmul_(grad, grad, value=1)
+#                 std = state['sum'].sqrt().add_(group['eps'])
+#                 p.addcdiv_(grad, std, value=-clr)
+# 
+#             p.assign(tf.Variable(to_numpy(p - lr * grad)))
+# 
+#         return True
+# 
+# 
+# class Adadelta(Optimizer):
+#     """Implements Adadelta algorithm.
+# 
+#     It has been proposed in `ADADELTA: An Adaptive Learning Rate Method`__.
+# 
+#     Arguments:
+#         params (iterable): iterable of parameters to optimize or dicts defining
+#             parameter groups
+#         rho (float, optional): coefficient used for computing a running average
+#             of squared gradients (default: 0.9)
+#         eps (float, optional): term added to the denominator to improve
+#             numerical stability (default: 1e-6)
+#         lr (float, optional): coefficient that scale delta before it is applied
+#             to the parameters (default: 1.0)
+#         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+# 
+#     __ https://arxiv.org/abs/1212.5701
+#     """
+#     def __init__(self, params, lr=1.0, rho=0.9, eps=1e-6, weight_decay=0,gradient_centralization=None):
+#         if not 0.0 <= lr:
+#             raise ValueError("Invalid learning rate: {}".format(lr))
+#         if not 0.0 <= rho <= 1.0:
+#             raise ValueError("Invalid rho value: {}".format(rho))
+#         if not 0.0 <= eps:
+#             raise ValueError("Invalid epsilon value: {}".format(eps))
+#         if not 0.0 <= weight_decay:
+#             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+#         self.gradient_centralization=gradient_centralization
+#         self.eps=eps
+#         defaults = dict(lr=lr, rho=rho, eps=eps, weight_decay=weight_decay)
+#         super(Adadelta, self).__init__(params, defaults)
+#     def __setstate__(self, state):
+#         super(Adadelta, self).__setstate__(state)
+# 
+#     def step(self, grads_and_vars=None):
+#         """Performs a single optimization step.
+# 
+#         Args:
+#             grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+# 
+#         """
+#         self.grads_and_vars = self._filter_grads(grads_and_vars)
+#         # grads_and_vars=zip(new_grads, new_vars)
+# 
+#         group = self.param_groups[0]
+#         dampening = group['dampening']
+#         nesterov = group['nesterov']
+#         for grad, p in self.grads_and_vars:
+#             if grad is None or not p.trainable:
+#                 continue
+# 
+#             if is_sparse(grad):
+#                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+# 
+#             state = self.state[p.ref()]
+#             # State initialization
+#             if len(state) == 0:
+#                 state['step'] = 0
+#                 state['square_avg'] = zeros_like(p)
+#                 state['acc_delta'] = zeros_like(p)
+# 
+#             square_avg, acc_delta = state['square_avg'], state['acc_delta']
+#             rho, eps = group['rho'], group['eps']
+# 
+#             state['step'] += 1
+# 
+#             if group['weight_decay'] != 0:
+#                 grad=grad+group['weight_decay']*p
+# 
+# 
+#             square_avg.mul_(rho).addcmul_(grad, grad, value=1 - rho)
+#             std = sqrt(square_avg+self.eps)
+#             delta =true_divide( sqrt(acc_delta+self.eps),std).mul_(grad)
+# 
+#             p_t=p-group['lr']*delta
+#             #acc_delta.mul_(rho).addcmul_(delta, delta, value=1 - rho)
+#             state['acc_delta']=acc_delta*rho+(delta**2)*(1 - rho)
+#             p.assign(tf.Variable(to_numpy(p_t)))
+# 
+#         return True
+# 
+# 
+# class LBFGS(Optimizer):
+#     """The Limited-Memory BFGS minimization algorithm.
+# 
+#     Limited-memory quasi-Newton methods are useful for solving large problems
+#     whose Hessian matrices cannot be computed at a reasonable cost or are not
+#     sparse. Instead of storing fully dense n x n approximations of Hessian
+#     matrices, they only save a few vectors of length n that represent the
+#     approximations implicitly.
+#     This module implements the algorithm known as L-BFGS, which, as its name
+#     suggests, is a limited-memory version of the BFGS algorithm.
+# 
+#     Reference:
+#         https://github.com/tensorflow/probability/blob/v0.10.0/tensorflow_probability/python/optimizer/lbfgs.py
+# 
+#     """
+# 
+#     def __init__(self, params, lr=1, max_iter=20, max_eval=None, tolerance_grad=1e-7, tolerance_change=1e-9,
+#                  history_size=100, line_search_fn=None,gradient_centralization=None):
+#         if max_eval is None:
+#             max_eval = max_iter * 5 // 4
+#         defaults = dict(lr=lr, max_iter=max_iter, max_eval=max_eval, tolerance_grad=tolerance_grad,
+#             tolerance_change=tolerance_change, history_size=history_size, line_search_fn=line_search_fn)
+#         super(LBFGS, self).__init__(params, defaults)
+# 
+#         if len(self.param_groups) != 1:
+#             raise ValueError("LBFGS doesn't support per-parameter options "
+#                              "(parameter groups)")
+# 
+#         self._params = self.param_groups[0]['params']
+#         self._numel_cache = None
+#         self.gradient_centralization = gradient_centralization
+# 
+#     def _numel(self):
+#         if self._numel_cache is None:
+#             self._numel_cache =functools.reduce(lambda total, p: total + reduce_prod(int_shape(p)), self._params, 0)
+#         return self._numel_cache
+# 
+#     def _add_grad(self, step_size, update):
+#         offset = 0
+#         for p in self._params:
+#             numel = p.numel()
+#             # view as to avoid deprecated pointwise semantics
+#             p.add_(update[offset:offset + numel].view_as(p), alpha=step_size)
+#             offset += numel
+#         assert offset == self._numel()
+# 
+#     def __setstate__(self, state):
+#         super(RAdam, self).__setstate__(state)
+# 
+#     def step(self, grads_and_vars=None):
+#         """Performs a single optimization step.
+# 
+#         Args:
+#             grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+# 
+#         """
+#         self.grads_and_vars = self._filter_grads(grads_and_vars)
+#         # grads_and_vars=zip(new_grads, new_vars)
+#         group = self.param_groups[0]
+#         lr = group['lr']
+#         max_iter = group['max_iter']
+#         max_eval = group['max_eval']
+#         tolerance_grad = group['tolerance_grad']
+#         tolerance_change = group['tolerance_change']
+#         line_search_fn = group['line_search_fn']
+#         history_size = group['history_size']
+# 
+#         # NOTE: LBFGS has only global state, but we register it as state for
+#         # the first param, because this helps with casting in load_state_dict
+#         state = self.state[self.param_groups[0]['params'][0].ref()]
+# 
+#         current_evals = 1
+#         # State initialization
+#         if len(state) == 0:
+#             state['step'] = 0
+#             state['func_evals'] = 0
+#             state['func_evals'] += 1
+# 
+#         flat_grad = []
+# 
+# 
+#         for grad, p in self.grads_and_vars:
+#             if grad is None or not p.trainable:
+#                 continue
+#             flat_grad.append(reshape(grad,(-1)))
+# 
+#         flat_grad=concate(flat_grad,axis=0)
+#         opt_cond = flat_grad.abs().max() <= tolerance_grad
+# 
+#         # optimal condition
+#         if opt_cond:
+#             return orig_loss
+# 
+#         # tensors cached in state (for tracing)
+#         d = state.get('d')
+#         t = state.get('t')
+#         old_dirs = state.get('old_dirs')
+#         old_stps = state.get('old_stps')
+#         ro = state.get('ro')
+#         H_diag = state.get('H_diag')
+#         prev_flat_grad = state.get('prev_flat_grad')
+#         prev_loss = state.get('prev_loss')
+# 
+#         n_iter = 0
+#         # optimize for a max of max_iter iterations
+#         while n_iter < max_iter:
+#             # keep track of nb of iterations
+#             n_iter += 1
+#             state['step'] += 1
+# 
+#             ############################################################
+#             # compute gradient descent direction
+#             ############################################################
+#             if state['step'] == 1:
+#                 d = flat_grad.neg()
+#                 old_dirs = []
+#                 old_stps = []
+#                 ro = []
+#                 H_diag = 1
+#             else:
+#                 # do lbfgs update (update memory)
+#                 y = flat_grad.sub(prev_flat_grad)
+#                 s = d.mul(t)
+#                 ys = y.dot(s)  # y*s
+#                 if ys > 1e-10:
+#                     # updating memory
+#                     if len(old_dirs) == history_size:
+#                         # shift history by one (limited-memory)
+#                         old_dirs.pop(0)
+#                         old_stps.pop(0)
+#                         ro.pop(0)
+# 
+#                     # store new direction/step
+#                     old_dirs.append(y)
+#                     old_stps.append(s)
+#                     ro.append(1. / ys)
+# 
+#                     # update scale of initial Hessian approximation
+#                     H_diag = ys / y.dot(y)  # (y*y)
+# 
+#                 # compute the approximate (L-BFGS) inverse Hessian
+#                 # multiplied by the gradient
+#                 num_old = len(old_dirs)
+# 
+#                 if 'al' not in state:
+#                     state['al'] = [None] * history_size
+#                 al = state['al']
+# 
+#                 # iteration in L-BFGS loop collapsed to use just one buffer
+#                 q = flat_grad.neg()
+#                 for i in range(num_old - 1, -1, -1):
+#                     al[i] = old_stps[i].dot(q) * ro[i]
+#                     q.add_(old_dirs[i], alpha=-al[i])
+# 
+#                 # multiply by initial Hessian
+#                 # r/d is the final direction
+#                 d = r = matmul(q, H_diag)
+#                 for i in range(num_old):
+#                     be_i = old_dirs[i].dot(r) * ro[i]
+#                     r.add_(old_stps[i], alpha=al[i] - be_i)
+# 
+#             if prev_flat_grad is None:
+#                 prev_flat_grad = flat_grad.clone(memory_format=torch.contiguous_format)
+#             else:
+#                 prev_flat_grad.copy_(flat_grad)
+#             prev_loss = loss
+# 
+#             ############################################################
+#             # compute step length
+#             ############################################################
+#             # reset initial guess for step size
+#             if state['step'] == 1:
+#                 t = min(1., 1. / flat_grad.abs().sum()) * lr
+#             else:
+#                 t = lr
+# 
+#             # directional derivative
+#             gtd = flat_grad.dot(d)  # g * d
+# 
+#             # directional derivative is below tolerance
+#             if gtd > -tolerance_change:
+#                 break
+# 
+#             # optional line search: user function
+#             ls_func_evals = 0
+#             if line_search_fn is not None:
+#                 # perform line search, using user function
+#                 if line_search_fn != "strong_wolfe":
+#                     raise RuntimeError("only 'strong_wolfe' is supported")
+#                 else:
+#                     x_init = self._clone_param()
+# 
+#                     def obj_func(x, t, d):
+#                         return self._directional_evaluate(closure, x, t, d)
+# 
+#                     loss, flat_grad, t, ls_func_evals = _strong_wolfe(obj_func, x_init, t, d, loss, flat_grad, gtd)
+#                 self._add_grad(t, d)
+#                 opt_cond = flat_grad.abs().max() <= tolerance_grad
+#             else:
+#                 # no line search, simply move with fixed-step
+#                 self._add_grad(t, d)
+#                 if n_iter != max_iter:
+#                     # re-evaluate function only if not in last iteration
+#                     # the reason we do this: in a stochastic setting,
+#                     # no use to re-evaluate that function here
+#                     with torch.enable_grad():
+#                         loss = float(closure())
+#                     flat_grad = self._gather_flat_grad()
+#                     opt_cond = flat_grad.abs().max() <= tolerance_grad
+#                     ls_func_evals = 1
+# 
+#             # update func eval
+#             current_evals += ls_func_evals
+#             state['func_evals'] += ls_func_evals
+# 
+#             ############################################################
+#             # check conditions
+#             ############################################################
+#             if n_iter == max_iter:
+#                 break
+# 
+#             if current_evals >= max_eval:
+#                 break
+# 
+#             # optimal condition
+#             if opt_cond:
+#                 break
+# 
+#             # lack of progress
+#             if d.mul(t).abs().max() <= tolerance_change:
+#                 break
+# 
+#             if abs(loss - prev_loss) < tolerance_change:
+#                 break
+# 
+#         state['d'] = d
+#         state['t'] = t
+#         state['old_dirs'] = old_dirs
+#         state['old_stps'] = old_stps
+#         state['ro'] = ro
+#         state['H_diag'] = H_diag
+#         state['prev_flat_grad'] = prev_flat_grad
+#         state['prev_loss'] = prev_loss
+# 
+# 
+# 
+#         return True
 
-class Adagrad(tf.keras.optimizers.Adagrad, OptimizerBase):
-    def get_value(self, x):
-        return tf.keras.backend.get_value(x)
-
-    def set_value(self, x):
-        return tf.keras.backend.set_value(x)
-
-    pass
-
-
-class Adadelta(tf.keras.optimizers.Adadelta, OptimizerBase):
-    def get_value(self, x):
-        return tf.keras.backend.get_value(x)
-
-    def set_value(self, x):
-        return tf.keras.backend.set_value(x)
-
-    pass
 
 
 class RAdam(Optimizer):
     """Variant of the Adam optimizer whose adaptive learning rate is rectified
-        so as to have a consistent variance.
-        It implements the Rectified Adam (a.k.a. RAdam) proposed by
-        Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
-        And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
 
-        Example:
-            >>> opt =RAdam(lr=1e-3)
+    so as to have a consistent variance.
+    It implements the Rectified Adam (a.k.a. RAdam) proposed by
+    Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
+    And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
 
-
-        Note: `amsgrad` is not described in the original paper. Use it with
-              caution.
-        RAdam is not a placement of the heuristic warmup, the settings should be
-        kept if warmup has already been employed and tuned in the baseline method.
-        You can enable warmup by setting `total_steps` and `warmup_proportion`:
-        ```python
-        opt = RAdam(lr=1e-3, betas=(0.9,0.999))
-
-        ```
-        In the above example, the learning rate will increase linearly
-        from 0 to `lr` in 1000 steps, then decrease linearly from `lr` to `min_lr`
-        in 9000 steps.
+    Examples:
+        >>> opt =RAdam(lr=1e-3)
 
 
-        """
+    Note: `amsgrad` is not described in the original paper. Use it with
+          caution.
+
+    RAdam is not a placement of the heuristic warmup, the settings should be
+    kept if warmup has already been employed and tuned in the baseline method.
+
+    """
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, N_sma_threshhold=5, weight_decay=0,
                  degenerated_to_sgd=True, gradient_centralization=None):
         """Construct a new RAdam optimizer.
@@ -787,8 +1200,11 @@ class RAdam(Optimizer):
             # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
             # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
             v_t = beta2 * v + (1 - beta2) * (grad * grad)
+            state['m'] = m_t
+            state['v'] = v_t
 
             state['step'] += 1
+
 
             buffered = self.buffer[int(state['step'] % 10)]
             if state['step'] == buffered[0]:
@@ -800,7 +1216,7 @@ class RAdam(Optimizer):
                 N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
                 buffered[1] = N_sma
 
-                step_size = -1
+                step_size = 1.0 / (1 - beta1 ** state['step'])
                 if N_sma >= 5:
                     step_size = math.sqrt(
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
@@ -811,17 +1227,16 @@ class RAdam(Optimizer):
                     step_size = -1
 
                 buffered[2] = step_size
-
+                p_data=to_tensor(to_numpy(p))
                 if group['weight_decay'] != 0:
-                    p = p + group['weight_decay'] * group['lr'] * p
+                    p_data = p_data - group['weight_decay'] * group['lr'] * p_data
 
                 p_t = where(N_sma > self.N_sma_threshhold,
-                            p - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps']),
-                            p - group['lr'] * step_size * m_t)
-                p.assign(tf.Variable(to_numpy(p_t)))
+                            p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps']),
+                            p_data - group['lr'] * step_size * m_t)
+                p.assign(tf.Variable(p_t))
 
-                state['m'] = m_t
-                state['v'] = v_t
+
         return True
 
 
@@ -926,7 +1341,7 @@ class AdamW(Optimizer):
     better training loss and generalization error in the paper above.
     For further information see the documentation of the Adam Optimizer.
 
-    Example:
+    Examples:
         >>> AdamW(lr=0.001, betas=(0.9, 0.999))
 
     """
@@ -1011,16 +1426,16 @@ class AdamW(Optimizer):
 class Lookahead(Optimizer):
     """This class allows to extend optimizers with the lookahead mechanism.
 
-        The mechanism is proposed by Michael R. Zhang et.al in the paper
-        [Lookahead Optimizer: k steps forward, 1 step back]
-        (https://arxiv.org/abs/1907.08610v1). The optimizer iteratively updates two
-        sets of weights: the search directions for weights are chosen by the inner
-        optimizer, while the "slow weights" are updated each `k` steps based on the
-        directions of the "fast weights" and the two sets of weights are
-        synchronized. This method improves the learning stability and lowers the
-        variance of its inner optimizer.
+    The mechanism is proposed by Michael R. Zhang et.al in the paper
+    [Lookahead Optimizer: k steps forward, 1 step back]
+    (https://arxiv.org/abs/1907.08610v1). The optimizer iteratively updates two
+    sets of weights: the search directions for weights are chosen by the inner
+    optimizer, while the "slow weights" are updated each `k` steps based on the
+    directions of the "fast weights" and the two sets of weights are
+    synchronized. This method improves the learning stability and lowers the
+    variance of its inner optimizer.
 
-    Example:
+    Examples:
         >>> opt = Lookahead(SGD(lr=0.001))
 
     """
@@ -1104,42 +1519,27 @@ class Lookahead(Optimizer):
         self.optimizer.add_param_group(param_group)
 
 
-class Ranger(Lookahead):
+class Ranger(Optimizer):
+    """Variant of the Adam optimizer whose adaptive learning rate is rectified
+
+    so as to have a consistent variance.
+    It implements the Rectified Adam (a.k.a. RAdam) proposed by
+    Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
+    And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
+
+    Examples:
+        >>> opt =RAdam(lr=1e-3)
+
+
+    Note: `amsgrad` is not described in the original paper. Use it with
+          caution.
+
+    RAdam is not a placement of the heuristic warmup, the settings should be
+    kept if warmup has already been employed and tuned in the baseline method.
+
     """
-    https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
-    """
-
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
-                 weight_decay=0, degenerated_to_sgd=True, gradient_centralization=None):
-        """Construct a new RAdam optimizer.
-         Args:
-             params: trainable parameters from model
-
-             lr (float): The learning rate.
-
-             alpha (float):
-
-             betas:  beta1 means the exponential decay rate for the 1st moment estimates.
-                 beta_2 means he exponential decay rate for the 2nd moment estimates.
-
-             eps (float): A small constant for numerical stability.
-             weight_decay(float): A floating point value. Weight decay for each param.
-
-             N_sma_threshhold (float). The threshold for simple mean average.
-
-             degenerated_to_sgd(bool): If True will be degenerated as sgd.
-
-             gradient_centralization (None,string):
-                if None, do nothing.
-                if 'gcc' , means only convolution layer will apply 'Gradient Centralization'
-                if 'gc', means convolution layer  and dense layer will apply 'Gradient Centralization'
-
-         References:
-             Gradient Centralization: A New Optimization Technique for Deep Neural Networks
-             https://arxiv.org/abs/2004.01461
-
-
-         """
+    def __init__(self,  params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
+                 weight_decay=0, gradient_centralization=None):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -1155,21 +1555,26 @@ class Ranger(Lookahead):
         # N_sma_threshold of 5 seems better in testing than 4.
         # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
 
-        # prep defaults and init tensorflow.optim base
+        # prep defaults and init torch.optim base
+        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,
+                        eps=eps, weight_decay=weight_decay)
+        super().__init__(params, defaults)
 
-        optimizer = RAdam(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,
-                          N_sma_threshhold=N_sma_threshhold, degenerated_to_sgd=degenerated_to_sgd,
-                          gradient_centralization=gradient_centralization)
-        super(Ranger, self).__init__(optimizer=optimizer, k=k, alpha=alpha)
-        # look ahead params
+        # adjustable threshold
+        self.N_sma_threshhold = N_sma_threshhold
+
         # now we can get to work...
         # removed as we now use step from RAdam...no need for duplicate step counting
         # for group in self.param_groups:
         #    group["step_counter"] = 0
         # print("group step counter init")
-        self.degenerated_to_sgd = degenerated_to_sgd
-        # adjustable threshold
-        self.N_sma_threshhold = N_sma_threshhold
+
+        # look ahead params
+        self.alpha = alpha
+        self.k = k
+
+        # radam buffer for state
+        self.radam_buffer = [[None, None, None] for ind in range(10)]
 
         # self.first_run_check=0
 
@@ -1182,7 +1587,87 @@ class Ranger(Lookahead):
         # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
 
     def __setstate__(self, state):
+        print("set state called")
         super(Ranger, self).__setstate__(state)
+
+    def step(self, grads_and_vars=None):
+        """Performs a single optimization step.
+
+        Args:
+            grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+
+        """
+        self.grads_and_vars = self._filter_grads(grads_and_vars)
+        # grads_and_vars=zip(new_grads, new_vars)
+
+        group = self.param_groups[0]
+        for grad, p in self.grads_and_vars:
+            if grad is None or not p.trainable:
+                continue
+
+            if is_sparse(grad):
+                raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+            p_data = to_tensor(to_numpy(p))
+            state = self.state[p.ref()]
+
+            # State initialization
+            if len(state) == 0:
+                state['step'] = 0
+                state['m'] = zeros_like(p)
+                state['v'] = zeros_like(p)
+                state['slow_buffer']=p_data
+            else:
+                state['m'] = cast(state['m'], p_data.dtype)
+                state['v'] = cast(state['v'], p_data.dtype)
+
+            m, v = state['m'], state['v']
+            beta1, beta2 = group['betas']
+
+            # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+            # Decay the first and second moment running average coefficient
+            # m_t = beta1 * m + (1 - beta1) * g_t
+            m_t = beta1 * m + (1 - beta1) * grad
+
+            # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+            # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+            v_t = beta2 * v + (1 - beta2) * (grad * grad)
+            state['m'] = m_t
+            state['v'] = v_t
+
+            state['step'] += 1
+            buffered = self.radam_buffer[int(state['step'] % 10)]
+
+            if state['step'] == buffered[0]:
+                N_sma, step_size = buffered[1], buffered[2]
+            else:
+                buffered[0] = state['step']
+                beta2_t = beta2 ** state['step']
+                N_sma_max = 2 / (1 - beta2) - 1
+                N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                buffered[1] = N_sma
+                if N_sma > self.N_sma_threshhold:
+                    step_size = math.sqrt(
+                        (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
+                                N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                else:
+                    step_size = 1.0 / (1 - beta1 ** state['step'])
+                buffered[2] = step_size
+
+
+                if group['weight_decay'] != 0:
+                    p_data = p_data - group['weight_decay'] * group['lr'] * p_data
+
+                if N_sma > self.N_sma_threshhold:
+                    #p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
+                    p_data=p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps'])
+                else:
+                    #p_data_fp32.add_(-step_size * group['lr'], exp_avg)
+                    p_data=p_data - group['lr'] * step_size * m_t
+
+                p.assign(tf.Variable(p_data))
+
+
+        return True
 
 
 def get_optimizer(optimizer_name):

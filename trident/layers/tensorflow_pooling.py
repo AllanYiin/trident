@@ -163,8 +163,7 @@ class MaxPool2d(_PoolNd):
         stride: the strides of the window. Default value is :attr:`kernel_size`
         padding: implicit zero padding to be added on both sides
         dilation: a parameter that controls the strides of elements in the window
-        return_indices: if ``True``, will return the max indices along with the outputs.
-                        Useful for :class:`torch.nn.MaxUnpool2d` later
+        return_indices: if ``True``, will return the max indices along with the outputs. Useful for :class:`torch.nn.MaxUnpool2d` later
         ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape
 
     Shape:
@@ -172,15 +171,12 @@ class MaxPool2d(_PoolNd):
         - Output: :math:`(N, C, H_{out}, W_{out})`, where
 
           .. math::
-              H_{out} = \left\lfloor\frac{H_{in} + 2 * \text{padding[0]} - \text{dilation[0]}
-                    \times (\text{kernel\_size[0]} - 1) - 1}{\text{stride[0]}} + 1\right\rfloor
+              'H_{out} = \left\lfloor\frac{H_{in} + 2 * \text{padding[0]} - \text{dilation[0]}\times (\text{kernel\_size[0]} - 1) - 1}{\text{stride[0]}} + 1\right\rfloor'
 
           .. math::
-              W_{out} = \left\lfloor\frac{W_{in} + 2 * \text{padding[1]} - \text{dilation[1]}
-                    \times (\text{kernel\_size[1]} - 1) - 1}{\text{stride[1]}} + 1\right\rfloor
+              'W_{out} = \left\lfloor\frac{W_{in} + 2 * \text{padding[1]} - \text{dilation[1]}\times (\text{kernel\_size[1]} - 1) - 1}{\text{stride[1]}} + 1\right\rfloor'
 
-    Examples::
-
+    Examples:
         >>> # pool of square window of size=3, strides=2
         >>> m = MaxPool2d(3, strides=2)
         >>> # pool of non-square window
@@ -188,8 +184,10 @@ class MaxPool2d(_PoolNd):
         >>> input = tf.random.normal((20, 16, 50, 32))
         >>> output = m(input)
 
-    .. _link:
+    References:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
+
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', name='', **kwargs):
@@ -241,8 +239,7 @@ class MaxPool3d(_PoolNd):
         stride: the strides of the window. Default value is :attr:`kernel_size`
         padding: implicit zero padding to be added on all three sides
         dilation: a parameter that controls the strides of elements in the window
-        return_indices: if ``True``, will return the max indices along with the outputs.
-                        Useful for :class:`torch.nn.MaxUnpool3d` later
+        return_indices: if ``True``, will return the max indices along with the outputs.Useful for :class:`torch.nn.MaxUnpool3d` later
         ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape
 
     Shape:
@@ -250,29 +247,26 @@ class MaxPool3d(_PoolNd):
         - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where
 
           .. math::
-              D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] - \text{dilation}[0] \times
-                (\text{kernel\_size}[0] - 1) - 1}{\text{stride}[0]} + 1\right\rfloor
+              'D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] - \text{dilation}[0] \times(\text{kernel\_size}[0] - 1) - 1}{\text{stride}[0]} + 1\right\rfloor'
 
           .. math::
-              H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] - \text{dilation}[1] \times
-                (\text{kernel\_size}[1] - 1) - 1}{\text{stride}[1]} + 1\right\rfloor
+              'H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] - \text{dilation}[1] \times (\text{kernel\_size}[1] - 1) - 1}{\text{stride}[1]} + 1\right\rfloor'
 
           .. math::
-              W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] - \text{dilation}[2] \times
-                (\text{kernel\_size}[2] - 1) - 1}{\text{stride}[2]} + 1\right\rfloor
+              'W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] - \text{dilation}[2] \times (\text{kernel\_size}[2] - 1) - 1}{\text{stride}[2]} + 1\right\rfloor'
 
-    Examples::
-
+    Examples:
         >>> # pool of square window of size=3, strides=2
-        >>> m = nn.MaxPool3d(3, strides=2)
+        >>> m = MaxPool3d(3, strides=2)
         >>> # pool of non-square window
-        >>> m = nn.MaxPool3d((3, 2, 2), strides=(2, 1, 2))
+        >>> m = MaxPool3d((3, 2, 2), strides=(2, 1, 2))
         >>> input = torch.randn(20, 16, 50,44, 31)
         >>> output = m(input)
 
-    .. _link:
+    References:
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
-    """  # noqa: E501
+
+    """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
         super(MaxPool3d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
@@ -326,7 +320,7 @@ class MaxUnpool2d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Example::
+    Examples::
 
         >>> pool = nn.MaxPool2d(2, strides=2, return_indices=True)
         >>> unpool = nn.MaxUnpool2d(2, strides=2)
@@ -489,8 +483,7 @@ class AvgPool2d(_PoolNd):
 
 
 class AvgPool3d(_PoolNd):
-    """Applies a 3D average pooling over an input signal composed of several input
-    planes.
+    """Applies a 3D average pooling over an input signal composed of several input planes.
 
     In the simplest case, the output value of the layer with input size :math:`(N, C, D, H, W)`,
     output :math:`(N, C, D_{out}, H_{out}, W_{out})` and :attr:`kernel_size` :math:`(kD, kH, kW)`
@@ -525,20 +518,16 @@ class AvgPool3d(_PoolNd):
         - Input: :math:`(N, C, D_{in}, H_{in}, W_{in})`
         - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where
 
-          .. math::
-              D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] -
-                    \text{kernel\_size}[0]}{\text{stride}[0]} + 1\right\rfloor
+        .. math::
+            'D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] -\text{kernel\_size}[0]}{\text{stride}[0]} + 1\right\rfloor'
 
-          .. math::
-              H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] -
-                    \text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor
+        .. math::
+            'H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] -\text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor'
 
-          .. math::
-              W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] -
-                    \text{kernel\_size}[2]}{\text{stride}[2]} + 1\right\rfloor
+        .. math::
+            'W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] -\text{kernel\_size}[2]}{\text{stride}[2]} + 1\right\rfloor'
 
-    Examples::
-
+    Examples:
         >>> # pool of square window of size=3, strides=2
         >>> m = AvgPool3d(3, strides=2)
         >>> # pool of non-square window
@@ -547,7 +536,6 @@ class AvgPool3d(_PoolNd):
         >>> output = m(input)
         >>> print(int_shape(output))
         [1, 64, 128, 64, 32]
-
 
     """
     __constants__ = ['kernel_size', 'stride', 'padding', 'ceil_mode', 'count_include_pad', 'divisor_override']

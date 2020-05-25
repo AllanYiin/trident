@@ -1,3 +1,4 @@
+"""trident models"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -23,6 +24,7 @@ elif get_backend()=='tensorflow':
     from . import tensorflow_efficientnet as efficientnet
     from . import tensorflow_densenet as densenet
     from . import tensorflow_mobilenet as mobilenet
+    from . import tensorflow_deeplab as deeplab
 
 #__all__ = ['vgg','resnet','densenet','efficientnet','mobilenet','gan','deeplab','arcfacenet','mtcnn','rfbnet','ssd','yolo']
 

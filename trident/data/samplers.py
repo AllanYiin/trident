@@ -100,7 +100,7 @@ class BatchSampler(Sampler):
         drop_last (bool): If ``True``, the sampler will drop the last batch if
             its size would be less than ``batch_size``
 
-    Example:
+    Examples:
         >>> list(BatchSampler(SequentialSampler(range(10)), batch_size=3, drop_last=False))
         [[0, 1, 2], [3, 4, 5], [6, 7, 8], [9]]
         >>> list(BatchSampler(SequentialSampler(range(10)), batch_size=3, drop_last=True))

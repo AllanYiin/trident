@@ -78,8 +78,8 @@ class MixupCallback(RegularizationCallbacksBase):
             y_a, y_b = y, y[index]
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
         elif get_backend()=='tensorflow':
-            x1 = tf.gather(x, index)
-            y1 = tf.gather(y, index)
+            x1 = tf.gather(x, index,axis=0)
+            y1 = tf.gather(y, index,axis=0)
             mixed_x = lam * x + (1 - lam) * x1
             pred = model(to_tensor(mixed_x, requires_grad=True))
             y_a, y_b = y, y1
@@ -177,8 +177,8 @@ class CutMixCallback(RegularizationCallbacksBase):
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
         elif get_backend() == 'tensorflow':
 
-            y1 = tf.gather(y,index)
-            x1= tf.gather(x,index)
+            y1 = tf.gather(y,index,axis=0)
+            x1= tf.gather(x,index,axis=0)
             y_a, y_b = y, y1
             bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
             filter=np.zeros(int_shape(x))

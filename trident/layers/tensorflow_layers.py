@@ -258,24 +258,41 @@ class Dot(Layer):
 
 
 class SoftMax(Layer):
-    """Flatten layer to flatten a tensor after convolution."""
+    """SoftMax layer
 
-    def __init__(self, axis=-1, add_noise=False, noise_intensity=0.005, name=None, **kwargs):
-        super(SoftMax, self).__init__(name=name)
+    SoftMax layer is designed for accelerating  classification model training
+    In training stage, it will process the log_softmax transformation (get log-likelihood for a single instance ).
+    In testing/ evaluation/ infer stage, it will process the 'so-called' softmax transformation.
+    All transformation is processed across 'asix (default=1)'
+
+    And you also can setting add_noise and noise_intensity arugments to imprement output noise.
+    output noise can force model make every output probability should large enough or small enough, otherwise it will confused within output noise.
+    It;s a regularzation technique for classification model training.
+
+    """
+    def __init__(self, axis=-1, add_noise=False, noise_intensity=0.005, name=None,keep_output=False, **kwargs):
+        """
+         Args:
+             axis (int,default=-1): The axis all the transformation processed across.
+             add_noise (bool, default=False): If True, will add (output) noise  in this layer.
+             noise_intensity (float, default=0.005): The noise intensity (is propotional to mean of actual output.
+
+         """
+        super(SoftMax, self).__init__(name=name,keep_output=keep_output)
         self.axis = axis
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
-
     def forward(self, *x):
         x = enforce_singleton(x)
         if not hasattr(self, 'add_noise'):
             self.add_noise = False
             self.noise_intensity = 0.005
         if self.training:
+            x = tf.math.log_softmax(x, self.axis)
             if self.add_noise == True:
                 noise = self.noise_intensity * tf.random.normal(shape=x.get_shape(), mean=1, stddev=1)
                 x = x + noise
-            x = tf.math.log(tf.math.softmax(x, self.axis))
+
         else:
             x = tf.math.softmax(x, self.axis)
         return x
@@ -458,14 +475,17 @@ class _ConvNd(Layer):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
             elif isinstance(self.__dict__['activation'], Layer):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
-        s += ',auto_pad={auto_pad},use_bias={use_bias} ,dilation={dilation}'
+        s += ',auto_pad={auto_pad}'
+        if hasattr(self,'padding') and self.padding is not None:
+            s += ', padding={0}, padding_mode={1}'.format(self.padding, self.padding_mode)
+        s += ',use_bias={use_bias} ,dilation={dilation}'
         if self.groups != 1:
             s += ', groups={groups}'
-        if self._input_shape is not None:
+        if hasattr(self,'_input_shape') and self._input_shape is not None:
             s += ', input_shape={0}, input_filters={1}'.format(self._input_shape.as_list(), self.input_filters)
-        if self.output_shape is not None:
+        if hasattr(self,'_output_shape') and self._output_shape is not None:
             s += ', output_shape={0}'.format(
-                self.output_shape if isinstance(self.output_shape, (list, tuple)) else self.output_shape.as_list())
+                self._output_shape if isinstance(self._output_shape, (list, tuple)) else self._output_shape.as_list())
         #     if self.bias is None:
         #         s += ', use_bias=False'
         return s.format(**self.__dict__)

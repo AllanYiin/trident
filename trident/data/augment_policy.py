@@ -8,7 +8,7 @@ __all__ = ['AugmentPolicy','SubPolicy']
 class AugmentPolicy(object):
     """ Randomly choose one of the best 24 Sub-policies on ImageNet.
 
-        Example:
+        Examples:
         >>> policy = AugmentPolicy()
         >>> transformed = policy(image)
 

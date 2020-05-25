@@ -84,54 +84,33 @@ def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bia
 #         model.load_state_dict(state_dict)
 #     return model
 
-def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=False, zero_init_residual=False,
-           width_per_group=64, replace_stride_with_dilation=None, include_top=True, model_name='',
+def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=False,  include_top=True, model_name='',
            **kwargs):
     """Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
-    Optionally loads weights pre-trained on ImageNet.
-    Note that the data format convention used by the model is
-    the one specified in your Keras config at `~/.keras/keras.json`.
+
     Args
-        stack_fn: a function that returns output tensor for the
-            stacked residual blocks.
-        preact: whether to use pre-activation or not
-            (True for ResNetV2, False for ResNet and ResNeXt).
-        use_bias: whether to use biases for convolutional layers or not
-            (True for ResNet and ResNetV2, False for ResNeXt).
-        model_name: string, model name.
-        include_top: whether to include the fully-connected
-            layer at the top of the network.
-        weights: one of `None` (random initialization),
-              'imagenet' (pre-training on ImageNet),
-              or the path to the weights file to be loaded.
-        input_tensor: optional Keras tensor
-            (i.e. output of `layers.Input()`)
-            to use as image input for the model.
+        block: a function that returns output tensor for the stacked residual blocks.
+        layers: list of integer, the number of  repeat units in each blocks.
         input_shape: optional shape tuple, only to be specified
             if `include_top` is False (otherwise the input shape
-            has to be `(224, 224, 3)` (with `channels_last` data format)
-            or `(3, 224, 224)` (with `channels_first` data format).
+            has to be`(3, 224, 224)` (with `channels_first` data format).
             It should have exactly 3 inputs channels.
-        pooling: optional pooling mode for feature extraction
-            when `include_top` is `False`.
-            - `None` means that the output of the model will be
-                the 4D tensor output of the
-                last convolutional layer.
-            - `avg` means that global average pooling
-                will be applied to the output of the
-                last convolutional layer, and thus
-                the output of the model will be a 2D tensor.
-            - `max` means that global max pooling will
-                be applied.
-        classes: optional number of classes to classify images
+        num_classes: optional number of classes to classify images
             into, only to be specified if `include_top` is True, and
             if no `weights` argument is specified.
+        use_bias: whether to use biases for convolutional layers or not
+            (True for ResNet and ResNetV2, False for ResNeXt).
+        include_top: whether to include the fully-connected layer at the top of the network.
+        model_name: string, model name.
+
     Returns
         A Keras model instance.
+
     Raises
-        ValueError: in case of invalid argument for `weights`,
-            or invalid input shape.
+        ValueError: in case of invalid argument for `weights`,  or invalid input shape.
+
     """
+
 
     def _make_layer(block, num_filters, blocklayers, strides=1, dilate=False,use_bias=use_bias,layer_name=''):
         conv_shortcut=False
@@ -201,13 +180,12 @@ def ResNet50(include_top=True,
         recovery_model.to(_device)
         if include_top==False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
         else:
             if classes!=1000:
 
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape=recovery_model.fc.input_shape
-                recovery_model.fc=new_fc
-
+                recovery_model.fc= Dense(classes, activation=None, name='fc')
+                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
 
         resnet50.model=recovery_model
     return resnet50
@@ -233,6 +211,7 @@ def ResNet101(include_top=True,
         else:
             if classes != 1000:
                 recovery_model.fc = Dense(classes, activation=None, name='fc')
+                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
 
         resnet101.model=recovery_model
     return resnet101
@@ -259,6 +238,7 @@ def ResNet152(include_top=True,
         else:
             if classes != 1000:
                 recovery_model.fc = Dense(classes, activation=None, name='fc')
+                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
 
         resnet152.model=recovery_model
     return resnet152

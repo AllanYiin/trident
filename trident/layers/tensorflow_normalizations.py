@@ -238,8 +238,7 @@ BatchNorm3d=BatchNorm
 
 
 class GroupNorm(Layer):
-    """Applies Group Normalization over a mini-batch of inputs as described in
-    the paper `Group Normalization`_ .
+    """Applies Group Normalization over a mini-batch of inputs as described in the paper `Group Normalization`_ .
 
     .. math::
         y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
@@ -254,7 +253,7 @@ class GroupNorm(Layer):
     evaluation modes.
 
     Shape:
-        - Input: :math:`(N, *, C)` where :math:`C=\text{num\_channels}`
+        - Input: :math:`(N, *, C)` where :math:`C=\text{num_channels}`
         - Output: :math:`(N, *, C)` (same shape as input)
 
     References:
@@ -325,7 +324,7 @@ class InstanceNorm(GroupNorm):
 
     .. math::
 
-        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+        'y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta'
 
     The mean and standard-deviation are calculated per-dimension separately
     for each object in a mini-batch. :math:`\gamma` and :math:`\beta` are learnable parameter vectors
@@ -419,7 +418,7 @@ class LayerNorm(Layer):
     the paper `Layer Normalization`_ .
 
     .. math::
-        y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta
+        'y = \frac{x - \mathrm{E}[x]}{ \sqrt{\mathrm{Var}[x] + \epsilon}} * \gamma + \beta'
 
     The mean and standard-deviation are calculated separately over the last
     certain number dimensions which have to be of the shape specified by

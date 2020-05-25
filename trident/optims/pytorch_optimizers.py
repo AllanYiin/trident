@@ -4,10 +4,10 @@ from __future__ import print_function
 
 import math
 from collections import defaultdict
-
+from functools import reduce
 import torch
 import torch.optim as optim
-
+from torch.optim import optimizer,lbfgs,adagrad,adadelta,rmsprop
 from trident.backend.common import get_class, snake2camel
 from trident.backend.pytorch_ops import *
 
@@ -44,7 +44,7 @@ def _filter_grads(grads_and_vars, gradient_centralization=None):
     return filtered
 
 
-class Optimizer(optim.optimizer):
+class Optimizer(optimizer.Optimizer):
     """Base class for all optimizers.
 
     .. warning::
@@ -205,7 +205,7 @@ class SGD(optim.SGD):
         dampening (float, optional): dampening for momentum (default: 0)
         nesterov (bool, optional): enables Nesterov momentum (default: False)
 
-    Example:
+    Examples:
         >>> SGD(lr=0.1, momentum=0.9)
 
 
@@ -237,6 +237,9 @@ class SGD(optim.SGD):
 
         The Nesterov version is analogously modified.
     """
+    def __init__(self, params, lr=1e-3, momentum=0, dampening=0,
+                 weight_decay=0, nesterov=False):
+        super().__init__(params, lr=lr, momentum=momentum, dampening=dampening, weight_decay=weight_decay, nesterov=nesterov)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -286,7 +289,47 @@ class SGD(optim.SGD):
         self._base_lr = value
 
 
-class LBFGS(get_class('LBFGS', ['torch.optim'])):
+class LBFGS(lbfgs.LBFGS):
+    """Implements L-BFGS algorithm, heavily inspired by `minFunc
+    <https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html>`.
+
+    .. warning::
+        This optimizer doesn't support per-parameter options and parameter
+        groups (there can be only one).
+
+    .. warning::
+        Right now all parameters have to be on a single device. This will be
+        improved in the future.
+
+    .. note::
+        This is a very memory intensive optimizer (it requires additional
+        ``param_bytes * (history_size + 1)`` bytes). If it doesn't fit in memory
+        try reducing the history size, or use a different algorithm.
+
+    Arguments:
+        lr (float): learning rate (default: 1)
+        max_iter (int): maximal number of iterations per optimization step
+            (default: 20)
+        max_eval (int): maximal number of function evaluations per optimization
+            step (default: max_iter * 1.25).
+        tolerance_grad (float): termination tolerance on first order optimality
+            (default: 1e-5).
+        tolerance_change (float): termination tolerance on function
+            value/parameter changes (default: 1e-9).
+        history_size (int): update history size (default: 100).
+        line_search_fn (str): either 'strong_wolfe' or None (default: None).
+    """
+
+    def __init__(self, params,
+                 lr=1,
+                 max_iter=20,
+                 max_eval=None,
+                 tolerance_grad=1e-7,
+                 tolerance_change=1e-9,
+                 history_size=100,
+                 line_search_fn=None):
+        super().__init__(params, lr=lr, max_iter=max_iter,max_eval=max_eval, tolerance_grad=tolerance_grad, tolerance_change=tolerance_change, history_size=history_size,line_search_fn=line_search_fn)
+
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
 
@@ -335,7 +378,27 @@ class LBFGS(get_class('LBFGS', ['torch.optim'])):
         self._base_lr = value
 
 
-class Adadelta(get_class('Adadelta', ['torch.optim'])):
+class Adadelta(adadelta.Adadelta):
+    """Implements Adadelta algorithm.
+
+    It has been proposed in `ADADELTA: An Adaptive Learning Rate Method`__.
+
+    Arguments:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        rho (float, optional): coefficient used for computing a running average
+            of squared gradients (default: 0.9)
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-6)
+        lr (float, optional): coefficient that scale delta before it is applied
+            to the parameters (default: 1.0)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+
+    __ https://arxiv.org/abs/1212.5701
+    """
+    def __init__(self, params, lr=1.0, rho=0.9, eps=1e-6, weight_decay=0):
+        super().__init__(params, lr=lr, rho=rho, eps=eps, weight_decay=weight_decay)
+
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
 
@@ -384,7 +447,27 @@ class Adadelta(get_class('Adadelta', ['torch.optim'])):
         self._base_lr = value
 
 
-class Adagrad(get_class('Adagrad', ['torch.optim'])):
+class Adagrad(adagrad.Adagrad):
+    """Implements Adagrad algorithm.
+
+     It has been proposed in `Adaptive Subgradient Methods for Online Learning
+     and Stochastic Optimization`_.
+
+     Arguments:
+         params (iterable): iterable of parameters to optimize or dicts defining
+             parameter groups
+         lr (float, optional): learning rate (default: 1e-2)
+         lr_decay (float, optional): learning rate decay (default: 0)
+         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+         eps (float, optional): term added to the denominator to improve
+             numerical stability (default: 1e-10)
+
+     .. _Adaptive Subgradient Methods for Online Learning and Stochastic
+         Optimization: http://jmlr.org/papers/v12/duchi11a.html
+     """
+    def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-10):
+        super().__init__(params, lr=lr, lr_decay=lr_decay, eps=eps, weight_decay=weight_decay,initial_accumulator_value=initial_accumulator_value)
+
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
 
@@ -433,7 +516,7 @@ class Adagrad(get_class('Adagrad', ['torch.optim'])):
         self._base_lr = value
 
 
-class RMSprop(get_class('RMSprop', ['torch.optim'])):
+class RMSprop(rmsprop.RMSprop):
     r"""Implements RMSprop algorithm.
 
     Proposed by G. Hinton in his
@@ -461,6 +544,8 @@ class RMSprop(get_class('RMSprop', ['torch.optim'])):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
 
     """
+    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False):
+        super().__init__(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay,momentum=momentum,centered=centered)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -758,7 +843,7 @@ class AdamW(Optimizer):
     better training loss and generalization error in the paper above.
     For further information see the documentation of the Adam Optimizer.
 
-    Example:
+    Examples:
         >>> AdamW(lr=0.001, betas=(0.9, 0.999))
 
     """

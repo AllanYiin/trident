@@ -104,7 +104,7 @@ def load_mnist(dataset_name='mnist', **kwargs):
             else:
                 testData = Iterator(data=imagedata, label=labeldata)
 
-            dataset = DataProviderV2(dataset_name, traindata=trainData, testdata=testData)
+            dataset = DataProvider(dataset_name, traindata=trainData, testdata=testData)
             dataset.binding_class_names(
                 [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] if dataset_name == 'mnist' else ['T-shirt/top', 'Trouser', 'Pullover',
                                                                                 'Dress', 'Coat', 'Sandal', 'Shirt',
@@ -174,7 +174,7 @@ def load_cifar(dataset_name='cifar10'):
 
     trainData = Iterator(data=ImageDataset(data), label=LabelDataset(label))
     testData = Iterator(data=ImageDataset(test_data), label=LabelDataset(test_label))
-    dataset = DataProviderV2(dataset_name, traindata=trainData, testdata=testData)
+    dataset = DataProvider(dataset_name, traindata=trainData, testdata=testData)
     dataset.binding_class_names(['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship',
                                  'truck'] if dataset_name == 'cifar10' else [], 'en-US')
     return dataset
@@ -295,14 +295,14 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
             labelsdata.binding_class_names(class_names)
 
             traindata = Iterator(data=imagedata, label=labelsdata)
-            dataset = DataProviderV2(dataset_name, traindata=traindata)
+            dataset = DataProvider(dataset_name, traindata=traindata)
             dataset.binding_class_names(class_names)
 
         else:
             imgs = glob.glob(base_folder + '/*.*g')
             imagedata = ImageDataset(imgs, expect_data_type=expect_data_type, get_image_mode=GetImageMode.processed)
             traindata = Iterator(data=imagedata)
-            dataset = DataProviderV2(dataset_name, traindata=traindata)
+            dataset = DataProvider(dataset_name, traindata=traindata)
         return dataset
     else:
         raise ValueError('')
@@ -480,7 +480,7 @@ def load_examples_data(dataset_name):
         test_iter = Iterator(data=testarray, label=testlabel)
         print('training images: {0}  test images:{1}'.format(len(trainarray), len(testarray)))
 
-        dataset = DataProviderV2(dataset_name, traindata=train_iter, testdata=test_iter)
+        dataset = DataProvider(dataset_name, traindata=train_iter, testdata=test_iter)
         dataset.binding_class_names(['drawing', 'hentai', 'neutral', 'porn', 'sexy'], 'en-us')
         dataset.binding_class_names(['繪畫', '色情漫畫', '中性', '色情', '性感'], 'zh-tw')
         dataset.binding_class_names(['绘画', '色情漫画', '中性', '色情', '性感'], 'zh-cn')
@@ -510,7 +510,7 @@ def load_examples_data(dataset_name):
                              get_image_mode=GetImageMode.processed)
         train_iter = Iterator(data=trainA, unpair=trainB)
         test_iter = Iterator(data=testA, unpair=testB)
-        dataset = DataProviderV2(dataset_name, traindata=train_iter, testdata=test_iter)
+        dataset = DataProvider(dataset_name, traindata=train_iter, testdata=test_iter)
         print('get horse2zebra images :{0}'.format(len(dataset)))
         return dataset
     elif dataset_name == 'examples_people':
@@ -528,7 +528,7 @@ def load_examples_data(dataset_name):
 
         imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb)
         mskdata = MaskDataset(masks=masks, expect_data_type=ExpectDataType.binary_mask)
-        dataset = DataProviderV2(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=mskdata))
+        dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=mskdata))
         print('get people images :{0}'.format(len(dataset)))
         return dataset
     elif dataset_name == 'examples_autodrive':
@@ -552,7 +552,7 @@ def load_examples_data(dataset_name):
         for i in range(len(label_codes)):
             mskdata.palette[label_names[i]] = label_codes[i]
 
-        dataset = DataProviderV2(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=mskdata))
+        dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=mskdata))
         print('get autodrive images :{0}'.format(len(dataset)))
         return dataset
     elif dataset_name == 'examples_superresolution':
@@ -564,7 +564,7 @@ def load_examples_data(dataset_name):
         print('get super resolution images :{0}'.format(len(imgs)))
         imgdata = ImageDataset(images=imgs * 2, expect_data_type=ExpectDataType.rgb, symbol='lr')
         labeldata = ImageDataset(images=imgs * 2, expect_data_type=ExpectDataType.rgb, symbol='hr')
-        dataset = DataProviderV2(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
+        dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
         return dataset
     elif dataset_name == 'examples_beauty':
         download_file_from_google_drive('1aJhxN9IqsxuayhRTm-gmxk6PiLe5wm9X', dirname, 'beauty.tar')
@@ -592,7 +592,7 @@ def load_examples_data(dataset_name):
         print('{0} faces loaded...'.format(len(imgs)))
         imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb, symbol='faces')
         labeldata = NumpyDataset(data=ratings, expect_data_type=ExpectDataType.array_data, symbol='ratings')
-        data_provider = DataProviderV2(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
+        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
         return data_provider
 
     elif dataset_name == 'examples_anpr':

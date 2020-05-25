@@ -262,7 +262,7 @@ class Mtcnn(ImageDetectionModel):
         self.rnet = ImageDetectionModel(input_shape=(3, 24, 24), output=r_net()).model
         self.onet = ImageDetectionModel(input_shape=(3, 48, 48), output=o_net()).model
         if pretrained == True:
-            pnet = Pnet().model
+            pnet =Pnet().model
             self.rnet = Rnet().model
             self.onet = Onet().model
         self.min_size = min_size
