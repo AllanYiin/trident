@@ -50,10 +50,12 @@ _quadruple = _ntuple(4)
 
 
 class Conv1d_Block(Layer):
-    def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self,sequence_rank='cna', kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
                  normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
-                 dropout_rate=0, name=None, depth_multiplier=None, **kwargs):
-        super(Conv1d_Block, self).__init__(name=name)
+                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+        super(Conv1d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -73,19 +75,26 @@ class Conv1d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
-        self.norm = get_normalization(normalization)
-        self.activation = get_activation(activation)
+        if self.sequence_rank=='cna':
+            self.conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                   auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                                   depth_multiplier=self.depth_multiplier).to(self.device)
+            self.norm = get_normalization(normalization)
+            self.activation = get_activation(activation)
+        elif self.sequence_rank=='nac':
+            self.norm = get_normalization(normalization)
+            self.activation = get_activation(activation)
+            self.conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                   auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                                   depth_multiplier=self.depth_multiplier).to(self.device)
 
         self.depth_multiplier = depth_multiplier
         self._name = name
 
     def build(self, input_shape):
         if self._built == False or self.conv is None:
-            self.conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                               auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                               depth_multiplier=self.depth_multiplier).to(self.device)
             self.conv.input_shape = input_shape
 
             output_shape = self._input_shape.clone().tolist()
@@ -99,11 +108,18 @@ class Conv1d_Block(Layer):
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
-        x = self.conv(x)
-        if self.norm is not None:
-            x = self.norm(x)
-        if self.activation is not None:
-            x = self.activation(x)
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
@@ -119,11 +135,13 @@ class Conv1d_Block(Layer):
 
 
 class Conv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,sequence_rank='cna',  kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
                  keep_output=False, **kwargs):
-        super(Conv2d_Block, self).__init__(name=name)
+        super(Conv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -164,17 +182,24 @@ class Conv2d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
+        if self.sequence_rank == 'cna':
+            self.conv=Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                           auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                                           use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                                           depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(self.device)
+            self.norm = norm
+            self.activation = get_activation(activation)
+        elif self.sequence_rank == 'nac':
 
-        self.add_module('conv', Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                                       auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                                       use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                                       depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(
-            self.device))
-        if self.use_spectral:
-            self.conv = SpectralNorm(self.conv)
+            self.norm = norm if not self.use_spectral else None
+            self.activation = get_activation(activation)
+            self.conv=Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                   auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                                   depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(
+                                self.device)
 
-        self.norm = norm
-        self.activation = get_activation(activation)
+
         self._name = name
 
     def build(self, input_shape):
@@ -194,11 +219,18 @@ class Conv2d_Block(Layer):
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
-        x = self.conv(x)
-        if self.norm is not None:
-            x = self.norm(x)
-        if self.activation is not None:
-            x = self.activation(x)
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
         if self.training and self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
@@ -214,11 +246,13 @@ class Conv2d_Block(Layer):
 
 
 class TransConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, sequence_rank='cna', kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
                  keep_output=False, **kwargs):
-        super(TransConv2d_Block, self).__init__(name=name)
+        super(TransConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -231,8 +265,11 @@ class TransConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
         self.use_spectral = use_spectral
+        self.conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                               auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
+                               depth_multiplier=self.depth_multiplier).to(self.device)
         self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
@@ -242,15 +279,12 @@ class TransConv2d_Block(Layer):
 
     def build(self, input_shape):
         if self._built == False or self.conv is None:
-            conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                               auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
-                               depth_multiplier=self.depth_multiplier).to(self.device)
-            conv.input_shape = input_shape
+            self.conv.input_shape = input_shape
             if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(conv)
-            else:
-                self.conv = conv
+                self.conv = nn.utils.spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm=None
+
             self.to(self.device)
             self._built = True
 
@@ -259,11 +293,18 @@ class TransConv2d_Block(Layer):
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
-        x = self.conv(x)
-        if self.norm != None:
-            x = self.norm(x)
-        if self.activation != None:
-            x = self.activation(x)
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
 
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
@@ -281,10 +322,12 @@ class TransConv2d_Block(Layer):
 
 
 class DepthwiseConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, sequence_rank='cna', kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, add_noise=False,
                  noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
-        super(DepthwiseConv2d_Block, self).__init__(name=name)
+        super(DepthwiseConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
 
@@ -304,7 +347,9 @@ class DepthwiseConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
+        self.conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                                   strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                                   activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(self.device)
         self.norm = get_normalization(normalization)
         self.use_spectral = use_spectral
         self.activation = get_activation(activation)
@@ -314,15 +359,13 @@ class DepthwiseConv2d_Block(Layer):
 
     def build(self, input_shape):
         if self._built == False or self.conv is None:
-            conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                   strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                   activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(
-                self.device)
-            conv.input_shape = input_shape
+
+            self.conv.input_shape = input_shape
             if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(conv)
-            else:
-                self.conv = conv
+                self.conv = nn.utils.spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm=None
+
             self.to(self.device)
             self._built = True
 
@@ -331,11 +374,18 @@ class DepthwiseConv2d_Block(Layer):
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
-        x = self.conv(x)
-        if self.norm is not None:
-            x = self.norm(x)
-        if self.activation is not None:
-            x = self.activation(x)
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
@@ -351,10 +401,12 @@ class DepthwiseConv2d_Block(Layer):
 
 
 class SeparableConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,sequence_rank='cna',  kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
-        super(SeparableConv2d_Block, self).__init__(name=name)
+        super(SeparableConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
         self.num_filters = kwargs.get('num_filters')
@@ -375,11 +427,22 @@ class SeparableConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
         self.use_spectral = use_spectral
-        self.norm = get_normalization(normalization)
-        self.activation = get_activation(activation)
+        if self.sequence_rank == 'cna':
+            self.conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                                       strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                                       activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                                       name=self._name).to(self.device)
 
+            self.norm = get_normalization(normalization)
+            self.activation = get_activation(activation)
+        elif self.sequence_rank == 'nac':
+            self.norm = get_normalization(normalization)
+            self.activation = get_activation(activation)
+            self.conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                                       strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                                       activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                                       name=self._name).to(self.device)
         self.depth_multiplier = depth_multiplier
         self.keep_output = keep_output
         self._name = name
@@ -388,21 +451,12 @@ class SeparableConv2d_Block(Layer):
         if self._built == False:
             self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else \
                 self.num_filters
-            conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                   strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                   activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                                   name=self._name).to(self.device)
-            conv.input_shape = input_shape
 
+            self.conv.input_shape = input_shape
             if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(conv)
-            else:
-                self.conv = conv
-            self.point_conv = Conv2d(kernel_size=1, num_filters=self.num_filters, strides=1, auto_pad=True,
-                                     padding_mode=self.padding_mode, activation=None, use_bias=self.use_bias,
-                                     dilation=1, groups=1, name='point_wise' + self._name).to(self.device)
-            if self.norm is not None:
-                self.norm.input_shape = self.conv.output_shape
+                self.conv = nn.utils.spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm=None
             self.to(self.device)
             self._built = True
 
@@ -411,12 +465,18 @@ class SeparableConv2d_Block(Layer):
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
-        x = self.conv(x)
-        x = self.point_conv(x)
-        if self.norm is not None:
-            x = self.norm(x)
-        if self.activation is not None:
-            x = self.activation(x)
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
@@ -432,11 +492,13 @@ class SeparableConv2d_Block(Layer):
 
 
 class GcdConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, sequence_rank='cna', kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  divisor_rank=0, activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1,
-                 groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,keep_output=False,
                  **kwargs):
-        super(GcdConv2d_Block, self).__init__(name=name)
+        super(GcdConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = _pair(strides)
@@ -450,31 +512,32 @@ class GcdConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        self.conv = None
-
+        if self.sequence_rank == 'cna':
+            self.conv =GcdConv2d(self.kernel_size, input_filters=self.input_filters, num_filters=self.num_filters,
+                                 strides=self.strides, auto_pad=self.auto_pad, activation=None, init=None,
+                                 use_bias=self.use_bias, init_bias=0, divisor_rank=self.divisor_rank,
+                                 dilation=self.dilation).to(self.device)
+            self.norm = get_normalization(normalization)
+            self.activation = get_activation(activation)
+        elif self.sequence_rank == 'nac':
+            self.norm = get_normalization(normalization)
+            self.activation = get_activation(activation)
+            self.conv =GcdConv2d(self.kernel_size, input_filters=self.input_filters, num_filters=self.num_filters,
+                                 strides=self.strides, auto_pad=self.auto_pad, activation=None, init=None,
+                                 use_bias=self.use_bias, init_bias=0, divisor_rank=self.divisor_rank,
+                                 dilation=self.dilation).to(self.device)
         self.divisor_rank = divisor_rank
 
-        self.activation = get_activation(activation)
-        self.norm = get_normalization(normalization)
+
+
 
     def build(self, input_shape):
         if self._built == False or self.conv is None:
-            conv = GcdConv2d(self.kernel_size, input_filters=self.input_filters, num_filters=self.num_filters,
-                             strides=self.strides, auto_pad=self.auto_pad, activation=None, init=None,
-                             use_bias=self.use_bias, init_bias=0, divisor_rank=self.divisor_rank,
-                             dilation=self.dilation).to(self.device)
-            conv.input_shape = input_shape
-
+            self.conv.input_shape = input_shape
             if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(conv)
-                self.norm = None
-            else:
-                self.conv = conv
-
-            output_shape = self._input_shape.clone()
-            output_shape[0] = self.num_filters
-            if self.norm != None:
-                self.norm.input_shape = output_shape
+                self.conv = nn.utils.spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm=None
             self._built = True
             self.to(self.device)
 
@@ -484,10 +547,18 @@ class GcdConv2d_Block(Layer):
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
         # dynamic generation
-        x = self.conv(x)
-        if self.activation is not None:
-            x = self.activation(x)
-
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         if torch.isnan(x).any():
