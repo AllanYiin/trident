@@ -19,17 +19,23 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 
+
+
+
+
+
+
 __all__ = ['is_tensor','is_tensor_like', 'to_numpy', 'to_tensor', 'ndim','cast', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
-           'ceil', 'round', 'dot', 'sqrt', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
+           'ceil', 'round', 'dot', 'sqrt','rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu',
-           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange' ,'meshgrid', 'reshape',
+           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','make_onehot','arange' ,'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix','set_seed',  'shuffle',
            'random_choice','random_normal','random_normal_like', 'get_rotation_matrix2d', 'warp_affine']
 
@@ -37,18 +43,29 @@ __all__ = ['is_tensor','is_tensor_like', 'to_numpy', 'to_tensor', 'ndim','cast',
 def _get_device():
     return get_session().device
 
-
+############################
+## tensor attribute
+###########################
 def is_tensor(x):
     """Checks whether `x` is exactly a tensor .
+
+    .. math::
+
+       x^n + y^n = z^n
+
+    .. math::
+
+       E = mc^2
+
 
     Args:
         x: A python object to check.
 
     Returns:
-        'True` if `x` is a tensor or "tensor-like", `False` if not.
+        'True` if `x` is exactly a tensor , `False` if not.
 
     Examples:
-`        >>> is_tensor(torch.tensor([[1,2,3],[4,5,6],[7,8,9]]))
+        >>> is_tensor(torch.tensor([[1,2,3],[4,5,6],[7,8,9]]))
         True
         >>> is_tensor(Parameter(to_tensor([[1,2,3],[4,5,6],[7,8,9]])))
         True
@@ -62,7 +79,7 @@ def is_tensor(x):
 
 
 def is_tensor_like(x):
-    """Checks whether `x` is a "tensor-like".
+    """Checks whether `x` is a  tensor or "tensor-like".
 
     If `is_tensor_like(x)` returns `True`, it is safe to assume that `x` is a tensor or
     can be converted to a tensor`.
@@ -124,16 +141,15 @@ def to_numpy(*x) -> np.ndarray:
 
 
 def to_tensor(x, dtype=torch.float32, requires_grad=None) -> torch.Tensor:
-    """
-     Convert input  to a tensor as possible
+    """ Convert input  to a tensor as possible
 
     Args:
-        x (int,float,list,tuple,ndarray,tensor):
-        dtype :
-        requires_grad (bool): wheather need grade
+        x: An object to be converted (ex.numpy array, list, tensors).
+        dtype (str or torch.dtype):
+        requires_grad (None or bool): whether need grade
 
     Returns:
-        output tensor
+        A tensor.
 
     Examples:
         >>> to_tensor(2)
@@ -196,14 +212,12 @@ def to_tensor(x, dtype=torch.float32, requires_grad=None) -> torch.Tensor:
         return x
 
 
-############################
-## tensor attribute
-###########################
+
 def ndim(x: torch.Tensor):
     """Number of dimension of a tensor
 
     Args:
-        x (tensor): input tensor.
+        x (torch.Tensor): input tensor.
 
     Returns:
         (int) Number of dimension
@@ -230,17 +244,27 @@ def int_shape(x: torch.Tensor):
 
 
 def is_sparse(x):
-    """
+    """ Check whether the tensor is sparse
 
     Args:
-        x ():
+        x (torch.Tensor): input tensor.
 
     Returns:
+        if input tensor is sparse return True, else False.
 
     """
-    return 'sparse' in str(type(x))
+    return is_tensor(x) and  'sparse' in str(type(x))
 
 def str2dtype(dtype):
+    """ Mapping string to dtype
+
+    Args:
+        dtype (str): dtype representation string
+
+    Returns:
+        dtype
+
+    """
     if isinstance(dtype, torch.dtype):
         return dtype
     elif isinstance(dtype, str):
@@ -333,7 +357,7 @@ def is_nan(x):
     """
 
     Args:
-        x ():
+        x (torch.Tensor): input tensor.
 
     Returns:
 
@@ -352,7 +376,7 @@ def is_inf(x):
     """
 
     Args:
-        x ():
+        x (torch.Tensor): input tensor.
 
     Returns:
 
@@ -368,10 +392,26 @@ def is_inf(x):
 
 
 def is_abnormal_number(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+
+    """
     return is_nan(x) or is_inf(x)
 
 
 def any_nan(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+
+    """
     if isinstance(x, torch.Tensor):
         return torch.isnan(x).any()
     elif isinstance(x, nn.Module):
@@ -386,6 +426,14 @@ def any_nan(x):
 
 
 def any_inf(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+
+    """
     if isinstance(x, torch.Tensor):
         return torch.isinf(x).any()
     elif isinstance(x, nn.Module):
@@ -400,6 +448,14 @@ def any_inf(x):
 
 
 def any_abnormal_number(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+
+    """
     return any_nan(x) or any_inf(x)
 
 
@@ -571,12 +627,13 @@ def add(x, y):
     [here](http://docs.scipy.org/doc/numpy/user/basics.broadcasting.html)
 
     Args:
-      x: A `Tensor`.
-      y: A `Tensor`.
+        x (torch.Tensor): input tensor.
+        y (torch.Tensor): another tensor.
 
 
     Returns:
       A `Tensor`. Has the same type as `x`.
+      
     """
     return torch.add(x, y)
 
@@ -588,12 +645,13 @@ def subtract(x, y):
     [here](http://docs.scipy.org/doc/numpy/user/basics.broadcasting.html)
 
     Args:
-      x: A `Tensor`.
-      y: A `Tensor`.
+        x (torch.Tensor): input tensor.
+        y (torch.Tensor): another tensor.
 
 
     Returns:
       A `Tensor`. Has the same type as `x`.
+
     """
     return torch.sub(x, y)
 
@@ -605,8 +663,8 @@ def dot(x, y):
     (e.g. `(2, 3) * (4, 3, 5) -> (2, 4, 5)`)
 
      Args
-            x: Tensor or variable.
-            y: Tensor or variable.
+        x (torch.Tensor): input tensor.
+        y (torch.Tensor): another tensor.
 
      Returns
             A tensor, dot product of `x` and `y`.
@@ -634,8 +692,8 @@ def true_divide(x, y):
     and `int64` (matching the behavior of Numpy).
 
     Args:
-      x: `Tensor` numerator of numeric type.
-      y: `Tensor` denominator of numeric type.
+        x (torch.Tensor): input tensor.
+        y (torch.Tensor): another tensor.
 
 
     Returns:
@@ -648,11 +706,97 @@ def true_divide(x, y):
     return torch.true_divide(x, y)
 
 
-def pi():
-    return to_tensor(np.pi)
-
-
 def matmul(a, b, transpose_a=False, transpose_b=False):
+    """Multiplies matrix `a` by matrix `b`, producing `a` * `b`.
+
+     The inputs must, following any transpositions, be tensors of rank >= 2
+     where the inner 2 dimensions specify valid matrix multiplication dimensions,
+     and any further outer dimensions specify matching batch size.
+
+     Both matrices must be of the same type. The supported types are:
+     `float16`, `float32`, `float64`, `int32`, `complex64`, `complex128`.
+
+     Either matrix can be transposed or adjointed (conjugated and transposed) on
+     the fly by setting one of the corresponding flag to `True`. These are `False`
+     by default.
+
+     If one or both of the matrices contain a lot of zeros, a more efficient
+     multiplication algorithm can be used by setting the corresponding
+     `a_is_sparse` or `b_is_sparse` flag to `True`. These are `False` by default.
+     This optimization is only available for plain matrices (rank-2 tensors) with
+     datatypes `bfloat16` or `float32`.
+
+     A simple 2-D tensor matrix multiplication:
+
+
+     >>> a =reshape(to_tensor([1, 2, 3, 4, 5, 6]),[2, 3])
+     >>> a  # 2-D tensor
+     tensor([[1, 2, 3],
+            [4, 5, 6]])
+     >>> b = reshape(to_tensor([7, 8, 9, 10, 11, 12]), [3, 2])
+     >>> b  # 2-D tensor
+     tensor([[ 7,  8],
+            [ 9, 10],
+            [11, 12]])
+     >>> c = matmul(a, b)
+     >>> c  # `a` * `b`
+     tensor([[ 58,  64],
+            [139, 154]])
+
+     A batch matrix multiplication with batch shape [2]:
+
+     >>> a =  reshape(to_tensor(np.arange(1, 13, dtype=np.int32)),[2, 2, 3])
+     >>> a  # 3-D tensor
+     tensor([[[ 1,  2,  3],
+             [ 4,  5,  6]],
+            [[ 7,  8,  9],
+             [10, 11, 12]]])
+     >>> b =  reshape(to_tensor(np.arange(13, 25, dtype=np.int32)),[2, 3, 2])
+     >>> b  # 3-D tensor
+     tensor([[[13, 14],
+             [15, 16],
+             [17, 18]],
+            [[19, 20],
+             [21, 22],
+             [23, 24]]])
+     >>> c = matmul(a, b)
+     >>> c  # `a` * `b`
+     tensor([[[ 94, 100],
+             [229, 244]],
+            [[508, 532],
+             [697, 730]]])
+
+     Since python >= 3.5 the @ operator is supported
+     (see [PEP 465](https://www.python.org/dev/peps/pep-0465/)). In TensorFlow,
+     it simply calls the `tf.matmul()` function, so the following lines are
+     equivalent:
+
+     >>> d = a @ b @ [[10], [11]]
+     >>> d = matmul(tf.matmul(a, b), [[10], [11]])
+
+     Args:
+       a: `Tensor` and rank > 1.
+       b: `Tensor` with same type and rank as `a`.
+       transpose_a: If `True`, `a` is transposed before multiplication.
+       transpose_b: If `True`, `b` is transposed before multiplication.
+
+
+     Returns:
+       A `Tensor` of the same type as `a` and `b` where each inner-most matrix
+       is the product of the corresponding matrices in `a` and `b`, e.g. if all
+       transpose or adjoint attributes are `False`:
+
+       `output[..., i, j] = sum_k (a[..., i, k] * b[..., k, j])`,
+       for all indices `i`, `j`.
+
+       Note: This is matrix product, not element-wise product.
+
+
+     Raises:
+       ValueError: If `transpose_a` and `adjoint_a`, or `transpose_b` and
+         `adjoint_b` are both set to `True`.
+
+     """
     if transpose_a:
         a = a.T
     if transpose_b:
@@ -661,6 +805,14 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
 
 
 def prod(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+
+    """
     return torch.prod(x)
 
 
@@ -668,7 +820,7 @@ def floor(x: (torch.Tensor, float)):
     """Returns element-wise largest integer not greater than x.
 
     Args:
-      x: A `Tensor`.
+        x (torch.Tensor): input tensor.
 
     Returns:
       A `Tensor`. Has the same type as `x`.
@@ -682,14 +834,14 @@ def floor(x: (torch.Tensor, float)):
 def ceil(x: (torch.Tensor, float)):
     """Return the ceiling of the input, element-wise.
 
-    For example:
+    Example:
 
     >>> ceil([-1.7, -1.5, -0.2, 0.2, 1.5, 1.7, 2.0])
     <tf.Tensor: shape=(7,), dtype=float32,
     numpy=array([-1., -1., -0.,  1.,  2.,  2.,  2.], dtype=float32)>
 
     Args:
-      x: A `tf.Tensor`.
+        x (torch.Tensor): input tensor.
 
 
     Returns:
@@ -711,7 +863,7 @@ def round(x: (torch.Tensor, float), digit: int = 0):
     according to the current system rounding mode use tf::cint.
 
     Args:
-        x: A `Tensor`
+        x (torch.Tensor): input tensor.
         digit: number of digit
 
     Returns:
@@ -740,56 +892,282 @@ def round(x: (torch.Tensor, float), digit: int = 0):
     else:
         return torch.round(x)
 
+def prod(x: torch.Tensor):
+    """Computes the product of elements across dimensions of a tensor.
+
+    Reduces `input_tensor` along all the dimensions
+
+
+    If `axis` is None, all dimensions are reduced, and a
+    tensor with a single element is returned.
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+        The reduced tensor.
+
+    @compatibility(numpy)
+    Equivalent to np.prod
+    @end_compatibility
+    """
+
+    if isinstance(x,(float,int)) :
+        return math.prod(x)
+    elif isinstance(x,(np.ndarray)) :
+        return np.prod(x).astype(np.float32)
+    else:
+        if not is_tensor(x):
+            x=cast(to_tensor(x),'float32')
+        else:
+            x = cast(x, 'float32')
+    return torch.prod(x)
+
+
+def pi():
+    """ The number π (/paɪ/)
+    The number π (/paɪ/) is a mathematical constant. It is defined as the ratio of a circle's circumference to its diameter
+
+    Returns:
+        The number π (/paɪ/)
+
+    """
+    return to_tensor(np.pi)
+
 
 def sqrt(x: torch.Tensor):
+    r"""Computes element-wise square root of the input tensor.
+
+    Note: This operation does not support integer types.
+
+    >>> x = to_tensor([[4.0], [16.0]])
+    >>> tf.sqrt(x)
+    <tf.Tensor: shape=(2, 1), dtype=float32, numpy=
+      array([[2.],
+             [4.]], dtype=float32)>
+    >>> y = to_tensor([[-4.0], [16.0]])
+    >>> sqrt(y)
+    <tf.Tensor: shape=(2, 1), dtype=float32, numpy=
+      array([[nan],
+             [ 4.]], dtype=float32)>
+    >>> z = to_tensor([[-1.0], [16.0]], dtype=tf.complex128)
+    >>> sqrt(z)
+    <tf.Tensor: shape=(2, 1), dtype=complex128, numpy=
+      array([[0.0+1.j],
+             [4.0+0.j]])>
+
+    Note: In order to support complex complex, please provide an input tensor
+    of `complex64` or `complex128`.
+
+    Args:
+        x: A `tf.Tensor`
+
+
+    Returns:
+      A `tf.Tensor` of same size, type and sparsity as `x`.
+
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     return x.sqrt()
 
+def rsqrt(x: torch.Tensor):
+    """Computes reciprocal of square root of x element-wise.
+
+    Args:
+      x: input tensor
+
+    Returns:
+      output tensor
+
+
+    Examples:
+        >>> x = to_tensor([2., 0., -2.])
+        >>> rsqrt(x)
+        <tf.Tensor: shape=(3,), dtype=float32,
+        numpy=array([0.707, inf, nan], dtype=float32)>
+
+    """
+    if not is_tensor(x):
+        x = to_tensor(x, dtype=torch.float32)
+    return x.rsqrt()
 
 def square(x: torch.Tensor):
+    r"""Computes square of x element-wise.
+
+    I.e., \\(y = x * x = x^2\\).
+
+    >>> tf.math.square([-2., 0., 3.])
+    <tf.Tensor: shape=(3,), dtype=float32, numpy=array([4., 0., 9.], dtype=float32)>
+
+    Args:
+      x: A `Tensor`. Must be one of the following types: `bfloat16`, `half`, `float32`, `float64`, `int32`, `int64`,
+      `complex64`, `complex128`.
+
+
+    Returns:
+      A `Tensor`. Has the same type as `x`.
+
+
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     return x ** 2
 
 
 def abs(x: torch.Tensor):
+    r"""Computes the absolute value of a tensor.
+
+    Given a tensor of integer or floating-point values, this operation returns a
+    tensor of the same type, where each element contains the absolute value of the
+    corresponding element in the input.
+
+    Given a tensor `x` of complex numbers, this operation returns a tensor of type
+    `float32` or `float64` that is the absolute value of each element in `x`. For
+    a complex number \\(a + bj\\), its absolute value is computed as \\(\sqrt{a^2
+    + b^2}\\).  For example:
+
+    >>> x = to_tensor([[-2.25 + 4.75j], [-3.25 + 5.75j]])
+    >>> tf.abs(x)
+    <tf.Tensor: shape=(2, 1), dtype=float64, numpy=
+    array([[5.25594901],
+           [6.60492241]])>
+
+    Args:
+      x: A `Tensor` or `SparseTensor` of type `float16`, `float32`, `float64`,
+        `int32`, `int64`, `complex64` or `complex128`.
+
+
+    Returns:
+      A `Tensor` or `SparseTensor` of the same size, type and sparsity as `x`,
+        with absolute values. Note, for `complex64` or `complex128` input, the
+        returned `Tensor` will be of type `float32` or `float64`, respectively.
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     return x.abs()
 
 
 def pow(x: torch.Tensor, y):
+    r"""Computes the power of one value to another.
+
+    Given a tensor `x` and a tensor `y`, this operation computes \\(x^y\\) for
+    corresponding elements in `x` and `y`. For example:
+
+    ```python
+    x = to_tensor([[2, 2], [3, 3]])
+    y = to_tensor([[8, 16], [2, 3]])
+    tf.pow(x, y)  # [[256, 65536], [9, 27]]
+    ```
+
+    Args:
+        x (torch.Tensor): input tensor.
+        y (torch.Tensor): another tensor.
+
+    Returns:
+      A `Tensor`.
+
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     return x.pow(y)
 
 
 def log(x: torch.Tensor):
+    r"""Computes natural logarithm of x element-wise.
+
+    I.e., \\(y = \log_e x\\).
+
+    See: https://en.wikipedia.org/wiki/Logarithm
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+
+    Returns:
+        A `Tensor`. Has the same type as `x`.
+
+    Examples:
+        >>> x = to_tensor([0, 0.5, 1, 5])
+        >>> log(x)
+        array([      -inf, -0.6931472,  0.       ,  1.609438 ])
+
+
+
+
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     return x.log()
 
 
 def exp(x: torch.Tensor):
+    r"""Computes exponential of x element-wise.  \\(y = e^x\\).
+
+    This function computes the exponential of the input tensor element-wise.
+    i.e. `math.exp(x)` or \\(e^x\\), where `x` is the input tensor.
+    \\(e\\) denotes Euler's number and is approximately equal to 2.718281.
+    Output is positive for any real input.
+
+    >>> x = to_tensor(2.0)
+    >>> exp(x)
+    <tf.Tensor: shape=(), dtype=float32, numpy=7.389056>
+
+    >>> x = to_tensor([2.0, 8.0])
+    >>> exp(x)
+    tensor([   7.389056, 2980.958   ])
+
+    For complex numbers, the exponential value is calculated as
+    \\(e^{x+iy}={e^x}{e^{iy}}={e^x}{\\cos(y)+i\\sin(y)}\\)
+
+    For `1+1j` the value would be computed as:
+    \\(e^1{\\cos(1)+i\\sin(1)} = 2.7182817 \\times (0.5403023+0.84147096j)\\)
+
+    >>> x =to_tensor(1 + 1j)
+    >>> exp(x)
+    tensor(1.4686939399158851+2.2873552871788423j)>
+
+    Args:
+      x: A `tf.Tensor`. Must be one of the following types: `bfloat16`, `half`,
+        `float32`, `float64`, `complex64`, `complex128`.
+
+
+    Returns:
+      A `tf.Tensor`. Has the same type as `x`.
+
+    @compatibility(numpy)
+    Equivalent to np.exp
+    @end_compatibility
+
+    """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
     return x.exp()
 
 
 def clip(x: torch.Tensor, min=-np.inf, max=np.inf):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        min ():
+        max ():
+
+    Returns:
+
+    """
     return x.clamp(min, max)
 
 
 def sin(x: torch.Tensor):
-    """
-    Computes the element-wise sine
+    """Computes the element-wise sine
+
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise sine
 
-    Examples
+    Examples:
         >>> sin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 0.8415,  0.4794],
                 [-0.2474, -0.6816]])
@@ -799,14 +1177,14 @@ def sin(x: torch.Tensor):
 
 
 def cos(x: torch.Tensor):
-    """
-    Computes the element-wise cosine
+    """Computes the element-wise cosine
+
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise cosine
 
-    Examples
+    Examples:
         >>> cos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[0.5403, 0.8776],
                 [0.9689, 0.7317]])
@@ -816,15 +1194,14 @@ def cos(x: torch.Tensor):
 
 
 def tan(x: torch.Tensor):
-    """
-    Computes the element-wise tan
+    """Computes the element-wise tan
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise tan
 
-    Examples
+    Examples:
         >>> tan(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 1.5574,  0.5463],
                 [-0.2553, -0.9316]])
@@ -834,15 +1211,14 @@ def tan(x: torch.Tensor):
 
 
 def asin(x: torch.Tensor):
-    """
-    Computes the element-wise arcsin (inverse sine)
+    """Computes the element-wise arcsin (inverse sine)
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise arcsin
 
-    Examples
+    Examples:
         >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 1.5708,  0.5236],
                 [-0.2527, -0.8481]])
@@ -852,15 +1228,14 @@ def asin(x: torch.Tensor):
 
 
 def acos(x: torch.Tensor):
-    """
-    Computes the element-wise arccos (inverse cosine)
+    """Computes the element-wise arccos (inverse cosine)
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise arccos
 
-    Examples
+    Examples:
         >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[0.0000, 1.0472],
                 [1.8235, 2.4189]])
@@ -870,15 +1245,14 @@ def acos(x: torch.Tensor):
 
 
 def atan(x: torch.Tensor):
-    """
-    Computes the element-wise arctan (inverse tan)
+    """Computes the element-wise arctan (inverse tan)
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise arccos
 
-    Examples
+    Examples:
         >>> atan(to_tensor([-1, 0, 1])).cpu()
         tensor([-0.7854,  0.0000,  0.7854])
 
@@ -887,15 +1261,14 @@ def atan(x: torch.Tensor):
 
 
 def sinh(x: torch.Tensor):
-    """
-    Computes the element-wise sinh
+    """Computes the element-wise sinh
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise sinh
 
-    Examples
+    Examples:
         >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 1.1752,  0.5211],
                 [-0.2526, -0.8223]])
@@ -905,15 +1278,14 @@ def sinh(x: torch.Tensor):
 
 
 def cosh(x: torch.Tensor):
-    """
-    Computes the element-wise cosh
+    """Computes the element-wise cosh
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise cosh
 
-    Examples
+    Examples:
         >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[1.5431, 1.1276],
                 [1.0314, 1.2947]])
@@ -923,15 +1295,14 @@ def cosh(x: torch.Tensor):
 
 
 def tanh(x: torch.Tensor):
-    """
-    Computes the element-wise tanh
+    """Computes the element-wise tanh
 
     Args:
-        x (tensor):input tensor
+        x (torch.Tensor): input tensor.
 
     Returns: element-wise tanh
 
-    Examples
+    Examples:
         >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 0.7616,  0.4621],
                 [-0.2449, -0.6351]])
@@ -1038,6 +1409,16 @@ def element_divide(left, right):
 
 
 def element_cosine_distance(v1, v2, axis=-1):
+    """
+
+    Args:
+        v1 ():
+        v2 ():
+        axis ():
+
+    Returns:
+
+    """
     reduce_dim = -1
     cos = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
             (v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt() * (v2 * v2).sum(dim=reduce_dim,
@@ -1071,11 +1452,10 @@ def where(flag, value_if_true, value_if_false):
 ###########################
 
 def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
-    """
-    Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
+    """Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
-        x (torch.Tensor):input tensor
+        x (torch.Tensor): input tensor.
         axis (int,list):  axis along which the reduction will be performed
         keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
         **kwargs ():
@@ -1083,7 +1463,7 @@ def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     Returns:
 
 
-    Exsample:
+    Examples:
         >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
         >>> print(reduce_mean(data, 0).cpu())
         tensor([[30.,  1.],
@@ -1111,11 +1491,10 @@ def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
 
 
 def reduce_sum(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
-    """
-        Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
+    """Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
 
     Args:
-        x (torch.Tensor):input tensor
+        x (torch.Tensor): input tensor.
         axis (int,list):  axis along which the reduction will be performed
         keepdims (bool): Keep the reduced dimension or not, default True mean keep reduced dimension
         **kwargs ():
@@ -1123,7 +1502,7 @@ def reduce_sum(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     Returns:
         The sum of the input tensor's elements across a specified axis or a list of specified axes.
 
-    Exsample:
+    Examples:
         >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
         >>> print(reduce_sum(data).cpu())
         tensor(219.)
@@ -1166,11 +1545,10 @@ def reduce_max(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     See the numpy docs for `np.amax` and `np.nanmax` behavior.
 
     Args:
-      x: The tensor to reduce. Should have real numeric type.
-      axis: The dimensions to reduce. If `None` (the default), reduces all
-        dimensions. Must be in the range `[-rank(input_tensor),
-        rank(input_tensor))`.
-      keepdims: If true, retains reduced dimensions with length 1.
+        x (torch.Tensor): input tensor.
+        axis: The dimensions to reduce. If `None` (the default), reduces all dimensions. Must be in the range `[-rank(input_tensor),
+        rank(input_tensor)`.
+        keepdims: If true, retains reduced dimensions with length 1.
 
     Returns:
       The reduced tensor.
@@ -1224,7 +1602,7 @@ def reduce_min(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     See the numpy docs for `np.amin` and `np.nanmin` behavior.
 
     Args:
-      x: The tensor to reduce. Should have real numeric type.
+        x (torch.Tensor): input tensor.
       axis: The dimensions to reduce. If `None` (the default), reduces all
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
@@ -1292,7 +1670,7 @@ def reduce_logsumexp(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
 
 
     Args:
-        x (tf.tensor): Input_tensor,the tensor to reduce. Should have numeric type.
+        x (torch.Tensor): input tensor.
         axis (int, list, tuple): The dimensions to reduce. If `None` (the default), reduces all dimensions. Must be
         in the range `[-rank(input_tensor), rank(input_tensor))`.
         keepdims (bool): If true, retains reduced dimensions with length 1.
@@ -1319,7 +1697,7 @@ def reduce_prod(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     tensor with a single element is returned.
 
     Args:
-      x: Input_tensor, the tensor to reduce. Should have numeric type.
+        x (torch.Tensor): input tensor.
       axis: The dimensions to reduce. If `None` (the default), reduces all
         dimensions. Must be in the range `[-rank(input_tensor),
         rank(input_tensor))`.
@@ -1416,6 +1794,13 @@ def min(*args,**kwargs):
 def identity(x):
     """Identity activation Layer
     A placeholder identity operator that is argument-insensitive.
+    
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
     Examples:
         >>> identity(to_tensor([-3.0, -1.0, 0.0, 2.0]))
         tensor([-3.0, -1.0, 0.0, 2.0])
@@ -1433,6 +1818,14 @@ def relu(x):
         f(x) = x if threshold <= x < max_value
         f(x) = negative_slope * (x - threshold) otherwise
       ```
+    
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     """
     return torch.relu(x)
 
@@ -1446,6 +1839,13 @@ def relu6(x):
         f(x) = x if threshold <= x < 6
         f(x) = negative_slope * (x - threshold) otherwise
       ```
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     """
     return F.relu6(x)
 
@@ -1457,6 +1857,13 @@ def leaky_relu(x, slope=0.2):
         f(x) = alpha * x if x < 0
         f(x) = x if x >= 0
         ```
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     """
     return F.leaky_relu(x, negative_slope=slope)
 
@@ -1469,12 +1876,29 @@ def leaky_relu6(x, slope=0.2):
             f(x) = x if  6>=x >= 0
             f(x) = 6 if  x > 6
           ```
+
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     """
     return torch.clamp(F.leaky_relu(x, negative_slope=slope), -6, 6)
 
 
 def smooth_relu(x):
     """smooth_relu activation function
+    
+    
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     """
     return torch.log(1 + torch.exp(x))
 
@@ -1491,8 +1915,12 @@ def p_relu(x, weight):
       where `alpha` is a learned parameters , it's a 1-D array, the length equal 1 or input_filters.
 
     Args:
-        num_parameters:(1 or None)  if None num_parameters will equal to input_filters .
-        init (float): initial value of the parameters
+        x (torch.Tensor): input tensor.
+        weight:(1 or None)  if None num_parameters will equal to input_filters .
+        
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
     """
     return torch.prelu(x, weight=weight)
@@ -1500,6 +1928,14 @@ def p_relu(x, weight):
 
 def sigmoid(x):
     """softmax activation function
+    
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     """
     return torch.sigmoid(x)
 
@@ -1513,6 +1949,13 @@ def swish(x):
         f(x) =  x * sigmoid(x)
 
       ```
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+    
     References:
         Swish: a Self-Gated Activation Function
         https://arxiv.org/abs/1710.05941v1
@@ -1533,12 +1976,12 @@ def hard_sigmoid(x):
 
         f(x) =  relu6(x+3)/6
 
-
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
 
     Examples:
@@ -1560,12 +2003,11 @@ def hard_swish(x):
 
 
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
-
-
+        (torch.Tensor): output tensor and have same shape with x.
+    
     Examples:
         >>> hard_swish(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
@@ -1586,13 +2028,12 @@ def hard_tanh(x):
 
         f(x) =  clip(x, -1, 1)
 
-
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
-
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
     Examples:
         >>> hard_tanh(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
@@ -1624,12 +2065,12 @@ def selu(x):
         Self-Normalizing Neural Networks
         Günter Klambauer, Thomas Unterthiner, Andreas Mayr, Sepp Hochreiter
 
-
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
     Examples:
         >>> selu(to_tensor([[-1, -0.5, 0, 1, 2]]))
@@ -1646,12 +2087,12 @@ def elu(x):
         f(x) =  alpha * (exp(x) - 1.) for x < 0
         f(x) = x for x >= 0
 
-
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
     Examples:
         >>> elu(to_tensor([-3.0, -1.0, 0.0, 2.0]))
@@ -1662,18 +2103,58 @@ def elu(x):
 
 
 def lecun_tanh(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+
+    """
     return 1.7159 * torch.tanh(2 / 3 * x)
 
 
 def soft_sign(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+
+    """
     return x.exp().add(1).log()
 
 
 def soft_plus(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+
+    """
     return F.softplus(x)
 
 
 def logit(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+
+    """
     return (x / (1 - x)).log()
 
 
@@ -1685,10 +2166,11 @@ def log_log(x):
         f(x) =  1 - exp(-exp(x))
 
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
     Examples:
         >>> loglog(to_tensor([-3.0, -1.0, 0.0, 2.0]))
@@ -1709,10 +2191,11 @@ def mish(x):
     """mish activation function
 
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
 
     Examples:
@@ -1733,13 +2216,12 @@ def hard_mish(x):
 
         f(x) =  x * hard_tanh(softplus(x))
 
-
-
     Args:
-        x (tensor): input tensor
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        (tensor) transformed tensor with the same shape as input tensor.
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
 
     Examples:
@@ -1769,11 +2251,11 @@ def softmax(x, axis=1):
     softmax will be applied to all axes.
 
     Args:
-        x: input tensor
-        axis (int) : axis along which the softmax operation will be performed
-
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        :output tensor
+        (torch.Tensor): output tensor and have same shape with x.
+    
 
     Examples:
     >>> softmax(to_tensor([[1, 1, 2, 3]]))
@@ -1799,12 +2281,13 @@ def log_softmax(x, axis=1):
     (the implementation uses an equivalent formula for numerical stability).
     It is also possible to use `x - reduce_log_sum_exp(x, axis)` instead of log_softmax:
     this can be faster (one reduce pass instead of two), but can behave slightly differently numerically.
-    Args:
-        x: a tensor
-        axis (int): axis along which the logsoftmax operation will be performed (the default is the last axis)
 
+    Args:
+        x (torch.Tensor): input tensor.
+    
     Returns:
-        :output tensor
+        (torch.Tensor): output tensor and have same shape with x.
+    
     """
     return x - reduce_logsumexp(x)
 
@@ -1818,7 +2301,12 @@ def gelu(x):
         where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
 
         ```
-
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
     References:
         Gaussian Error Linear Units (GELUs)
         https://arxiv.org/abs/1606.08415
@@ -1832,6 +2320,16 @@ def gelu(x):
 
 
 def gpt_gelu(x):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+
+    """
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
 
@@ -1840,6 +2338,17 @@ def gpt_gelu(x):
 ###########################
 
 def moments(x: torch.Tensor, axis, keepdims=True):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        axis (int) :
+    
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+    
+
+    """
     _axes = list(axis)
     norm_mean = reduce_mean(x, axis=_axes, keepdims=keepdims).detach()
     norm_variance = reduce_mean(square(x - norm_mean), axis=_axes, keepdims=keepdims)
@@ -1847,6 +2356,17 @@ def moments(x: torch.Tensor, axis, keepdims=True):
 
 
 def l2_normalize(x: torch.Tensor, eps=epsilon()):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+        (torch.Tensor): output tensor and have same shape with x.
+
+
+
+    """
     return x / (x.norm() + eps)
 
 
@@ -1854,6 +2374,15 @@ def l2_normalize(x: torch.Tensor, eps=epsilon()):
 ## tensor shape operation
 ###########################
 def reshape(x, shape=None) -> torch.Tensor:
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        shape ():
+
+    Returns:
+
+    """
     if shape is None:
         return x
     elif isinstance(shape, list):
@@ -1866,19 +2395,55 @@ def reshape(x, shape=None) -> torch.Tensor:
 
 
 def transpose(x, pattern=None) -> torch.Tensor:
-    return x.transpose(pattern) if x.is_contiguous() else x.transpose(pattern).contiguous()
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        pattern ():
+
+    Returns:
+
+    """
+    return x.transpose(*pattern) if x.is_contiguous() else x.transpose(*pattern).contiguous()
 
 
 def permute(x, pattern=None) -> torch.Tensor:
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        pattern ():
+
+    Returns:
+
+    """
     return x.permute(pattern) if x.is_contiguous() else x.permute(pattern).contiguous()
 
 
-def squeeze(t: torch.Tensor, axis=0):
-    return t.squeeze(axis)
+def squeeze(x: torch.Tensor, axis=0):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        axis ():
+
+    Returns:
+
+    """
+    return x.squeeze(axis)
 
 
-def expand_dims(t: torch.Tensor, axis=0):
-    return t.unsqueeze(axis)
+def expand_dims(x: torch.Tensor, axis=0):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+        axis ():
+
+    Returns:
+
+    """
+    return x.unsqueeze(axis)
 
 
 def depth_to_space(x: torch.Tensor, block_size=2):
@@ -1887,12 +2452,12 @@ def depth_to_space(x: torch.Tensor, block_size=2):
     The equivalent to Pixel-Shuffle
 
     Args:
-        x (tensor): Input tensor, with dimensions CHW or NCHW
+        x (torch.Tensor): input tensor.
         block_size (int):
 
     Returns: resized tensor
 
-    Examples
+    Examples:
     >>> x = to_tensor(np.tile(np.array(np.reshape(range(8), (8, 1, 1)), dtype=np.float32), (1, 2, 3)))
     >>> x
     tensor([[[0., 0., 0.],
@@ -1959,11 +2524,11 @@ def space_to_depth(x: torch.Tensor, block_size=2):
     each location.
 
     Args:
-        x (tensor): Input tensor, with dimensions CHW or NCHW
+        x (torch.Tensor): input tensor.
         block_size (int):
 
     Returns: resized tensor
-    Examples
+    Examples:
     >>> arr=space_to_depth(to_tensor([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],
     [2., 3., 2., 3., 2., 3.]],[[4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.], [4., 5., 4., 5., 4., 5.],[6., 7.,
     6., 7., 6., 7.]]]),block_size=2)
@@ -2023,7 +2588,7 @@ def ones(shape, dtype=torch.float32, requires_grad=False):
     Args
         shape (Tuple of integers):  the  output shape
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `1.0`.
@@ -2045,7 +2610,7 @@ def ones_like(a, dtype=torch.float32, requires_grad=False):
     Args
         a (torch.Tensor):  another tensor
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `1.0` and shape is the same as another tensor.
@@ -2067,7 +2632,7 @@ def zeros(shape, dtype=torch.float32, requires_grad=False):
     Args
         shape (Tuple of integers):  the  output shape
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `0.0`.
@@ -2089,7 +2654,7 @@ def zeros_like(a, dtype=torch.float32, requires_grad=False):
     Args
         a (torch.Tensor):  another tensor
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `0.0` and shape is the same as another tensor.
@@ -2111,7 +2676,7 @@ def eye(shape, dtype=torch.float32, requires_grad=None):
     Args
         shape (Tuple of integers):  the  output shape
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         an identity matrix.
@@ -2138,7 +2703,7 @@ def eye_like(a, dtype=torch.float32, requires_grad=False):
     Args:
         a (torch.Tensor):  another tensor of rank 2
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         an identity matrix.
@@ -2156,17 +2721,17 @@ def eye_like(a, dtype=torch.float32, requires_grad=False):
         raise ValueError('input tensor must have exactly two axe.')
 
 
-def one_hot(a, num_classes, axis=-1):
+def make_onehot(label, num_classes, axis=-1):
     """
     Create one hot tensor based on the input tensor
     Args:
-        a: input tensor, the value must be positive integer and less than num_class
+        label: input tensor, the value must be positive integer and less than num_class
         num_classes: the number of class in one hot tensor
         axis: The axis to fill (default: -1, a new inner-most axis).
     Returns:
         :onehot tensor
     Examples:
-    >>> one_hot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
+    >>> make_onehot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
     tensor([[[0., 1., 1., 0.],
              [0., 1., 0., 1.]],
     <BLANKLINE>
@@ -2175,12 +2740,10 @@ def one_hot(a, num_classes, axis=-1):
 
     """
 
-    one_hot_shape = list(a.size())
-    flattend_a = a.view(-1)
-    one_hot_result = zeros((len(flattend_a), num_classes)).float()
-    target = one_hot_result.scatter_(1, a, 1)
-    target = target.view(*one_hot_shape, num_classes).contiguous()
-    return target
+    onehot= torch.nn.functional.one_hot(label,num_classes)
+    if axis is not None and  axis!=-1:
+        onehot=transpose(onehot,(-1,axis)).float()
+    return onehot
 
 
 def arange( *args,dtype=torch.int32, requires_grad=False):
@@ -2189,7 +2752,7 @@ def arange( *args,dtype=torch.int32, requires_grad=False):
     Args:
         *args (int): the start, end, step
         dtype (dtype): dtype of the tensor
-        requires_grad (bool): wheather need require gradient.
+        requires_grad (bool): whether need require gradient.
 
     Returns:
 
@@ -2264,14 +2827,40 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
 ###########################
 
 def concate(x: List[torch.Tensor], axis=1):
+    """
+
+    Args:
+        x ():
+        axis ():
+
+    Returns:
+
+    """
     return torch.cat(x, dim=axis)
 
 
 def stack(x: List[torch.Tensor], axis=1):
+    """
+
+    Args:
+        x ():
+        axis ():
+
+    Returns:
+
+    """
     return torch.stack(x, dim=axis)
 
 
 def gram_matrix(x: torch.Tensor):
+    """
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+
+    """
     a, b, c, d = x.size()  # a=batch size(=1)
     # b=number of feature maps
     # (c,d)=dimensions of a f. map (N=c*d)
@@ -2307,7 +2896,7 @@ def shuffle(t: torch.Tensor):
     """
 
     Args:
-        t ():
+        t (torch.Tensor): input tensor.
 
     Returns:
 
@@ -2318,7 +2907,18 @@ def shuffle(t: torch.Tensor):
 
 
 def random_choice(t: torch.Tensor):
-    idx = np.random.choice(np.array(range(t.size(0))))
+    """Generates a random sample from a given 1-D array
+
+    Args:
+        t (torch.Tensor): input tensor (1-D  tensor).
+
+    Returns:
+        (torch.Tensor) : single item ,the generated random samples
+
+    """
+
+
+    idx=np.random.choice(np.array(range(t.size(0))))
     return t[idx]
 
 
@@ -2924,3 +3524,127 @@ def shear(tensor: torch.Tensor, shear: torch.Tensor) -> torch.Tensor:
 
     # warp using the affine transform
     return affine(tensor, shear_matrix[..., :2, :3])
+
+
+
+
+
+
+
+
+
+_FUN_NAMES = [
+    # source_fun, target_fun
+    ('to_numpy', to_numpy),
+    ('ndim', ndim),
+    ('int_shape', int_shape),
+    ('cast', cast),
+    ('is_sparse', is_sparse),
+    ('is_nan', is_nan),
+    ('is_inf', is_inf),
+    ('is_abnormal_number', is_abnormal_number),
+    ('any_nan', any_nan),
+    ('any_inf', any_inf),
+    ('any_abnormal_number', any_abnormal_number),
+    ('less', less),
+    ('equal', equal),
+    ('greater', greater),
+    ('greater_equal', greater_equal),
+    ('not_equal', not_equal),
+    ('less_equal', less_equal),
+    ('argmax', argmax),
+    ('argmin', argmin),
+    ('argsort', argsort),
+    ('maximum', maximum),
+    ('minimum', minimum),
+    ('floor', floor),
+    ('ceil', ceil),
+    ('round', round),
+    ('dot', dot),
+    ('sqrt', sqrt),
+    ('rsqrt', rsqrt),
+    ('square', square),
+    ('abs', abs),
+    ('pow', pow),
+    ('log', log),
+    ('exp', exp),
+    ('clip', clip),
+    ('add', add),
+    ('subtract', subtract),
+    ('true_divide', true_divide),
+    ('matmul', matmul),
+    ('sin', sin),
+    ('cos', cos),
+    ('tan', tan),
+    ('asin', asin),
+    ('acos', acos),
+    ('atan', atan),
+    ('sinh', sinh),
+    ('cosh', cosh),
+    ('tanh', tanh),
+    ('element_times', element_times),
+    ('element_max', element_max),
+    ('element_min', element_min),
+    ('element_divide', element_divide),
+    ('element_cosine_distance', element_cosine_distance),
+    ('where', where),
+    ('reduce_mean', reduce_mean),
+    ('reduce_sum', reduce_sum),
+    ('reduce_max', reduce_max),
+    ('reduce_min', reduce_min),
+    ('mean', mean),
+    ('sum', sum),
+    ('max', max),
+    ('min', min),
+    ('reduce_logsumexp', reduce_logsumexp),
+    ('reduce_prod', reduce_prod),
+    ('depth_to_space', depth_to_space),
+    ('space_to_depth', space_to_depth),
+    ('identity', identity),
+    ('sigmoid', sigmoid),
+    ('relu', relu),
+    ('relu6', relu6),
+    ('leaky_relu', leaky_relu),
+    ('leaky_relu6', leaky_relu6),
+    ('smooth_relu', smooth_relu),
+    ('p_relu', p_relu),
+    ('swish', swish),
+    ('elu', elu),
+    ('hard_sigmoid', hard_sigmoid),
+    ('hard_swish', hard_swish),
+    ('selu', selu),
+    ('lecun_tanh', lecun_tanh),
+    ('soft_sign', soft_sign),
+    ('soft_plus', soft_plus),
+    ('hard_tanh', hard_tanh),
+    ('logit', logit),
+    ('log_log', log_log),
+    ('mish', mish),
+    ('hard_mish', hard_mish),
+    ('softmax', softmax),
+    ('log_softmax', log_softmax),
+    ('gelu', gelu),
+    ('gpt_gelu', gpt_gelu),
+    ('l2_normalize', l2_normalize),
+    ('ones_like', ones_like),
+    ('zeros_like', zeros_like),
+    ('eye_like', eye_like),
+    ('arange', arange),
+    ('make_onehot', make_onehot),
+    ('meshgrid', meshgrid),
+    ('reshape', reshape),
+    ('permute', permute),
+    ('transpose', transpose),
+    ('squeeze', squeeze),
+    ('expand_dims', expand_dims),
+    ('concate', concate),
+    ('stack', stack),
+    ('gram_matrix', gram_matrix),
+    ('shuffle', shuffle),
+    ('random_choice', random_choice),
+    ('random_normal_like', random_normal_like)
+    ]
+for target_fun_name,source_fun in _FUN_NAMES:
+    if not hasattr(torch.Tensor,target_fun_name):
+        setattr(torch.Tensor, target_fun_name, source_fun)
+del _FUN_NAMES

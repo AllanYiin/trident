@@ -6,22 +6,24 @@ from typing import List
 import random
 import numpy as np
 import tensorflow as tf
+from types import MethodType
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
-
+from tensorflow.python.framework.ops import EagerTensor
 from trident.backend.common import to_list, unpack_singleton, epsilon
+
 
 __all__ = ['is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim', 'int_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
-           'ceil', 'round', 'dot', 'sqrt', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
+           'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu',
-           'gpt_gelu','moments','l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange', 'meshgrid', 'reshape', 'permute', 'transpose',
+           'gpt_gelu','moments','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix','set_seed', 'shuffle', 'random_choice','random_normal','random_normal_like','binary_crossentropy']
 
 
@@ -29,13 +31,13 @@ __all__ = ['is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim', 'int_s
 def is_tensor(x):
     """Checks whether `x` is exactly a tensor
 
-    If `is_tensor(x)` returns `True`, it is safe to assume that `x` is a tensor or can be converted to a tensor using `ops.convert_to_tensor(x)`.
+    If `is_tensor(x)` returns `True`, that `x` is a EagerTensor .
 
     Args:
         x: A python object to check.
 
     Returns:
-        `True` if `x` is a tensor or "tensor-like", `False` if not.
+        `True` if `x` is exactly a tensor, `False` if not.
 
     Examples:
         >>> is_tensor(tf.constant([[1,2,3],[4,5,6],[7,8,9]]))
@@ -49,6 +51,8 @@ def is_tensor(x):
     if hasattr(x, 'numpy'):
         with context.eager_mode():
             return True
+    elif isinstance(x,EagerTensor):
+        return True
     elif x.__class__.__name__ == 'EagerTensor':
         return True
     elif isinstance(x, tf.Tensor):
@@ -108,7 +112,7 @@ def to_numpy(x) -> np.ndarray:
     #     return x.numpy()
     elif hasattr(x, 'numpy'):
         with context.eager_mode():
-            return x.__copy__().numpy()
+            return copy.deepcopy(x).numpy()
     elif isinstance(x, tf.TensorShape):
         return np.array(copy.deepcopy(x.as_list()))
     elif isinstance(x, (tf.Tensor, tf.Variable)):
@@ -139,9 +143,9 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
 
     Args:
 
-        x: An object to be converted (numpy array, list, tensors).
-        dtype: The destination type or type string.
-        requires_grad ():
+        x: An object to be converted (ex.numpy array, list, tensors).
+        dtype (str or tf.Dtype): The destination type or type string.
+        requires_grad (None or bool): whether need grade
 
     Returns:
         A tensor.
@@ -175,7 +179,7 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
         try:
 
             if requires_grad == False:
-                x = tf.constant(ops.convert_to_tensor_v2(x, dtype=dtype))
+                x = tf.no_gradient(ops.convert_to_tensor_v2(x, dtype=dtype))
             else:
                 x = ops.convert_to_tensor_v2(x, dtype=dtype)
         except:
@@ -196,7 +200,8 @@ def ndim(x):
     Args:
         x (tf.Tensor): input tensor
 
-    Returns: The number of dimensions
+    Returns:
+        (int) The number of dimensions
 
     """
     return x.shape.rank
@@ -537,77 +542,6 @@ def minimum(x: tf.Tensor, other: (tf.Tensor, int, float)) -> tf.Tensor:
 ## basic math operation
 ###########################
 
-def floor(x: tf.Tensor):
-    """Returns element-wise largest integer not greater than x.
-
-    Args:
-      x: A `Tensor`.
-
-    Returns:
-      A `Tensor`. Has the same type as `x`.
-
-    """
-    return tf.math.floor(x)
-
-
-def ceil(x: tf.Tensor):
-    """Return the ceiling of the input, element-wise.
-
-    For example:
-
-    >>> tf.math.ceil([-1.7, -1.5, -0.2, 0.2, 1.5, 1.7, 2.0])
-    <tf.Tensor: shape=(7,), dtype=float32,
-    numpy=array([-1., -1., -0.,  1.,  2.,  2.,  2.], dtype=float32)>
-
-    Args:
-      x: A `tf.Tensor`. Must be one of the following types: `bfloat16`, `half`,
-        `float32`, `float64`. `int32`
-      name: A name for the operation (optional).
-
-    Returns:
-      A `tf.Tensor`. Has the same type as `x`.
-
-    @compatibility(numpy)
-    Equivalent to np.ceil
-    @end_compatibility
-    """
-    return tf.math.ceil(x)
-
-
-def round(x: tf.Tensor, digit: int = 0):
-    """Rounds the values of a tensor to the nearest integer, element-wise.
-
-    Rounds half to even.  Also known as bankers rounding. If you want to round
-    according to the current system rounding mode use tf::cint.
-
-    Args:
-        x: A `Tensor`
-        digit: number of digit
-
-    Returns:
-        A `Tensor` of same shape and type as `x`.
-
-    Examples;
-        >>> round(to_tensor([[1,2,3,4,5]])/3,0)
-        <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
-        array([[0.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00, 2.0000e+00]],
-              dtype=float32)>
-        >>> round(to_tensor([[1,2,3,4,5]])/3,2)
-        <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
-        array([[3.3000e-01, 6.7000e-01, 1.0000e+00, 1.3300e+00, 1.6700e+00]],
-              dtype=float32)>
-        >>> round(to_tensor([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
-        <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
-        array([[0.0000e+00, 1.0000e+01, 1.0000e+01, 0.0000e+00, 1.0000e+01]],
-              dtype=float32)>
-
-    """
-    if digit != 0:
-        factor = float(math.pow(10, -1 * digit))
-        return tf.math.round(x / factor) * factor
-    else:
-        return tf.math.round(x)
-
 
 def add(x, y):
     """Returns x + y element-wise.
@@ -810,16 +744,14 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
      >>> d = matmul(tf.matmul(a, b), [[10], [11]])
 
      Args:
-       a: `Tensor` and rank > 1.
-       b: `Tensor` with same type and rank as `a`.
-       transpose_a: If `True`, `a` is transposed before multiplication.
-       transpose_b: If `True`, `b` is transposed before multiplication.
+        a: `Tensor` and rank > 1.
+        b: `Tensor` with same type and rank as `a`.
+        transpose_a: If `True`, `a` is transposed before multiplication.
+        transpose_b: If `True`, `b` is transposed before multiplication.
 
 
      Returns:
-       A `Tensor` of the same type as `a` and `b` where each inner-most matrix
-       is the product of the corresponding matrices in `a` and `b`, e.g. if all
-       transpose or adjoint attributes are `False`:
+         A `Tensor` of the same type as `a` and `b` where each inner-most matrix is the product of the corresponding matrices in `a` and `b`, e.g. if all transpose or adjoint attributes are `False`:
 
        `output[..., i, j] = sum_k (a[..., i, k] * b[..., k, j])`,
        for all indices `i`, `j`.
@@ -828,7 +760,7 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
 
 
      Raises:
-       ValueError: If `transpose_a` and `adjoint_a`, or `transpose_b` and
+         ValueError: If `transpose_a` and `adjoint_a`, or `transpose_b` and
          `adjoint_b` are both set to `True`.
 
      """
@@ -882,7 +814,87 @@ def true_divide(x, y):
     return tf.truediv(x, y)
 
 
+def floor(x: tf.Tensor):
+    """Returns element-wise largest integer not greater than x.
+
+    Args:
+      x: A `Tensor`.
+
+    Returns:
+      A `Tensor`. Has the same type as `x`.
+
+    """
+    return tf.math.floor(x)
+
+
+def ceil(x: tf.Tensor):
+    """Return the ceiling of the input, element-wise.
+
+    For example:
+
+    >>> tf.math.ceil([-1.7, -1.5, -0.2, 0.2, 1.5, 1.7, 2.0])
+    <tf.Tensor: shape=(7,), dtype=float32,
+    numpy=array([-1., -1., -0.,  1.,  2.,  2.,  2.], dtype=float32)>
+
+    Args:
+      x: A `tf.Tensor`. Must be one of the following types: `bfloat16`, `half`,
+        `float32`, `float64`. `int32`
+      name: A name for the operation (optional).
+
+    Returns:
+      A `tf.Tensor`. Has the same type as `x`.
+
+    @compatibility(numpy)
+    Equivalent to np.ceil
+    @end_compatibility
+    """
+    return tf.math.ceil(x)
+
+
+def round(x: tf.Tensor, digit: int = 0):
+    """Rounds the values of a tensor to the nearest integer, element-wise.
+
+    Rounds half to even.  Also known as bankers rounding. If you want to round
+    according to the current system rounding mode use tf::cint.
+
+    Args:
+        x: A `Tensor`
+        digit: number of digit
+
+    Returns:
+        A `Tensor` of same shape and type as `x`.
+
+    Examples;
+        >>> round(to_tensor([[1,2,3,4,5]])/3,0)
+        <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
+        array([[0.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00, 2.0000e+00]],
+              dtype=float32)>
+        >>> round(to_tensor([[1,2,3,4,5]])/3,2)
+        <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
+        array([[3.3000e-01, 6.7000e-01, 1.0000e+00, 1.3300e+00, 1.6700e+00]],
+              dtype=float32)>
+        >>> round(to_tensor([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
+        <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
+        array([[0.0000e+00, 1.0000e+01, 1.0000e+01, 0.0000e+00, 1.0000e+01]],
+              dtype=float32)>
+
+    """
+    if digit != 0:
+        factor = float(math.pow(10, -1 * digit))
+        return tf.math.round(x / factor) * factor
+    else:
+        return tf.math.round(x)
+
+
+
 def pi():
+    """ The number π (/paɪ/)
+    The number π (/paɪ/) is a mathematical constant. It is defined as the ratio of a circle's circumference to its diameter
+
+    Returns:
+        The number π (/paɪ/)
+
+    """
     return to_tensor(np.pi)
 
 
@@ -930,6 +942,34 @@ def sqrt(x: tf.Tensor):
             x = cast(x, 'float32')
     return tf.math.sqrt(x)
 
+def rsqrt(x: tf.Tensor):
+    """Computes reciprocal of square root of x element-wise.
+
+    Args:
+      x: input tensor
+
+    Returns:
+      output tensor
+
+
+    Examples:
+        >>> x = tf.constant([2., 0., -2.])
+        >>> rsqrt(x)
+        <tf.Tensor: shape=(3,), dtype=float32,
+        numpy=array([0.707, inf, nan], dtype=float32)>
+
+    """
+    if isinstance(x,(float,int)) :
+        return 1/math.sqrt(x)
+    elif isinstance(x,(np.ndarray)) :
+        return 1/np.sqrt(x).astype(np.float32)
+
+    else:
+        if not is_tensor(x):
+            x=cast(to_tensor(x),'float32')
+        else:
+            x = cast(x, 'float32')
+    return tf.math.rsqrt(x)
 
 def square(x: tf.Tensor):
     r"""Computes square of x element-wise.
@@ -942,10 +982,12 @@ def square(x: tf.Tensor):
     Args:
       x: A `Tensor`. Must be one of the following types: `bfloat16`, `half`, `float32`, `float64`, `int32`, `int64`,
       `complex64`, `complex128`.
-      name: A name for the operation (optional).
+
 
     Returns:
       A `Tensor`. Has the same type as `x`.
+
+
     """
     if isinstance(x, (float, int)):
         return math.pow(x,2)
@@ -1039,15 +1081,6 @@ def log(x: tf.Tensor):
 
     I.e., \\(y = \log_e x\\).
 
-    Examples:
-
-    ```python
-    >>> x = tf.constant([0, 0.5, 1, 5])
-    >>> tf.math.log(x)
-    <tf.Tensor: shape=(4,), dtype=float32, numpy=array([      -inf, -0.6931472,  0.       ,  1.609438 ], dtype=float32)>
-
-    ```
-
     See: https://en.wikipedia.org/wiki/Logarithm
 
     Args:
@@ -1057,6 +1090,13 @@ def log(x: tf.Tensor):
 
     Returns:
       A `Tensor`. Has the same type as `x`.
+
+    Examples:
+        >>> x = to_tensor([0, 0.5, 1, 5])
+        >>> log(x)
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([      -inf, -0.6931472,  0.       ,  1.609438 ], dtype=float32)>
+
+
     """
     if isinstance(x,(float,int)) :
         return math.log(x)
@@ -1125,7 +1165,7 @@ def exp(x: tf.Tensor):
     return tf.math.exp(x)
 
 
-def prod(x,axis=None):
+def prod(x: tf.Tensor):
     """Computes the product of elements across dimensions of a tensor.
 
     Reduces `input_tensor` along the dimensions given in `axis`.
@@ -1138,9 +1178,7 @@ def prod(x,axis=None):
 
     Args:
       x: The tensor to reduce. Should have numeric type.
-      axis: The dimensions to reduce. If `None` (the default), reduces all
-        dimensions. Must be in the range `[-rank(input_tensor),
-        rank(input_tensor))`.
+
 
 
     Returns:
@@ -1155,17 +1193,86 @@ def prod(x,axis=None):
         return math.prod(x)
     elif isinstance(x,(np.ndarray)) :
         return np.prod(x).astype(np.float32)
-
     else:
         if not is_tensor(x):
             x=cast(to_tensor(x),'float32')
         else:
             x = cast(x, 'float32')
-    return tf.math.reduce_prod(x,axis=axis,keepdims=False)
+    return tf.math.reduce_prod(x,axis=None,keepdims=False)
 
 
 def clip(x: tf.Tensor, min=-np.inf, max=np.inf):
+    """Clips tensor values to a specified min and max.
+
+    Given a tensor `t`, this operation returns a tensor of the same type and
+    shape as `t` with its values clipped to `clip_value_min` and `clip_value_max`.
+    Any values less than `clip_value_min` are set to `clip_value_min`. Any values
+    greater than `clip_value_max` are set to `clip_value_max`.
+
+    Note: `clip_value_min` needs to be smaller or equal to `clip_value_max` for
+    correct results.
+
+    For example:
+
+    Basic usage passes a scalar as the min and max value.
+
+    >>> t = tf.constant([[-10., -1., 0.], [0., 2., 10.]])
+    >>> t2 = tf.clip_by_value(t, clip_value_min=-1, clip_value_max=1)
+    >>> t2.numpy()
+    array([[-1., -1.,  0.],
+           [ 0.,  1.,  1.]], dtype=float32)
+
+    The min and max can be the same size as `t`, or broadcastable to that size.
+
+    >>> t = tf.constant([[-1, 0., 10.], [-1, 0, 10]])
+    >>> clip_min = [[2],[1]]
+    >>> t3 = tf.clip_by_value(t, clip_value_min=clip_min, clip_value_max=100)
+    >>> t3.numpy()
+    array([[ 2.,  2., 10.],
+           [ 1.,  1., 10.]], dtype=float32)
+
+    Broadcasting fails, intentionally, if you would expand the dimensions of `t`
+
+    >>> t = tf.constant([[-1, 0., 10.], [-1, 0, 10]])
+    >>> clip_min = [[[2, 1]]] # Has a third axis
+    >>> t4 = tf.clip_by_value(t, clip_value_min=clip_min, clip_value_max=100)
+    Traceback (most recent call last):
+    ...
+    InvalidArgumentError: Incompatible shapes: [2,3] vs. [1,1,2]
+
+    It throws a `TypeError` if you try to clip an `int` to a `float` value
+    (`tf.cast` the input to `float` first).
+
+    >>> t = tf.constant([[1, 2], [3, 4]], dtype=tf.int32)
+    >>> t5 = tf.clip_by_value(t, clip_value_min=-3.1, clip_value_max=3.1)
+    Traceback (most recent call last):
+    ...
+    TypeError: Cannot convert ...
+
+
+    Args:
+      x: A `Tensor` or `IndexedSlices`.
+      min: The minimum value to clip to. A scalar `Tensor` or one that
+        is broadcastable to the shape of `t`.
+      max: The minimum value to clip to. A scalar `Tensor` or one that
+        is broadcastable to the shape of `t`.
+
+
+    Returns:
+      A clipped `Tensor` or `IndexedSlices`.
+
+    Raises:
+      `tf.errors.InvalidArgumentError`: If the clip tensors would trigger array
+        broadcasting that would make the returned tensor larger than the input.
+      TypeError: If dtype of the input is `int32` and dtype of
+        the `clip_value_min` or `clip_value_max` is `float32`
+    """
     return tf.clip_by_value(x, float(min), float(max))
+
+
+
+
+
 
 
 def sin(x: tf.Tensor):
@@ -1200,7 +1307,7 @@ def sinh(x: tf.Tensor):
 
     Returns: element-wise sinh
 
-    Examples
+    Examples:
         >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
         array([[1.1752e+00, 5.2110e-01],
@@ -1218,7 +1325,7 @@ def cosh(x: tf.Tensor):
 
     Returns: element-wise cosh
 
-    Examples
+    Examples:
         >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         <tf.Tensor: shape=(2, 2), dtype=float32, numpy=
         array([[1.5431e+00, 1.1276e+00],
@@ -1236,7 +1343,7 @@ def tanh(x: tf.Tensor):
 
     Returns: element-wise tanh
 
-    Examples
+    Examples:
         >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 0.     ,  1.0472 ],
            [ 1.82348,  2.41886]])
@@ -1578,13 +1685,14 @@ def tanh(x):
 
 def relu(x, upper_limit=None):
     """Rectified Linear Unit activation function.
-      With default values, it returns element-wise `max(x, 0)`.
-      Otherwise, it follows:
-      ```
+
+    With default values, it returns element-wise `max(x, 0)`.
+    Otherwise, it follows:
+
         f(x) = max_value if x >= max_value
         f(x) = x if threshold <= x < max_value
         f(x) = negative_slope * (x - threshold) otherwise
-      ```
+
     """
     if upper_limit is not None and upper_limit <= 0:
         raise ValueError('Upper limit should greater than 0!')
@@ -1595,24 +1703,27 @@ def relu(x, upper_limit=None):
 
 def relu6(x):
     """Rectified Linear Unit  6 activation function.
-      With default values, it returns element-wise `min(max(x, 0)`,6).
-      Otherwise, it follows:
-      ```
+
+    With default values, it returns element-wise `min(max(x, 0)`,6).
+    Otherwise, it follows:
+
         f(x) = 6 if x >= 6
         f(x) = x if threshold <= x < 6
         f(x) = negative_slope * (x - threshold) otherwise
-      ```
+
+
     """
     return relu(x,6)
 
 
 def leaky_relu(x, alpha=0.02, upper_limit=None):
     """Leaky version of a Rectified Linear Unit.
-        It allows a small gradient when the unit is not active:
-        ```
+
+    It allows a small gradient when the unit is not active:
+
         f(x) = alpha * x if x < 0
         f(x) = x if x >= 0
-        ```
+
     """
     if upper_limit is not None:
         return clip(tf.nn.leaky_relu(x, alpha), -np.inf, upper_limit)
@@ -1621,12 +1732,13 @@ def leaky_relu(x, alpha=0.02, upper_limit=None):
 
 def leaky_relu6(x, alpha=0.01):
     """Leaky version of a Rectified Linear Unit.6
-          It allows a small gradient when the unit is not active:
-          ```
-            f(x) = alpha * x if x < 0
-            f(x) = x if  6>=x >= 0
-            f(x) = 6 if  x > 6
-          ```
+
+    It allows a small gradient when the unit is not active:
+
+        f(x) = alpha * x if x < 0
+        f(x) = x if  6>=x >= 0
+        f(x) = 6 if  x > 6
+
     """
     return clip(tf.nn.leaky_relu(x, alpha), -6, 6)
 
@@ -1967,7 +2079,90 @@ def moments(x:tf.Tensor, axis,  keepdims=True):
 
 
 def l2_normalize(x:tf.Tensor,axis,  keepdims=True, eps=epsilon()):
+    """
+
+    Args:
+        x ():
+        axis ():
+        keepdims ():
+        eps ():
+
+    Returns:
+
+    """
     return x / (tf.norm(x,keepdims=keepdims)+eps)
+
+
+def spectral_norm(module, n_iterations=1,axis=-1):
+    """Applies spectral normalization to a parameter in the given module.
+
+    .. math::
+        \mathbf{W}_{SN} = \dfrac{\mathbf{W}}{\sigma(\mathbf{W})},
+        \sigma(\mathbf{W}) = \max_{\mathbf{h}: \mathbf{h} \ne 0} \dfrac{\|\mathbf{W} \mathbf{h}\|_2}{\|\mathbf{h}\|_2}
+
+    Spectral normalization stabilizes the training of discriminators (critics)
+    in Generative Adversarial Networks (GANs) by rescaling the weight tensor
+    with spectral norm :math:`\sigma` of the weight matrix calculated using
+    power iteration method. If the dimension of the weight tensor is greater
+    than 2, it is reshaped to 2D in power iteration method to get spectral
+    norm. This is implemented via a hook that calculates spectral norm and
+    rescales weight before every :meth:`~Module.forward` call.
+
+    See `Spectral Normalization for Generative Adversarial Networks`_ .
+
+    .. _`Spectral Normalization for Generative Adversarial Networks`: https://arxiv.org/abs/1802.05957
+
+    Args:
+        module (nn.Module): containing module
+
+        n_iterations (int, optional): number of power iterations to
+            calculate spectral norm
+
+        axis (int, optional): dimension corresponding to number of outputs,
+            the default is ``0``, except for modules that are instances of
+            ConvTranspose{1,2,3}d, when it is ``1``
+
+    Returns:
+        The original module with the spectral norm hook
+
+    Examples::
+
+        >>> m = spectral_norm(Dense(20, 40))
+        >>> m
+        Linear(in_features=20, out_features=40, bias=True)
+        >>> m.weight_u.size()
+        torch.Size([40])
+
+    """
+    w_shape = module.shape.as_list()
+    module = tf.reshape(module, [-1, w_shape[axis]])
+
+    u = tf.get_variable("u", [1, w_shape[axis]], initializer=tf.random_normal_initializer(), trainable=False)
+
+    u_hat = u
+    v_hat = None
+    for i in range(n_iterations):
+        """
+        power iteration
+        Usually iteration = 1 will be enough
+        """
+
+        v_ = tf.matmul(u_hat, tf.transpose(module))
+        v_hat = tf.nn.l2_normalize(v_)
+
+        u_ = tf.matmul(v_hat, module)
+        u_hat = tf.nn.l2_normalize(u_)
+
+    u_hat = tf.stop_gradient(u_hat)
+    v_hat = tf.stop_gradient(v_hat)
+
+    sigma = tf.matmul(tf.matmul(v_hat, module), tf.transpose(u_hat))
+
+    with tf.control_dependencies([u.assign(u_hat)]):
+        w_norm = module / sigma
+        w_norm = tf.reshape(w_norm, w_shape)
+
+    return w_norm
 
 ############################
 ## tensor shape operation
@@ -2055,7 +2250,7 @@ def depth_to_space(x: tf.Tensor, block_size=2):
 
     Returns: resized tensor
 
-    Examples
+    Examples:
         >>> x = to_tensor(np.tile(np.array(np.reshape(range(8), (8,1,1)), dtype=np.float32), (1, 2, 3)).transpose([1,2,0]))
         >>> x
         <tf.Tensor: shape=(2, 3, 8), dtype=float32, numpy=array([[[0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
@@ -2126,7 +2321,7 @@ def space_to_depth(x: tf.Tensor, block_size=2):
 
     Returns: resized tensor
 
-    Examples
+    Examples:
         >>> arr=space_to_depth( to_tensor([[[0.,1. ],[2., 3.],[0.,1. ],[2., 3.],[0.,1. ],[2., 3.]],[[4., 5.],[6.,7.],[4., 5.],[6., 7.],[4., 5.],[6., 7.]],[[0.,1. ],[2., 3.],[0.,1. ],[2., 3.],[0.,1. ],[2., 3.]],[[4., 5.],[6., 7.],[4., 5.],[6., 7.],[4., 5.],[6., 7.]]]),block_size=2)
         >>> arr
         <tf.Tensor: shape=(2, 3, 8), dtype=float32, numpy=array([[[0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00,
@@ -2171,7 +2366,7 @@ def ones(shape, dtype=tf.float32, requires_grad=None):
     Args
         shape (Tuple of integers):  the  output shape
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `1.0`.
@@ -2198,7 +2393,7 @@ def ones_like(a, dtype=tf.float32, requires_grad=None):
     Args
         a (tf.Tensor):  another tensor
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `1.0` and shape is the same as another tensor.
@@ -2224,7 +2419,7 @@ def zeros(shape, dtype=tf.float32, requires_grad=None):
     Args
         shape (Tuple of integers):  the  output shape
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `0.0`.
@@ -2250,7 +2445,7 @@ def zeros_like(a, dtype=tf.float32, requires_grad=None):
     Args
         a (tf.Tensor):  another tensor
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         A tensor, filled with `0.0` and shape is the same as another tensor.
@@ -2275,7 +2470,7 @@ def eye(shape, dtype=tf.float32, requires_grad=None):
     Args
         shape (Tuple of integers):  the  output shape
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns
         an identity matrix.
@@ -2305,7 +2500,7 @@ def eye_like(a, dtype=tf.float32, requires_grad=None):
     Args:
         a (tf.Tensor):  another tensor of rank 2
         dtype (String):  data type
-        requires_grad (bool):  wheather need gradient
+        requires_grad (bool):  whether need gradient
 
     Returns:
         tensor
@@ -2333,7 +2528,7 @@ def arange( *args,dtype=tf.int32, requires_grad=None):
     Args:
         *args (int): the start, end, step
         dtype (dtype): dtype of the tensor
-        requires_grad (bool): wheather need require gradient.
+        requires_grad (bool): whether need require gradient.
 
     Returns:
 
@@ -2350,6 +2545,26 @@ def arange( *args,dtype=tf.int32, requires_grad=None):
     if requires_grad==False:
         return tf.constant(t)
     return t
+
+def make_onehot(label, num_classes, axis=-1):
+    """
+    Create one hot tensor based on the input tensor
+    Args:
+        label: input tensor, the value must be positive integer and less than num_class
+        num_classes: the number of class in one hot tensor
+        axis: The axis to fill (default: -1, a new inner-most axis).
+    Returns:
+        :onehot tensor
+    Examples:
+    >>> make_onehot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
+    tensor([[[0., 1., 1., 0.],
+             [0., 1., 0., 1.]],
+    <BLANKLINE>
+            [[0., 0., 0., 0.],
+             [0., 0., 0., 0.]]])
+
+    """
+    return tf.one_hot(indices=label, depth=num_classes, on_value=1.0, off_value=0.0, axis=axis)
 
 
 def meshgrid(x, y, normalized_coordinates=False, requires_grad=None):
@@ -2457,12 +2672,42 @@ def set_seed(seed: int) -> None:
 
 
 def shuffle(x: tf.Tensor,seed=None):
+    """Randomly shuffles a tensor along its first dimension.
+
+    The tensor is shuffled along dimension 0, such that each `value[j]` is mapped
+    to one and only one `output[i]`. For example, a mapping that might occur for a
+    3x2 tensor is:
+
+    ```python
+    [[1, 2],       [[5, 6],
+     [3, 4],  ==>   [1, 2],
+     [5, 6]]        [3, 4]]
+    ```
+
+    Args:
+        x (torch.Tensor): input tensor (1-D  tensor).
+        seed (None or int): random seed.
+
+    Returns:
+        A tensor of same shape and type as `value`, shuffled along its first dimension.
+
+    """
     if seed is not None:
         return tf.random.shuffle(x,seed)
     return tf.random.shuffle(x)
 
 
 def random_choice(x: tf.Tensor,seed=None):
+    """Generates a random sample from a given 1-D array
+
+    Args:
+        x (torch.Tensor): input tensor (1-D  tensor).
+        seed (None or int): random seed.
+
+    Returns:
+        (torch.Tensor) : single item ,the generated random samples
+
+    """
     t=to_tensor(np.array(range(x.size(0))))
     shuffle(t,seed)
     idx =t[0]
@@ -2562,3 +2807,126 @@ def binary_crossentropy(target, output, from_logits=False):
   bce = target *log(output + epsilon())
   bce += (1 - target) *log(1 - output + epsilon())
   return -bce
+
+
+
+
+
+
+
+
+_FUN_NAMES = [
+    # source_fun, target_fun
+    ('to_numpy', to_numpy),
+    ('ndim', ndim),
+    ('int_shape', int_shape),
+    ('cast', cast),
+    ('is_sparse', is_sparse),
+    ('is_nan', is_nan),
+    ('is_inf', is_inf),
+    ('is_abnormal_number', is_abnormal_number),
+    ('any_nan', any_nan),
+    ('any_inf', any_inf),
+    ('any_abnormal_number', any_abnormal_number),
+    ('less', less),
+    ('equal', equal),
+    ('greater', greater),
+    ('greater_equal', greater_equal),
+    ('not_equal', not_equal),
+    ('less_equal', less_equal),
+    ('argmax', argmax),
+    ('argmin', argmin),
+    ('argsort', argsort),
+    ('maximum', maximum),
+    ('minimum', minimum),
+    ('floor', floor),
+    ('ceil', ceil),
+    ('round', round),
+    ('dot', dot),
+    ('sqrt', sqrt),
+    ('rsqrt', rsqrt),
+    ('square', square),
+    ('abs', abs),
+    ('pow', pow),
+    ('log', log),
+    ('exp', exp),
+    ('clip', clip),
+    ('add', add),
+    ('subtract', subtract),
+    ('true_divide', true_divide),
+    ('matmul', matmul),
+    ('sin', sin),
+    ('cos', cos),
+    ('tan', tan),
+    ('asin', asin),
+    ('acos', acos),
+    ('atan', atan),
+    ('sinh', sinh),
+    ('cosh', cosh),
+    ('tanh', tanh),
+    ('element_times', element_times),
+    ('element_max', element_max),
+    ('element_min', element_min),
+    ('element_divide', element_divide),
+    ('element_cosine_distance', element_cosine_distance),
+    ('where', where),
+    ('reduce_mean', reduce_mean),
+    ('reduce_sum', reduce_sum),
+    ('reduce_max', reduce_max),
+    ('reduce_min', reduce_min),
+    ('mean', mean),
+    ('sum', sum),
+    ('max', max),
+    ('min', min),
+    ('reduce_logsumexp', reduce_logsumexp),
+    ('reduce_prod', reduce_prod),
+    ('depth_to_space', depth_to_space),
+    ('space_to_depth', space_to_depth),
+    ('identity', identity),
+    ('sigmoid', sigmoid),
+    ('relu', relu),
+    ('relu6', relu6),
+    ('leaky_relu', leaky_relu),
+    ('leaky_relu6', leaky_relu6),
+    ('smooth_relu', smooth_relu),
+    ('p_relu', p_relu),
+    ('swish', swish),
+    ('elu', elu),
+    ('hard_sigmoid', hard_sigmoid),
+    ('hard_swish', hard_swish),
+    ('selu', selu),
+    ('lecun_tanh', lecun_tanh),
+    ('soft_sign', soft_sign),
+    ('soft_plus', soft_plus),
+    ('hard_tanh', hard_tanh),
+    ('logit', logit),
+    ('log_log', log_log),
+    ('mish', mish),
+    ('hard_mish', hard_mish),
+    ('softmax', softmax),
+    ('log_softmax', log_softmax),
+    ('gelu', gelu),
+    ('gpt_gelu', gpt_gelu),
+    ('l2_normalize', l2_normalize),
+    ('ones_like', ones_like),
+    ('zeros_like', zeros_like),
+    ('eye_like', eye_like),
+    ('arange', arange),
+    ('make_onehot', make_onehot),
+    ('meshgrid', meshgrid),
+    ('reshape', reshape),
+    ('permute', permute),
+    ('transpose', transpose),
+    ('squeeze', squeeze),
+    ('expand_dims', expand_dims),
+    ('concate', concate),
+    ('stack', stack),
+    ('gram_matrix', gram_matrix),
+    ('shuffle', shuffle),
+    ('random_choice', random_choice),
+    ('random_normal_like', random_normal_like)
+    ]
+for target_fun_name,source_fun in _FUN_NAMES:
+    if not hasattr(tf.Tensor,target_fun_name):
+        setattr(tf.Tensor, target_fun_name, source_fun)
+del _FUN_NAMES
