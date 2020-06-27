@@ -6,14 +6,13 @@ import six
 from trident.backend.common import get_session,set_session,get_plateform, get_trident_dir, epsilon, floatx, camel2snake, \
     snake2camel, addindent, format_time, get_time_suffix, get_function, get_class, get_terminal_size, gcd, \
     get_divisors, isprime, next_prime, prev_prime, nearest_prime,PrintException, if_else
-
+import  trident.backend.numpy_ops
 #from trident.backend.load_backend import get_backend, get_image_backend
 from trident.backend.model import *
 
 
+
 from trident.data import *
-from trident.data.data_loaders import *
-from trident.data.image_common import *
 from trident.misc import *
 
 if get_backend()=='pytorch':

@@ -91,6 +91,7 @@ def image2array(img):
             return None
     arr=None
     if isinstance(img, np.ndarray):
+        arr=img
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:

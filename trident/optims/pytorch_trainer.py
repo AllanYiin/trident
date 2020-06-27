@@ -94,14 +94,18 @@ class Model(ModelBase):
                 raise ValueError('You should assign inputs or input shape')
             else:
                 input_shape = to_list(input_shape)
-                input_name = 'input_{0}'.format(len(self.inputs))
+                input_name = 'input'
                 self.inputs[input_name] = input_shape
         elif isinstance(inputs, (tuple, list)):
-            for m in range(len(inputs)):
-                inp=inputs[m]
-                if is_tensor(inp):
-                    input_name = 'input_{0}'.format(m)
-                    self.inputs[input_name] = list(int_shape(inp))[1:]
+            if len(inputs)==1 and is_tensor(inputs[0]):
+                input_name = 'input'
+                self.inputs[input_name] = int_shape(inputs[0])
+            else:
+                for m in range(len(inputs)):
+                    inp=inputs[m]
+                    if is_tensor(inp):
+                        input_name = 'input_{0}'.format(m)
+                        self.inputs[input_name] = list(int_shape(inp))[1:]
         elif isinstance(inputs, dict):
             for k, v in inputs.items():
                 if is_tensor(v):
@@ -610,14 +614,14 @@ class Model(ModelBase):
             for item in train_data.key_list:
                 if item in input_list:
                     # only model 's input argments
-                    train_data[item] = to_tensor(train_data[item].copy(), requires_grad=True)
+                    train_data[item] = to_tensor(train_data[item].copy(), requires_grad=True)#.cpu()
                 elif item in self.targets.key_list or data_feed:
-                    train_data[item] = to_tensor(train_data[item].copy())
+                    train_data[item] = to_tensor(train_data[item].copy())#.cpu()
                 else:
-                    train_data[item] = to_tensor(train_data[item].copy())
+                    train_data[item] = to_tensor(train_data[item].copy())#.cpu()
 
                 if test_data is not None and  item in test_data:
-                    test_data[item] = to_tensor(test_data[item].copy())
+                    test_data[item] = to_tensor(test_data[item].copy())#.cpu()
 
                     # check target
 
@@ -636,42 +640,48 @@ class Model(ModelBase):
         return self.training_context['current_loss']
 
     def do_gradient_update(self, log_gradients=False):
-        if self.training_context['stop_update'] <1:
-            self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
-            #only check once every epoch start.
-            if self.training_context['current_batch']==0:
-                if isinstance(self._model,nn.Module):
-                    for name,para in self._model.named_parameters():
-                        try:
-                            if para is not None  and para.grad is not None:
-                                grad_norm=para.grad.norm()
-                                if not 0<grad_norm<1e5:
-                                    sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
-                        except:
-                            PrintException()
-                elif isinstance(self._model,torch.Tensor):
-                    grad_norm = self._model.grad.norm()
-                    if not 0 < grad_norm < 1e5:
-                        sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
-                        if any_abnormal_number(grad_norm):
-                            raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
+        try:
+            if self.training_context['stop_update'] <1:
+                self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
+                #only check once every epoch start.
+                if self.training_context['current_batch']==0:
+                    if isinstance(self._model,nn.Module):
+                        for name,para in self._model.named_parameters():
+                            try:
+                                if para is not None  and para.grad is not None:
+                                    grad_norm=para.grad.norm()
+                                    if not 0<grad_norm<1e5:
+                                        sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
+                            except Exception as e:
+                                print(e)
+                                PrintException()
+                    elif isinstance(self._model,torch.Tensor):
+                        grad_norm = self._model.grad.norm()
+                        if not 0 < grad_norm < 1e5:
+                            sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
+                            if any_abnormal_number(grad_norm):
+                                raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
+
+                for callback in self.training_context['callbacks']:
+                    callback.on_optimization_step_start(self.training_context)
+
+                if log_gradients:
+                    self.log_gradient()
+
+            if self.training_context['stop_update'] == 0:
+                self.optimizer.step(self.get_current_loss)
+            elif 0 < self.training_context['stop_update'] < 1:
+                if random.random() <= self.training_context['stop_update']:
+                    self.optimizer.step(self.get_current_loss)
+            else:
+                self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
             for callback in self.training_context['callbacks']:
-                callback.on_optimization_step_start(self.training_context)
+                callback.on_optimization_step_end(self.training_context)
+        except Exception as e:
+            print(e)
+            PrintException()
 
-            if log_gradients:
-                self.log_gradient()
-
-        if self.training_context['stop_update'] == 0:
-            self.optimizer.step(self.get_current_loss)
-        elif 0 < self.training_context['stop_update'] < 1:
-            if random.random() <= self.training_context['stop_update']:
-                self.optimizer.step(self.get_current_loss)
-        else:
-            self.training_context['stop_update'] = self.training_context['stop_update'] - 1
-
-        for callback in self.training_context['callbacks']:
-            callback.on_optimization_step_end(self.training_context)
 
     def do_on_progress_end(self):
         if self.training_context['current_epoch'] > self.warmup:
@@ -720,6 +730,11 @@ class Model(ModelBase):
             self._model.train()
             shutil.copy(save_path, save_path.replace('.pth.tar_','.pth.tar'))
             os.remove(save_path)
+            save_path=save_path.replace('pth.tar','pth')
+            save(self._model,save_path)
+            shutil.copy(save_path, save_path.replace('.pth_', '.pth'))
+            os.remove(save_path)
+
 
         elif isinstance(self._model,torch.Tensor):
             save_path = self.get_save_path(save_path, default_folder='Models',default_file_name='{0}_epoch{1}.npy_'.format(self._model.name, self.training_context[ 'current_epoch']))
@@ -1080,6 +1095,4 @@ class LanguageModel(Model):
 
 
 TrainingItem = Model
-
-
 

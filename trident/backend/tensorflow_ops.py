@@ -10,7 +10,7 @@ from types import MethodType
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
 from tensorflow.python.framework.ops import EagerTensor
-from trident.backend.common import to_list, unpack_singleton, epsilon
+from trident.backend.common import to_list, unpack_singleton, epsilon,OrderedDict,get_function
 
 
 __all__ = ['is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim', 'int_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
@@ -27,6 +27,57 @@ __all__ = ['is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim', 'int_s
            'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix','set_seed', 'shuffle', 'random_choice','random_normal','random_normal_like','binary_crossentropy']
 
 
+def numpy_compatible(func):
+    def wrapper(*args, **kwargs):
+        x =args[0]
+        new_args = []
+        new_kwargs = OrderedDict()
+        if isinstance(x,np.ndarray):
+            numpy_func=get_function(func.__name__,['trident.backend.numpy_ops'])
+            if numpy_func is not None:
+                for arg in args:
+                    if is_tensor(arg):
+                        new_args.append(to_numpy(arg))
+                    else:
+                        new_args.append(arg)
+                for k,v in kwargs.items():
+                    if is_tensor(v):
+                        new_kwargs[k]=to_numpy(v)
+                    else:
+                        new_kwargs[k] = v
+                y=numpy_func(*new_args,**new_kwargs)
+                return y
+            else:
+                for arg in args:
+                    if isinstance(arg,np.ndarray):
+                        new_args.append(to_tensor(arg))
+                    else:
+                        new_args.append(arg)
+                for k,v in kwargs.items():
+                    if isinstance(v,np.ndarray):
+                        new_kwargs[k]=to_tensor(v)
+                    else:
+                        new_kwargs[k] = v
+                y=func(*new_args,**new_kwargs)
+                return y
+        else:
+            for arg in args:
+                if isinstance(arg, np.ndarray):
+                    new_args.append(to_tensor(arg))
+                else:
+                    new_args.append(arg)
+            for k, v in kwargs.items():
+                if isinstance(v, np.ndarray):
+                    new_kwargs[k] = to_tensor(v)
+                else:
+                    new_kwargs[k] = v
+            y = func(*new_args,**new_kwargs)
+            return y
+    return wrapper
+
+
+def detach(self:EagerTensor):
+    return self.x._copy_nograd()
 
 def is_tensor(x):
     """Checks whether `x` is exactly a tensor
@@ -110,13 +161,14 @@ def to_numpy(x) -> np.ndarray:
         return x
     # elif isinstance(x,EagerTensor):
     #     return x.numpy()
-    elif hasattr(x, 'numpy'):
-        with context.eager_mode():
-            return copy.deepcopy(x).numpy()
+    elif isinstance(x, tf.Variable):
+        return x.value()._copy_nograd().numpy()
+    elif isinstance(x,EagerTensor):
+        return x._copy_nograd().numpy()
     elif isinstance(x, tf.TensorShape):
-        return np.array(copy.deepcopy(x.as_list()))
-    elif isinstance(x, (tf.Tensor, tf.Variable)):
-        return copy.deepcopy(x).value()
+        return np.array(copy.deepcopy(x).as_list())
+    elif isinstance(x, tf.Tensor):
+        return  ops.convert_to_tensor_v2(x)._copy_nograd().numpy()
     elif isinstance(x, (list,tuple)):
         return np.asarray(x)
     elif hasattr(x, '__len__') and len(x) > 1 and all( [isinstance(k, (list, tuple, int, float, np.ndarray)) for k in x]):
@@ -138,7 +190,7 @@ def to_numpy(x) -> np.ndarray:
             raise ValueError("Unsupported type")
 
 
-def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
+def to_tensor(x, dtype=None, requires_grad=None) -> tf.Tensor:
     """Convert the input `x` to a tensor of type `dtype`.
 
     Args:
@@ -170,8 +222,18 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
     """
     if isinstance(dtype,str):
         dtype=str2dtype(dtype)
+    elif dtype is None:
+        if is_tensor(x):
+            dtype=x.dtype
+        else:
+            dtype=tf.float32
+
+
     if isinstance(x, int):
         x= tf.constant(value=x, dtype=tf.int32)
+    elif is_tensor(x):
+        if x.dtype!=dtype:
+            x=tf.cast(x,dtype)
 
     elif isinstance(x, float):
         x= tf.constant(value=x, dtype=tf.float32)
@@ -185,7 +247,7 @@ def to_tensor(x, dtype=tf.float32, requires_grad=None) -> tf.Tensor:
         except:
             pass
 
-    if dtype is not None:
+    if dtype is not None :
         x = cast(x, dtype)
     return x
 
@@ -389,7 +451,7 @@ def any_abnormal_number(x):
 ###########################
 
 
-def less(left: tf.Tensor, right: tf.Tensor):
+def less(left: tf.Tensor, right:(tf.Tensor,np.ndarray,float,int)):
     """Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
@@ -410,7 +472,7 @@ def less(left: tf.Tensor, right: tf.Tensor):
     return tf.cast(tf.less(left, right), tf.float32)
 
 
-def equal(left: tf.Tensor, right: tf.Tensor):
+def equal(left: tf.Tensor, right:(tf.Tensor,np.ndarray,float,int)):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
 
@@ -431,7 +493,7 @@ def equal(left: tf.Tensor, right: tf.Tensor):
     return tf.cast(tf.equal(left, right), tf.float32)
 
 
-def greater(left: tf.Tensor, right: tf.Tensor):
+def greater(left: tf.Tensor, right:(tf.Tensor,np.ndarray,float,int)):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
 
@@ -452,7 +514,7 @@ def greater(left: tf.Tensor, right: tf.Tensor):
     return tf.cast(tf.greater(left, right), tf.float32)
 
 
-def greater_equal(left: tf.Tensor, right: tf.Tensor):
+def greater_equal(left: tf.Tensor, right:(tf.Tensor,np.ndarray,float,int)):
     """Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
@@ -472,7 +534,7 @@ def greater_equal(left: tf.Tensor, right: tf.Tensor):
     return tf.cast(tf.greater_equal(left, right), tf.float32)
 
 
-def not_equal(left: tf.Tensor, right: tf.Tensor):
+def not_equal(left: tf.Tensor, right:(tf.Tensor,np.ndarray,float,int)):
     """Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
@@ -492,7 +554,7 @@ def not_equal(left: tf.Tensor, right: tf.Tensor):
     return tf.cast(tf.not_equal(left, right), tf.float32)
 
 
-def less_equal(left: tf.Tensor, right: tf.Tensor):
+def less_equal(left: tf.Tensor, right:(tf.Tensor,np.ndarray,float,int)):
     """Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
@@ -1665,14 +1727,42 @@ min = reduce_min
 
 
 def identity(x):
-    """Identity activation Layer
-    A placeholder identity operator that is argument-insensitive.
-    Examples:
-        >>> identity(to_tensor([-3.0, -1.0, 0.0, 2.0]))
-        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-3.0000e+00, -1.0000e+00, 0.0000e+00, 2.0000e+00], dtype=float32)>
+    r"""Return a Tensor with the same shape and contents as input.
 
-    """
-    return x
+      The return value is not the same Tensor as the original, but contains the same
+      values.  This operation is fast when used on the same device.
+
+    Examples:
+
+      >>> a = tf.constant([0.78])
+      >>> a_identity = tf.identity(a)
+      >>> a.numpy()
+      array([0.78], dtype=float32)
+      >>> a_identity.numpy()
+      array([0.78], dtype=float32)
+
+      Calling `identity` on a variable will make a Tensor that represents the
+      value of that variable at the time it is called. This is equivalent to calling
+      `<variable>.read_value()`.
+
+      >>> a = tf.Variable(5)
+      >>> a_identity = tf.identity(a)
+      >>> a.assign_add(1)
+      <tf.Variable ... shape=() dtype=int32, numpy=6>
+      >>> a.numpy()
+      6
+      >>> a_identity.numpy()
+      5
+
+      Args:
+        x: A `Tensor`.
+
+
+      Returns:
+        A `Tensor`. Has the same type as `input`.
+
+      """
+    return  tf.identity(x)
 
 
 def sigmoid(x):
@@ -1753,6 +1843,7 @@ def elu(x, alpha=0.01, upper_limit=None):
 
     Args:
         x (tensor): input tensor
+        alpha (float):multiplier
 
     Returns:
         (tensor) transformed tensor with the same shape as input tensor.
@@ -2930,3 +3021,6 @@ for target_fun_name,source_fun in _FUN_NAMES:
     if not hasattr(tf.Tensor,target_fun_name):
         setattr(tf.Tensor, target_fun_name, source_fun)
 del _FUN_NAMES
+
+
+setattr(EagerTensor, 'detach', detach)

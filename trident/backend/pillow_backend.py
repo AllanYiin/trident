@@ -12,6 +12,7 @@ try:
     from PIL import ImageOps
     from PIL import ImageFilter
     from PIL import Image as pil_image
+    from PIL.PngImagePlugin import PngImageFile
 except ImportError:
     pil_image = None
     ImageEnhance = None
@@ -45,6 +46,8 @@ def read_image(im_path:str):
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
             img=pil_image.open(im_path)
+            if isinstance(img, PngImageFile):
+                img=np.array(img).astype(np.float32)
             return img
         else:
             if not os.path.exists(im_path):
@@ -112,29 +115,31 @@ def image2array(img):
     Returns:
         ndarray  (HWC / RGB)
     """
-    if isinstance(img,str):
-        if os.path.exists(img) and img.split('.')[-1] in ('jpg','jpeg','png','bmp','tiff'):
-            img=pil_image.open(img)
-        else:
-            return None
-    arr=None
-    if isinstance(img,pil_image.Image):
-        arr = np.array(img).astype(_session.floatx)
+    if isinstance(img, str):
+        if os.path.exists(img) and img.split('.')[-1] in ('jpg', 'jpeg', 'png', 'bmp', 'tiff'):
+            img = pil_image.open(img)
+
+
+    arr = None
+    if isinstance(img, PngImageFile):
+        arr = np.array(img.im).astype(np.float32)
+    if isinstance(img, pil_image.Image):
+        arr = np.array(img).astype(np.float32)
     elif isinstance(img, np.ndarray):
-        arr=img
+        arr = img
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:
             if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
                 pass
-            elif arr.shape[0] in [1,3, 4]:
+            elif arr.shape[0] in [1, 3, 4]:
                 arr = arr.transpose([1, 2, 0])
             else:
                 raise ValueError('3d image should be 1, 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
-        arr=img.astype(_session.floatx)
+        arr = img.astype(_session.floatx)
     if arr.flags['C_CONTIGUOUS'] == False:
         arr = np.ascontiguousarray(arr)
-    return arr
+    return arr.astype(np.float32)
 
 
 def array2image(arr:np.ndarray):
@@ -148,10 +153,11 @@ def array2image(arr:np.ndarray):
 
     """
     # confirm back to numpy
-
+    arr=np.squeeze(arr)
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     mode = None
+
     if arr.ndim == 2:
         mode = 'L'
     elif arr.ndim == 3:
@@ -219,6 +225,7 @@ def array2mask(arr:np.ndarray):
 
     """
     # confirm back to numpy
+    arr=np.squeeze(arr)
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     mode = None

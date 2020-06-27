@@ -19,32 +19,14 @@ from trident.layers.pytorch_activations import sigmoid
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-__all__ = ['MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
-           'ExponentialLoss','ItakuraSaitoLoss', 'make_onehot', 'MS_SSIMLoss', 'CrossEntropyLabelSmooth', 'mixup_criterion', 'DiceLoss',
+__all__ = ['_ClassificationLoss','MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
+           'ExponentialLoss','ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss',
            'IouLoss',  'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss',
-           'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss','_ClassificationLoss']
+           'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
 
 
-def make_onehot(labels, classes,axis=1):
-    """
 
-    Args:
-        labels ():
-        classes ():
-        axis ():
-
-    Returns:
-
-    """
-    one_hot_shape = list(labels.size())
-    if axis==-1:
-        one_hot_shape.append(classes)
-    else:
-        one_hot_shape.insert(axis, classes)
-    one_hot = torch.zeros(tuple(one_hot_shape)).to(_device)
-    target = one_hot.scatter_(axis, labels.unsqueeze(axis).data, 1)
-    return target
 
 class _ClassificationLoss(Layer):
     """Calculate loss for  complex classification task."""
@@ -55,7 +37,7 @@ class _ClassificationLoss(Layer):
             axis (int): the position where the classes is.
             loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
             number of classes.
-            from_logits (bool): wheather the output tensor is normalized as a probability (total equal to 1)
+            from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
             ignore_index (int or list of int):
             cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
             less than 1..
@@ -65,9 +47,24 @@ class _ClassificationLoss(Layer):
                 'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
                 summation them.
 
+        Attributes:
+            need_target_onehot (bool): If True, means the before loss calculation , need to transform target as one-hot format, ex. label-smooth, default is False.
+            is_multiselection (bool): If True, means the classification model is multi-selection, so cannot use  any softmax process, use sigmoid and binary_crosss_entropy insteaded.
+            is_target_onehot (bool):  If True, means we have confirmed (not just declare) the target is transformed as  one-hot format
+            reduction(str): The aggregation function for loss, available options are 'sum', 'mean 'and 'batch_mean', default is 'mean'
+            axis (None or int): The axis we according with for loss calculation. Default is 1.
+            from_logits (bool):If True, means  the sum of all probability will equal 1.
+            is_logsoftmax (bool):If True, means model  use SoftMax as last layer or use any equivalent calculation.
+            loss_weights(1D tensor):The loss weight for all classes.
+            ignore_index(int , list, tuple): The classes we want to ignore in the loss calculation.
+            cutoff(float): Means the decision boundary in this classification model, default=0.5.
+            num_classes(int):number of  all the classes.
+            label_smooth (bool):If True, mean we will apply label-smoothing in loss calculation.
+
         """
         super(_ClassificationLoss, self).__init__(name=name)
         self.need_target_onehot = False
+        self.is_multiselection=False
         self.is_target_onehot =False
         self.reduction = reduction
         self.axis=axis
@@ -138,12 +135,10 @@ class _ClassificationLoss(Layer):
             self.need_target_onehot=True
         #need target onehot but currently not
         if self.need_target_onehot==True and (target>1).float().sum()>0:
-            target = make_onehot(target, classes=self.num_classes, axis=self.axis).to(output.device)
+            target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(output.device)
             if self.label_smooth:
                 target=target*(torch.Tensor(target.size()).uniform_(0.9,1).to(output.device))
                 self.is_target_onehot = True
-
-
 
         #setting cutoff
         if self.cutoff is not None:
@@ -234,36 +229,18 @@ class CrossEntropyLoss(_ClassificationLoss):
 
 
     Args:
-        weight (Tensor, optional): a manual rescaling weight given to each class.
-            If given, has to be a Tensor of size `C`
-        size_average (bool, optional): Deprecated (see :attr:`reduction`). By default,
-            the losses are averaged over each loss element in the batch. Note that for
-            some losses, there are multiple elements per sample. If the field :attr:`size_average`
-            is set to ``False``, the losses are instead summed for each minibatch. Ignored
-            when reduce is ``False``. Default: ``True``
-        ignore_index (int, optional): Specifies a target value that is ignored
-            and does not contribute to the input gradient. When :attr:`size_average` is
-            ``True``, the loss is averaged over non-ignored targets.
-
-        reduction (string, optional): Specifies the reduction to apply to the output:
-            ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction will be applied,
-            ``'mean'``: the sum of the output will be divided by the number of
-            elements in the output, ``'sum'``: the output will be summed. Note: :attr:`size_average`
-            and :attr:`reduce` are in the process of being deprecated, and in the meantime,
-            specifying either of those two args will override :attr:`reduction`. Default: ``'mean'``
-
-    Shape:
-        - Input: :math:`(N, C)` where `C = number of classes`, or
-          :math:`(N, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`
-          in the case of `K`-dimensional loss.
-        - Target: :math:`(N)` where each value is :math:`0 \leq \text{targets}[i] \leq C-1`, or
-          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of
-          K-dimensional loss.
-        - Output: scalar.
-          If :attr:`reduction` is ``'none'``, then the same size as the target:
-          :math:`(N)`, or
-          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case
-          of K-dimensional loss.
+        axis (int): the position where the classes is.
+        loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        is_target_onehot (bool): Is the target tensor in onehot format?
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
 
     Examples:
     >>> output=to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]]).float()
@@ -418,15 +395,15 @@ class NLLLoss(_ClassificationLoss):
     >>> print(target.shape)
     torch.Size([4])
     >>> NLLLoss(reduction='mean')(output,target).cpu()
-    tensor(1.1034)
+    tensor(-0.3375)
     >>> NLLLoss(reduction='sum')(output,target).cpu()
-    tensor(4.4136)
+    tensor(-1.3500)
     >>> NLLLoss(label_smooth=True,reduction='mean')(output,target).cpu()
     tensor(1.1034)
     >>> NLLLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
-    tensor(0.8259)
+    tensor(-0.2625)
     >>> NLLLoss(ignore_index=2,reduction='mean')(output,target).cpu()
-    tensor(0.8259)
+    tensor(-0.2625)
 
 
     """
@@ -444,10 +421,10 @@ class NLLLoss(_ClassificationLoss):
         Returns:
 
         """
-        if not self.need_target_onehot:
+        if not self.need_target_onehot and self.is_target_onehot and  ndim(target)==ndim(output):
             target = argmax(target, axis=self.axis)
 
-        loss = F.nll_loss(output, target, weight=self.loss_weights, ignore_index=self.ignore_index, reduction=None)
+        loss = F.nll_loss(output, target, weight=self.loss_weights, ignore_index=self.ignore_index,  reduce=None,reduction='none')
         return loss
 
 
@@ -464,10 +441,20 @@ class F1ScoreLoss(_ClassificationLoss):
     This operation works with both binary and multiclass classification.
 
     Args:
-        output: the output values from the network
-        target: it is usually a one-hot vector where the hot bit corresponds to the label index
         beta: greater than one weights recall higher than precision, less than one for the opposite.
         Commonly chosen values are 0.5, 1 or 2.
+        axis (int): the position where the classes is.
+        loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        is_target_onehot (bool): Is the target tensor in onehot format?
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
 
     Returns:
         :class:`~cntk.ops.functions.Function`
@@ -517,9 +504,29 @@ class FocalLoss(_ClassificationLoss):
     Compute binary focal loss between target and output logits.
     See :class:`~pytorch_toolbelt.losses.FocalLoss` for details.
 
+    Args:
+        axis (int): the position where the classes is.
+        loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        is_target_onehot (bool): Is the target tensor in onehot format?
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
+
+
     References::
 
         https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/loss/losses.py
+
+        normalized (bool): Compute normalized focal loss (https://arxiv.org/pdf/1909.07829.pdf).
+        threshold (float, optional): Compute reduced focal loss (https://arxiv.org/abs/1903.01347).
+
+
     """
     def __init__(self, alpha=0.5, gamma=2, normalized=False,threshold=None,axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,
                  label_smooth=False, reduction='mean', name='FocalLoss'):
@@ -537,8 +544,7 @@ class FocalLoss(_ClassificationLoss):
             output: Tensor of arbitrary shape
             target: Tensor of the same shape as input
 
-            normalized (bool): Compute normalized focal loss (https://arxiv.org/pdf/1909.07829.pdf).
-            threshold (float, optional): Compute reduced focal loss (https://arxiv.org/abs/1903.01347).
+
 
         Returns:
 
@@ -556,6 +562,7 @@ class FocalLoss(_ClassificationLoss):
 
         loss = -focal_term * logpt
 
+
         if self.alpha is not None:
             loss = loss * (self.alpha * target + (1 - self.alpha) * (1 - target))
         if self.normalized:
@@ -565,32 +572,31 @@ class FocalLoss(_ClassificationLoss):
         return loss
 
 
-class BCELoss(_Loss):
-    def __init__(self, weight=None, reduction='mean', with_logit=False, name='BCELoss'):
-        super().__init__()
-        self.name = name
-        self.reduction = reduction
-        self.loss_weight = weight
-        self.with_logit = with_logit
 
-    def forward(self, output, target) ->'loss':
-        if not self.with_logits:
-            output = torch.softmax(output, dim=1)
-        target1 = to_numpy(target)
-        if self.with_logit == False:
-            output = sigmoid(output)
-        target1[target1 == 0] = 1
-        target1[target1 != 1] = 0
-        target = target.float()
-        if target1.astype(np.float32).max() == 1:
-            if output.shape == target.shape or output.squeeze().shape == target.shape:
-                return F.binary_cross_entropy(output, target, weight=self.loss_weight, reduction=self.reduction)
-        elif output.shape[1] == int(target1.max()) and len(output.shape) == len(target.shape) + 1:
-            max_int = target1.max()
-            target = make_onehot(target, max_int + 1)
-            return F.binary_cross_entropy(output, target, weight=self.loss_weight, reduction=self.reduction)
-        return F.binary_cross_entropy(output, target, weight=self.loss_weight, reduction=self.reduction)
 
+class BCELoss(_ClassificationLoss):
+    def __init__(self, axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='BCELoss'):
+        super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
+        self._built = True
+        self.num_classes=1
+        self.is_logsoftmax=False
+        self.need_target_onehot=False
+        self.is_target_onehot=False
+
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+
+        loss = F.binary_cross_entropy_with_logits(output, target, weight=self.loss_weights, reduce=None,reduction='none')
+        return loss
 
 class L1Loss(_Loss):
     def __init__(self, reduction='mean', name='L1Loss'):
@@ -799,123 +805,90 @@ class MS_SSIMLoss(_Loss):
         return 1-msssim(output, target, window_size=self.window_size,normalize=True)
 
 
-class CrossEntropyLabelSmooth(_Loss):
-    def __init__(self, num_classes,axis=1,weight=None, reduction='mean'):
-        super(CrossEntropyLabelSmooth, self).__init__()
-        self.num_classes = num_classes
-        self.axis = axis
-        self.logsoftmax = nn.LogSoftmax(dim=self.axis)
-        self.reduction=reduction
-
-        if isinstance(weight, list):
-            weight = to_tensor(np.array(weight))
-        elif isinstance(weight, np.ndarray):
-            weight = to_tensor(weight)
-        if weight is None or isinstance(weight, torch.Tensor):
-            self.weight = weight
-        else:
-            raise ValueError('weight should be 1-D tensor')
-
-
-    def forward(self, output, target) ->'loss':
-        log_probs = self.logsoftmax(output)
-        target = make_onehot(target, classes=self.num_classes, axis=self.axis)
-
-        smooth = np.random.uniform( 0, 0.12,target.shape)
-        smooth[:,0]=1
-        smooth=to_tensor(smooth)
-        target = (1 - smooth) * target + smooth / self.num_classes
-        if self.weight is not None and len(self.weight)==self.num_classes:
-            if self.reduction=='sum':
-                return (-target * log_probs*self.weight).sum()
-            elif self.reduction=='mean':
-                return (-target * log_probs * self.weight).mean()
-        else:
-            if self.reduction == 'sum':
-                return (-target * log_probs ).sum()
-            elif self.reduction == 'mean':
-                return (-target * log_probs).mean()
 
 
 
-def mixup_criterion(y_a, y_b, lam):
-    return lambda criterion, pred: lam * criterion(pred, y_a) + (1 - lam) * criterion(pred, y_b)
+class DiceLoss(_ClassificationLoss):
+    r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
+
+    It is useful when training a classification problem with `C` classes.
+    If provided, the optional argument :attr:`weight` should be a 1D `Tensor`
+    assigning weight to each of the classes.
+    This is particularly useful when you have an unbalanced training set.
+
+    Args:
+        axis (int): the position where the classes is.
+        loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
+
+    Examples:
+    >>> output=zeros((1,3,128,128))
+    >>> output[0,1,32:64,48:92]=1
+    >>> output[0,2,12:32,56:64]=1
+    >>> target=zeros((1,128,128)).long()
+    >>> target[0,33:63,50:9]=1
+    >>> target[0,13:35,52:65]=2
+    >>> DiceLoss(reduction='mean')(output,target).cpu()
+    tensor(0.8271)
+    >>> DiceLoss(ignore_index=0,reduction='mean')(output,target).cpu()
+    tensor(0.9829)
 
 
-class DiceLoss(_Loss):
-    def __init__(self, axis=1,weight=None, smooth=1., ignore_index=-100,cutoff=None, reduction='mean'):
-        super(DiceLoss, self).__init__(reduction=reduction)
-        self.ignore_index = ignore_index
-        self.smooth = smooth
-        self.axis=axis
-        self.cutoff=cutoff
-        if isinstance(weight, list):
-            weight = to_tensor(np.array(weight))
-        elif isinstance(weight, np.ndarray):
-            weight = to_tensor(weight)
-        if weight is None or isinstance(weight, torch.Tensor):
-            self.weight = weight
-        else:
-            raise ValueError('weight should be 1-D tensor')
 
-    def forward(self, output, target) ->'loss':
-        if self.weight is not None and len(self.weight) != output.size(self.axis):
-            raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
-
-        target = make_onehot(target, classes=output.size(self.axis),axis=self.axis)
-        probs = F.softmax(output, dim=self.axis)
-        if self.cutoff is not None:
-            mask=(probs>self.cutoff).float()
-            probs=probs*mask
-
-        if probs.ndim==3:
-            if self.weight is None:
-                self.weight=to_tensor(np.ones((output.size(self.axis))))
-            if isinstance(self.ignore_index,int) and 0<=self.ignore_index<output.size(self.axis):
-                self.weight[self.ignore_index]=0
-            elif isinstance(self.ignore_index,(list,tuple)):
-                for idx in self.ignore_index:
-                    if isinstance(idx, int) and 0 <= idx < output.size(self.axis):
-                        self.weight[idx] = 0
+    Reference:
+        https://arxiv.org/abs/1707.03237
 
 
-            # probs=output#*((output>0.5).float())
-            if self.reduction == 'mean':
+    """
+    def __init__(self, smooth=1., axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='CrossEntropyLoss'):
+        """
+        Args:
+            axis (int): the axis where the class label is.
+            loss_weights ():
+            from_logits ():
+            ignore_index ():
+            cutoff ():
+            label_smooth ():
+            reduction (string):
+            name (stringf):
+        """
 
-                intersection = (target * probs).sum(1 if self.axis==-1 else -1)
-                den1 = probs.sum(1 if self.axis==-1 else -1)
-                den2 = target.sum(1 if self.axis==-1 else -1)
-                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-                if self.weight is not None:
-                    dice = dice * (self.weight.unsqueeze(0))
-                dice1 = 1 - ((2 * intersection[:, 1:].sum() + self.smooth) / (
-                            den1[:, 1:].sum() + den2[:, 1:].sum() + self.smooth))
-                return dice[:, 1:].mean()  # +dice1#.sum()
-            else:
+        super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
+        self.smooth=smooth
+        self.is_logsoftmax = False
+        self.need_target_onehot = True
+        self.is_multiselection = False
+        self._built = True
 
-                intersection = (target * probs).sum(1)
-                den1 = probs.sum(1)
-                den2 = target.sum(1)
-                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-                return (dice.mean(0)*self.weight).sum()
+    def calculate_loss(self, output, target, **kwargs):
+        """
 
-        elif probs.ndim==4:
-            # probs=output#*((output>0.5).float())
-            if self.reduction == 'mean':
-                intersection = (target * probs).sum(-1).sum(-1)
-                den1 = probs.sum(-1).sum(-1)
-                den2 = target.sum(-1).sum(-1)
-                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-                if self.weight is not None:
-                    dice = dice * (self.weight.unsqueeze(0))
-                dice1 = 1 - ((2 * intersection[:, 1:].sum() + self.smooth) / ( den1[:, 1:].sum() + den2[:, 1:].sum() + self.smooth))
-                return dice[:, 1:].mean()  # +dice1#.sum()
-            else:
-                intersection = (target * probs)[:, 1:].sum()
-                den1 = probs[:, 1:].sum()
-                den2 = target[:, 1:].sum()
-                dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-                return dice
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+
+        intersection = reduce_sum(target * output,list(range(target.ndim))[2:])
+        den1 = reduce_sum(output,list(range(target.ndim))[2:])
+        den2 = reduce_sum(target,list(range(target.ndim))[2:])
+        if self.loss_weights is not None:
+            intersection = intersection * self.loss_weights.unsqueeze(0)
+        dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+
+        return dice
+
 
 
 class IouLoss(_Loss):
@@ -935,9 +908,6 @@ class IouLoss(_Loss):
         union = ((output_flat + target_flat) > 0).float().sum().clamp(min=1)
         loss = -(intersection / union).log()
         return loss
-
-
-
 
 
 class SoftIoULoss(_Loss):

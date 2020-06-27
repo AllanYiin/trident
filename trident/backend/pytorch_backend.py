@@ -109,15 +109,56 @@ def get_global_uid(prefix=''):
     return _UID_PREFIX[prefix]
 
 class Layer(nn.Module):
-    """Trident extened nn.Module as base layer class.
-    Your models should also subclass this class.
+    """Trident extened pytorch nn.Module as base layer class.
+
+    Your models should also subclass of this class.
     Layer contains :
         modules: another child layer(module) in it.
         parameters: the trainable parameters in the layer.
         buffers: the other non_trainable tensor in the layer.
 
+
+    Attributes :
+        training (bool): If True, means in the training phase, else in the infer or evaluation phase.
+
+        rank (int): The number of the spatial related axes.
+
+        _modules (OrderedDict) : storage of all the sub-modules.
+
+        _parameters (OrderedDict) : storage of all the tranable weights.
+
+        _buffers (OrderedDict) : storage of all the non-trainable tensor.
+
+        _forward_hooks (OrderedDict) : storage of all the hooks triggered before the forward execution.
+
+        _forward_pre_hooks (OrderedDict) : storage of all the hooks triggered  after the forward execution.
+
+        _state_dict_hooks (OrderedDict) : storage of all the hooks triggered  when state_dict generating  execution.
+
+        _load_state_dict_pre_hooks (OrderedDict) : storage of all the hooks triggered  when loading state_dict   execution.
+
+
+        input_filters (int): input channels
+
+        signature (int): the function signature of this layer.
+
+        default_name: default_name is the same concept as in keras, it comes from class name with sequence number.
+
+        relative_name:relative_name is the same concept as named_modules in pytorch. But in pytorch, you need to get the name from generator enumeration. In trident, you can access the relative name  with this attribute.
+
+
+
+
     """
     def __init__(self,name=None,keep_output=False,**kwargs):
+        """
+
+        Args:
+            name (str) :name of the layer.
+            keep_output (bool) :whether need to kept output tensor in execution time.
+
+
+        """
         super(Layer, self).__init__()
         self.training = True
         self._built = False
@@ -171,7 +212,7 @@ class Layer(nn.Module):
 
     @property
     def nodes(self):
-        """The whole tree structured OrderedDict {uuid: module} , for module to access any node in this structures, ex. Shortcut"""
+        """"The whole tree structured OrderedDict { uuid : module } , for module to access any node in this structures, ex. Shortcut"""
         return self._nodes
 
     @nodes.setter
@@ -186,7 +227,9 @@ class Layer(nn.Module):
 
         The module can be accessed as an attribute using the given name.
         1) add module as child
+
         2) generate default_name and relative_name
+
         3) update the nodes
 
         Args:
@@ -222,47 +265,59 @@ class Layer(nn.Module):
             if isinstance(mod,Layer):
                 mod.nodes =self.nodes
 
+    def add(self, module):
+        """Simplified add_module
 
+        Use the count of child modules as the default name.
+
+        Args:
+            module (Module): child module to be added to the module.
+
+        """
+        if module is None:
+            raise KeyError("module  can't be None")
+        elif isinstance(module, Layer):
+            self.add_module(str(len(self._modules)),module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
+
+        else:
+            raise ValueError('Not valid module')
 
     def build(self, input_shape):
-        pass  #pass if no need shape infer
+        """ Do the shape inference and initialize weights and bias.
 
-    def compute_output_shape(self, input_shape):
-        """
-        Computes the output shape of the layer.Assumes that the layer will be builtto match that input shape provided.
-        Args
-            input_shape: Shape tuple (tuple of integers)
-                or list of shape tuples (one per output tensor of the layer).
-                Shape tuples can include None for free dimensions,
-                instead of an integer.
-        Returns
-            An output shape tuple.
-        """
-        if not self._built:
-            self.input_shape=input_shape
-        return self.output_shape
+        `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
+        In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
 
+        Args:
+            input_shape (tensor):  the shape representation exclude the batch axis.
+
+        """
+        pass
 
 
     @property
     def trainable_weights(self) -> List[nn.Parameter]:
         """The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
+
         Notes:
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
+
         """
         return [x for x in self.parameters() if x.requires_grad]
 
     @property
     def non_trainable_weights(self) -> List[nn.Parameter]:
         """
-        The list of trainable variables (parameters) of the module.Parameters of this module and all its submodules are included.
+        The list of non-trainable variables (parameters) of the module.Parameters of this module and all its submodules are included.
+
         Notes:
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
+
         """
         return [x for x in self.parameters() if x.requires_grad==False]
 
@@ -291,21 +346,26 @@ class Layer(nn.Module):
 
     @property
     def trainable(self):
-        if len(self.weights)==0:
-            return False
-        elif len(self.weights)>0:
+        if len(self._parameters)==0:
+            return None
+
+        elif len(self._parameters)>0:
             for k,v in self._parameters.items():
-                if v is not None and v.requires_grad==False:
+                if (v is not None and v.requires_grad==False) :
                     return False
-            else:
-                return True
+                elif v is None:
+                    pass
+                else:
+                    pass
+            return True
 
     @trainable.setter
     def trainable(self,value:bool):
         n=0
         for name, para in self.named_parameters():
-            para.requires_grad = value
-            n+=np.prod(list(para.size()))
+            if (para.requires_grad != value):
+                para.requires_grad = value
+                n+=np.prod(list(para.size()))
         if value:
             print('{0} parameters have set trainable'.format(n))
         else:
@@ -332,7 +392,7 @@ class Layer(nn.Module):
 
     @property
     def input_shape(self):
-        """Shape of input tensor',not including the batch axis."""
+        """Shape of input tensor,not including the batch axis."""
         return self._input_shape
 
 
@@ -410,14 +470,14 @@ class Layer(nn.Module):
         """
             Retrieves the output tensor(s) of a layer.
             for memory saving issue, we don'tb prefer to keep every input/output
-            tensor in every layer.You should set self.keep.output flag to True, and then
+            tensor in every layer.You should set self.keep_output flag to True, and then
             retrive the output tensor when the calll() is executing.
         Returns
             Output tensor or list of output tensors.
 
         """
         if self.keep_output==False:
-            raise ValueError('Layer {0} has not set self.keep.output  to True, cannot access output '.format(self.name))
+            raise ValueError('Layer {0} has not set self.keep_output  to True, cannot access output '.format(self.name))
         return list(self._output_tensor) if isinstance(self._output_tensor,tuple) else self._output_tensor
 
 
@@ -448,30 +508,46 @@ class Layer(nn.Module):
                                         'output': {0: 'batch_size'}})
 
     def __call__(self, *input, **kwargs):
+        is_all_numpy=True
+        input = list(input)
+        new_input=[]
+        for inp in input:
+            if isinstance(inp,np.ndarray):
+                inp=to_tensor(inp)
+                new_input.append(inp)
+            else:
+                new_input.append(inp)
+                is_all_numpy=False
+        input=new_input
         for hook in self._forward_pre_hooks.values():
-            input = hook(self, input)
+            result  = hook(self, *input)
+            if result is not None:
+                if not isinstance(result, tuple):
+                    result = (result,)
+                input = result
+
         if self._built==False :
             inp= unpack_singleton(input)
             if isinstance(inp, (tuple, list)):
-                self.input_shape=inp[0].size()[1:]
+                self.build([input_tensor.shape[1:] for input_tensor in inp])
             elif isinstance(inp,torch.Tensor):
-                self.input_shape = inp.size()[1:]
+                self.input_shape = inp.shape[1:]
             else:
                 print('input shou be tensor or tuple of tensor')
+                print(inp)
                 self.input_shape=torch.tensor(-1)
-            self.build(self.input_shape)
+
         if torch._C._get_tracing_state():
             result = self._slow_forward(*input, **kwargs)
         else:
             result = self.forward(*input, **kwargs)
-            result=unpack_singleton(result)
 
+            output=unpack_singleton(result)
             if hasattr(self,'keep_output') and self.keep_output==True:
-                self._output_tensor=result
-            if isinstance(result,torch.Tensor) :
+                self._output_tensor=output
+            if isinstance(output,torch.Tensor) :
                 if self._output_shape is None:
-                    self.output_shape=result.size()[1:]
-
+                    self.output_shape=output.shape[1:]
 
         for hook in self._forward_hooks.values():
             hook_result = hook(self, input, result)
@@ -490,6 +566,12 @@ class Layer(nn.Module):
                     wrapper = partial(hook, self)
                     update_wrapper(wrapper, hook)
                     grad_fn.register_hook(wrapper)
+        if is_all_numpy==True and self.training==False:
+            if is_tensor(result):
+                return to_numpy(result)
+            elif isinstance(result,(list,tuple)):
+                result=list(result)
+            return tuple([ to_numpy(res) if is_tensor(res) else res for  res in result])
         return result
 
     def __getattr__(self, name):
@@ -734,7 +816,7 @@ class ModuleList(Layer):
     Args:
         modules (iterable, optional): an iterable of modules to add
 
-    Examples::
+    Examples:
 
         class MyModule(nn.Module):
             def __init__(self):
@@ -1102,11 +1184,12 @@ def normalize_padding(padding, rank):
 
     Returns:
         the normalized format of padding
-    Examples
-    >>> normalize_padding(((1,0),(1,0)),2)
-    (1, 0, 1, 0)
-    >>> normalize_padding((1,0),2)
-    (0, 0, 1, 1)
+
+    Examples:
+        >>> normalize_padding(((1,0),(1,0)),2)
+        (1, 0, 1, 0)
+        >>> normalize_padding((1,0),2)
+        (0, 0, 1, 1)
     """
     if padding is None:
         padding=(0,)*(2*rank)
@@ -1420,6 +1503,17 @@ def get_human_readable_count(number):
 
 
 def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
+    """This function is the core function for mapping callable and argments
+
+    Args:
+        fn (callable): the callable, maybe functions or layers
+        data (OrderedDict): The key-value pair for available data.
+        data_feed (OrderedDict): The relation between callable argments (key) and data (value)
+
+    Returns:
+        The result of the callable base on data_feed
+
+    """
     if isinstance(fn,torch.Tensor):
         return fn
     else:
@@ -1427,35 +1521,41 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
         if isinstance(fn,Layer) :
             for arg in fn.signature.inputs.key_list:
                 if arg in data_feed:
-                    arg_map[arg]=data[data_feed[arg]]
+                    arg_map[arg]=to_tensor(data[data_feed[arg]]).to(get_device())
                 else:
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
             #print('arg_map',arg_map.key_list)
             out=fn(*arg_map.value_list)
+            for item in data.value_list:
+                item.cpu()
             return out
         elif hasattr(fn,'signature') and callable(fn):
             for arg in fn.signature.inputs.key_list:
                 if arg in data:
-                    arg_map[arg]=data[arg]
+                    arg_map[arg]=data[arg].to(get_device())
                 elif arg in data_feed:
-                    arg_map[arg]=data[data_feed[arg]]
+                    arg_map[arg]=data[data_feed[arg]].to(get_device())
                 else:
 
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
             #print('arg_map', arg_map.key_list)
             out=fn(*arg_map.value_list)
+            for item in data.value_list:
+                item.cpu()
             return out
         elif  callable(fn):
             args=get_signature(fn).key_list
             for arg in args:
                 if arg in data:
-                    arg_map[arg]=data[arg]
+                    arg_map[arg]=data[arg].to(get_device())
                 elif arg in  data_feed:
-                    arg_map[arg]=data[data_feed[arg]]
+                    arg_map[arg]=data[data_feed[arg]].to(get_device())
                 else:
                     arg_map[arg] = ''
             #print('arg_map', arg_map.key_list)
             out = fn(*arg_map.value_list)
+            for item in data.value_list:
+                item.cpu()
             return out
         else:
 
@@ -1476,11 +1576,6 @@ def force_deterministic(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
-
-
-
-
-
 
 
 

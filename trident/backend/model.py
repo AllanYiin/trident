@@ -534,7 +534,7 @@ class ModelBase(object):
                 callback.on_data_received(self.training_context)
 
             if accumulate_grads == False:
-                self.training_context['current_loss'] = 0
+                self.training_context['current_loss'] = to_tensor(0.0,requires_grad=True)
                 self.do_preparation_for_loss()
                 self.training_context['optimizer'] = self.optimizer
 
@@ -565,13 +565,13 @@ class ModelBase(object):
                         loss_weight=to_tensor(loss_weight,'float32')
                         this_loss = loss_weight*try_map_args_and_call(v, train_data, self.training_context['data_feed']) # v.forward(output, target) if hasattr(v, 'forward') else v(
                         if self.training_context['stop_update'] >=1 :
-                            this_loss=to_tensor(0.0)
+                            pass#this_loss= to_tensor(0.0,requires_grad=True)
                         # output, target)
 
                         if isinstance(this_loss, tuple):
-                            overall_loss =0
+                            overall_loss =0.0
                             for i in range(len(this_loss)):
-                                if is_abnormal_number(this_loss[i]):
+                                if any_abnormal_number(this_loss[i]):
                                     sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
                                 else:
                                     overall_loss += this_loss[i]
@@ -579,7 +579,7 @@ class ModelBase(object):
                             if is_collect_data:
                                 self.training_context['losses'][k].append(float(to_numpy(overall_loss)))
                         else:
-                            if is_abnormal_number(this_loss):
+                            if any_abnormal_number(this_loss):
                                 sys.stderr.write( 'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
                             else:
                                 self.training_context['current_loss'] += this_loss
@@ -598,12 +598,12 @@ class ModelBase(object):
                 for k, v in self._regs.items():
                     if k + '_Loss' not in self.training_context['losses']:
                         self.training_context['losses'][k + '_Loss'] = []
-                    this_loss=0
+                    this_loss=0.0
                     if 'model' in v.signature.inputs:
-                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0)
+                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,requires_grad=True)
                     elif 'output' in v.signature.inputs:
 
-                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
+                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
 
 
                     self.training_context['current_loss'] += this_loss  # self.training_context[

@@ -30,7 +30,7 @@ __all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'floatx
            'DataRole',
 
            'ExpectDataType', 'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
-           'DataSpec', 'get_args_spec', 'get_gpu_memory_map']
+           'DataSpec', 'get_args_spec','update_signature', 'get_gpu_memory_map']
 
 
 _SESSION = threading.local()
@@ -76,7 +76,7 @@ def split_path(path:str):
     return folder, filename, ext
 
 def make_dir_if_need(path):
-    """Check the base folder in input path wheather exist, if not , then create it.
+    """Check the base folder in input path whether exist, if not , then create it.
 
     Args:
         path (str): a path of file or folder
@@ -317,6 +317,10 @@ def snake2camel(string1):
 
 
 def PrintException():
+    """
+        Print exception with the line_no.
+
+    """
     exc_type, exc_obj, tb = sys.exc_info()
 
     f = tb.tb_frame
@@ -324,7 +328,7 @@ def PrintException():
     filename = f.f_code.co_filename
     linecache.checkcache(filename)
     line = linecache.getline(filename, lineno, f.f_globals)
-    print('EXCEPTION IN ({}, LINE {} "{}"): {}'.format(filename, lineno, line.strip(), exc_obj))
+    print('EXCEPTION IN ({}, LINE {} "{}"): {}\n'.format(filename, lineno, line.strip(), exc_obj))
     traceback.print_tb(tb, limit=1, file=sys.stdout)
     traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
 
@@ -1054,8 +1058,18 @@ def format_arg_spec(v, is_output=False):
 
 
 def update_signature(fn: callable, args: list):
-    sig = signature(fn)
-    sig = sig.replace(tuple(sig.parameters.values())[1:])
+    sig=None
+    if hasattr(fn,'signature') and  fn.signature is not None:
+        sig = fn.signature
+    else:
+        sig=get_signature(fn)
+
+    new_sig=Signature(name=sig.name)
+    for i in range(len(args)):
+        new_sig.inputs[args[i]]=sig.inputs.value_list[i]
+    new_sig.outputs=sig.outputs
+    fn.signature=new_sig
+    print(fn.signature)
 
 
 def get_gpu_memory_map():

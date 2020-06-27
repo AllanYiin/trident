@@ -15,10 +15,12 @@ from itertools import islice
 from typing import List
 
 import numpy as np
+
 import tensorflow as tf
 from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
 from tensorflow.python.framework import func_graph, ops
+
 from tensorflow.python.module import module
 from tensorflow.python.util import object_identity
 
@@ -30,7 +32,8 @@ from trident.data.utils import pickle_it
 __all__ = ['Layer', 'get_flops', 'Sequential', 'ReplayBuffer', 'summary', 'normalize_padding', 'load', 'save','try_map_args_and_call']
 
 gpus = tf.config.list_physical_devices('GPU')
-
+if gpus is not None and len(gpus)>0:
+    tf.config.experimental.set_memory_growth(gpus[0], True)
 
 def get_device():
     if gpus:
@@ -51,9 +54,12 @@ sys.stdout.write('Tensorflow version:{0}.\n'.format(version.VERSION))
 
 sys.stdout.write('use device:{0}.\n'.format(get_device()))
 
-enable_eager_execution()
-tf.executing_eagerly()
-sys.stdout.write('executing_eagerly\n')
+try:
+    enable_eager_execution()
+    tf.executing_eagerly()
+    sys.stdout.write('executing_eagerly\n')
+except Exception as e:
+    sys.stdout.write('executing_eagerly fail. {0}\n'.format(e))
 
 
 def load(path):
@@ -185,11 +191,65 @@ def _addindent(s_, numSpaces):
 
 
 
+
+
+
+
+
+
+
 class Layer(tf.Module):
-    """Trident extened tf.Module as base layer class."""
+    """Trident extened tf.Module as base layer class.
+
+   Your models should also subclass of this class.
+    Layer contains :
+        modules: another child layer(module) in it.
+        parameters: the trainable parameters in the layer.
+        buffers: the other non_trainable tensor in the layer.
+
+
+    Attributes :
+        training (bool): If True, means in the training phase, else in the infer or evaluation phase.
+
+        rank (int): The number of the spatial related axes.
+
+        _modules (OrderedDict) : storage of all the sub-modules.
+
+        _parameters (OrderedDict) : storage of all the tranable weights.
+
+        _buffers (OrderedDict) : storage of all the non-trainable tensor.
+
+        _forward_hooks (OrderedDict) : storage of all the hooks triggered before the forward execution.
+
+        _forward_pre_hooks (OrderedDict) : storage of all the hooks triggered  after the forward execution.
+
+        _state_dict_hooks (OrderedDict) : storage of all the hooks triggered  when state_dict generating  execution.
+
+        _load_state_dict_pre_hooks (OrderedDict) : storage of all the hooks triggered  when loading state_dict   execution.
+
+        input_filters (int): input channels
+
+        signature (int): the function signature of this layer.
+
+        default_name: default_name is the same concept as in keras, it comes from class name with sequence number.
+
+        relative_name:relative_name is the same concept as named_modules in pytorch. But in pytorch, you need to get the name from generator enumeration. In trident, you can access the relative name  with this attribute.
+
+    References:
+        https://github.com/tensorflow/tensorflow/blob/v2.2.0/tensorflow/python/module/module.py#L35-L291
+
+
+    """
     _version = 1
 
     def __init__(self, name=None, keep_output=False,**kwargs):
+        """
+        Args:
+            name (str) :name of the layer.
+            keep_output (bool) :whether need to kept output tensor in execution time.
+
+
+        """
         super(Layer, self).__init__()
         self.training = True
         self._built = False
@@ -199,6 +259,7 @@ class Layer(tf.Module):
         self._modules = OrderedDict()
         self._parameters = OrderedDict()
         self._buffers = OrderedDict()
+        self._backward_hooks = OrderedDict()
         self._forward_hooks = OrderedDict()
         self._forward_pre_hooks = OrderedDict()
         self._state_dict_hooks = OrderedDict()
@@ -235,7 +296,7 @@ class Layer(tf.Module):
 
     @property
     def nodes(self):
-        """The whole tree structured OrderedDict {uuid: module} , for module to access any node in this structures, ex. Shortcut"""
+        """The whole tree structured OrderedDict { uuid : module } , for module to access any node in this structures, ex. Shortcut"""
         return self._nodes
 
     @nodes.setter
@@ -299,7 +360,7 @@ class Layer(tf.Module):
     def add(self, module):
         """Simplified 'add_module'
 
-        The module name will retrieve from module can be accessed as an attribute using the given name.
+        Use the count of child modules as the default name.
 
         Args:
             module (Module): child module to be added to the module.
@@ -315,6 +376,51 @@ class Layer(tf.Module):
 
         else:
             raise ValueError('Not valid module')
+
+    def build(self, input_shape):
+        """ Do the shape inference and initialize weights and bias.
+
+        `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
+        In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
+
+        Args:
+            input_shape (tensor):  the shape representation exclude the batch axis.
+
+        """
+        pass
+
+    def register_backward_hook(self, hook):
+        r"""Registers a backward hook on the module.
+
+        The hook will be called every time the gradients with respect to module
+        inputs are computed. The hook should have the following signature::
+
+            hook(module, grad_input, grad_output) -> Tensor or None
+
+        The :attr:`grad_input` and :attr:`grad_output` may be tuples if the
+        module has multiple inputs or outputs. The hook should not modify its
+        arguments, but it can optionally return a new gradient with respect to
+        input that will be used in place of :attr:`grad_input` in subsequent
+        computations.
+
+        Returns:
+            :class:`torch.utils.hooks.RemovableHandle`:
+                a handle that can be used to remove the added hook by calling
+                ``handle.remove()``
+
+        .. warning ::
+
+            The current implementation will not have the presented behavior
+            for complex :class:`Module` that perform many operations.
+            In some failure cases, :attr:`grad_input` and :attr:`grad_output` will only
+            contain the gradients for a subset of the inputs and outputs.
+            For such :class:`Module`, you should use :func:`torch.Tensor.register_hook`
+            directly on a specific input or output to get the required gradients.
+
+        """
+        handle =RemovableHandle(self._backward_hooks)
+        self._backward_hooks[handle.id] = hook
+        return handle
 
     def register_forward_pre_hook(self, hook):
         r"""Registers a forward pre-hook on the module.
@@ -375,7 +481,7 @@ class Layer(tf.Module):
                 from this module using the given name
             tensor (Tensor): buffer to be registered.
 
-        Examples::
+        Examples:
 
             >>> self.register_buffer('running_mean', tf.zeros([5]))
 
@@ -433,32 +539,9 @@ class Layer(tf.Module):
 
 
 
-    def build(self, input_shape):
-        """
 
-        Args:
-            input_shape ():
 
-        Returns:
 
-        """
-        pass  # pass if no need shape infer
-
-    def compute_output_shape(self, input_shape):
-        """Computes the output shape of the layer.
-        Assumes that the layer will be built
-        to match that input shape provided.
-     Args
-            input_shape: Shape tuple (tuple of integers)
-                or list of shape tuples (one per output tensor of the layer).
-                Shape tuples can include None for free dimensions,
-                instead of an integer.
-     Returns
-            An output shape tuple.
-        """
-        if not self._built:
-            self.input_shape = input_shape
-        return self.output_shape
 
     def cuda(self, device=None):
         r"""Moves all model parameters and buffers to the GPU.
@@ -593,7 +676,7 @@ class Layer(tf.Module):
     def output(self):
         """Retrieves the output tensor(s) of a layer.
             for memory saving issue, we don'tb prefer to keep every input/output
-            tensor in every layer.You should set self.keep.output flag to True, and then
+            tensor in every layer.You should set self.keep_output flag to True, and then
             retrive the output tensor when the calll() is executing.
         Returns
                 Output tensor or list of output tensors.
@@ -602,7 +685,7 @@ class Layer(tf.Module):
                 more than one incoming layers.
         """
         if self.keep_output == False:
-            raise ValueError('Layer {0} has not set self.keep.output  to True, cannot access output '.format(self.name))
+            raise ValueError('Layer {0} has not set self.keep_output  to True, cannot access output '.format(self.name))
         return list(self._output_tensor) if isinstance(self._output_tensor, tuple) else self._output_tensor
 
     def reset_parameters(self):
@@ -636,7 +719,7 @@ class Layer(tf.Module):
         Returns:
             dict:
                 a dictionary containing a whole state of the module
-        Examples::
+        Examples:
             >>> module.state_dict().keys()
             ['bias', 'weight']
         """
@@ -794,6 +877,7 @@ class Layer(tf.Module):
 
     def save_weight(self, file_path=''):
         pass
+
     def forward(self, *input, **kwargs):
         r"""Defines the computation performed at every call.
 
@@ -808,40 +892,76 @@ class Layer(tf.Module):
         raise NotImplementedError
 
     def _slow_forward(self, *input, **kwargs):
-        pass  # tracing_state = torch._C._get_tracing_state()  # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):  #     return self.forward(*input, **kwargs)  # recording_scopes = torch.jit._trace_module_map is not None  # if recording_scopes:  #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None  #     if name:  #         cur_scope_name = tracing_state.current_scope()  #         tracing_state.push_scope(name)  #     else:  #         recording_scopes = False  # try:  #     result = self.forward(*input, **kwargs)  # finally:  #     if recording_scopes:  #         tracing_state.pop_scope()  # return result
+        return self.forward(*input, **kwargs)
+        # tracing_state = torch._C._get_tracing_state()  # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):  #     return self.forward(*input, **kwargs)  # recording_scopes = torch.jit._trace_module_map is not None  # if recording_scopes:  #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None  #     if name:  #         cur_scope_name = tracing_state.current_scope()  #         tracing_state.push_scope(name)  #     else:  #         recording_scopes = False  # try:  #     result = self.forward(*input, **kwargs)  # finally:  #     if recording_scopes:  #         tracing_state.pop_scope()  # return result
+        #tracing_state = torch._C._get_tracing_state()
+        # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):
+        #     return self.forward(*input, **kwargs)
+        # recording_scopes = torch.jit._trace_module_map is not None
+        # if recording_scopes:
+        #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None
+        #     if name:
+        #         cur_scope_name = tracing_state.current_scope()
+        #         tracing_state.push_scope(name)
+        #     else:
+        #         recording_scopes = False
+        # try:
+        #     result = self.forward(*input, **kwargs)
+        # finally:
+        #     if recording_scopes:
+        #         tracing_state.pop_scope()
+        # return result
 
+
+    @tf.Module.with_name_scope
     def __call__(self, *input, **kwargs):
-        for hook in self._forward_pre_hooks.values():
-            input = hook(self, input)
-        if self._built == False:
-            inp = unpack_singleton(input)
-            if isinstance(inp, (tuple, list)):
-                self.input_shape = inp[0].get_shape()[1:]
-            elif is_tensor(inp):
-                self.input_shape = inp.get_shape()[1:]
-            elif isinstance(inp, np.ndarray):
-                self.input_shape = inp.shape[1:]
+        is_all_numpy=True
+        input = list(input)
+        new_input = []
+        for inp in input:
+            if isinstance(inp, np.ndarray):
                 inp = to_tensor(inp)
+                new_input.append(inp)
+            else:
+                new_input.append(inp)
+                is_all_numpy = False
+        input = new_input
+        for hook in self._forward_pre_hooks.values():
+            result  = hook(self, *input)
+            if result is not None:
+                if not isinstance(result, tuple):
+                    result = (result,)
+                input = result
+        if self._built==False :
+            inp= unpack_singleton(input)
+            if isinstance(inp, (tuple, list)):
+                self.build([input_tensor.shape[1:] for input_tensor in inp])
+            elif is_tensor(inp):
+                self.input_shape = inp.shape[1:]
             else:
                 print('input shou be tensor or tuple of tensor')
-                self.input_shape = tf.TensorShape(None)
-            self.build(self.input_shape)
-
+                print(inp)
+                self.input_shape= tf.TensorShape(None)
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
         try:
             result = self.forward(*input, **kwargs)
-            result = unpack_singleton(result)
+            output = unpack_singleton(result)
             if hasattr(self, 'keep_output') and self.keep_output == True:
-                self._output_tensor = result
-            if is_tensor(result):
+                self._output_tensor = output
+            if to_tensor(output):
                 if self._output_shape is None:
-                    self.output_shape = result.get_shape()[1:]
+                    self.output_shape = output.shape[1:]
 
             for hook in self._forward_hooks.values():
                 hook_result = hook(self, input, result)
                 if hook_result is not None:
                     result = hook_result
-                    return result
+            if is_all_numpy == True and self.training == False:
+                if is_tensor(result):
+                    return to_numpy(result)
+                elif isinstance(result, (list, tuple)):
+                    result = list(result)
+                return tuple([to_numpy(res) if is_tensor(res) else res for res in result])
             return result
         except Exception as e:
             print('{0} ({1} call failed.)'.format(self.name, self.default_name))
@@ -953,7 +1073,7 @@ class Layer(tf.Module):
         Yields:
             Parameter: module parameter
 
-        Examples::
+        Examples:
 
             >>> for param in model.parameters():
             >>>     print(type(param.data), param.size())
@@ -977,7 +1097,7 @@ class Layer(tf.Module):
         Yields:
             (string, Parameter): Tuple containing the name and parameter
 
-        Examples::
+        Examples:
 
             >>> for name, param in self.named_parameters():
             >>>    if name in ['bias']:
@@ -999,7 +1119,7 @@ class Layer(tf.Module):
         Yields:
             torch.Tensor: module buffer
 
-        Examples::
+        Examples:
 
             >>> for buf in model.buffers():
             >>>     print(type(buf.data), buf.size())
@@ -1023,7 +1143,7 @@ class Layer(tf.Module):
         Yields:
             (string, torch.Tensor): Tuple containing the name and buffer
 
-        Examples::
+        Examples:
 
             >>> for name, buf in self.named_buffers():
             >>>    if name in ['running_var']:
@@ -1050,7 +1170,7 @@ class Layer(tf.Module):
         Yields:
             (string, Module): Tuple containing a name and child module
 
-        Examples::
+        Examples:
 
             >>> for name, module in model.named_children():
             >>>     if name in ['conv4', 'conv5']:
@@ -1073,7 +1193,7 @@ class Layer(tf.Module):
             Duplicate modules are returned only once. In the following
             example, ``l`` will be returned only once.
 
-        Examples::
+        Examples:
 
             >>> l = nn.Linear(2, 2)
             >>> net = nn.Sequential(l, l)
@@ -1101,7 +1221,7 @@ class Layer(tf.Module):
             Duplicate modules are returned only once. In the following
             example, ``l`` will be returned only once.
 
-        Examples::
+        Examples:
 
             >>> l = nn.Linear(2, 2)
             >>> net = nn.Sequential(l, l)
@@ -1167,10 +1287,12 @@ class Layer(tf.Module):
     def trainable_weights(self) -> List[tf.Variable]:
         r"""The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
+
         .. note::
             The list returned may contain duplicate parameters (e.g. output
             layer shares parameters with embeddings). For most usages, it's not
             necessary to ensure uniqueness.
+
         """
         return [x for x in self.parameters() if x.trainable]
 
@@ -1204,7 +1326,7 @@ class Layer(tf.Module):
                                                                          'provided weight shape ' + str(w.shape))
             weight_value_tuples.append((p, w))
         for p, w in weight_value_tuples:
-            p.data = w.data
+            p.assign(w.value())
 
     @property
     def trainable(self):
@@ -1233,7 +1355,7 @@ class Layer(tf.Module):
         n = 0
         need_update = False
         for name, para in self.named_parameters():
-            if para.trainable != value:
+            if para is not None and para.trainable != value:
                 para._trainable = value
 
                 n += np.prod(to_numpy(int_shape(para)))

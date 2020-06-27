@@ -19,29 +19,74 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 
-
-
-
-
-
-
-__all__ = ['is_tensor','is_tensor_like', 'to_numpy', 'to_tensor', 'ndim','cast', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor', 'ndim', 'cast', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
-           'ceil', 'round', 'dot', 'sqrt','rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
+           'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu',
-           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','make_onehot','arange' ,'meshgrid', 'reshape',
-           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix','set_seed',  'shuffle',
-           'random_choice','random_normal','random_normal_like', 'get_rotation_matrix2d', 'warp_affine']
+           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu',
+           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
+           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix', 'set_seed', 'shuffle',
+           'random_choice', 'random_normal', 'random_normal_like', 'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
+
+
+def numpy_compatible(func):
+    def wrapper(*args, **kwargs):
+        x = args[0]
+        new_args = []
+        new_kwargs = OrderedDict()
+        if isinstance(x, np.ndarray):
+            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops'])
+            if numpy_func is not None:
+                for arg in args:
+                    if is_tensor(arg):
+                        new_args.append(to_numpy(arg))
+                    else:
+                        new_args.append(arg)
+                for k, v in kwargs.items():
+                    if is_tensor(v):
+                        new_kwargs[k] = to_numpy(v)
+                    else:
+                        new_kwargs[k] = v
+                y = numpy_func(*new_args, **new_kwargs)
+                return y
+            else:
+                for arg in args:
+                    if isinstance(arg, np.ndarray):
+                        new_args.append(to_tensor(arg))
+                    else:
+                        new_args.append(arg)
+                for k, v in kwargs.items():
+                    if isinstance(v, np.ndarray):
+                        new_kwargs[k] = to_tensor(v)
+                    else:
+                        new_kwargs[k] = v
+                y = func(*new_args, **new_kwargs)
+                return y
+        else:
+            for arg in args:
+                if isinstance(arg, np.ndarray):
+                    new_args.append(to_tensor(arg))
+                else:
+                    new_args.append(arg)
+            for k, v in kwargs.items():
+                if isinstance(v, np.ndarray):
+                    new_kwargs[k] = to_tensor(v)
+                else:
+                    new_kwargs[k] = v
+            y = func(*new_args, **new_kwargs)
+            return y
+
+    return wrapper
 
 
 def _get_device():
     return get_session().device
+
 
 ############################
 ## tensor attribute
@@ -140,7 +185,7 @@ def to_numpy(*x) -> np.ndarray:
         raise ValueError("Unsupported type")
 
 
-def to_tensor(x, dtype=torch.float32, requires_grad=None) -> torch.Tensor:
+def to_tensor(x, dtype=None, requires_grad=None) -> torch.Tensor:
     """ Convert input  to a tensor as possible
 
     Args:
@@ -166,51 +211,52 @@ def to_tensor(x, dtype=torch.float32, requires_grad=None) -> torch.Tensor:
         tensor([0, 1, 2, 3, 4])
 
     """
-    if isinstance(dtype,str):
-        dtype=str2dtype(dtype)
+    if isinstance(dtype, str):
+        dtype = str2dtype(dtype)
     if isinstance(x, torch.Tensor):
-        x = x.clone().detach()
         x = x.to(_get_device())
+        if dtype is None:
+            dtype = x.dtype
         if dtype is not None:
             x = x.type(dtype)
-        if requires_grad == False:
-            x.requires_grad = False
-        elif requires_grad == True:
-            x.requires_grad = True
+        if isinstance(requires_grad, bool) and requires_grad != x.requires_grad:
+            x.requires_grad = requires_grad
 
-        return x
-    elif isinstance(x, int):
-        return torch.tensor(x).int().to(_get_device()) if requires_grad is None else torch.tensor(x,
-                                                                                                  requires_grad=requires_grad).int().to(
-            _get_device())
-    elif isinstance(x, float):
-        return torch.tensor(x).float().to(_get_device()) if requires_grad is None else torch.tensor(x,
-                                                                                                    requires_grad=requires_grad).float().to(
-            _get_device())
-    elif isinstance(x, (list, tuple)):
-        if isinstance(x[0], int):
-            x = torch.tensor(x).int() if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int()
-        else:
-            x = torch.tensor(x).float() if requires_grad is None else torch.tensor(x,
-                                                                                   requires_grad=requires_grad).float()
-        x = x.to(_get_device())
-        return x
-    elif isinstance(x, np.ndarray):
-        npdtype = x.dtype
-        x = torch.tensor(x)
-        if 'int' in str(npdtype):
-            x = x.type(torch.int64)
-        else:
-            x = x.type(dtype)
-        x = x.to(_get_device())
-        if requires_grad == False:
-            x.requires_grad = False
-        elif requires_grad == True:
-            x.requires_grad = True
         return x
     else:
-        return x
-
+        if dtype is None:
+            dtype = torch.float32
+        if isinstance(x, int):
+            return torch.tensor(x).int().to(_get_device()) if requires_grad is None else torch.tensor(x,
+                                                                                                      requires_grad=requires_grad).int().to(
+                _get_device())
+        elif isinstance(x, float):
+            return torch.tensor(x).float().to(_get_device()) if requires_grad is None else torch.tensor(x,
+                                                                                                        requires_grad=requires_grad).float().to(
+                _get_device())
+        elif isinstance(x, (list, tuple)):
+            if isinstance(x[0], int):
+                x = torch.tensor(x).int() if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int()
+            else:
+                x = torch.tensor(x).float() if requires_grad is None else torch.tensor(x,
+                                                                                       requires_grad=requires_grad).float()
+            x = x.to(_get_device())
+            return x
+        elif isinstance(x, np.ndarray):
+            npdtype = x.dtype
+            x = torch.tensor(x)
+            if 'int' in str(npdtype):
+                x = x.type(torch.int64)
+            else:
+                x = x.type(dtype)
+            x = x.to(_get_device())
+            if requires_grad == False:
+                x.requires_grad = False
+            elif requires_grad == True:
+                x.requires_grad = True
+            return x
+        else:
+            return x
 
 
 def ndim(x: torch.Tensor):
@@ -226,6 +272,7 @@ def ndim(x: torch.Tensor):
     return x.ndim
 
 
+@numpy_compatible
 def int_shape(x: torch.Tensor):
     """Shape of a tensor in tuple of integer format
 
@@ -253,7 +300,8 @@ def is_sparse(x):
         if input tensor is sparse return True, else False.
 
     """
-    return is_tensor(x) and  'sparse' in str(type(x))
+    return is_tensor(x) and 'sparse' in str(type(x))
+
 
 def str2dtype(dtype):
     """ Mapping string to dtype
@@ -322,6 +370,7 @@ def cast(x, dtype):
         TypeError: If `x` cannot be cast to the `dtype`.
 
     """
+    dtype = str2dtype(dtype)
     if isinstance(dtype, torch.dtype):
         if dtype == torch.float64 or dtype == torch.double:
             return x.double()
@@ -341,12 +390,8 @@ def cast(x, dtype):
             return x.byte()
         elif dtype == torch.bool:
             return x.bool()
-
-    dtype = str2dtype(dtype)
-    if isinstance(dtype, torch.dtype):
-        return x.type(torch.DoubleTensor).to(_get_device())
-    else:
-        return x.to(_get_device())
+        else:
+            return x.float()
 
 
 ############################
@@ -463,8 +508,8 @@ def any_abnormal_number(x):
 ## compare operation
 ###########################
 
-
-def less(left: torch.Tensor, right: torch.Tensor):
+@numpy_compatible
+def less(left: torch.Tensor, right: (torch.Tensor, np.ndarray, float, int)):
     """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
@@ -485,7 +530,8 @@ def less(left: torch.Tensor, right: torch.Tensor):
     return left.lt(right).float()
 
 
-def equal(left: torch.Tensor, right: torch.Tensor):
+@numpy_compatible
+def equal(left: torch.Tensor, right: (torch.Tensor, np.ndarray, float, int)):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
@@ -504,7 +550,8 @@ def equal(left: torch.Tensor, right: torch.Tensor):
     return left.eq(right).float()
 
 
-def greater(left: torch.Tensor, right: torch.Tensor):
+@numpy_compatible
+def greater(left: torch.Tensor, right: (torch.Tensor, np.ndarray, float, int)):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
@@ -523,7 +570,8 @@ def greater(left: torch.Tensor, right: torch.Tensor):
     return left.gt(right).float()
 
 
-def greater_equal(left: torch.Tensor, right: torch.Tensor):
+@numpy_compatible
+def greater_equal(left: torch.Tensor, right: (torch.Tensor, np.ndarray, float, int)):
     """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
@@ -543,7 +591,8 @@ def greater_equal(left: torch.Tensor, right: torch.Tensor):
     return left.ge(right).float()
 
 
-def not_equal(left: torch.Tensor, right: torch.Tensor):
+@numpy_compatible
+def not_equal(left: torch.Tensor, right: (torch.Tensor, np.ndarray, float, int)):
     """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
@@ -563,7 +612,8 @@ def not_equal(left: torch.Tensor, right: torch.Tensor):
     return 1 - (left.eq(right).float())
 
 
-def less_equal(left: torch.Tensor, right: torch.Tensor):
+@numpy_compatible
+def less_equal(left: torch.Tensor, right: (torch.Tensor, np.ndarray, float, int)):
     """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
@@ -583,7 +633,10 @@ def less_equal(left: torch.Tensor, right: torch.Tensor):
     return left.le(right).float()
 
 
+@numpy_compatible
 def argmax(x: torch.Tensor, axis=1) -> torch.Tensor:
+    if ndim(x) == 1:
+        axis = 0
     if len(x.shape) > axis:
         _, idx = x.max(dim=axis)
     else:
@@ -591,7 +644,10 @@ def argmax(x: torch.Tensor, axis=1) -> torch.Tensor:
     return idx
 
 
+@numpy_compatible
 def argmin(x: torch.Tensor, axis=1) -> torch.Tensor:
+    if ndim(x) == 1:
+        axis = 0
     if len(x.shape) > axis:
         _, idx = x.min(dim=axis)
     else:
@@ -599,10 +655,14 @@ def argmin(x: torch.Tensor, axis=1) -> torch.Tensor:
     return idx
 
 
+@numpy_compatible
 def argsort(x: torch.Tensor, axis=1, descending=True) -> torch.Tensor:
+    if ndim(x) == 1:
+        axis = 0
     return torch.argsort(x, dim=axis, descending=descending)
 
 
+@numpy_compatible
 def maximum(x: torch.Tensor, other: (torch.Tensor, int, float)) -> torch.Tensor:
     if isinstance(other, torch.Tensor):
         return torch.max(x, other)
@@ -610,6 +670,7 @@ def maximum(x: torch.Tensor, other: (torch.Tensor, int, float)) -> torch.Tensor:
         return x.clamp(min=other)
 
 
+@numpy_compatible
 def minimum(x: torch.Tensor, other: (torch.Tensor, int, float)) -> torch.Tensor:
     if isinstance(other, torch.Tensor):
         return torch.min(x, other)
@@ -620,6 +681,7 @@ def minimum(x: torch.Tensor, other: (torch.Tensor, int, float)) -> torch.Tensor:
 ############################
 ## basic math operation
 ###########################
+@numpy_compatible
 def add(x, y):
     """Returns x + y element-wise.
 
@@ -633,11 +695,11 @@ def add(x, y):
 
     Returns:
       A `Tensor`. Has the same type as `x`.
-      
+
     """
     return torch.add(x, y)
 
-
+@numpy_compatible
 def subtract(x, y):
     """Returns x - y element-wise.
 
@@ -655,7 +717,7 @@ def subtract(x, y):
     """
     return torch.sub(x, y)
 
-
+@numpy_compatible
 def dot(x, y):
     """Multiplies 2 tensors (and/or variables) and returns a *tensor*.
     When attempting to multiply a nD tensor
@@ -673,7 +735,7 @@ def dot(x, y):
     """
     return torch.dot(x, y)
 
-
+@numpy_compatible
 def true_divide(x, y):
     """Divides x / y elementwise (using Python 3 division operator semantics).
 
@@ -705,7 +767,7 @@ def true_divide(x, y):
     """
     return torch.true_divide(x, y)
 
-
+@numpy_compatible
 def matmul(a, b, transpose_a=False, transpose_b=False):
     """Multiplies matrix `a` by matrix `b`, producing `a` * `b`.
 
@@ -803,19 +865,7 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
         b = b.T
     return torch.matmul(a, b)
 
-
-def prod(x):
-    """
-
-    Args:
-        x (torch.Tensor): input tensor.
-
-    Returns:
-
-    """
-    return torch.prod(x)
-
-
+@numpy_compatible
 def floor(x: (torch.Tensor, float)):
     """Returns element-wise largest integer not greater than x.
 
@@ -830,7 +880,7 @@ def floor(x: (torch.Tensor, float)):
         x = to_tensor(x)
     return x.floor()
 
-
+@numpy_compatible
 def ceil(x: (torch.Tensor, float)):
     """Return the ceiling of the input, element-wise.
 
@@ -855,7 +905,7 @@ def ceil(x: (torch.Tensor, float)):
         x = to_tensor(x)
     return x.ceil()
 
-
+@numpy_compatible
 def round(x: (torch.Tensor, float), digit: int = 0):
     """Rounds the values of a tensor to the nearest integer, element-wise.
 
@@ -892,6 +942,7 @@ def round(x: (torch.Tensor, float), digit: int = 0):
     else:
         return torch.round(x)
 
+@numpy_compatible
 def prod(x: torch.Tensor):
     """Computes the product of elements across dimensions of a tensor.
 
@@ -912,13 +963,13 @@ def prod(x: torch.Tensor):
     @end_compatibility
     """
 
-    if isinstance(x,(float,int)) :
+    if isinstance(x, (float, int)):
         return math.prod(x)
-    elif isinstance(x,(np.ndarray)) :
+    elif isinstance(x, (np.ndarray)):
         return np.prod(x).astype(np.float32)
     else:
         if not is_tensor(x):
-            x=cast(to_tensor(x),'float32')
+            x = cast(to_tensor(x), 'float32')
         else:
             x = cast(x, 'float32')
     return torch.prod(x)
@@ -934,7 +985,7 @@ def pi():
     """
     return to_tensor(np.pi)
 
-
+@numpy_compatible
 def sqrt(x: torch.Tensor):
     r"""Computes element-wise square root of the input tensor.
 
@@ -971,6 +1022,7 @@ def sqrt(x: torch.Tensor):
         x = to_tensor(x, dtype=torch.float32)
     return x.sqrt()
 
+@numpy_compatible
 def rsqrt(x: torch.Tensor):
     """Computes reciprocal of square root of x element-wise.
 
@@ -992,6 +1044,7 @@ def rsqrt(x: torch.Tensor):
         x = to_tensor(x, dtype=torch.float32)
     return x.rsqrt()
 
+@numpy_compatible
 def square(x: torch.Tensor):
     r"""Computes square of x element-wise.
 
@@ -1014,7 +1067,7 @@ def square(x: torch.Tensor):
         x = to_tensor(x, dtype=torch.float32)
     return x ** 2
 
-
+@numpy_compatible
 def abs(x: torch.Tensor):
     r"""Computes the absolute value of a tensor.
 
@@ -1047,7 +1100,7 @@ def abs(x: torch.Tensor):
         x = to_tensor(x, dtype=torch.float32)
     return x.abs()
 
-
+@numpy_compatible
 def pow(x: torch.Tensor, y):
     r"""Computes the power of one value to another.
 
@@ -1072,7 +1125,7 @@ def pow(x: torch.Tensor, y):
         x = to_tensor(x, dtype=torch.float32)
     return x.pow(y)
 
-
+@numpy_compatible
 def log(x: torch.Tensor):
     r"""Computes natural logarithm of x element-wise.
 
@@ -1100,7 +1153,7 @@ def log(x: torch.Tensor):
         x = to_tensor(x, dtype=torch.float32)
     return x.log()
 
-
+@numpy_compatible
 def exp(x: torch.Tensor):
     r"""Computes exponential of x element-wise.  \\(y = e^x\\).
 
@@ -1144,7 +1197,7 @@ def exp(x: torch.Tensor):
         x = to_tensor(x, dtype=torch.float32)
     return x.exp()
 
-
+@numpy_compatible
 def clip(x: torch.Tensor, min=-np.inf, max=np.inf):
     """
 
@@ -1158,7 +1211,7 @@ def clip(x: torch.Tensor, min=-np.inf, max=np.inf):
     """
     return x.clamp(min, max)
 
-
+@numpy_compatible
 def sin(x: torch.Tensor):
     """Computes the element-wise sine
 
@@ -1175,7 +1228,7 @@ def sin(x: torch.Tensor):
     """
     return torch.sin(x.float())
 
-
+@numpy_compatible
 def cos(x: torch.Tensor):
     """Computes the element-wise cosine
 
@@ -1192,7 +1245,7 @@ def cos(x: torch.Tensor):
     """
     return torch.cos(x.float())
 
-
+@numpy_compatible
 def tan(x: torch.Tensor):
     """Computes the element-wise tan
 
@@ -1209,7 +1262,7 @@ def tan(x: torch.Tensor):
     """
     return torch.tan(x.float())
 
-
+@numpy_compatible
 def asin(x: torch.Tensor):
     """Computes the element-wise arcsin (inverse sine)
 
@@ -1226,7 +1279,7 @@ def asin(x: torch.Tensor):
     """
     return torch.asin(x.float())
 
-
+@numpy_compatible
 def acos(x: torch.Tensor):
     """Computes the element-wise arccos (inverse cosine)
 
@@ -1243,7 +1296,7 @@ def acos(x: torch.Tensor):
     """
     return torch.acos(x.float())
 
-
+@numpy_compatible
 def atan(x: torch.Tensor):
     """Computes the element-wise arctan (inverse tan)
 
@@ -1259,7 +1312,7 @@ def atan(x: torch.Tensor):
     """
     return torch.atan(x.float())
 
-
+@numpy_compatible
 def sinh(x: torch.Tensor):
     """Computes the element-wise sinh
 
@@ -1276,7 +1329,7 @@ def sinh(x: torch.Tensor):
     """
     return torch.sinh(x.float())
 
-
+@numpy_compatible
 def cosh(x: torch.Tensor):
     """Computes the element-wise cosh
 
@@ -1293,7 +1346,7 @@ def cosh(x: torch.Tensor):
     """
     return torch.cosh(x.float())
 
-
+@numpy_compatible
 def tanh(x: torch.Tensor):
     """Computes the element-wise tanh
 
@@ -1314,7 +1367,7 @@ def tanh(x: torch.Tensor):
 ############################
 ## elementwise operation
 ###########################
-
+@numpy_compatible
 def element_times(left, right):
     """
     The output of this operation is the element-wise product of the two  input
@@ -1338,7 +1391,7 @@ def element_times(left, right):
     """
     return left * right
 
-
+@numpy_compatible
 def element_max(left, right):
     """
     The output of this operation is the element-wise product of the two  input
@@ -1361,7 +1414,7 @@ def element_max(left, right):
     """
     return torch.max(left, right)
 
-
+@numpy_compatible
 def element_min(left, right):
     """
     The output of this operation is the element-wise product of the two  input
@@ -1382,9 +1435,10 @@ def element_min(left, right):
     >>> element_min(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
     tensor([1., 2., 1., 2.])
     """
+
     return torch.min(left, right)
 
-
+@numpy_compatible
 def element_divide(left, right):
     """
     The output of this operation is the element-wise divide of the two  input
@@ -1407,7 +1461,7 @@ def element_divide(left, right):
     """
     return torch.true_divide(left, right)
 
-
+@numpy_compatible
 def element_cosine_distance(v1, v2, axis=-1):
     """
 
@@ -1425,7 +1479,7 @@ def element_cosine_distance(v1, v2, axis=-1):
                                                                                  keepdims=False).sqrt())
     return cos
 
-
+@numpy_compatible
 def where(flag, value_if_true, value_if_false):
     """
     return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
@@ -1450,7 +1504,7 @@ def where(flag, value_if_true, value_if_false):
 ############################
 ## reduce operation
 ###########################
-
+@numpy_compatible
 def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the mean of the input tensor's elements across a specified axis or a list of specified axes.
 
@@ -1478,6 +1532,8 @@ def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
 
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+    if x.element_size() == 0:
+        return x
     if axis is None:
         return x.mean()
     elif isinstance(axis, int):
@@ -1489,7 +1545,7 @@ def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
             x = x.mean(dim=a, keepdim=keepdims)
         return x
 
-
+@numpy_compatible
 def reduce_sum(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the sum of the input tensor's elements across a specified axis or a list of specified axes.
 
@@ -1518,6 +1574,8 @@ def reduce_sum(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+    if x.element_size() == 0:
+        return x
     if axis is None:
         return x.sum()
     elif isinstance(axis, int):
@@ -1529,7 +1587,7 @@ def reduce_sum(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
             x = x.sum(dim=a, keepdim=keepdims)
         return x
 
-
+@numpy_compatible
 def reduce_max(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the maximum of elements across dimensions of a tensor.
 
@@ -1573,6 +1631,8 @@ def reduce_max(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+    if x.element_size() == 0:
+        return x
     if axis is None:
         return x.max()
     elif isinstance(axis, int):
@@ -1586,7 +1646,7 @@ def reduce_max(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
             x = arr
         return x
 
-
+@numpy_compatible
 def reduce_min(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the minimum of elements across dimensions of a tensor.
 
@@ -1631,6 +1691,8 @@ def reduce_min(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+    if x.element_size() == 0:
+        return x
     if axis is None:
         return x.min()
     elif isinstance(axis, int):
@@ -1644,7 +1706,7 @@ def reduce_min(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
             x = arr
         return x
 
-
+@numpy_compatible
 def reduce_logsumexp(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """Computes log(sum(exp(elements across dimensions of a tensor))).
 
@@ -1679,12 +1741,14 @@ def reduce_logsumexp(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
       The reduced tensor.
 
     """
+    if x.element_size() == 0:
+        return x
     if axis is None:
         return log(reduce_sum(exp(x)))
     else:
         return log(reduce_sum(exp(x), axis=axis, keepdims=keepdims))
 
-
+@numpy_compatible
 def reduce_prod(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """Computes the product of elements across dimensions of a tensor.
 
@@ -1712,6 +1776,8 @@ def reduce_prod(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     """
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+    if x.element_size() == 0:
+        return x
     if isinstance(axis, int):
         arr, idx = x.prod(dim=axis, keepdim=keepdims)
         return arr
@@ -1733,9 +1799,8 @@ def reduce_prod(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
 mean = reduce_mean
 sum = reduce_sum
 
-
-
-def max(*args,**kwargs):
+@numpy_compatible
+def max(*args, **kwargs):
     """
 
     Args:
@@ -1744,22 +1809,24 @@ def max(*args,**kwargs):
     Returns:
 
     """
-    if len(args)>1 and all([str(a).isnumeric() for a in args]):
+    if len(args) > 1 and all([str(a).isnumeric() for a in args]):
         return builtins.max(*args)
-    elif len(args)>1 :
-        new_args=[to_tensor(a) for a in args]
+    elif len(args) > 1:
+        new_args = [to_tensor(a) for a in args]
         return torch.max(*new_args)
-    elif len(args) ==1 and  isinstance(args[0],np.ndarray):
-        axis=kwargs.get('axis',kwargs.get('dim',None))
+    elif len(args) == 1 and isinstance(args[0], np.ndarray):
+        axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
-        return np.max(args[0],axis=axis,keepdims=keepdims)
-    elif len(args) ==1 and is_tensor(args[0]):
+        return np.max(args[0], axis=axis, keepdims=keepdims)
+    elif len(args) == 1 and is_tensor(args[0]):
+        if args[0].element_size() == 0:
+            return args[0]
         axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
         return reduce_max(args[0], axis=axis, keepdims=keepdims)
 
-
-def min(*args,**kwargs):
+@numpy_compatible
+def min(*args, **kwargs):
     """
 
     Args:
@@ -1768,22 +1835,21 @@ def min(*args,**kwargs):
     Returns:
 
     """
-    if len(args)>1 and all([str(a).isnumeric() for a in args]):
+    if len(args) > 1 and all([str(a).isnumeric() for a in args]):
         return builtins.min(*args)
-    elif len(args)>1 :
-        new_args=[to_tensor(a) for a in args]
+    elif len(args) > 1:
+        new_args = [to_tensor(a) for a in args]
         return torch.min(*new_args)
-    elif len(args) ==1 and  isinstance(args[0],np.ndarray):
-        axis=kwargs.get('axis',kwargs.get('dim',None))
+    elif len(args) == 1 and isinstance(args[0], np.ndarray):
+        axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
-        return np.min(args[0],axis=axis,keepdims=keepdims)
-    elif len(args) ==1 and is_tensor(args[0]):
+        return np.min(args[0], axis=axis, keepdims=keepdims)
+    elif len(args) == 1 and is_tensor(args[0]):
+        if args[0].element_size() == 0:
+            return args[0]
         axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
         return reduce_min(args[0], axis=axis, keepdims=keepdims)
-
-
-
 
 
 ############################
@@ -1794,13 +1860,13 @@ def min(*args,**kwargs):
 def identity(x):
     """Identity activation Layer
     A placeholder identity operator that is argument-insensitive.
-    
+
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
     Examples:
         >>> identity(to_tensor([-3.0, -1.0, 0.0, 2.0]))
         tensor([-3.0, -1.0, 0.0, 2.0])
@@ -1818,14 +1884,14 @@ def relu(x):
         f(x) = x if threshold <= x < max_value
         f(x) = negative_slope * (x - threshold) otherwise
       ```
-    
+
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     """
     return torch.relu(x)
 
@@ -1841,11 +1907,11 @@ def relu6(x):
       ```
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     """
     return F.relu6(x)
 
@@ -1859,11 +1925,11 @@ def leaky_relu(x, slope=0.2):
         ```
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     """
     return F.leaky_relu(x, negative_slope=slope)
 
@@ -1879,30 +1945,28 @@ def leaky_relu6(x, slope=0.2):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     """
     return torch.clamp(F.leaky_relu(x, negative_slope=slope), -6, 6)
 
 
 def smooth_relu(x):
     """smooth_relu activation function
-    
-    
+
+
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     """
     return torch.log(1 + torch.exp(x))
-
-
 
 
 def p_relu(x, weight):
@@ -1917,10 +1981,10 @@ def p_relu(x, weight):
     Args:
         x (torch.Tensor): input tensor.
         weight:(1 or None)  if None num_parameters will equal to input_filters .
-        
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     return torch.prelu(x, weight=weight)
@@ -1928,18 +1992,16 @@ def p_relu(x, weight):
 
 def sigmoid(x):
     """softmax activation function
-    
+
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     """
     return torch.sigmoid(x)
-
-
 
 
 def swish(x):
@@ -1951,11 +2013,11 @@ def swish(x):
       ```
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
-    
+
+
     References:
         Swish: a Self-Gated Activation Function
         https://arxiv.org/abs/1710.05941v1
@@ -1978,10 +2040,10 @@ def hard_sigmoid(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
 
     Examples:
@@ -2004,10 +2066,10 @@ def hard_swish(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
     Examples:
         >>> hard_swish(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
@@ -2030,10 +2092,10 @@ def hard_tanh(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     Examples:
         >>> hard_tanh(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
@@ -2067,10 +2129,10 @@ def selu(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     Examples:
         >>> selu(to_tensor([[-1, -0.5, 0, 1, 2]]))
@@ -2080,26 +2142,29 @@ def selu(x):
     return torch.selu(x)
 
 
-def elu(x):
+def elu(x, alpha=1):
     """ Exponential Linear Unit.
     It follows:
 
         f(x) =  alpha * (exp(x) - 1.) for x < 0
         f(x) = x for x >= 0
 
+    :math:`\text{ELU}(x) = \max(0,x) + \min(0, \alpha * (\exp(x) - 1))`.
+
     Args:
         x (torch.Tensor): input tensor.
-    
+        alpha (float):multiplier
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     Examples:
         >>> elu(to_tensor([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
 
     """
-    return F.elu(x)
+    return F.elu(x, alpha=alpha)
 
 
 def lecun_tanh(x):
@@ -2107,10 +2172,10 @@ def lecun_tanh(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     return 1.7159 * torch.tanh(2 / 3 * x)
@@ -2121,10 +2186,10 @@ def soft_sign(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     return x.exp().add(1).log()
@@ -2135,10 +2200,10 @@ def soft_plus(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     return F.softplus(x)
@@ -2149,10 +2214,10 @@ def logit(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     return (x / (1 - x)).log()
@@ -2167,10 +2232,10 @@ def log_log(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     Examples:
         >>> loglog(to_tensor([-3.0, -1.0, 0.0, 2.0]))
@@ -2185,17 +2250,15 @@ def log_log(x):
     return 1 - torch.exp(-torch.exp(x))
 
 
-
-
 def mish(x):
     """mish activation function
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
 
     Examples:
@@ -2209,6 +2272,7 @@ def mish(x):
     """
     return x * (torch.tanh(F.softplus(x)))
 
+
 def hard_mish(x):
     """hard mish activation function
 
@@ -2218,10 +2282,10 @@ def hard_mish(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
 
     Examples:
@@ -2233,7 +2297,7 @@ def hard_mish(x):
         https://arxiv.org/abs/1908.08681v1
 
     """
-    return  x * hard_tanh(F.softplus(x))
+    return x * hard_tanh(F.softplus(x))
 
 
 def softmax(x, axis=1):
@@ -2252,10 +2316,11 @@ def softmax(x, axis=1):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+        axis (int,list):  axis along which the reduction will be performed
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     Examples:
     >>> softmax(to_tensor([[1, 1, 2, 3]]))
@@ -2284,12 +2349,13 @@ def log_softmax(x, axis=1):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+        axis (int,list):  axis along which the reduction will be performed
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
     """
-    return x - reduce_logsumexp(x)
+    return x - reduce_logsumexp(x, axis=axis)
 
 
 def gelu(x):
@@ -2303,10 +2369,10 @@ def gelu(x):
         ```
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
     References:
         Gaussian Error Linear Units (GELUs)
         https://arxiv.org/abs/1606.08415
@@ -2324,10 +2390,10 @@ def gpt_gelu(x):
 
     Args:
         x (torch.Tensor): input tensor.
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
@@ -2343,10 +2409,10 @@ def moments(x: torch.Tensor, axis, keepdims=True):
     Args:
         x (torch.Tensor): input tensor.
         axis (int) :
-    
+
     Returns:
         (torch.Tensor): output tensor and have same shape with x.
-    
+
 
     """
     _axes = list(axis)
@@ -2433,6 +2499,7 @@ def squeeze(x: torch.Tensor, axis=0):
     return x.squeeze(axis)
 
 
+@numpy_compatible
 def expand_dims(x: torch.Tensor, axis=0):
     """
 
@@ -2694,7 +2761,6 @@ def eye(shape, dtype=torch.float32, requires_grad=None):
         raise ValueError('input tensor must have exactly two axe.')
 
 
-
 def eye_like(a, dtype=torch.float32, requires_grad=False):
     """
     Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
@@ -2740,13 +2806,13 @@ def make_onehot(label, num_classes, axis=-1):
 
     """
 
-    onehot= torch.nn.functional.one_hot(label,num_classes)
-    if axis is not None and  axis!=-1:
-        onehot=transpose(onehot,(-1,axis)).float()
+    onehot = torch.nn.functional.one_hot(label, num_classes)
+    if axis is not None and axis != -1:
+        onehot = transpose(onehot, (-1, axis)).float()
     return onehot
 
 
-def arange( *args,dtype=torch.int32, requires_grad=False):
+def arange(*args, dtype=torch.int32, requires_grad=False):
     """
 
     Args:
@@ -2757,12 +2823,12 @@ def arange( *args,dtype=torch.int32, requires_grad=False):
     Returns:
 
     """
-    if len(args)==1:
-        return torch.arange(end=args[0],dtype=dtype,requires_grad=requires_grad).to(_get_device())
+    if len(args) == 1:
+        return torch.arange(end=args[0], dtype=dtype, requires_grad=requires_grad).to(_get_device())
     elif len(args) == 2:
-        return torch.arange(start=args[0],end=args[1],dtype=dtype,requires_grad=requires_grad).to(_get_device())
+        return torch.arange(start=args[0], end=args[1], dtype=dtype, requires_grad=requires_grad).to(_get_device())
     elif len(args) == 3:
-        return torch.arange(start=args[0],end=args[1],step=args[2],dtype=dtype,requires_grad=requires_grad).to(_get_device())
+        return torch.arange(start=args[0], end=args[1], step=args[2], dtype=dtype, requires_grad=requires_grad).to(_get_device())
     else:
         raise ValueError('only maximum  3 args in arange function ')
 
@@ -2917,8 +2983,7 @@ def random_choice(t: torch.Tensor):
 
     """
 
-
-    idx=np.random.choice(np.array(range(t.size(0))))
+    idx = np.random.choice(np.array(range(t.size(0))))
     return t[idx]
 
 
@@ -2963,7 +3028,8 @@ def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):
             dtype = str2dtype(dtype)
     if dtype is not None:
         return cast(torch.normal(mean=mean, std=std, size=shape), dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std,size=shape), dtype=torch.float32)
+    return cast(torch.normal(mean=mean, std=std, size=shape), dtype=torch.float32)
+
 
 def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
     """Outputs random values from a normal distribution.
@@ -3006,7 +3072,7 @@ def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
             dtype = str2dtype(dtype)
     if dtype is not None:
         return cast(torch.normal(mean=mean, std=std, size=a.shape), dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std,size=a.shape), dtype=torch.float32)
+    return cast(torch.normal(mean=mean, std=std, size=a.shape), dtype=torch.float32)
 
 
 ############################
@@ -3014,9 +3080,9 @@ def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
 ###########################
 
 def binary_crossentropy(target, output, from_logits=False):
-    if from_logits:
-        output = output.sigmoid_()
-    output = output.clamp_(epsilon(), 1.0 - epsilon())
+    if not from_logits:
+        output = output.sigmoid()
+    output = output.clamp(epsilon(), 1.0 - epsilon())
     output = -target * torch.log(output) - (1.0 - target) * torch.log(1.0 - output)
     return output
 
@@ -3526,13 +3592,6 @@ def shear(tensor: torch.Tensor, shear: torch.Tensor) -> torch.Tensor:
     return affine(tensor, shear_matrix[..., :2, :3])
 
 
-
-
-
-
-
-
-
 _FUN_NAMES = [
     # source_fun, target_fun
     ('to_numpy', to_numpy),
@@ -3643,8 +3702,8 @@ _FUN_NAMES = [
     ('shuffle', shuffle),
     ('random_choice', random_choice),
     ('random_normal_like', random_normal_like)
-    ]
-for target_fun_name,source_fun in _FUN_NAMES:
-    if not hasattr(torch.Tensor,target_fun_name):
+]
+for target_fun_name, source_fun in _FUN_NAMES:
+    if not hasattr(torch.Tensor, target_fun_name):
         setattr(torch.Tensor, target_fun_name, source_fun)
 del _FUN_NAMES

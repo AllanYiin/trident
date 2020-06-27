@@ -371,7 +371,7 @@ def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, _use_ne
            containing a file name
         pickle_module: module used for pickling metadata and objects
         pickle_protocol: can be specified to override the default protocol
-        _use_new_zipfile_serialization:wheather reuse zipfile_serialization
+        _use_new_zipfile_serialization:whether reuse zipfile_serialization
 
     .. warning::
         If you are using Python 2, :func:`torch.save` does NOT support :class:`StringIO.StringIO`

@@ -24,22 +24,11 @@ from trident.backend.tensorflow_ops import *
 #             [0 ] *0, axis=-1)
 
 
-__all__ = ['get_loss', 'CrossEntropyLoss', 'MSELoss', 'EdgeLoss', 'NLLLoss', 'F1ScoreLoss', '_ClassificationLoss',
+__all__ = ['get_loss','_ClassificationLoss', 'CrossEntropyLoss', 'MSELoss', 'EdgeLoss', 'NLLLoss', 'F1ScoreLoss', '_ClassificationLoss',
            'FocalLoss']
 
 
-def make_onehot(labels, classes, axis=-1):
-    """
 
-    Args:
-        labels ():
-        classes ():
-        axis ():
-
-    Returns:
-
-    """
-    return tf.one_hot(indices=labels, depth=classes, on_value=1.0, off_value=0.0, axis=axis)
 
 
 class _ClassificationLoss(Layer):
@@ -52,7 +41,7 @@ class _ClassificationLoss(Layer):
             axis (int): the position where the classes is.
             loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
             number of classes.
-            from_logits (bool): wheather the output tensor is normalized as a probability (total equal to 1)
+            from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
             ignore_index (int or list of int):
             cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
             less than 1..
@@ -62,10 +51,24 @@ class _ClassificationLoss(Layer):
                 'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
                 summation them.
 
+        Attributes:
+            need_target_onehot (bool): If True, means the before loss calculation , need to transform target as one-hot format, ex. label-smooth, default is False.
+            is_multiselection (bool): If True, means the classification model is multi-selection, so cannot use  any softmax process, use sigmoid and binary_crosss_entropy insteaded.
+            is_target_onehot (bool):  If True, means we have confirmed (not just declare) the target is transformed as  one-hot format
+            reduction(str): The aggregation function for loss, available options are 'sum', 'mean 'and 'batch_mean', default is 'mean'
+            axis (None or int): The axis we according with for loss calculation. Default is 1.
+            from_logits (bool):If True, means  the sum of all probability will equal 1.
+            is_logsoftmax (bool):If True, means model  use SoftMax as last layer or use any equivalent calculation.
+            loss_weights(1D tensor):The loss weight for all classes.
+            ignore_index(int , list, tuple): The classes we want to ignore in the loss calculation.
+            cutoff(float): Means the decision boundary in this classification model, default=0.5.
+            num_classes(int):number of  all the classes.
+            label_smooth (bool):If True, mean we will apply label-smoothing in loss calculation.
+
         """
         super(_ClassificationLoss, self).__init__(name=name)
         self.need_target_onehot = True
-
+        self.is_multiselection = False
         self.reduction = reduction
         self.axis = axis
         self.from_logits = from_logits
@@ -317,11 +320,12 @@ class F1ScoreLoss(_ClassificationLoss):
 
     """
 
-    def __init__(self, beta=1, axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,
+    def __init__(self,num_classes=None, beta=1, axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,
                  label_smooth=False, reduction='mean', name='CrossEntropyLoss'):
         super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
         self.beta = beta
         self._built = True
+        self.num_classes=num_classes
 
     def calculate_loss(self, output, target, **kwargs):
         """
