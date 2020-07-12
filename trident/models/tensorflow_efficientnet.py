@@ -220,7 +220,7 @@ def EfficientNetB0(include_top=True,
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape=recovery_model.fc.input_shape
                 recovery_model.fc=new_fc
-        effb0._model=recovery_model
+        effb0.model=recovery_model
 
     return effb0
 

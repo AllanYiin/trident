@@ -13,7 +13,7 @@ from itertools import product as product
 import cv2
 from trident.data.dataset import BboxDataset
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,ModuleList
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import xywh2xyxy, xyxy2xywh,bbox_giou,bbox_giou_numpy
 from trident.data.image_common import *

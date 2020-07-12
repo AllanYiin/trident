@@ -3,8 +3,10 @@ from __future__ import division
 from __future__ import print_function
 import inspect
 import numbers
+import copy
 import tensorflow as tf
 import numpy as np
+from tensorflow.python.ops import variables as tf_variables
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
     format_time, get_terminal_size, snake2camel, camel2snake
 from trident.backend.tensorflow_backend import Layer, Sequential
@@ -155,14 +157,14 @@ class BatchNorm(Layer):
 
 
             if self.affine:
-                self.weight = tf.Variable(tf.ones(shape=[self.input_filters]), name='weight') #gamma//scale
-                self.bias = tf.Variable(tf.zeros(shape=[self.input_filters]), name='bias') #beta/ offset
+                self.weight = tf.Variable(tf.ones(shape=[self.input_filters]),trainable=True, name='weight') #gamma//scale
+                self.bias = tf.Variable(tf.zeros(shape=[self.input_filters]),trainable=True, name='bias') #beta/ offset
 
             if self.track_running_stats:
-                self.register_buffer('running_mean',tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=False,name='running_mean'))
-                self.register_buffer('running_var',tf.Variable(tf.ones(shape=[self.input_filters]), trainable=False, name='running_var'))
+                self.register_buffer('running_mean',tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=False,name='running_mean',synchronization=tf.VariableSynchronization.AUTO,aggregation=tf_variables.VariableAggregation.MEAN))
+                self.register_buffer('running_var',tf.Variable(tf.ones(shape=[self.input_filters]), trainable=False, name='running_var',synchronization=tf.VariableSynchronization.AUTO,aggregation=tf_variables.VariableAggregation.MEAN))
                 self.register_buffer('num_batches_tracked',to_tensor(0,dtype=tf.int64))
-                self.num_batches_tracked =tf.constant(0)
+
 
             self._built = True
 
@@ -180,20 +182,20 @@ class BatchNorm(Layer):
 
         scale, offset = _broadcast(self.weight), _broadcast(self.bias)
 
-        mean, variance = tf.nn.moments(x, axes=reduction_axes, keepdims=False)
+        mean, variance = tf.nn.moments(x, axes=reduction_axes, keepdims=True)
         running_mean = self.running_mean
         running_var = self.running_var
 
         if not self.training:
-            mean=to_tensor(running_mean)
-            variance=to_tensor(running_var)
+            mean, variance = self.running_mean, self.running_var
 
         new_mean, new_variance = mean, variance
         def _do_update(var, value):
             """Compute the updates for mean and variance."""
-            return self.assign_moving_average(var, value, self.momentum, None)
+            return self.assign_moving_average(var, value, self.momentum, self.input_shape.prod())
 
         def mean_update():
+            """Update the moving variance."""
             true_branch = lambda: _do_update(self.running_mean, new_mean)
             false_branch = lambda: self.running_mean
             if  self.training:
@@ -385,7 +387,7 @@ class InstanceNorm(GroupNorm):
                 this module does not track such statistics and always uses batch
                 statistics in both training and eval modes. Default: ``False``
 
-        Examples::
+        Examples:
             >>> innorm=InstanceNorm(affine=False)
             >>> input = to_tensor(np.random.standard_normal((2, 128, 128,64)))
             >>> print(int_shape(innorm(input)))
@@ -462,7 +464,7 @@ class LayerNorm(Layer):
             has learnable per-element affine parameters initialized to ones (for weights)
             and zeros (for biases). Default: ``True``.
 
-    Examples::
+    Examples:
 
         >>> input = to_tensor(np.random.standard_normal((2, 128, 128,64)))
         >>> # With Learnable Parameters
@@ -512,6 +514,56 @@ class PixelNorm(Layer):
         return x /sqrt(mean(x ** 2, axis=self.axis, keepdims=True) + self.eps)
 
 
+class SpectralNorm(Layer):
+    """
+    Attributes:
+       layer: tensorflow keras layers (with kernel attribute)
+    """
+
+    def __init__(self, layer, **kwargs):
+        super(SpectralNorm, self).__init__(layer, **kwargs)
+
+    def build(self, input_shape):
+        """Build `Layer`"""
+
+        if not self.layer.built:
+            self.layer.build(input_shape)
+
+            if not hasattr(self.layer, 'kernel'):
+                raise ValueError('`SpectralNormalization` must wrap a layer that'
+                                 ' contains a `kernel` for weights')
+
+            self.w = self.layer.kernel
+            self.w_shape = self.w.shape.as_list()
+            self.u = self.add_variable(shape=tuple([1, self.w_shape[-1]]),
+                initializer=initializers.TruncatedNormal(stddev=0.02), name='sn_u', trainable=False,
+                dtype=dtypes.float32)
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if self.training == True:
+            # Recompute weights for each forward pass
+            self._compute_weights()
+
+        output = self.layer(x)
+        return output
+
+    def _compute_weights(self):
+        """Generate normalized weights.
+        This method will update the value of self.layer.kernel with the
+        normalized value, so that the layer is ready for call().
+        """
+        w_reshaped = reshape(self.w, [-1, self.w_shape[-1]])
+        eps = 1e-12
+        _u = copy.deepcopy(self.u)
+        _v =matmul(_u, w_reshaped,transpose_b=True)
+        _v = _v / maximum(reduce_sum(_v ** 2) ** 0.5, eps)
+        _u = matmul(_v, w_reshaped)
+        _u = _u / maximum(reduce_sum(_u ** 2) ** 0.5, eps)
+        self.u.assign(_u)
+        sigma =matmul(matmul(_v, w_reshaped), _u,transpose_b=True)
+
+        self.layer.kernel.assign(self.w / sigma)
 
 
 class EvoNormB0(Layer):

@@ -544,12 +544,12 @@ class Iterator(object):
         try:
             bbox = None
             mask = None
-            data = self.data.__getitem__(index % len(self.data)) if len(self.data) > 0 else None
+            data = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
             # stop = time.time()
             # print('get data:{0}'.format(stop - start))
             # start=stop
 
-            label = self.label.__getitem__(index % len(self.label)) if len(self.label) > 0 else None
+            label = self.label.__getitem__(index % len(self.label)) if self.label is not None and len(self.label) > 0 else None
             # stop = time.time()
             # print('get label:{0}'.format(stop - start))
             # start = stop
@@ -584,7 +584,7 @@ class Iterator(object):
                 # print('paired_transform:{0}'.format(stop - start))
                 # start = stop
                 if hasattr(self.data, 'image_transform'):
-                    data = self.data.image_transform( data)  # stop = time.time()  # print('data image_transform:{0}'.format(stop - start))  #
+                    data = self.data.image_transform(data) # stop = time.time()  # print('data image_transform:{0}'.format(stop - start))  #
                     # start = stop
                 if hasattr(self.label, 'image_transform'):
                     label = self.label.image_transform(label)  # stop = time.time()  # print('label image_transform:{0}'.format(stop - start))  #

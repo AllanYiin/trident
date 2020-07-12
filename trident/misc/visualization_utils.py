@@ -4,12 +4,15 @@ from __future__ import print_function
 import sys
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 import math
+
 if is_in_ipython():
     from IPython import display
+from tkinter import *
 
 if not is_in_colab:
     import matplotlib
-    matplotlib.use('Qt5Agg' if not is_in_ipython() and not is_in_colab() else 'NbAgg' )
+
+    matplotlib.use('TkAgg' if not is_in_ipython() and not is_in_colab() else 'NbAgg')
 else:
     import matplotlib
 
@@ -21,7 +24,7 @@ import matplotlib.font_manager
 fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
 fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
 
-if  sys.platform == 'win32' :
+if sys.platform == 'win32':
     if 'Microsoft YaHei' in fontnames:
         matplotlib.rc('font', family='Microsoft YaHei')
     else:
@@ -29,8 +32,6 @@ if  sys.platform == 'win32' :
             if 'heiti' in name.lower():
                 matplotlib.rc('font', family=name)
                 break
-
-
 
 import PIL
 from PIL import Image
@@ -40,11 +41,10 @@ from PIL import ImageFont
 import colorsys
 import itertools
 import numpy as np
-from trident.backend.common import get_time_suffix,make_dir_if_need
+from trident.backend.common import get_time_suffix, make_dir_if_need
 from trident.data.image_common import *
 
-
-__all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram','generate_palette','plot_bbox','plot_3d_histogram','plot_centerloss']
+__all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram', 'generate_palette', 'plot_bbox', 'plot_3d_histogram', 'plot_centerloss']
 
 
 def generate_palette(num_classes):
@@ -54,35 +54,33 @@ def generate_palette(num_classes):
     return colors
 
 
-
 def plot_bbox(x, img, color=None, label=None, line_thickness=None):
-    img_shape =(img.height,img.width,3)
+    img_shape = (img.height, img.width, 3)
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
-    #img = array2image(img)
+    # img = array2image(img)
     draw = ImageDraw.Draw(img)
-    draw.rectangle(((x[0], x[1]), (x[2], x[3])), outline=color,fill=None, width=tl)
+    draw.rectangle(((x[0], x[1]), (x[2], x[3])), outline=color, fill=None, width=tl)
     fontcolor = (255, 255, 255)
     avg_color = np.array(list(color)).mean()
     if avg_color > 150:
         fontcolor = (0, 0, 0)
-    if label and sys.platform == 'win32' :
+    if label and sys.platform == 'win32':
         font = ImageFont.truetype(fonts[fontnames.index('Microsoft YaHei')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
         tf = max(tl - 1, 1)  # font thickness
         size = draw.textsize(label, font=font)
         offset = font.getoffset(label)
-        draw.rectangle(((x[0], x[1] - size[1] - 2*(offset[1]+1)), (x[0] + 2*(size[0] + offset[0] + 1), x[1])), fill=color,
+        draw.rectangle(((x[0], x[1] - size[1] - 2 * (offset[1] + 1)), (x[0] + 2 * (size[0] + offset[0] + 1), x[1])), fill=color,
                        width=2)
-        draw.text((x[0] + 2, x[1] - size[1] - offset[1]- 1), u'{0}'.format(label), fill=fontcolor, font=font)
-    #rgb_image = image2array(img)
+        draw.text((x[0] + 2, x[1] - size[1] - offset[1] - 1), u'{0}'.format(label), fill=fontcolor, font=font)
+    # rgb_image = image2array(img)
     return img
-
-
 
 
 def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
     make_dir_if_need(save_path)
+    row = len(imgs)
     suffix = get_time_suffix()
-    if len(imgs)==1 and row==1:
+    if len(imgs) == 1 and row == 1:
         img = array2image(imgs[0][0])
         filename = save_path.format(suffix)
         img.save(filename)
@@ -102,7 +100,6 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
         fig.set_size_inches(len(imgs) * 2, row * 2)
         plt.clf()
         plt.ion()  # is not None:
-
 
         for m in range(row * len(imgs)):
             plt.subplot(row, len(imgs), m + 1)
@@ -172,20 +169,19 @@ def loss_metric_curve(losses, metrics, sample_collected=None, legend=None, calcu
         for i in range(len(metrics)):
             item = metrics[i]
             for k, v in item.items():
-                if len(collected_samples) ==len(v)> 0:
+                if len(collected_samples) == len(v) > 0:
                     plt.plot(collected_samples, np.array(item[k]))
-                elif len(v)> 0:
+                elif len(v) > 0:
                     plt.plot(np.array(item[k]))
-                if len(v)> 0 and legend is not None:
+                if len(v) > 0 and legend is not None:
                     legend_list.append(['{0} {1}'.format(k, legend[i])])
-                elif len(v)> 0:
+                elif len(v) > 0:
                     legend_list.append(['{0} {1}'.format(k, i)])
         plt.legend(legend_list, loc='upper left')
 
     plt.title('model metrics')
     plt.ylabel('metrics')
     plt.xlabel(calculate_base)
-
 
     if max_iteration is not None:
         plt.xlim(0, max_iteration)
@@ -216,7 +212,7 @@ default_bins.extend(np.arange(-0.0002, 0.0002, 0.00002).tolist())
 default_bins = sorted(list(set(default_bins)))
 
 
-def plot_3d_histogram(ax,grads,sample_collected=None, bins=None, inteval=1, title=''):
+def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, title=''):
     global default_bins
     from mpl_toolkits.mplot3d import Axes3D
     if bins is None:
@@ -227,8 +223,6 @@ def plot_3d_histogram(ax,grads,sample_collected=None, bins=None, inteval=1, titl
         sample_collected = np.array(sample_collected)
         sample = np.arange(len(sample_collected))
         collected_samples = sample[sample_collected == 1]
-
-
 
     # ax = fig.gca(projection='3d')
     # Make verts a list, verts[i] will be a list of (x,y) pairs defining polygon i
@@ -260,7 +254,6 @@ def plot_3d_histogram(ax,grads,sample_collected=None, bins=None, inteval=1, titl
     ax.set_ylim(0, int(max(new_zs)))
     ax.set_zlim(0, int(max_frequency * 1.1))
     plt.title(title + ' Gradients Histogram')
-
 
 
 def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=(18, 8), inteval=1, title='', save_path=None,
@@ -359,18 +352,18 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
             plt.show(block=False)
 
 
-def plot_centerloss(plt,feat, labels,num_class=10,title=''):
+def plot_centerloss(plt, feat, labels, num_class=10, title=''):
     c = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#990000', '#999900', '#009900', '#009999']
     for i in range(num_class):
         plt.plot(feat[labels == i, 0], feat[labels == i, 1], '.', c=c[i])
     plt.legend(range(num_class), loc='upper right')
     plt.xlim(xmin=feat[:, 0].min(), xmax=feat[:, 0].max())
     plt.ylim(ymin=feat[:, 1].min(), ymax=feat[:, 1].max())
-    plt.title(title+' center loss')
+    plt.title(title + ' center loss')
 
 
 def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, title="Confusion matrix", fname=None,
-        noshow=False, ):
+                          noshow=False, ):
     """Render the confusion matrix and return matplotlib's figure with it.
     Normalization can be applied by setting `normalize=True`.
     """
@@ -395,7 +388,7 @@ def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, ti
     thresh = cm.max() / 2.0
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
         plt.text(j, i, format(cm[i, j], fmt), horizontalalignment="center",
-            color="white" if cm[i, j] > thresh else "black", )
+                 color="white" if cm[i, j] > thresh else "black", )
 
     plt.tight_layout()
     plt.ylabel("True label")

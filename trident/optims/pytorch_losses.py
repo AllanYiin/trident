@@ -8,7 +8,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import math
 from torch.nn import init
 from torch.nn.modules.loss import _Loss
 
@@ -20,7 +20,7 @@ from trident.layers.pytorch_activations import sigmoid
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 __all__ = ['_ClassificationLoss','MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
-           'ExponentialLoss','ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss',
+           'ExponentialLoss','ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss','WingLoss','AdaptiveWingLoss',
            'IouLoss',  'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss',
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
@@ -598,6 +598,92 @@ class BCELoss(_ClassificationLoss):
         loss = F.binary_cross_entropy_with_logits(output, target, weight=self.loss_weights, reduce=None,reduction='none')
         return loss
 
+
+
+class DiceLoss(_ClassificationLoss):
+    r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
+
+    It is useful when training a classification problem with `C` classes.
+    If provided, the optional argument :attr:`weight` should be a 1D `Tensor`
+    assigning weight to each of the classes.
+    This is particularly useful when you have an unbalanced training set.
+
+    Args:
+        axis (int): the position where the classes is.
+        loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
+
+    Examples:
+    >>> output=zeros((1,3,128,128))
+    >>> output[0,1,32:64,48:92]=1
+    >>> output[0,2,12:32,56:64]=1
+    >>> target=zeros((1,128,128)).long()
+    >>> target[0,33:63,50:9]=1
+    >>> target[0,13:35,52:65]=2
+    >>> DiceLoss(reduction='mean')(output,target).cpu()
+    tensor(0.8271)
+    >>> DiceLoss(ignore_index=0,reduction='mean')(output,target).cpu()
+    tensor(0.9829)
+
+
+
+    Reference:
+        https://arxiv.org/abs/1707.03237
+
+
+    """
+    def __init__(self, smooth=1., axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='CrossEntropyLoss'):
+        """
+        Args:
+            axis (int): the axis where the class label is.
+            loss_weights ():
+            from_logits ():
+            ignore_index ():
+            cutoff ():
+            label_smooth ():
+            reduction (string):
+            name (stringf):
+        """
+
+        super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
+        self.smooth=smooth
+        self.is_logsoftmax = False
+        self.need_target_onehot = True
+        self.is_multiselection = False
+        self._built = True
+
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+
+        intersection = reduce_sum(target * output,list(range(target.ndim))[2:])
+        den1 = reduce_sum(output,list(range(target.ndim))[2:])
+        den2 = reduce_sum(target,list(range(target.ndim))[2:])
+        if self.loss_weights is not None:
+            intersection = intersection * self.loss_weights.unsqueeze(0)
+        dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+
+        return dice
+
+
+
+
 class L1Loss(_Loss):
     def __init__(self, reduction='mean', name='L1Loss'):
         super(L1Loss, self).__init__(reduction)
@@ -646,6 +732,47 @@ class MSELoss(_Loss):
     def forward(self, output, target) ->'loss':
         return F.mse_loss(output, target, reduction=self.reduction)
 
+
+class WingLoss(_Loss):
+    def __init__(self, omega=10, epsilon=2, name='WingLoss'):
+        super(WingLoss, self).__init__()
+        self.name = name
+        self.omega = omega
+        self.epsilon = epsilon
+
+    def forward(self, output, target)->'loss':
+        delta_y = (target - output).abs()
+        delta_y1 = delta_y[delta_y < self.omega]
+        delta_y2 = delta_y[delta_y >= self.omega]
+        loss1 = self.omega * torch.log(1 + delta_y1 / self.epsilon)
+        C = self.omega - self.omega * math.log(1 + self.omega / self.epsilon)
+        loss2 = delta_y2 - C
+        return (loss1.sum() + loss2.sum()) / (len(loss1) + len(loss2))
+
+
+class AdaptiveWingLoss(_Loss):
+    def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1, name='AdaptiveWingLoss'):
+        super(AdaptiveWingLoss, self).__init__()
+        self.name = name
+        self.omega = omega
+        self.theta = theta
+        self.epsilon = epsilon
+        self.alpha = alpha
+
+    def forward(self, output, target)->'loss':
+        y = target
+        y_hat = output
+        delta_y = (y - y_hat).abs()
+        delta_y1 = delta_y[delta_y < self.theta]
+        delta_y2 = delta_y[delta_y >= self.theta]
+        y1 = y[delta_y < self.theta]
+        y2 = y[delta_y >= self.theta]
+        loss1 = self.omega * torch.log(1 + torch.pow(delta_y1 / self.omega, self.alpha - y1))
+        A = self.omega * (1 / (1 + torch.pow(self.theta / self.epsilon, self.alpha - y2))) * (self.alpha - y2) * (
+            torch.pow(self.theta / self.epsilon, self.alpha - y2 - 1)) * (1 / self.epsilon)
+        C = self.theta * A - self.omega * torch.log(1 + torch.pow(self.theta / self.epsilon, self.alpha - y2))
+        loss2 = A * delta_y2 - C
+        return (loss1.sum() + loss2.sum()) / (len(loss1) + len(loss2))
 
 class ExponentialLoss(_Loss):
     def __init__(self, reduction='mean', name='ExponentialLoss'):
@@ -806,88 +933,6 @@ class MS_SSIMLoss(_Loss):
 
 
 
-
-
-class DiceLoss(_ClassificationLoss):
-    r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
-
-    It is useful when training a classification problem with `C` classes.
-    If provided, the optional argument :attr:`weight` should be a 1D `Tensor`
-    assigning weight to each of the classes.
-    This is particularly useful when you have an unbalanced training set.
-
-    Args:
-        axis (int): the position where the classes is.
-        loss_weights (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
-        number of classes.
-        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
-        ignore_index (int or list of int):
-        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
-        label_smooth (bool): Should use label smoothing?
-        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
-            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
-            summation them.
-
-    Examples:
-    >>> output=zeros((1,3,128,128))
-    >>> output[0,1,32:64,48:92]=1
-    >>> output[0,2,12:32,56:64]=1
-    >>> target=zeros((1,128,128)).long()
-    >>> target[0,33:63,50:9]=1
-    >>> target[0,13:35,52:65]=2
-    >>> DiceLoss(reduction='mean')(output,target).cpu()
-    tensor(0.8271)
-    >>> DiceLoss(ignore_index=0,reduction='mean')(output,target).cpu()
-    tensor(0.9829)
-
-
-
-    Reference:
-        https://arxiv.org/abs/1707.03237
-
-
-    """
-    def __init__(self, smooth=1., axis=1,loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,label_smooth=False,reduction='mean', name='CrossEntropyLoss'):
-        """
-        Args:
-            axis (int): the axis where the class label is.
-            loss_weights ():
-            from_logits ():
-            ignore_index ():
-            cutoff ():
-            label_smooth ():
-            reduction (string):
-            name (stringf):
-        """
-
-        super().__init__(axis,loss_weights, from_logits, ignore_index,cutoff ,label_smooth, reduction,name)
-        self.smooth=smooth
-        self.is_logsoftmax = False
-        self.need_target_onehot = True
-        self.is_multiselection = False
-        self._built = True
-
-    def calculate_loss(self, output, target, **kwargs):
-        """
-
-        Args:
-            output ():
-            target ():
-            **kwargs ():
-
-        Returns:
-
-        """
-
-        intersection = reduce_sum(target * output,list(range(target.ndim))[2:])
-        den1 = reduce_sum(output,list(range(target.ndim))[2:])
-        den2 = reduce_sum(target,list(range(target.ndim))[2:])
-        if self.loss_weights is not None:
-            intersection = intersection * self.loss_weights.unsqueeze(0)
-        dice = 1 - ((2 * intersection + self.smooth) / (den1 + den2 + self.smooth))
-
-        return dice
 
 
 

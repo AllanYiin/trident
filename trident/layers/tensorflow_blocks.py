@@ -22,7 +22,7 @@ from trident.backend.common import *
 from trident.layers.tensorflow_activations import get_activation, Identity
 from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization
-from trident.layers.tensorflow_pooling import get_pooling, GlobalAvgPool2d
+from trident.layers.tensorflow_pooling import  GlobalAvgPool2d
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_layers import *
@@ -51,10 +51,12 @@ _quadruple = _ntuple(4)
 
 
 class Conv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, sequence_rank='cna', **kwargs):
         super(Conv2d_Block, self).__init__(name=name)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -132,8 +134,10 @@ class Conv2d_Block(Layer):
 class TransConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,sequence_rank='cna', **kwargs):
         super(TransConv2d_Block, self).__init__(name=name)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -198,11 +202,13 @@ class TransConv2d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-class TransConv3d_Block(tf.keras.Sequential):
+class TransConv3d_Block(Layer):
     def __init__(self, kernel_size=(3, 3, 3), num_filters=32, strides=1, input_shape=None, auto_pad=True,
                  activation='leaky_relu', normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False,
-                 noise_intensity=0.001, dropout_rate=0, name=None, **kwargs):
+                 noise_intensity=0.001, dropout_rate=0, name=None,sequence_rank='cna', **kwargs):
         super(TransConv3d_Block, self).__init__(name=name)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         if add_noise:
             noise = tf.keras.layers.GaussianNoise(noise_intensity)
             self.add(noise)
@@ -232,10 +238,12 @@ class TransConv3d_Block(tf.keras.Sequential):
 
 
 class DepthwiseConv2d_Block1(Layer):
-    def __init__(self, kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,  **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,  sequence_rank='cna', **kwargs):
         super(DepthwiseConv2d_Block, self).__init__()
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.strides = strides
         self.auto_pad = auto_pad
@@ -300,8 +308,10 @@ class DepthwiseConv2d_Block1(Layer):
 class DepthwiseConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding=None,padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, sequence_rank='cna',**kwargs):
         super(DepthwiseConv2d_Block, self).__init__(name=name)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
 
@@ -335,7 +345,7 @@ class DepthwiseConv2d_Block(Layer):
                                    activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name)
             conv.input_shape = input_shape
             if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(conv)
+                self.conv = spectral_norm(conv)
             else:
                 self.conv = conv
 
@@ -370,8 +380,10 @@ class DepthwiseConv2d_Block(Layer):
 class SeparableConv2d_Block(Layer):
     def __init__(self, kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,  **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, sequence_rank='cna', **kwargs):
         super(SeparableConv2d_Block, self).__init__()
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.strides = strides
         self.auto_pad = auto_pad
@@ -404,10 +416,9 @@ class SeparableConv2d_Block(Layer):
             #conv.input_shape = input_shape
 
             if self.use_spectral:
-                #self.conv = nn.utils.spectral_norm(conv)
-                self.norm=None
-            else:
-                self.conv = conv
+                self.conv = spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm=None
             self._built=True
 
     def forward(self, *x):

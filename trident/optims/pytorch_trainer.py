@@ -314,7 +314,7 @@ class Model(ModelBase):
 
         print(self._losses[alias].signature)
 
-        self.loss_weights[alias] = loss_weight
+        self.loss_weights[alias] = float(loss_weight)
 
         # outputs = self.outputs
         # targets = self.targets
@@ -644,23 +644,26 @@ class Model(ModelBase):
             if self.training_context['stop_update'] <1:
                 self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
                 #only check once every epoch start.
-                if self.training_context['current_batch']==0:
-                    if isinstance(self._model,nn.Module):
-                        for name,para in self._model.named_parameters():
-                            try:
-                                if para is not None  and para.grad is not None:
-                                    grad_norm=para.grad.norm()
-                                    if not 0<grad_norm<1e5:
-                                        sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
-                            except Exception as e:
-                                print(e)
-                                PrintException()
-                    elif isinstance(self._model,torch.Tensor):
-                        grad_norm = self._model.grad.norm()
-                        if not 0 < grad_norm < 1e5:
-                            sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
-                            if any_abnormal_number(grad_norm):
-                                raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
+
+                if isinstance(self._model,nn.Module):
+                    torch.nn.utils.clip_grad_norm_(self._model.parameters(), 3)
+                    # for name,para in self._model.named_parameters():
+                    #     try:
+                    #         if para is not None  and para.grad is not None:
+                    #             grad_norm=para.grad.norm()
+                    #             if grad_norm>1e3:
+                    #
+                    #             if not 0<grad_norm<1e5:
+                    #                 sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
+                    #     except Exception as e:
+                    #         print(e)
+                    #         PrintException()
+                elif isinstance(self._model,torch.Tensor):
+                    grad_norm = self._model.grad.norm()
+                    if not 0 < grad_norm < 1e5:
+                        sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
+                        if any_abnormal_number(grad_norm):
+                            raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
 
                 for callback in self.training_context['callbacks']:
                     callback.on_optimization_step_start(self.training_context)
@@ -718,6 +721,7 @@ class Model(ModelBase):
             save_path=self.get_save_path(save_path,default_folder='Models',default_file_name= '{0}_epoch{1}.pth.tar_'.format(self._model.name,self.training_context['current_epoch']))
             save_path=sanitize_path(save_path)
             self.current_save_path = save_path
+            device=get_device()
             self._model.eval()
 
             torch.save({
@@ -727,6 +731,8 @@ class Model(ModelBase):
                 'pytorch_version':torch.__version__,
                 'signature':self.signature
             }, save_path)
+
+
             self._model.train()
             shutil.copy(save_path, save_path.replace('.pth.tar_','.pth.tar'))
             os.remove(save_path)
@@ -861,10 +867,10 @@ class Model(ModelBase):
         attrs = list(self.__dict__.keys())
         losses = list(self._losses.keys())
         metrics = list(self._metrics.keys())
-        output_regs = list(self._output_regs.keys())
-        model_regs = list(self._model_regs.keys())
+        regs = list(self._regs.keys())
+
         constraints = list(self._constraints.keys())
-        keys = module_attrs + optimizer_attrs + attrs + losses + metrics + output_regs + model_regs + constraints
+        keys = module_attrs + optimizer_attrs + attrs + losses + metrics + regs+ constraints
         # Eliminate attrs that are not legal Python variable names
         keys = [key for key in keys if not key[0].isdigit()]
 

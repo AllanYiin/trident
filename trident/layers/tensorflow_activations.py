@@ -20,7 +20,7 @@ __all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','
 
 
 class Identity(Layer):
-    """Identity activation Layer
+    """Identity activation Layer.
     A placeholder identity operator that is argument-insensitive.
 
     Examples:
@@ -68,13 +68,16 @@ class Tanh(Layer):
 
 class Relu(Layer):
     """Rectified Linear Unit activation function.
-      With default values, it returns element-wise `max(x, 0)`.
-      Otherwise, it follows:
-      ```
+
+    With default values, it returns element-wise `max(x, 0)`.
+    Otherwise, it follows:
+    ::
+
         f(x) = max_value if x >= max_value
         f(x) = x if threshold <= x < max_value
         f(x) = negative_slope * (x - threshold) otherwise
-      ```
+
+
     """
     def __init__(self,name=None):
         super(Relu, self).__init__(name=name)
@@ -86,13 +89,15 @@ class Relu(Layer):
 
 class Relu6(Layer):
     """Rectified Linear Unit  6 activation function.
-      With default values, it returns element-wise `min(max(x, 0)`,6).
-      Otherwise, it follows:
-      ```
+
+    With default values, it returns element-wise `min(max(x, 0)`,6).
+    Otherwise, it follows:
+    ::
+
         f(x) = 6 if x >= 6
         f(x) = x if threshold <= x < 6
         f(x) = negative_slope * (x - threshold) otherwise
-      ```
+
     """
     def __init__(self,name=None):
         super(Relu6, self).__init__(name=name)
@@ -106,11 +111,13 @@ class Relu6(Layer):
 
 class LeakyRelu(Layer):
     """Leaky version of a Rectified Linear Unit.
-        It allows a small gradient when the unit is not active:
-        ```
+
+    It allows a small gradient when the unit is not active:
+    ::
+
         f(x) = alpha * x if x < 0
         f(x) = x if x >= 0
-        ```
+
     """
     def __init__(self,alpha=0.02,name=None):
         super(LeakyRelu, self).__init__(name=name)
@@ -122,13 +129,15 @@ class LeakyRelu(Layer):
 
 
 class LeakyRelu6(Layer):
-    """Leaky version of a Rectified Linear Unit.6
-          It allows a small gradient when the unit is not active:
-          ```
-            f(x) = alpha * x if x < 0
-            f(x) = x if  6>=x >= 0
-            f(x) = 6 if  x > 6
-          ```
+    """Leaky version of a Rectified Linear Unit 6.
+
+    It allows a small gradient when the unit is not active:
+    ::
+
+        f(x) = alpha * x if x < 0
+        f(x) = x if  6>=x >= 0
+        f(x) = 6 if  x > 6
+
     """
     def __init__(self,alpha=0.02,name=None):
         super(LeakyRelu6, self).__init__(name=name)
@@ -141,11 +150,14 @@ class LeakyRelu6(Layer):
 
 class Elu(Layer):
     """Exponential Linear Unit.
-         It follows:
-         ```
-           f(x) =  alpha * (exp(x) - 1.) for x < 0
-           f(x) = x for x >= 0
-         ```
+
+    It follows:
+    ::
+
+        f(x) =  alpha * (exp(x) - 1.) for x < 0
+        f(x) = x for x >= 0
+
+
     """
     def __init__(self,name=None):
         super(Elu, self).__init__(name=name)
@@ -154,6 +166,9 @@ class Elu(Layer):
         return elu(x)
 
 class SmoothRelu(Layer):
+    """Smooth Relu
+
+    """
     def __init__(self,name=None):
         super(SmoothRelu, self).__init__(name=name)
         self._built = True
@@ -165,11 +180,12 @@ class SmoothRelu(Layer):
 
 class PRelu(Layer):
     """Parametric Rectified Linear Unit.
-      It follows:
-      ```
+    It follows:
+    ::
+
         f(x) = alpha * x for x < 0
         f(x) = x for x >= 0
-      ```
+
       where `alpha` is a learned parameters , it's a 1-D array, the length equal 1 or input_filters.
 
       Args:
@@ -204,13 +220,13 @@ class PRelu(Layer):
 
 
 class Swish(Layer):
-    """
-    Self-Gated Activation Function.
+    """ Self-Gated Activation Function.
     it follows:
-        ```
+    ::
+
         f(x) =  x * sigmoid(x)
 
-        ```
+
 
     References:
         Swish: a Self-Gated Activation Function
@@ -233,15 +249,15 @@ class Swish(Layer):
 
 
 class Selu(Layer):
-    """
-    Scaled exponential linear unit  activation function
+    """Scaled exponential linear unit  activation function.
     Scaled exponential linear unit operation. Computes the element-wise exponential linear
-        it follows:
-        ```
+
+    it follows:
+    ::
+
         f(x) =scale∗(max(0,x)+min(0,α∗(exp(x)−1)))
         scale=1.0507009873554804934193349852946, alpha=1.6732632423543772848170429916717
 
-        ```
 
 
     References:
@@ -295,13 +311,12 @@ class SoftPlus(Layer):
 
 
 class HardSigmoid(Layer):
-    """
-    Hard sigmoid activation layer.
+    """Hard sigmoid activation layer.
     it follows:
-        ```
+    ::
+
         f(x) = relu6(x + 3) / 6
 
-        ```
 
 
     Examples:
@@ -345,12 +360,12 @@ class Logit(Layer):
 
 
 class LogLog(Layer):
-    """LogLog Activation Function
+    """LogLog Activation Function.
     it follows:
-      ```
+    ::
+
         f(x) =  1 - exp(-exp(x))
 
-      ```
     References:
         "Complementary Log-Log and Probit: Activation Functions Implemented in Artificial Neural Networks"
         https://ieeexplore.ieee.org/document/4626755/
@@ -397,12 +412,13 @@ class LogSoftmax(Layer):
 
 
 class Mish(Layer):
-    """Self Regularized Non-Monotonic Neural Activation Function
-      it follows:
-      ```
+    """Self Regularized Non-Monotonic Neural Activation Function.
+    it follows:
+    ::
+
         f(x) =  x * tanh(softplus(x))
 
-      ```
+
     References:
         Mish: A Self Regularized Non-Monotonic Neural Activation Function
         https://arxiv.org/abs/1908.08681
@@ -421,12 +437,14 @@ class Mish(Layer):
 
 
 class HardMish(Layer):
-    """Self Regularized Non-Monotonic Neural Activation Function
-      it follows:
-      ```
+    """Self Regularized Non-Monotonic Neural Activation Function.
+
+    it follows:
+    ::
+
         f(x) =  x * hard_tanh(softplus(x))
 
-      ```
+
     References:
         Mish: A Self Regularized Non-Monotonic Neural Activation Function
         https://arxiv.org/abs/1908.08681
@@ -446,14 +464,14 @@ class HardMish(Layer):
 
 
 class Gelu(Layer):
-    """
-    Gaussian Error Linear Unit.
+    """Gaussian Error Linear Unit.
     it follows:
-        ```
+    ::
+
         f(x) =x∗Φ(x)
         where \Phi(x)Φ(x) is the Cumulative Distribution Function for Gaussian Distribution.
 
-        ```
+
 
     References:
         Gaussian Error Linear Units (GELUs)
@@ -474,12 +492,13 @@ class Gelu(Layer):
 
 
 class GptGelu(Layer):
-    """Self Regularized Non-Monotonic Neural Activation Function
-      it follows:
-      ```
+    """Self Regularized Non-Monotonic Neural Activation Function.
+    it follows:
+    ::
+
         f(x) =  x * hard_tanh(softplus(x))
 
-      ```
+
     References:
         Mish: A Self Regularized Non-Monotonic Neural Activation Function
         https://arxiv.org/abs/1908.08681
@@ -497,6 +516,33 @@ class GptGelu(Layer):
         return gpt_gelu(x)
 
 
+class SIREN(Layer):
+    """SIREN leverages periodic activation functions for implicit neural representations and demonstrate
+    that these networks are ideally suited for representing complex natural signals and their derivatives.
+
+    Their project page can be found here "https://vsitzmann.github.io/siren/"
+
+    For more details please refer to the paper Implicit Neural Representations with PeriodicActivation Functions by
+    Sitzmann et. al. (https://arxiv.org/abs/2006.09661)
+    """
+
+    def __init__(self,w0=30.0, name=None):
+        super(SIREN, self).__init__()
+        self._built = True
+        self.w0=w0
+
+    def build(self, input_shape):
+        if self._built == False:
+            if self.num_parameters is None:
+                self.num_parameters=self.input_filters
+            self.weight=tf.Variable(ones((1))*self.w0, name='weight')
+            self._built = True
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        x=sin(self.weight*x)
+        return x
+
 
 def get_activation(fn_name):
     """
@@ -508,8 +554,8 @@ def get_activation(fn_name):
     Returns: function or Layer class
 
     Examples:
-    >>> get_activation('relu')
-    <function relu at 0x0000021143F49D90>
+    >>> get_activation('relu').__name__
+    'relu'
     >>> get_activation('Relu')
     Relu()
     >>> get_activation(Mish)
@@ -519,38 +565,27 @@ def get_activation(fn_name):
 
 
     """
+    fn_modules = ['trident.backend.tensorflow_ops','trident.layers.tensorflow_activations']
+
     if fn_name is None:
         return None
-    elif isinstance(fn_name,Layer):
+    elif inspect.isclass(fn_name) and inspect._is_type(fn_name):
+        return fn_name()
+    elif isinstance(fn_name, Layer):
         return fn_name
-
-    fn_modules = ['trident.layers.tensorflow_activations']
-    try:
-        if isinstance(fn_name,str):
-            if fn_name.lower()==fn_name:
-                 activation_fn = get_function(fn_name, ['trident.layers.tensorflow_activations'] if fn_name in __all__ else  fn_modules)
-                 return activation_fn
-            else:
-                try:
-                    activation_fn =  get_class(snack2camel(fn_name), fn_modules)
-                    return activation_fn()
-                except Exception:
-                    activation_fn = tf.keras.activations.get(fn_name)
-                    return activation_fn()
-
-        elif getattr(fn_name, '__module__', None) == 'trident.layers.tensorflow_activations':
-            if inspect.isfunction(fn_name):
-                return fn_name
-            elif isinstance(fn_name, Layer):
-                return fn_name()
-        else:
-            if callable(fn_name) :
-                result=inspect.getfullargspec(fn_name)
-                if 1<=len(result.args)<=2:
-                    return fn_name if inspect.isfunction(fn_name) else fn_name()
-                else:
-                    raise ValueError('Unknown activation function/ class')
-    except Exception:
-        return None
-
+    elif isinstance(fn_name, str) :
+        pooling_class = get_function(fn_name, fn_modules)
+        return pooling_class
+    elif isinstance(fn_name, str) and fn_name in __all__:
+        pooling_class = get_class(fn_name, fn_modules)
+        return pooling_class()
+    elif isinstance(fn_name, str) and snake2camel(fn_name) in __all__:
+        pooling_class = get_class(snake2camel(fn_name), fn_modules)
+        return pooling_class()
+    elif inspect.isfunction(fn_name) or callable(fn_name):
+        result = inspect.getfullargspec(fn_name)
+        if 1 == len(result.args):
+            return fn_name
+    else:
+        raise ValueError('Unknown pooling function/ class')
 

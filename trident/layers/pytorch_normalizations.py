@@ -315,7 +315,7 @@ class InstanceNorm(Layer):
                 this module does not track such statistics and always uses batch
                 statistics in both training and eval modes. Default: ``False``
 
-        Examples::
+        Examples:
             >>> innorm=InstanceNorm(affine=False)
             >>> input = torch.randn(2, 64, 128, 128)
             >>> print(int_shape(innorm(input)))
@@ -417,7 +417,7 @@ class LayerNorm(Layer):
             has learnable per-element affine parameters initialized to ones (for weights)
             and zeros (for biases). Default: ``True``.
 
-    Examples::
+    Examples:
 
         >>> input = torch.randn(20, 5, 10, 10)
         >>> # With Learnable Parameters
@@ -466,6 +466,47 @@ class PixelNorm(Layer):
 
 
 class SpectralNorm(Layer):
+    r"""Applies spectral normalization to a parameter in the given module.
+
+    .. math::
+        \mathbf{W}_{SN} = \dfrac{\mathbf{W}}{\sigma(\mathbf{W})},
+        \sigma(\mathbf{W}) = \max_{\mathbf{h}: \mathbf{h} \ne 0} \dfrac{\|\mathbf{W} \mathbf{h}\|_2}{\|\mathbf{h}\|_2}
+
+    Spectral normalization stabilizes the training of discriminators (critics)
+    in Generative Adversarial Networks (GANs) by rescaling the weight tensor
+    with spectral norm :math:`\sigma` of the weight matrix calculated using
+    power iteration method. If the dimension of the weight tensor is greater
+    than 2, it is reshaped to 2D in power iteration method to get spectral
+    norm. This is implemented via a hook that calculates spectral norm and
+    rescales weight before every :meth:`~Module.forward` call.
+
+    See `Spectral Normalization for Generative Adversarial Networks`_ .
+
+    .. _`Spectral Normalization for Generative Adversarial Networks`: https://arxiv.org/abs/1802.05957
+
+    Args:
+        module (nn.Module): containing module
+        name (str, optional): name of weight parameter
+        n_power_iterations (int, optional): number of power iterations to
+            calculate spectral norm
+        eps (float, optional): epsilon for numerical stability in
+            calculating norms
+        dim (int, optional): dimension corresponding to number of outputs,
+            the default is ``0``, except for modules that are instances of
+            ConvTranspose{1,2,3}d, when it is ``1``
+
+    Returns:
+        The original module with the spectral norm hook
+
+    Examples::
+
+        >>> m = spectral_norm(nn.Linear(20, 40))
+        >>> m
+        Linear(in_features=20, out_features=40, bias=True)
+        >>> m.weight_u.size()
+        torch.Size([40])
+
+    """
     def __init__(self, module, name='weight', power_iterations=1):
         super(SpectralNorm, self).__init__()
         self.module = module

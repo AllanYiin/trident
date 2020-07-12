@@ -25,21 +25,23 @@ elif _backend == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 
 
-__all__ = ['nms', 'xywh2xyxy', 'xyxy2xywh','bbox_giou','bbox_giou_numpy','plot_one_box']
+
+__all__ = ['nms', 'xywh2xyxy', 'xyxy2xywh','bbox_iou','bbox_diou','bbox_giou','bbox_giou_numpy','plot_one_box']
 
 
 def plot_one_box(x, img, color=None, label=None, line_thickness=None):
     import cv2
     # Plots one bounding box on image img
-    tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
+    tl = line_thickness if  line_thickness is not None else round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
-    cv2.rectangle(img, c1, c2, color, thickness=tl)
+    cv2.rectangle(img, c1, c2, color=color, thickness=tl)
     if label:
         tf = max(tl - 1, 1)  # font thickness
         t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
         c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
         cv2.rectangle(img, c1, c2, color, -1)  # filled
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+    return img
 
 def xywh2xyxy(boxes,image_size=None):
     """
@@ -55,14 +57,20 @@ def xywh2xyxy(boxes,image_size=None):
     if isinstance(boxes, (list, tuple)):
         # Single box given as a list of coordinates
         assert len(boxes) == 4
-        x1, y1 = boxes[0], boxes[1]
-        x2 = x1 + np.maximum(0., boxes[2] - 1.)
-        y2 = y1 + np.maximum(0., boxes[3] - 1.)
+        cx, cy ,w,h= boxes[0], boxes[1], boxes[2], boxes[3]
+        x1=cx-0.5*w
+        y1=cy-0.5*h
+        x2 = cx+0.5*w
+        y2=cy+0.5*h
+        if len(boxes)>4:
+            boxlist=[x1, y1, x2, y2]
+            boxlist.extend(boxes[4:])
+            return np.array(boxlist)
         return np.array([x1, y1, x2, y2])
     elif isinstance(boxes, np.ndarray):
         # Multiple boxes given as a 2D ndarray
-        boxes[:, 0:2] -= boxes[:, 2:4] / 2
-        boxes[:, 2:4] += boxes[:, 0:2]
+        boxes[:, 0:2] =boxes[:, 0:2]- boxes[:, 2:4] / 2
+        boxes[:, 2:4] =boxes[:, 2:4] + boxes[:, 0:2]
 
         height, width = np.inf, np.inf
         if image_size is not None:
@@ -75,7 +83,7 @@ def xywh2xyxy(boxes,image_size=None):
         return boxes
     elif is_tensor(boxes) :
         x1y1= clip(round(boxes[:, 0:2] -boxes[:, 2:4] /2,0),0)
-        x2y2=clip(round(boxes[:, 2:4] + boxes[:, 0:2],0),0)
+        x2y2=clip(round(x1y1+ boxes[:, 2:4],0),0)
         boxes=concate([x1y1,x2y2],axis=-1)
         return boxes
 
@@ -87,15 +95,19 @@ def xyxy2xywh(boxes):
     """Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format."""
     if isinstance(boxes, (list, tuple)):
         # Single box given as a list of coordinates
-        assert len(boxes) == 4
+        assert len(boxes) == 4 or len(boxes) == 5
         x1, y1 = boxes[0], boxes[1]
         w = boxes[2] - x1 + 1
         h = boxes[3] - y1 + 1
         return np.array([x1, y1, w, h])
     elif isinstance(boxes, np.ndarray):
+        if boxes.ndim==1:
+            boxes=np.expand_dims(boxes,0)
         return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
                         boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
     elif is_tensor(boxes):
+        if boxes.ndim==1:
+            boxes=expand_dims(boxes,0)
         return concate([(boxes[:, 2:4] + boxes[:, 0:2])/2,  # cx, cy
                      boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
     else:
@@ -223,7 +235,7 @@ def matrix_iof(a, b):
 
 
 
-def bbox_overlaps(bboxes1, bboxes2, mode='iou', allow_neg=False):
+def bbox_iou(bboxes1, bboxes2, mode='iou', allow_neg=False):
     """Calculate the ious between each bbox of bboxes1 and bboxes2.
 
     Args:
@@ -238,6 +250,11 @@ def bbox_overlaps(bboxes1, bboxes2, mode='iou', allow_neg=False):
     """
 
     assert mode in ['iou', 'iof']
+    if (bboxes1 is None or len(bboxes1) == 0) and (bboxes2 is None or len(bboxes2) == 0):
+        return np.ones(1)
+
+    elif bboxes1 is None or len(bboxes1)==0 or bboxes2 is None or len(bboxes2)==0:
+        return np.zeros(1)
 
     bboxes1 = bboxes1.astype(np.float32)
     bboxes2 = bboxes2.astype(np.float32)
@@ -320,7 +337,7 @@ def bbox_giou_numpy(bboxes1, bboxes2):
         closure = np.clip(np.maximum(x_max - x_min + 1, 0) * np.maximum(y_max - y_min + 1, 0),1e-8,np.inf)
 
         union =np.clip( area1[i] + area2 - overlap,1e-8,np.inf)
-        closure
+
         ious[i, :] = overlap / union - (closure - union) / closure
     if exchange:
         ious = ious.T
@@ -341,19 +358,25 @@ def bbox_giou(bboxes1, bboxes2):
         giou: tensor, shape=(batch, feat_w, feat_h, anchor_num, 1)
 
     """
-
-
     bboxes1 = bboxes1.float()
     bboxes2 = bboxes2.float()
     rows = bboxes1.shape[0]
     cols = bboxes2.shape[0]
+    # if (bboxes1 is None or len(bboxes1) == 0) and (bboxes2 is None or len(bboxes2) == 0):
+    #     return ones((rows, cols))
+    #
+    # elif bboxes1 is None or len(bboxes1)==0 or bboxes2 is None or len(bboxes2)==0:
+    #     return zeros((rows, cols))
+    #
+
     ious = zeros((rows, cols))
+    ious.requires_grad=True
     if rows * cols == 0:
         return ious
     exchange = False
     if bboxes1.shape[0] > bboxes2.shape[0]:
         bboxes1, bboxes2 = bboxes2, bboxes1
-        ious = zeros((cols, rows))
+        ious = zeros((cols, rows),requires_grad=True)
         exchange = True
     area1 = (bboxes1[:, 2] - bboxes1[:, 0] + 1) * (bboxes1[:, 3] - bboxes1[:, 1] + 1)
     area2 = (bboxes2[:, 2] - bboxes2[:, 0] + 1) * (bboxes2[:, 3] - bboxes2[:, 1] + 1)
@@ -439,13 +462,4 @@ def bbox_diou(bboxes1, bboxes2):
 #         return boxes, []
 #
 #     methods = {'hard': 0, 'linear': 1, 'gaussian': 2}
-#     assert method in methods, 'Unknown soft_nms method: {}'.format(method)
-#
-#     boxes, keep = cython_nms.soft_nms(
-#         np.ascontiguousarray(boxes, dtype=np.float32),
-#         np.float32(sigma),
-#         np.float32(overlap_threshold),
-#         np.float32(score_threshold),
-#         np.uint8(methods[method])
-#     )
-#     return boxes, keep
+#     assert method in methods, 'Unknown soft_nms method: {}'.format(met

@@ -59,12 +59,12 @@ if not os.path.exists(dirname):
 def p_net():
     return Sequential(
     Conv2d((3,3),10,strides=1,auto_pad=False,use_bias=True,name='conv1'),
-    PRelu(),
+    PRelu(num_parameters=1),
     MaxPool2d((2,2),strides=2,auto_pad=False),
     Conv2d((3, 3), 16, strides=1, auto_pad=False,use_bias=True,name='conv2'),
-    PRelu(),
+    PRelu(num_parameters=1),
     Conv2d((3,3),32,strides=1,auto_pad=False,use_bias=True,name='conv3'),
-    PRelu(),
+    PRelu(num_parameters=1),
     Combine(
         Conv2d((1,1),1,strides=1,auto_pad=False,use_bias=True,activation='sigmoid',name='conv4_1'),
         Conv2d((1,1),4,strides=1,auto_pad=False,use_bias=True,name='conv4_2'),
@@ -75,16 +75,16 @@ def p_net():
 def r_net():
     return Sequential(
     Conv2d((3,3),28,strides=1,auto_pad=False,use_bias=True,name='conv1'),
-    PRelu(),
+    PRelu(num_parameters=1),
     MaxPool2d((3,3),strides=2,auto_pad=False),
     Conv2d((3, 3), 48, strides=1, auto_pad=False,use_bias=True,name='conv2'),
-    PRelu(),
+    PRelu(num_parameters=1),
     MaxPool2d((3,3),strides=2,auto_pad=False),
     Conv2d((2,2),64,strides=1,auto_pad=False,use_bias=True,name='conv3'),
-    PRelu(),
+    PRelu(num_parameters=1),
     Flatten(),
     Dense(128,activation=None,use_bias=True,name='conv4'),
-    PRelu(),
+    PRelu(num_parameters=1),
     Combine(
         Dense(1,activation='sigmoid',use_bias=True,name='conv5_1'),
         Dense(4,activation=None,use_bias=True,name='conv5_2'),
@@ -96,19 +96,19 @@ def r_net():
 def o_net():
     return Sequential(
     Conv2d((3,3),32,strides=1,auto_pad=False,use_bias=True,name='conv1'),
-    PRelu(),
+    PRelu(num_parameters=1),
     MaxPool2d((3,3),strides=2,auto_pad=False),
     Conv2d((3, 3), 64, strides=1, auto_pad=False,use_bias=True,name='conv2'),
-    PRelu(),
+    PRelu(num_parameters=1),
     MaxPool2d((3,3),strides=2,auto_pad=False),
     Conv2d((3,3),64,strides=1,auto_pad=False,use_bias=True,name='conv3'),
-    PRelu(),
+    PRelu(num_parameters=1),
     MaxPool2d((2, 2), strides=2,auto_pad=False),
     Conv2d((2, 2), 128, strides=1, auto_pad=False,use_bias=True,name='conv4'),
-    PRelu(),
+    PRelu(num_parameters=1),
     Flatten(),
     Dense(256,activation=None,use_bias=True,name='conv5'),
-    PRelu(),
+    PRelu(num_parameters=1),
     Combine(
         Dense(1,activation='sigmoid',use_bias=True,name='conv6_1'),
         Dense(4,activation=None,use_bias=True,name='conv6_2'),

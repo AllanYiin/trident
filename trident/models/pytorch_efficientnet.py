@@ -242,7 +242,7 @@ def EfficientNetB0(include_top=True, pretrained=True, input_shape=(3, 224, 224),
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
         recovery_model.to(_device)
-        effb0._model = recovery_model
+        effb0.model = recovery_model
 
     return effb0
 

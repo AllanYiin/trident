@@ -68,7 +68,7 @@ class MixupCallback(RegularizationCallbacksBase):
         else:
             lam = 1
         batch_size = int_shape(x)[0]
-        index = cast(arange(batch_size),'int64')
+        index = arange(batch_size).long()
         index=shuffle(index)
 
         mixed_x=None

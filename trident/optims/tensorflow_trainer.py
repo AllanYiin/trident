@@ -275,7 +275,7 @@ class Model(ModelBase):
                 last_module = list(self._model.modules())[-1]
                 if isinstance(last_module, SoftMax):
                     self._losses[alias].is_logsoftmax = True
-        self.loss_weights[alias] = loss_weight
+        self.loss_weights[alias] = float(loss_weight)
 
         self._losses[alias].__name__ = alias
         self._losses[alias].start_epoch = start_epoch

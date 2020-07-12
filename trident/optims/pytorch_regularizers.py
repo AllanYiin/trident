@@ -17,7 +17,7 @@ __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
 def l1_reg(model:nn.Module,reg_weight=1e-6):
     #with torch.enable_grad():
-    loss =0.0
+    loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:
             loss = loss + (reg_weight * torch.sum(abs(param)))
@@ -25,7 +25,7 @@ def l1_reg(model:nn.Module,reg_weight=1e-6):
 
 
 def l2_reg(model:nn.Module,reg_weight=1e-6):
-    loss =0.0
+    loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:
             loss=loss+ reg_weight *torch.norm(param)
@@ -33,7 +33,7 @@ def l2_reg(model:nn.Module,reg_weight=1e-6):
 
 
 def orth_reg(model:nn.Module,reg_weight=1e-6):
-    loss =0.0
+    loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:
             param_flat = param.view(param.shape[0], -1)

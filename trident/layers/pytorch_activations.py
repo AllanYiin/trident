@@ -22,7 +22,7 @@ from trident.backend.pytorch_ops import *
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
-           'LogLog', 'Mish', 'Softmax', 'Gelu', 'GptGelu', 'LogSoftmax', 'get_activation']
+           'LogLog', 'Mish', 'Softmax', 'Gelu', 'GptGelu','SIREN', 'LogSoftmax', 'get_activation']
 
 
 class Identity(Layer):
@@ -332,14 +332,13 @@ class HardSwish(Layer):
 
     """
 
-    def __init__(self, inplace=False, name=None):
+    def __init__(self, name=None):
         super(HardSwish, self).__init__()
-        self.inplace = inplace
         self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return hard_swish(x, inplace=self.inplace)
+        return hard_swish(x)
 
 
 class HardTanh(Layer):
@@ -527,7 +526,7 @@ class LogSoftmax(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return reduce_logsumexp(x)
+        return log_softmax(x)
 
 
 class Gelu(Layer):
@@ -570,6 +569,27 @@ class GptGelu(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return gpt_gelu(x)
+
+
+class SIREN(Layer):
+    """SIREN leverages periodic activation functions for implicit neural representations and demonstrate
+    that these networks are ideally suited for representing complex natural signals and their derivatives.
+
+    Their project page can be found here "https://vsitzmann.github.io/siren/"
+
+    For more details please refer to the paper Implicit Neural Representations with PeriodicActivation Functions by
+    Sitzmann et. al. (https://arxiv.org/abs/2006.09661)
+    """
+
+    def __init__(self, name=None):
+        super(SIREN, self).__init__()
+        self._built = True
+        self.w0=Parameter(data=to_tensor(30.0,requires_grad=True))
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        x=sin(self.w0*x)
+        return x
 
 
 def get_activation(fn_name):

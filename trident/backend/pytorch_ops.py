@@ -9,6 +9,7 @@ import builtins
 from collections import Sized, Iterable
 from functools import partial
 from typing import Tuple, List, Optional, Union
+from functools import wraps
 
 import numpy as np
 import torch
@@ -35,6 +36,7 @@ __all__ = ['is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor', 'ndim', 'cast
 
 
 def numpy_compatible(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         x = args[0]
         new_args = []
@@ -227,9 +229,10 @@ def to_tensor(x, dtype=None, requires_grad=None) -> torch.Tensor:
         if dtype is None:
             dtype = torch.float32
         if isinstance(x, int):
-            return torch.tensor(x).int().to(_get_device()) if requires_grad is None else torch.tensor(x,
-                                                                                                      requires_grad=requires_grad).int().to(
-                _get_device())
+            t= torch.tensor(x).int().to(_get_device()) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(_get_device())
+            if dtype is not None:
+                t=cast(t,dtype)
+            return t
         elif isinstance(x, float):
             return torch.tensor(x).float().to(_get_device()) if requires_grad is None else torch.tensor(x,
                                                                                                         requires_grad=requires_grad).float().to(

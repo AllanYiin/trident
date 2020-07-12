@@ -4,36 +4,27 @@ from __future__ import division
 from __future__ import print_function
 
 import collections
-import inspect
-import itertools
-import math
 from itertools import repeat
 
 import tensorflow as tf
-from  tensorflow.keras import backend as K
 from tensorflow.python.client import device_lib
-from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras.engine.input_spec import InputSpec
-from tensorflow.python.keras.utils import conv_utils
-from tensorflow.python.ops import nn_ops
 
-from trident.layers.tensorflow_activations import get_activation
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
-_tf_data_format= 'channels_last'
 
-__all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d',  'MaxUnpool2d',  'AvgPool1d', 'AvgPool2d',
-           'AvgPool3d', 'GlobalAvgPool2d','get_pooling']
+_tf_data_format = 'channels_last'
 
+__all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d', 'MaxUnpool2d', 'AvgPool1d', 'AvgPool2d', 'AvgPool3d',
+           'GlobalAvgPool2d']
 
 _session = get_session()
 
-_device='CPU'
+_device = 'CPU'
 for device in device_lib.list_local_devices():
-      if tf.DeviceSpec.from_string(device.name).device_type == 'GPU':
-          _device='GPU'
-          break
+    if tf.DeviceSpec.from_string(device.name).device_type == 'GPU':
+        _device = 'GPU'
+        break
 
 _epsilon = _session.epsilon
 
@@ -56,7 +47,7 @@ _quadruple = _ntuple(4)
 class _PoolNd(Layer):
     __constants__ = ['kernel_size', 'strides', 'auto_pad', 'padding', 'dilation']
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', dilation=1, name=None,  **kwargs):
+    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', dilation=1, name=None, **kwargs):
         super(_PoolNd, self).__init__()
         self.kernel_size = kernel_size
         self.strides = strides or kernel_size
@@ -69,12 +60,9 @@ class _PoolNd(Layer):
         # self.count_include_pad = kwargs.get('count_include_pad', False)
         self.name = name
 
-
-
     def extra_repr(self):
         return 'kernel_size={kernel_size}, strides={strides}, padding={padding}' \
                ', dilation={dilation}'.format(**self.__dict__)
-
 
 
 class MaxPool1d(_PoolNd):
@@ -108,15 +96,16 @@ class MaxPool1d(_PoolNd):
               L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}
                     \times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool of size=3, strides=2
         >>> m = MaxPool1d(3, strides=2)
         >>> input = randn(20, 16, 50)
         >>> output = m(input)
 
-    .. _link:
+    References
         https://github.com/vdumoulin/conv_arithmetic/blob/master/README.md
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate', name='', **kwargs):
@@ -130,7 +119,8 @@ class MaxPool1d(_PoolNd):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return tf.nn.max_pool1d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID', data_format="NWC", name=None)
+        return tf.nn.max_pool1d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                data_format="NWC", name=None)
 
 
 class MaxPool2d(_PoolNd):
@@ -163,7 +153,8 @@ class MaxPool2d(_PoolNd):
         stride: the strides of the window. Default value is :attr:`kernel_size`
         padding: implicit zero padding to be added on both sides
         dilation: a parameter that controls the strides of elements in the window
-        return_indices: if ``True``, will return the max indices along with the outputs. Useful for :class:`torch.nn.MaxUnpool2d` later
+        return_indices: if ``True``, will return the max indices along with the outputs. Useful for
+        :class:`torch.nn.MaxUnpool2d` later
         ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape
 
     Shape:
@@ -171,10 +162,12 @@ class MaxPool2d(_PoolNd):
         - Output: :math:`(N, C, H_{out}, W_{out})`, where
 
           .. math::
-              'H_{out} = \left\lfloor\frac{H_{in} + 2 * \text{padding[0]} - \text{dilation[0]}\times (\text{kernel\_size[0]} - 1) - 1}{\text{stride[0]}} + 1\right\rfloor'
+              'H_{out} = \left\lfloor\frac{H_{in} + 2 * \text{padding[0]} - \text{dilation[0]}\times (\text{
+              kernel\_size[0]} - 1) - 1}{\text{stride[0]}} + 1\right\rfloor'
 
           .. math::
-              'W_{out} = \left\lfloor\frac{W_{in} + 2 * \text{padding[1]} - \text{dilation[1]}\times (\text{kernel\_size[1]} - 1) - 1}{\text{stride[1]}} + 1\right\rfloor'
+              'W_{out} = \left\lfloor\frac{W_{in} + 2 * \text{padding[1]} - \text{dilation[1]}\times (\text{
+              kernel\_size[1]} - 1) - 1}{\text{stride[1]}} + 1\right\rfloor'
 
     Examples:
         >>> # pool of square window of size=3, strides=2
@@ -204,7 +197,8 @@ class MaxPool2d(_PoolNd):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return tf.nn.max_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID', data_format="NHWC", name=None)
+        return tf.nn.max_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                data_format="NHWC", name=None)
 
 
 class MaxPool3d(_PoolNd):
@@ -239,7 +233,8 @@ class MaxPool3d(_PoolNd):
         stride: the strides of the window. Default value is :attr:`kernel_size`
         padding: implicit zero padding to be added on all three sides
         dilation: a parameter that controls the strides of elements in the window
-        return_indices: if ``True``, will return the max indices along with the outputs.Useful for :class:`torch.nn.MaxUnpool3d` later
+        return_indices: if ``True``, will return the max indices along with the outputs.Useful for
+        :class:`torch.nn.MaxUnpool3d` later
         ceil_mode: when True, will use `ceil` instead of `floor` to compute the output shape
 
     Shape:
@@ -247,13 +242,16 @@ class MaxPool3d(_PoolNd):
         - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where
 
           .. math::
-              'D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] - \text{dilation}[0] \times(\text{kernel\_size}[0] - 1) - 1}{\text{stride}[0]} + 1\right\rfloor'
+              'D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] - \text{dilation}[0] \times(\text{
+              kernel\_size}[0] - 1) - 1}{\text{stride}[0]} + 1\right\rfloor'
 
           .. math::
-              'H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] - \text{dilation}[1] \times (\text{kernel\_size}[1] - 1) - 1}{\text{stride}[1]} + 1\right\rfloor'
+              'H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] - \text{dilation}[1] \times (\text{
+              kernel\_size}[1] - 1) - 1}{\text{stride}[1]} + 1\right\rfloor'
 
           .. math::
-              'W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] - \text{dilation}[2] \times (\text{kernel\_size}[2] - 1) - 1}{\text{stride}[2]} + 1\right\rfloor'
+              'W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] - \text{dilation}[2] \times (\text{
+              kernel\_size}[2] - 1) - 1}{\text{stride}[2]} + 1\right\rfloor'
 
     Examples:
         >>> # pool of square window of size=3, strides=2
@@ -277,9 +275,8 @@ class MaxPool3d(_PoolNd):
         self.return_indices = kwargs.get('return_indices', False)
 
     def forward(self, input):
-        return tf.nn.max_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID', data_format="NDHWC", name=None)
-
-
+        return tf.nn.max_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                data_format="NDHWC", name=None)
 
 
 class MaxUnpool2d(_PoolNd):
@@ -320,7 +317,7 @@ class MaxUnpool2d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Examples::
+    Examples:
 
         >>> pool = nn.MaxPool2d(2, strides=2, return_indices=True)
         >>> unpool = nn.MaxUnpool2d(2, strides=2)
@@ -352,8 +349,9 @@ class MaxUnpool2d(_PoolNd):
         self.padding = _pair(0)
 
     def forward(self, x, indices, output_size=None):
-        return tf.nn.max_pool_with_argmax(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID', data_format="NHWC",output_dtype=tf.int64, include_batch_in_index=False, name=None)
-
+        return tf.nn.max_pool_with_argmax(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                          data_format="NHWC", output_dtype=tf.int64, include_batch_in_index=False,
+                                          name=None)
 
 
 class AvgPool1d(_PoolNd):
@@ -390,7 +388,7 @@ class AvgPool1d(_PoolNd):
               L_{out} = \left\lfloor \frac{L_{in} +
               2 \times \text{padding} - \text{kernel\_size}}{\text{stride}} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool with window of size=3, strides=2
         >>> m = AvgPool1d(3, strides=2)
@@ -401,14 +399,15 @@ class AvgPool1d(_PoolNd):
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
         super(AvgPool1d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
         self.kernel_size = _single(kernel_size)
-        self.auto_pad=auto_pad
+        self.auto_pad = auto_pad
         self.strides = _single(strides if strides is not None else kernel_size)
-        self.padding = _single(self.padding)
-        # self.ceil_mode = kwargs.get('ceil_mode', False)
-        # self.count_include_pad = kwargs.get('count_include_pad', False)
+        self.padding = _single(
+            self.padding)  # self.ceil_mode = kwargs.get('ceil_mode', False)  # self.count_include_pad = kwargs.get(
+        # 'count_include_pad', False)
 
     def forward(self, input):
-        return tf.nn.avg_pool1d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID', data_format="NWC", name=None)
+        return tf.nn.avg_pool1d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                data_format="NWC", name=None)
 
 
 class AvgPool2d(_PoolNd):
@@ -453,7 +452,7 @@ class AvgPool2d(_PoolNd):
               W_{out} = \left\lfloor\frac{W_{in}  + 2 \times \text{padding}[1] -
                 \text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool of square window of size=3, strides=2
         >>> m1 = AvgPool2d(3, strides=2)
@@ -466,7 +465,8 @@ class AvgPool2d(_PoolNd):
 
     """
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True,count_include_pad=True, divisor_override=None, name='', **kwargs):
+    def __init__(self, kernel_size, strides=None, auto_pad=True, count_include_pad=True, divisor_override=None, name='',
+                 **kwargs):
         super(AvgPool2d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
         self.kernel_size = _pair(kernel_size)
         self.strides = _pair(strides if strides is not None else kernel_size)
@@ -479,7 +479,8 @@ class AvgPool2d(_PoolNd):
     def forward(self, *x):
         x = enforce_singleton(x)
 
-        return tf.nn.avg_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID', data_format="NHWC", name=None)
+        return tf.nn.avg_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                data_format="NHWC", name=None)
 
 
 class AvgPool3d(_PoolNd):
@@ -519,13 +520,16 @@ class AvgPool3d(_PoolNd):
         - Output: :math:`(N, C, D_{out}, H_{out}, W_{out})`, where
 
         .. math::
-            'D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] -\text{kernel\_size}[0]}{\text{stride}[0]} + 1\right\rfloor'
+            'D_{out} = \left\lfloor\frac{D_{in} + 2 \times \text{padding}[0] -\text{kernel\_size}[0]}{\text{stride}[
+            0]} + 1\right\rfloor'
 
         .. math::
-            'H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] -\text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor'
+            'H_{out} = \left\lfloor\frac{H_{in} + 2 \times \text{padding}[1] -\text{kernel\_size}[1]}{\text{stride}[
+            1]} + 1\right\rfloor'
 
         .. math::
-            'W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] -\text{kernel\_size}[2]}{\text{stride}[2]} + 1\right\rfloor'
+            'W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] -\text{kernel\_size}[2]}{\text{stride}[
+            2]} + 1\right\rfloor'
 
     Examples:
         >>> # pool of square window of size=3, strides=2
@@ -550,7 +554,8 @@ class AvgPool3d(_PoolNd):
         self.divisor_override = kwargs.get('divisor_override', None)
 
     def forward(self, input):
-        return tf.nn.avg_pool3d(input, self.kernel_size, self.strides,  'SAME' if self.auto_pad else 'VALID', data_format="NDHWC", name=None)
+        return tf.nn.avg_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+                                data_format="NDHWC", name=None)
 
     def __setstate__(self, d):
         super(AvgPool3d, self).__setstate__(d)
@@ -564,11 +569,10 @@ class GlobalAvgPool2d(Layer):
         super(GlobalAvgPool2d, self).__init__(name=name)
         self.keepdim = keepdim
 
-
     def build(self, input_shape):
         if self._built == False:
             if self.keepdim == True:
-                self.output_shape = tf.TensorShape([1,1,self.input_filters])
+                self.output_shape = tf.TensorShape([1, 1, self.input_filters])
             else:
                 self.output_shape = input_shape[-1]
             self._built = True
@@ -576,37 +580,8 @@ class GlobalAvgPool2d(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         if self.keepdim == True:
-            x = tf.reduce_mean(x,[1,2],keepdims=True)
+            x = tf.reduce_mean(x, [1, 2], keepdims=True)
 
         else:
-            x = tf.reduce_mean(x,[1,2],keepdims=False)
+            x = tf.reduce_mean(x, [1, 2], keepdims=False)
         return x
-
-
-def get_pooling(fn_name):
-    if fn_name is None:
-        return None
-    fn_modules = ['trident.layers.tensorflow_pooling']
-    try:
-        if isinstance(fn_name,str) and fn_name in __all__:
-            try:
-                pooling_class = get_class(fn_name, fn_modules)
-                return pooling_class()
-            except Exception:
-                PrintException()
-                return None
-        if getattr(fn_name, '__module__', None) == fn_modules[0]:
-            if inspect.isfunction(fn_name):
-                return fn_name
-            elif isinstance(fn_name, Layer):
-                return fn_name()
-        else:
-            if callable(fn_name) :
-                result=inspect.getfullargspec(fn_name)
-                if 1<=len(result.args)<=2:
-                    return fn_name if inspect.isfunction(fn_name) else fn_name()
-                else:
-                    raise ValueError('Unknown pooling function/ class')
-    except Exception:
-        return None
-

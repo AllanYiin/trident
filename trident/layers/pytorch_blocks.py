@@ -50,11 +50,11 @@ _quadruple = _ntuple(4)
 
 
 class Conv1d_Block(Layer):
-    def __init__(self,sequence_rank='cna', kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+    def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
                  normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
-                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,sequence_rank='cna',**kwargs):
         super(Conv1d_Block, self).__init__(name=name,keep_output=keep_output)
-        if sequence_rank in ['cna','nac']:
+        if hasattr(self,'sequence_rank') and  sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
@@ -75,7 +75,7 @@ class Conv1d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
-        if self.sequence_rank=='cna':
+        if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
             self.conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
                                    auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
                                    use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
@@ -105,6 +105,8 @@ class Conv1d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
+        if hasattr(self,'sequence_rank'):
+            setattr(self,'sequence_rank','cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -135,11 +137,12 @@ class Conv1d_Block(Layer):
 
 
 class Conv2d_Block(Layer):
-    def __init__(self,sequence_rank='cna',  kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
-                 keep_output=False, **kwargs):
+                 keep_output=False,sequence_rank='cna',   **kwargs):
         super(Conv2d_Block, self).__init__(name=name,keep_output=keep_output)
+
         if sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
@@ -182,7 +185,7 @@ class Conv2d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-        if self.sequence_rank == 'cna':
+        if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
             self.conv=Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
                                            auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
                                            use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
@@ -207,7 +210,8 @@ class Conv2d_Block(Layer):
             self.conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
-                self.norm = None
+                if self.norm is SpectralNorm:
+                    self.norm=None
 
             # if self.norm is not None:
             #     self.norm.input_shape = self.conv.output_shape
@@ -216,6 +220,8 @@ class Conv2d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
+        if not hasattr(self,'sequence_rank'):
+            setattr(self,'sequence_rank','cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -246,11 +252,13 @@ class Conv2d_Block(Layer):
 
 
 class TransConv2d_Block(Layer):
-    def __init__(self, sequence_rank='cna', kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,  kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
-                 keep_output=False, **kwargs):
+                 keep_output=False,sequence_rank='cna',   **kwargs):
         super(TransConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
@@ -266,6 +274,7 @@ class TransConv2d_Block(Layer):
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
         self.use_spectral = use_spectral
+        self.depth_multiplier=depth_multiplier
         self.conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
                                auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
                                use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
@@ -290,6 +299,8 @@ class TransConv2d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -322,10 +333,12 @@ class TransConv2d_Block(Layer):
 
 
 class DepthwiseConv2d_Block(Layer):
-    def __init__(self, sequence_rank='cna', kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,  kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, add_noise=False,
-                 noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
+                 noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False,sequence_rank='cna', **kwargs):
         super(DepthwiseConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        if not hasattr(self,'sequence_rank'):
+            setattr(self,'sequence_rank','cna')
         if sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
@@ -371,6 +384,8 @@ class DepthwiseConv2d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
+        if not hasattr(self,'sequence_rank'):
+            setattr(self,'sequence_rank','cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -401,10 +416,11 @@ class DepthwiseConv2d_Block(Layer):
 
 
 class SeparableConv2d_Block(Layer):
-    def __init__(self,sequence_rank='cna',  kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, sequence_rank='cna', **kwargs):
         super(SeparableConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+
         if sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
         self.kernel_size = kernel_size
@@ -428,6 +444,8 @@ class SeparableConv2d_Block(Layer):
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
         self.use_spectral = use_spectral
+        if not hasattr(self,'sequence_rank'):
+            setattr(self,'sequence_rank','cna')
         if self.sequence_rank == 'cna':
             self.conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
                                        strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
@@ -462,6 +480,8 @@ class SeparableConv2d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -492,9 +512,9 @@ class SeparableConv2d_Block(Layer):
 
 
 class GcdConv2d_Block(Layer):
-    def __init__(self, sequence_rank='cna', kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self,  kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  divisor_rank=0, activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1,
-                 groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,keep_output=False,
+                 groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,keep_output=False,sequence_rank='cna',
                  **kwargs):
         super(GcdConv2d_Block, self).__init__(name=name,keep_output=keep_output)
         if sequence_rank in ['cna','nac']:
@@ -543,6 +563,8 @@ class GcdConv2d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise

@@ -15,7 +15,8 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import  image_ops
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,  summary
+from trident.backend.tensorflow_ops  import *
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,  summary
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.tensorflow_activations import get_activation, Identity, Relu
@@ -54,7 +55,7 @@ def DeepLabHead(classes=20, atrous_rates=(6, 12, 18,24),num_filters=256):
 
 
 def ASPPPooling(num_filters,size):
-    return Sequential(AdaptiveAvgPool2d((1,1)),
+    return Sequential(GlobalAvgPool2d(),
                       Conv2d((1,1),num_filters,strides=1,use_bias=False,activation=None),
                       Upsampling2d(size=(size[-3], size[-2]),mode='bilinear', align_corners=False))
 
@@ -136,7 +137,7 @@ class _DeeplabV3_plus(Layer):
         new_shape = x.shape.as_list()[1:-1]
         x=image_ops.resize_images_v2(x, (new_shape[0],new_shape[1]*4,new_shape[2]*4,new_shape[3]), method=image_ops.ResizeMethod.BILINEAR)
         low_level_feature=self.low_level_conv(low_level_feature)
-        x=torch.cat([x,low_level_feature],dim=1)
+        x=concate([x,low_level_feature],axis=1)
         x=self.decoder(x)
 
         new_shape = x.shape.as_list()[1:-1]

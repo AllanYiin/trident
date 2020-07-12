@@ -1119,15 +1119,20 @@ class Ranger(Optimizer):
                     p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
                 else:
                     p_data_fp32.add_(-step_size * group['lr'], exp_avg)
+                if not any_abnormal_number(p_data_fp32):
+                    p.data.copy_(p_data_fp32)
 
-                p.data.copy_(p_data_fp32)
-
-                # integrated look ahead...
-                # we do it at the param level instead of group level
-                if state['step'] % group['k'] == 0:
-                    slow_p = state['slow_buffer']  # get access to slow param tensor
-                    slow_p.add_(self.alpha, p.data - slow_p)  # (fast weights - slow weights) * alpha
-                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+                    # integrated look ahead...
+                    # we do it at the param level instead of group level
+                    if state['step'] % group['k'] == 0:
+                        slow_p = state['slow_buffer']  # get access to slow param tensor
+                        slow_p.add_(self.alpha, p.data - slow_p)  # (fast weights - slow weights) * alpha
+                        if not any_abnormal_number(slow_p):
+                            p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+                        else:
+                            return
+                else:
+                    return
         return loss
 
 

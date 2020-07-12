@@ -25,7 +25,7 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, Sequential
 
 __all__ = [ 'MaxPool1d','MaxPool2d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
-           'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d','get_pooling']
+           'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d']
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -102,7 +102,7 @@ class MaxPool1d(_PoolNd):
         - Output: :math:`(N, C, L_{out})`, where
         : :math:'L_{out} = \left\lfloor \frac{L_{in} + 2 \times \text{padding} - \text{dilation}\times (\text{kernel\_size} - 1) - 1}{\text{stride}} + 1\right\rfloor'
 
-    Examples::
+    Examples:
 
         >>> # pool of size=3, strides=2
         >>> m = nn.MaxPool1d(3, strides=2)
@@ -175,7 +175,7 @@ class MaxPool2d(_PoolNd):
               W_{out} = \left\lfloor\frac{W_{in} + 2 * \text{padding[1]} - \text{dilation[1]}
                     \times (\text{kernel\_size[1]} - 1) - 1}{\text{stride[1]}} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool of square window of size=3, stride=2
         >>> m = nn.MaxPool2d(3, stride=2)
@@ -285,7 +285,7 @@ class MaxPool3d(_PoolNd):
               W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] - \text{dilation}[2] \times
                 (\text{kernel\_size}[2] - 1) - 1}{\text{stride}[2]} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool of square window of size=3, strides=2
         >>> m = nn.MaxPool3d(3, strides=2)
@@ -347,7 +347,7 @@ class MaxUnpool1d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Examples::
+    Examples:
 
         >>> pool = nn.MaxPool1d(2, strides=2, return_indices=True)
         >>> unpool = nn.MaxUnpool1d(2, strides=2)
@@ -414,7 +414,7 @@ class MaxUnpool2d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Examples::
+    Examples:
 
         >>> pool = nn.MaxPool2d(2, strides=2, return_indices=True)
         >>> unpool = nn.MaxUnpool2d(2, strides=2)
@@ -490,7 +490,7 @@ class MaxUnpool3d(_PoolNd):
 
           or as given by :attr:`output_size` in the call operator
 
-    Examples::
+    Examples:
 
         >>> # pool of square window of size=3, strides=2
         >>> pool = nn.MaxPool3d(3, strides=2, return_indices=True)
@@ -545,7 +545,7 @@ class AvgPool1d(_PoolNd):
               L_{out} = \left\lfloor \frac{L_{in} +
               2 \times \text{padding} - \text{kernel\_size}}{\text{stride}} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool with window of size=3, strides=2
         >>> m = nn.AvgPool1d(3, strides=2)
@@ -607,7 +607,7 @@ class AvgPool2d(_PoolNd):
               W_{out} = \left\lfloor\frac{W_{in}  + 2 \times \text{padding}[1] -
                 \text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool of square window of size=3, strides=2
         >>> m = nn.AvgPool2d(3, strides=2)
@@ -706,7 +706,7 @@ class AvgPool3d(_PoolNd):
               W_{out} = \left\lfloor\frac{W_{in} + 2 \times \text{padding}[2] -
                     \text{kernel\_size}[2]}{\text{stride}[2]} + 1\right\rfloor
 
-    Examples::
+    Examples:
 
         >>> # pool of square window of size=3, strides=2
         >>> m = nn.AvgPool3d(3, strides=2)
@@ -778,40 +778,4 @@ class AdaptiveAvgPool2d(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         return F.adaptive_avg_pool2d(x, self.output_size)
-
-
-def get_pooling(fn_name):
-    """
-
-    Args:
-        fn_name ():
-
-    Returns:
-
-    """
-    if fn_name is None:
-        return None
-    fn_modules = ['trident.layers.ptorch_pooling']
-    try:
-        if isinstance(fn_name,str) and fn_name in __all__:
-            try:
-                pooling_class = get_class(fn_name, fn_modules)
-                return pooling_class()
-            except Exception:
-                PrintException()
-                return None
-        if getattr(fn_name, '__module__', None) == fn_modules[0]:
-            if inspect.isfunction(fn_name):
-                return fn_name
-            elif isinstance(fn_name, Layer):
-                return fn_name()
-        else:
-            if callable(fn_name) :
-                result=inspect.getfullargspec(fn_name)
-                if 1<=len(result.args)<=2:
-                    return fn_name if inspect.isfunction(fn_name) else fn_name()
-                else:
-                    raise ValueError('Unknown pooling function/ class')
-    except Exception:
-        return None
 

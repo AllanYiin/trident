@@ -77,7 +77,7 @@ class Dense(Layer):
                 :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
                 :math:`k = \frac{1}{\text{in\_features}}`
 
-    Examples::
+    Examples:
 
         >>> m = Dense(30)
         >>> input = to_tensor(torch.randn(2, 20))
@@ -152,6 +152,7 @@ class Concate(Layer):
     def __init__(self, axis=1):
         super(Concate, self).__init__()
         self.axis = axis
+
     def forward(self, *x) -> torch.Tensor:
         if not isinstance(x, list) or len(x) < 2:
             raise ValueError('A `Concatenate` layer should be called on a list of at least 2 inputs')
@@ -297,7 +298,7 @@ def get_static_padding(rank,kernal_shape,strides,dilations,input_shape=None,tran
         strides (tuple of integer):
         dilations (tuple of integer):
         input_shape (None or tuple of integer):
-        transpose (bool): wheather transposed
+        transpose (bool): whether transposed
 
     Returns: the padding we need (shape: 2*rank )
 
@@ -542,7 +543,7 @@ class Conv1d(_ConvNd):
                     :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
                     :math:`k = \frac{1}{\text{in\_features}}`
 
-        Examples::
+        Examples:
             >>> input = to_tensor(torch.randn(1,64,32))
             >>> conv1= Conv1d(3,64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
             >>> output = conv1(input)
@@ -669,7 +670,7 @@ class Conv2d(_ConvNd):
                     :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
                     :math:`k = \frac{1}{\text{in\_features}}`
 
-        Examples::
+        Examples:
             >>> input = to_tensor(torch.randn(1,32,32,32))
             >>> conv1= Conv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
             >>> output = conv1(input)
@@ -1919,6 +1920,52 @@ class AlphaDropout(Layer):
 
     def extra_repr(self):
         return 'p={}, inplace={}'.format(self.dropout_rate, self.inplace)
+    
+
+class DropBlock2d(Layer):
+    r"""Randomly zeroes spatial blocks of the input tensor.
+
+
+    As described in the paper
+    `DropBlock: A regularization method for convolutional networks`_ ,
+    dropping whole blocks of feature map allows to remove semantic
+    information as compared to regular dropout.
+
+    Args:
+        keep_prob (float, optional): probability of an element to be kept.
+        Authors recommend to linearly decrease this value from 1 to desired
+        value.
+        block_size (int, optional): size of the block. Block size in paper
+        usually equals last feature map dimensions.
+
+    Shape:
+        - Input: :math:`(N, C, H, W)`
+        - Output: :math:`(N, C, H, W)` (same shape as input)
+
+    .. _DropBlock: A regularization method for convolutional networks:
+       https://arxiv.org/abs/1810.12890
+    """
+
+    def __init__(self, dropout_rate=0.1, block_size=7):
+        super(DropBlock2d, self).__init__()
+        self.dropout_rate = dropout_rate
+        self.block_size = block_size
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if not self.training or self.dropout_rate == 0:
+            return x
+        gamma = self.dropout_rate / self.block_size ** 2
+        for sh in x.shape[2:]:
+            gamma *= sh / (sh - self.block_size + 1)
+        M = torch.bernoulli(torch.ones_like(x) * gamma)
+        Msum = F.conv2d(M,
+                        torch.ones((x.shape[1], 1, self.block_size, self.block_size)).to(device=x.device,dtype=x.dtype),
+                        padding=self.block_size // 2,
+                        groups=x.shape[1])
+        torch.set_printoptions(threshold=5000)
+        mask = (Msum < 1).to(device=x.device, dtype=x.dtype)
+        return x * mask * mask.numel() /mask.sum() #TODO x * mask * self.keep_prob ?
 
 
 

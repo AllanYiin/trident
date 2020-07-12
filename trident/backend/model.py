@@ -574,15 +574,17 @@ class ModelBase(object):
                                 if any_abnormal_number(this_loss[i]):
                                     sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
                                 else:
+                                    # a leaf Variable that requires grad connotused in an in-place operation.
                                     overall_loss += this_loss[i]
-                            self.training_context['current_loss'] += overall_loss
+                            self.training_context['current_loss'] =self.training_context['current_loss']+ overall_loss
                             if is_collect_data:
                                 self.training_context['losses'][k].append(float(to_numpy(overall_loss)))
                         else:
                             if any_abnormal_number(this_loss):
                                 sys.stderr.write( 'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
                             else:
-                                self.training_context['current_loss'] += this_loss
+                                #a leaf Variable that requires grad connotused in an in-place operation.
+                                self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss
                             if is_collect_data:
                                 self.training_context['losses'][k].append(float(to_numpy(this_loss)))
                     except Exception as e:
@@ -605,8 +607,8 @@ class ModelBase(object):
 
                         this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
 
-
-                    self.training_context['current_loss'] += this_loss  # self.training_context[
+                    # a leaf Variable that requires grad connotused in an in-place operation.
+                    self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
                     # 'current_loss'] + this_loss
                     if is_collect_data:
                         self.training_context['losses'][k + '_Loss'].append(float(to_numpy(this_loss)))

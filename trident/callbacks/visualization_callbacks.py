@@ -16,13 +16,15 @@ from trident.callbacks.callback_base import CallbackBase
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
-
+from trident.data.bbox_common  import *
 
 if get_backend()=='pytorch':
-    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape
+    from trident.backend.pytorch_backend import try_map_args_and_call
+    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,argmax,softmax
 
 elif get_backend()=='tensorflow':
-    from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like
+    from trident.backend.tensorflow_backend import try_map_args_and_call
+    from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like,argmax,softmax
 
 
 if is_in_ipython() or is_in_colab():
@@ -36,7 +38,7 @@ _backend = get_backend()
 
 
 __all__ = ['VisualizationCallbackBase', 'TileImageCallback', 'PrintGradientsCallback', 'SegTileImageCallback',
-           'PlotLossMetricsCallback']
+           'PlotLossMetricsCallback','DetectionPlotImageCallback']
 
 
 class VisualizationCallbackBase(CallbackBase):
@@ -236,6 +238,77 @@ class SegTileImageCallback(VisualizationCallbackBase):
             self.plot_tile_image(training_context)
 
 
+
+
+
+class DetectionPlotImageCallback(VisualizationCallbackBase):
+    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results', reverse_image_transform=None, labels=None,
+                 palette=None, background=(120, 120, 120), name_prefix: str = 'detection_plot_image_{0}.png', imshow=False):
+        super(DetectionPlotImageCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        self.is_in_ipython = is_in_ipython()
+        self.is_in_colab = is_in_colab()
+        self.labels=labels
+        self.palette = palette
+        self.tile_image_name_prefix = name_prefix
+        self.reverse_image_transform = reverse_image_transform
+        self.background = np.expand_dims(np.expand_dims(to_numpy(background), 0), 0)
+
+    def plot_detection_image(self, training_context):
+        tile_images_list=[]
+        input = None
+        target = None
+        output = None
+
+        data_feed = training_context['data_feed']
+        data = training_context['train_data']
+        model = training_context['current_model']
+        output = try_map_args_and_call(model, data, data_feed)
+        target=data['bbox']
+        input=data[data_feed[model.signature.inputs.key_list[0]]]
+        input_image=self.reverse_image_transform(to_numpy(input))
+        targetmask = (target[:,4] > 0.9)
+        input_image1=input_image.copy()
+        target_boxes=to_numpy(xywh2xyxy(target[targetmask,:]))
+        for box in target_boxes:
+            plot_one_box(box,input_image1,(255, 128, 128),self.labels[box[5:]])
+
+
+        # input_arr=np.asarray(input_arr)
+        tile_images_list.append(input_image1)
+
+        input_image = self.reverse_image_transform(to_numpy(input))
+        mask=(output[:,:,4] >0.7)
+        if len(output[:,:,4]) > 0:
+            mask2 = (argmax(softmax(output[:, :, 5:], -1), -1) != 0)
+            mask = (mask.float() + mask2.float() == 2)
+        output=output[mask,:]
+        input_image2 = input_image.copy()
+        output_boxes = to_numpy(xywh2xyxy(output[mask, :]))
+        for box in output_boxes:
+            plot_one_box(box, input_image2, (255, 255, 128),self.labels[np.argmax(box[5:])])
+
+
+        tile_images_list.append(input_image2)
+
+        tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
+
+    def on_batch_end(self, training_context):
+        if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
+            self.plot_detection_image(training_context)
+
+    def on_epoch_end(self, training_context):
+        if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
+            self.plot_detection_image(training_context)
+
+    def on_batch_end(self, training_context):
+        if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
+            self.plot_detection_image(training_context)
+
+    def on_epoch_end(self, training_context):
+        if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
+            self.plot_detection_image(training_context)
+
+
 class PlotLossMetricsCallback(VisualizationCallbackBase):
     def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results', clean_ipython_output_frequency=5,
                  name_prefix: str = 'loss_metric_curve_{0}.png', imshow=False):
@@ -285,7 +358,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
 
     def on_optimization_step_start(self, training_context):
         if get_backend()=='pytorch':
-            if self.batch_inteval > 0 and (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
+            if  (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
                 grad_dict = {}
                 if 'grads_state' not in training_context:
                     training_context['grads_state']=OrderedDict()
@@ -319,9 +392,8 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                     self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
                         training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
                         training_context['grads_state']['last_layer'][-1]))
-    def on_optimization_step_end(self, training_context):
-        if get_backend() == 'tensoflow':
-            if self.batch_inteval > 0 and (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
+        elif get_backend() == 'tensorflow':
+            if  (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
                 grad_dict = {}
                 if 'grads_state' not in training_context:
                     training_context['grads_state'] = OrderedDict()

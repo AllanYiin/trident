@@ -59,8 +59,8 @@ def DenseLayer(growth_rate,name=''):
     items = OrderedDict()
     items['norm']=BatchNorm2d()
     items['relu']=Relu()
-    items['conv1']=Conv2d_Block((1,1),4 * growth_rate,strides=1,activation='relu',auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
-    items['conv2']=Conv2d((3,3),growth_rate,strides=1,auto_pad=True,padding_mode='zero',use_bias=False)
+    items['conv1']=Conv2d_Block((1,1),num_filters=4 * growth_rate,strides=1,activation='relu',auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
+    items['conv2']=Conv2d((3,3),num_filters=growth_rate,strides=1,auto_pad=True,padding_mode='zero',use_bias=False)
     return  Sequential(items)
 
 
@@ -166,7 +166,7 @@ def DenseNet(blocks,
 
     """
     densenet=Sequential()
-    densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
+    densenet.add_module('conv1/conv',Conv2d_Block((7,7),num_filters=initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
     densenet.add_module('maxpool', (MaxPool2d((3, 3), strides=2, auto_pad=True, padding_mode='zero')))
     densenet.add_module('denseblock1', DenseBlock(blocks[0],growth_rate=growth_rate))
     densenet.add_module('transitiondown1', Transition(0.5))

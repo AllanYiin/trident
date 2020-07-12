@@ -27,7 +27,7 @@ __all__ = ['transform_func','read_image', 'read_mask', 'save_image', 'save_mask'
            'random_crop', 'resize', 'rescale', 'downsample_then_upsample', 'add_noise', 'gray_scale', 'to_rgb',
            'to_bgr', 'auto_level', 'random_invert_color', 'image_backend_adaption', 'reverse_image_backend_adaption',
            'random_adjust_hue', 'random_channel_shift', 'random_cutout', 'random_rescale_crop', 'random_center_crop',
-           'adjust_gamma', 'random_adjust_gamma', 'adjust_contrast', 'random_adjust_contrast', 'clahe',
+           'adjust_gamma','adjust_brightness_contrast', 'random_adjust_gamma', 'adjust_contrast', 'random_adjust_contrast', 'clahe',
            'erosion_then_dilation', 'dilation_then_erosion', 'image_erosion', 'image_dilation', 'adaptive_binarization',
            'random_transform', 'horizontal_flip', 'random_mirror', 'to_low_resolution']
 
@@ -366,11 +366,11 @@ def to_rgb():
         elif len(image.shape) == 3:
             if image.shape[0] in (1,3, 4) and image.shape[-1] >4:
                 image = image.transpose([1, 2, 0])
-            if image[-1].shape in (3, 4):
-                if image[0].shape == 4:
+            if image.shape[-1] in (3, 4):
+                if image.shape[0] == 4:
                     image = image[:, :,:3]
                 image = image[..., ::-1]
-            elif  image[-1].shape ==1:
+            elif  image.shape[-1] ==1:
                image = np.concatenate([image, image, image], -1)
             return image
 
@@ -388,17 +388,62 @@ def to_bgr():
         elif image.ndim == 3:
             if image.shape[0] in (1,3, 4) and image.shape[-1] >4:
                 image = image.transpose([1, 2, 0])
-            if image[-1].shape in (3, 4):
-                if image[0].shape == 4:
+            if image.shape[-1] in (3, 4):
+                if image.shape[0] == 4:
                     image = image[:, :,:3]
                 image = image[..., ::-1]
-            elif  image[-1].shape ==1:
+            elif  image.shape[-1] ==1:
                image = np.concatenate([image, image, image], -1)
             return image
 
         return image
 
     return img_op
+
+
+def adjust_brightness_contrast(brightness=255, contrast=127):
+    """
+
+    Args:
+        brightness ():       -255~255
+        contrast (float):   -127~127
+
+    Returns:
+
+    """
+
+
+    def map(x, in_min, in_max, out_min, out_max):
+        return float((x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min)
+
+    brightness = map(brightness, 0, 510.0, -255.0, 255.0)
+    contrast = map(contrast, 0.0, 254.0, -127.0, 127.0)
+    def img_op(image: np.ndarray):
+        if brightness != 0:
+            if brightness > 0:
+                shadow = brightness
+                highlight = 255
+            else:
+                shadow = 0
+                highlight = 255 + brightness
+            alpha_b = (highlight - shadow) / 255
+            gamma_b = shadow
+
+            image = image * alpha_b + image * 0 + gamma_b
+        else:
+            image = image.copy()
+
+        if contrast != 0:
+            f = float(131 * (contrast + 127)) / (127 * (131 - contrast))
+            alpha_c = f
+            gamma_c = 127 * (1 - f)
+            image = image * alpha_c + image * 0 + gamma_c
+
+        return image
+    return img_op
+
+
+
 
 
 def adjust_gamma(gamma=1):
@@ -423,7 +468,8 @@ def adjust_contrast(alpha=1):
 
     def img_op(image: np.ndarray):
         image = image.astype(np.float32) * alpha + beta
-        image = np.clip(image, 0, 255).astype(np.uint8)
+        if image.max() > 225.0:
+            image=image * 255 / (image.max())
         return image.astype(np.float32)
 
     return img_op
@@ -436,13 +482,14 @@ def random_adjust_contrast(scale=(0.5, 1.5)):
     def img_op(image: np.ndarray):
         alpha = random.uniform(scalemin, scalemax)
         image = image.astype(np.float32) * alpha + beta
-        image = np.clip(image, 0, 255).astype(np.uint8)
+        if image.max()>225.0:
+            image=image*255.0/(image.max())
         return image.astype(np.float32)
 
     return img_op
 
 
-def random_adjust_hue(hue_range=(-20, 20), saturation_range=(-10, 10), lightness_range=(-20, 20)):
+def random_adjust_hue(hue_range=(-20, 20), saturation_range=(0.5, 1.5), lightness_range=(-50, 50)):
     def img_op(image: np.ndarray):
         # hue is mapped to [0, 1] from [0, 360]
         # if hue_offset not in range(-180, 180):
@@ -452,18 +499,24 @@ def random_adjust_hue(hue_range=(-20, 20), saturation_range=(-10, 10), lightness
         # if lightness not in range(-100, 100):
         #     raise ValueError('Lightness should be within (-100, 100)')
         hue_offset = random.uniform(*hue_range)
-        saturation = random.uniform(*saturation_range)
-        lightness = random.uniform(*lightness_range)
-        image = color.rgb2hsv(image.astype('uint8'))
-        hue_offset = ((180 + hue_offset) % 180) / 360.0
-        image[:, :, 0] = image[:, :, 0] + hue_offset
-        image[:, :, 0][image[:, :, 0] > 1] -= 1
-        image[:, :, 0][image[:, :, 0] < 0.0] += 1
+        saturation_offset = random.uniform(*saturation_range)
+        lightness_offset = random.uniform(*lightness_range)
 
-        # image[:, :, 1] = image[:, :, 1] + saturation / 200.0
-        # image[:, :, 2] = image[:, :, 2] + lightness / 200.0
-        image = color.hsv2rgb(image) * 255.0
-        return image.astype(np.float32)
+        image =cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGB2HSV)
+
+        image[:, :, 0] +=hue_offset
+        image[:, :, 0][image[:, :, 0] > 360.0] -= 360.0
+        image[:, :, 0][image[:, :, 0] < 0.0] += 360.0
+
+        image[:, :, 1] *=saturation_offset
+
+        image[:, :, 2] = image[:, :, 2] +lightness_offset
+
+        image =cv2.cvtColor(image,cv2.COLOR_HSV2RGB).astype(np.float32)
+
+        if image.max()>255.0:
+            image=image* 255.0/image.max()
+        return np.clip(image.astype(np.float32),0,255)
 
     return img_op
 
@@ -672,7 +725,8 @@ def horizontal_flip():
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                im[:, 0::2] = width - im[:, 2::-2]
+                im[:, 0]=width- im[:, 0]
+                im[:, 2]=width- im[:, 2]
                 if len(im) > 0:
                     results[k] = im
                 else:
@@ -696,12 +750,14 @@ def random_mirror():
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
+                box=im.copy()
+                print(im)
                 if img_op.rnd % 2 == 0:
-                    im[:, 0::2] = width - im[:, 2::-2]
-                if len(im) > 0:
+                    im[:, 0] = width - box[:, 2]
+                    im[:, 2] = width - box[:, 0]
+                    print(im)
                     results[k] = im
-                else:
-                    results[k] = None
+
 
             elif im.ndim == 3:
                 if img_op.rnd % 2 == 0:
@@ -747,7 +803,7 @@ def random_channel_shift(intensity=15):
         min_x, max_x = np.min(image), np.max(image)
         intensity = max_x / 255 * inten
         channel_images = [np.clip(x_channel + np.random.uniform(-intensity, intensity), min_x, max_x) for x_channel in
-                          image[:, :, ]]
+                          image.shape[-1]]
         x = np.stack(channel_images, axis=channel_axis)
         x = np.rollaxis(x, 0, channel_axis + 1)
         return x
@@ -792,18 +848,46 @@ def clahe(clip_limit=0.1, nbins=16):
 
 
 def image_erosion(filter_size=3, repeat=1):
+    """ Erosion operation
+    Erosion is a mathematical morphology operation that uses a structuring element for shrinking the shapes in an image. The binary erosion of an image by a structuring element is the locus of the points where a superimposition of the structuring element centered on the point is entirely contained in the set of non-zero elements of the image.
+
+    Args:
+        filter_size (int): the size of the structuring element .
+        repeat (int): the number of repeating operation.
+
+    Returns:
+        output image array
+
+    """
     def img_op(image: np.ndarray):
+        structure_shape = [1] * image.ndim
+        structure_shape[0]=filter_size
+        structure_shape[1] = filter_size
         for i in range(repeat):
-            image = morphology.erosion(image,None)
+            image =ndimage.morphology.grey_erosion(image,size=(filter_size,filter_size),structure=np.ones(tuple(structure_shape)))
         return image
 
     return img_op
 
 
 def image_dilation(filter_size=3, repeat=1):
+    """ Dilation operation
+    Dilation is a mathematical morphology operation that uses a structuring element for expanding the shapes in an image. The binary dilation of an image by a structuring element is the locus of the points covered by the structuring element, when its center lies within the non-zero points of the image.
+
+    Args:
+        filter_size (int): the size of the structuring element .
+        repeat (int): the number of repeating operation.
+
+    Returns:
+        output image array
+
+    """
     def img_op(image: np.ndarray):
+        structure_shape = [1] * image.ndim
+        structure_shape[0]=filter_size
+        structure_shape[1] = filter_size
         for i in range(repeat):
-            image = morphology.dilation(image,None)
+            image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size),structure=np.ones(tuple(structure_shape)))
         return image
 
     return img_op
@@ -811,9 +895,12 @@ def image_dilation(filter_size=3, repeat=1):
 
 def erosion_then_dilation(filter_size=3, repeat=1):
     def img_op(image: np.ndarray):
+        structure_shape=[1]*image.ndim
+        structure_shape[0]=filter_size
+        structure_shape[1] = filter_size
         for i in range(repeat):
-            image = morphology.erosion(image,None)
-            image = morphology.dilation(image, None)
+            image = ndimage.morphology.grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
         return image
 
     return img_op
@@ -821,9 +908,12 @@ def erosion_then_dilation(filter_size=3, repeat=1):
 
 def dilation_then_erosion(filter_size=3, repeat=1):
     def img_op(image: np.ndarray):
+        structure_shape = [1] * image.ndim
+        structure_shape[0]=filter_size
+        structure_shape[1] = filter_size
         for i in range(repeat):
-            image = morphology.dilation(image, None)
-            image = morphology.erosion(image, None)
+            image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = ndimage.morphology.grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
         return image
 
     return img_op
@@ -831,7 +921,9 @@ def dilation_then_erosion(filter_size=3, repeat=1):
 
 def adaptive_binarization(threshold_type='otsu'):
     def img_op(image: np.ndarray):
+
         image = image.astype(np.float32)
+        original_shape=image.shape
         local_thresh = None
         blur = gaussian(image, sigma=0.5, multichannel=True if image.ndim == 3 else None)
         try:
@@ -866,6 +958,15 @@ def adaptive_binarization(threshold_type='otsu'):
                 image = blur
         except Exception as e:
             print(e)
+
+        if image.ndim==2:
+            if len(original_shape)==2:
+                pass
+            elif  len(original_shape)==3:
+                image=np.expand_dims(image,-1)
+                if original_shape[-1] ==3:
+                    image=to_rgb()(image)
+
         return image
 
     return img_op
@@ -918,23 +1019,96 @@ def build_affine_matrix(s, c, rad, t=(0, 0)):
     return M
 
 
-def random_transform(rotation_range=12, zoom_range=0.05, shift_range=0.05, random_flip=0.3):
-    def img_op(img):
-        h, w = img.shape[0:2]
-        rotation = np.random.uniform(-rotation_range, rotation_range)
-        scale = np.random.uniform(1 - zoom_range, 1 + zoom_range)
-        tx = np.random.uniform(-shift_range, shift_range) * w
-        ty = np.random.uniform(-shift_range, shift_range) * h
-        mat = cv2.getRotationMatrix2D((w // 2, h // 2), rotation, scale)
-        mat[:, 2] += (tx, ty)
 
-        img = cv2.warpAffine(img, mat, (w, h), borderMode=cv2.BORDER_CONSTANT)  # , borderMode=cv2.BORDER_REPLICATE
-        if np.random.random() < random_flip:
-            img = img[:, ::-1]
+def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,shear_range = 0.2,
+                     random_flip= 0.15):
+    # 把現有的圖片隨機擾亂
+    coverage = 110
+    rotation = np.random.uniform(-rotation_range, rotation_range) if rotation_range!=0 else 0
+    scale = np.random.uniform(1 - zoom_range, 1 + zoom_range)if zoom_range!=0 else 1
+    shear= np.random.uniform( - shear_range,  shear_range)if shear_range!=0 else 0
+    rr = np.random.random()
+    def img_op(*image: np.ndarray):
+        results = to_list(image)
 
-        return img
+        h, w = results[0].shape[0:2]
+        tx = int(np.random.uniform(-shift_range, shift_range)* w if shift_range!=0 else 0)
+        ty = int(np.random.uniform(-shift_range, shift_range)* h if shift_range!=0 else 0)
+        mat = cv2.getRotationMatrix2D((w // 2+tx, h // 2+ty), rotation,1)
+        #mat[:, 2] += (tx, ty)
 
+        cos = np.abs(mat[0, 0])
+        sin = np.abs(mat[0, 1])
+        new_W = int((h * sin) + (w * cos))
+        new_H = int((h * cos) + (w * sin))
+        mat[0, 2] += (new_W / 2) - w // 2
+        mat[1, 2] += (new_H / 2) - h // 2
+        mat_img = mat.copy()
+        mat_box = mat.copy()
+
+        for k in range(len(results)):
+            im = results[k]
+            if im is None or len(im)==0:
+                pass
+            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
+
+                # compute the new bounding dimensions of the image
+                box_w = (im[:, 2] - im[:, 0]).reshape(-1, 1)
+                box_h = (im[:, 3] - im[:, 1]).reshape(-1, 1)
+
+                x1 = im[:, 0].reshape(-1, 1)
+                y1 = im[:, 1].reshape(-1, 1)
+
+                x2 = x1 + box_w
+                y2 = y1
+
+                x3 = x1
+                y3 = y1 + box_h
+
+                x4 = im[:, 2].reshape(-1, 1)
+                y4 = im[:, 3].reshape(-1, 1)
+
+                corners = np.hstack((x1, y1, x2, y2, x3, y3, x4, y4))
+                corners = corners.reshape(-1, 2)
+
+                corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
+                new_box = np.dot(mat_box, corners.T).T
+                new_box=new_box.reshape(-1, 8)
+
+                x_ = new_box[:, [0, 2, 4, 6]]
+                y_ = new_box[:, [1, 3, 5, 7]]
+
+                xmin = np.min(x_, 1).reshape(-1, 1)
+                ymin = np.min(y_, 1).reshape(-1, 1)
+                xmax = np.max(x_, 1).reshape(-1, 1)
+                ymax = np.max(y_, 1).reshape(-1, 1)
+
+                im = np.hstack((xmin, ymin, xmax, ymax, new_box[:, 8:]))
+
+                if im.ndim==1:
+                    im=np.expand_dims(im,0)
+                area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
+                im = im[area > 0]
+                if len(im) > 0:
+                    results[k] = im
+                else:
+                    results[k] = None
+            elif im.ndim == 3:
+                new_image = cv2.warpAffine(im.copy(), mat_img, (w, h), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
+                if rr< random_flip:
+                    new_image = new_image[:, ::-1]
+                results[k] = new_image
+            elif im.ndim ==2:
+                image=np.concatenate([np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1)],axis=-1)
+                new_image = cv2.warpAffine(im.copy(), mat_img, (w, h), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
+                if np.random.random() < random_flip:
+                    new_image = new_image[:, ::-1]
+                new_image=cv2.cvtColor(new_image,cv2.COLOR_RGB2GRAY)
+
+                results[k] = new_image
+        return unpack_singleton(tuple(results))
     return img_op
+
 
 
 def to_low_resolution(scale=2):

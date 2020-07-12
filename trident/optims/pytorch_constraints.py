@@ -77,6 +77,7 @@ def min_max_norm(model,min_value=0, max_value=1, rate=3.0, axis=0):
 
 
 
+
 maxnorm = max_norm
 nonnegnorm = non_neg_norm
 unitnorm = unit_norm

@@ -379,7 +379,7 @@ class _ConvNd(Layer):
     __constants__ = ['kernel_size', 'num_filters', 'strides', 'auto_pad', 'padding_mode', 'use_bias', 'dilation',
                      'groups', 'transposed']
 
-    def __init__(self, rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias, dilation,
+    def __init__(self, rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias=False, dilation=1,
                  groups=1, transposed=False, name=None, depth_multiplier=1, depthwise=False, separable=False, **kwargs):
         super(_ConvNd, self).__init__(name=name)
         self.rank = rank
@@ -613,7 +613,7 @@ class Conv2d(_ConvNd):
                 :math:`\mathcal{U}(-\sqrt{k}, \sqrt{k})` where
                 :math:`k = \frac{1}{\text{in\_features}}`
 
-    Examples::
+    Examples:
     >>> input =to_tensor(np.random.random((1,128,128,32)))
     >>> conv1= Conv2d((3,3),64,strides=2,activation='leaky_relu', auto_pad=True,use_bias=False)
     >>> output = conv1(input)
@@ -1185,12 +1185,20 @@ class Dropout(Layer):
         s = 'dropout_rate={0}'.format(self.dropout_rate)
 
 
-class Noise(tf.keras.layers.GaussianNoise):
+class Noise(Layer):
     def __init__(self, stddev=0.1, name=None):
         super(Noise, self).__init__(stddev=stddev, name=name)
+        self.stddev=stddev
+    def build(self, input_shape):
+        if self._built == False:
+            self._built = True
 
-    def __repr__(self):
-        return get_layer_repr(self)
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if self.training:
+            noise = random_normal_like(x,mean=mean(x),std=self.stddev)
+            x=x+noise
+        return x
 
     def extra_repr(self):
         s = 'stddev={0}'.format(self.stddev)
