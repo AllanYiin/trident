@@ -948,7 +948,7 @@ class Layer(tf.Module):
             output = unpack_singleton(result)
             if hasattr(self, 'keep_output') and self.keep_output == True:
                 self._output_tensor = output
-            if to_tensor(output):
+            if is_tensor(output):
                 if self._output_shape is None:
                     self.output_shape = output.shape[1:]
 
