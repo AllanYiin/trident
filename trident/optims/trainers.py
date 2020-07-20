@@ -381,9 +381,7 @@ class TrainingPlan(object):
                             need_out_sample_evaluation = True
 
                         iter_testdata = None
-                        if isinstance(data_loader,
-                                      DataProvider) and data_loader.testdata is not None and \
-                                need_out_sample_evaluation:
+                        if isinstance(data_loader,DataProvider) and data_loader.testdata is not None and need_out_sample_evaluation:
                             return_test = data_loader.next_test()
                             if return_test is not None:
                                 iter_testdata = OrderedDict()
@@ -424,7 +422,7 @@ class TrainingPlan(object):
                         if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and mbs % \
                                 self.save_model_frequency == 0:
                             for k, trainitem in self.training_items.items():
-                                trainitem.save_model()
+                                trainitem.save_model(trainitem.training_context['save_path'])
 
                         if only_steps == True and num_batches >= max_batches - 1:
                             for k, trainitem in self.training_items.items():

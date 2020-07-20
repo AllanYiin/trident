@@ -408,19 +408,19 @@ class ModelBase(object):
     def merge_grads(self, old_grads, new_grades):
         raise NotImplementedError
 
-    def get_save_path(self,save_path='',default_folder='log',default_file_name=''):
-        _,default_filename,default_ext=split_path(default_file_name)
-        if save_path is None or len(save_path) == 0:
-            save_path = self.training_context.get('save_path', getattr(self, 'save_path',''))
-
-        folder,filename,ext=split_path(save_path)
-        if folder=='':
-            folder=default_folder
-        if filename=='':
-            filename=default_filename
-        save_path = os.path.join(folder, filename+default_ext)
-        make_dir_if_need(sanitize_path(save_path))
-        return sanitize_path(save_path)
+    # def get_save_path(self,save_path='',default_folder='log',default_file_name=''):
+    #     _,default_filename,default_ext=split_path(default_file_name)
+    #     if save_path is None or len(save_path) == 0:
+    #         save_path = self.training_context.get('save_path', getattr(self, 'save_path',''))
+    #
+    #     folder,filename,ext=split_path(save_path)
+    #     if folder=='':
+    #         folder=default_folder
+    #     if filename=='':
+    #         filename=default_filename
+    #     save_path = os.path.join(folder, filename+default_ext)
+    #     make_dir_if_need(sanitize_path(save_path))
+    #     return sanitize_path(save_path)
 
 
 
@@ -569,13 +569,13 @@ class ModelBase(object):
                         # output, target)
 
                         if isinstance(this_loss, tuple):
-                            overall_loss =0.0
+                            overall_loss =to_tensor(0.0)
                             for i in range(len(this_loss)):
                                 if any_abnormal_number(this_loss[i]):
                                     sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
                                 else:
                                     # a leaf Variable that requires grad connotused in an in-place operation.
-                                    overall_loss += this_loss[i]
+                                    overall_loss =overall_loss+ this_loss[i]
                             self.training_context['current_loss'] =self.training_context['current_loss']+ overall_loss
                             if is_collect_data:
                                 self.training_context['losses'][k].append(float(to_numpy(overall_loss)))

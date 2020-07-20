@@ -448,8 +448,9 @@ class Model(ModelBase):
     def with_model_save_path(self, save_path, **kwargs):
         if save_path is None or len(save_path)==0:
             save_path=os.path.join('Models','{0}.pth.tar_'.format(self.name))
-        self.save_path = make_dir_if_need(save_path)
-        self.training_context['save_path'] = self.save_path
+        save_path =sanitize_path(save_path)
+        make_dir_if_need(save_path)
+        self.training_context['save_path'] = save_path
         return self
 
     def with_learning_rate_scheduler(self, lr_schedule, warmup=0, **kwargs):
@@ -717,10 +718,18 @@ class Model(ModelBase):
         if any_abnormal_number(self._model):
             raise ValueError(self._get_name() + '  nan detected!!')
 
+        if save_path is None or save_path=='':
+            save_path=training_context['save_path']
+
         if isinstance(self._model,nn.Module):
-            save_path=self.get_save_path(save_path,default_folder='Models',default_file_name= '{0}_epoch{1}.pth.tar_'.format(self._model.name,self.training_context['current_epoch']))
-            save_path=sanitize_path(save_path)
-            self.current_save_path = save_path
+            folder,filename,ext=split_path(save_path)
+            if filename=='':
+                filenam=self.name
+
+            ext='.pth.tar_'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
+            save_path = sanitize_path(save_path)
             device=get_device()
             self._model.eval()
 
@@ -743,9 +752,16 @@ class Model(ModelBase):
 
 
         elif isinstance(self._model,torch.Tensor):
-            save_path = self.get_save_path(save_path, default_folder='Models',default_file_name='{0}_epoch{1}.npy_'.format(self._model.name, self.training_context[ 'current_epoch']))
+
+
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filenam = self.name
+
+            ext = '.npy_'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
-            self.current_save_path =save_path
             numpy_model=to_numpy(self._model)
             np.save(save_path,numpy_model)
             shutil.copy(save_path, save_path.replace('.npy_', '.npy'))
@@ -757,9 +773,8 @@ class Model(ModelBase):
 
     def save_onnx(self, file_path, dynamic_axes=None):
         if isinstance(self._model,nn.Module):
-            save_path = self.get_save_path(file_path, default_folder='Models',default_file_name='{0}_epoch{1}.onnx_'.format(self._model.name, self.training_context[ 'current_epoch']))
 
-            import torch.onnx
+            import_or_install('torch.onnx')
             self._model.eval()
             dummy_input = torch.randn(1, *to_list(self._model.input_shape), device=get_device(),requires_grad=True)
             file, ext = os.path.splitext(file_path)
@@ -768,7 +783,7 @@ class Model(ModelBase):
             self._model.to(get_device())
             outputs = self._model(dummy_input)
             save_path=sanitize_path(save_path)
-            self.current_save_path =save_path
+
 
             # if dynamic_axes is None:
             #     dynamic_axes = {}
@@ -839,15 +854,18 @@ class Model(ModelBase):
             extra_lines = extra_repr.split('\n')
         child_lines = []
         for key, value in self.__dict__.items():
-            if isinstance(value, OrderedDict):
-                for subkey, subvalue in value.items():
-                    mod_str = repr(subvalue)
+            try:
+                if isinstance(value, OrderedDict):
+                    for subkey, subvalue in value.items():
+                        mod_str = repr(subvalue)
+                        mod_str = addindent(mod_str, 2)
+                        child_lines.append('(' + key + '): ' + mod_str)
+                else:
+                    mod_str = repr(value)
                     mod_str = addindent(mod_str, 2)
                     child_lines.append('(' + key + '): ' + mod_str)
-            else:
-                mod_str = repr(value)
-                mod_str = addindent(mod_str, 2)
-                child_lines.append('(' + key + '): ' + mod_str)
+            except:
+                pass
         lines = extra_lines + child_lines
 
         main_str = self._get_name() + '('
