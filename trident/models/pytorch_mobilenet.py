@@ -140,10 +140,14 @@ def MobileNetV2(include_top=True,
         recovery_model.to(_device)
         if include_top==False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape=recovery_model.fc.input_shape
                 recovery_model.fc=new_fc
+                mob.class_names=[]
         mob.model=recovery_model
     return mob
