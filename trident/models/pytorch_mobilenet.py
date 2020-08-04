@@ -143,6 +143,7 @@ def MobileNetV2(include_top=True,
             recovery_model.__delitem__(-1)
             recovery_model.__delitem__(-1)
             recovery_model.__delitem__(-1)
+            mob.class_names = []
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='fc')

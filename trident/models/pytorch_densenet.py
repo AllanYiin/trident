@@ -182,8 +182,8 @@ def DenseNet(blocks,
     densenet.add_module('denseblock4', DenseBlock(blocks[3], growth_rate=growth_rate))
     densenet.add_module('classifier_norm',BatchNorm2d(name='classifier_norm'))
     densenet.add_module('classifier_relu', Relu(name='classifier_relu'))
-    densenet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
     if include_top:
+        densenet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         densenet.add_module('classifier', Dense(num_classes, activation=None, name='classifier'))
         densenet.add_module('softmax', SoftMax( name='softmax'))
     densenet.name = name
@@ -333,11 +333,15 @@ def DenseNet121(include_top=True,
         recovery_model.to(_device)
         if include_top==False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            densenet121.class_names = []
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='classifier')
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
+                densenet121.class_names = []
         densenet121.model=recovery_model
 
         densenet121.signature = get_signature(densenet121.model.forward)
@@ -383,11 +387,15 @@ def DenseNet161(include_top=True,
         recovery_model.to(_device)
         if include_top==False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            densenet161.class_names = []
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='classifier')
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
+                densenet161.class_names = []
         densenet161.model=recovery_model
         densenet161.signature = get_signature(densenet161.model.forward)
     return densenet161
@@ -433,11 +441,15 @@ def DenseNet169(include_top=True,
         recovery_model.to(_device)
         if include_top==False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            densenet169.class_names = []
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='classifier')
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
+                densenet169.class_names = []
         densenet169.model=recovery_model
         densenet169.signature = get_signature(densenet169.model.forward)
     return densenet169
@@ -482,11 +494,15 @@ def DenseNet201(include_top=True,
         recovery_model.to(_device)
         if include_top==False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            densenet201.class_names = []
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='classifier')
                 new_fc.input_shape=recovery_model.classifier.input_shape
                 recovery_model.classifier=new_fc
+                densenet201.class_names = []
         densenet201.model=recovery_model
         densenet201.signature = get_signature(densenet201.model.forward)
     return densenet201

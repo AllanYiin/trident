@@ -411,7 +411,7 @@ def is_abnormal_number(x):
 def any_nan(x):
     if isinstance(x, (tf.Tensor, tf.Variable)) or is_tensor(x):
         if x.ndim == 0:
-            return tf.math.is_nan(x).any()
+            return tf.math.is_nan(x).numpy().any()
         else:
             return tf.math.is_nan(x).numpy().any()
     elif isinstance(x, tf.Module):
@@ -428,7 +428,7 @@ def any_nan(x):
 def any_inf(x):
     if isinstance(x, (tf.Tensor, tf.Variable)) or is_tensor(x):
         if x.ndim == 0:
-            return tf.math.is_inf(x).any()
+            return tf.math.is_inf(x).numpy().any()
         else:
             return tf.math.is_inf(x).numpy().any()
     elif isinstance(x, tf.Module):

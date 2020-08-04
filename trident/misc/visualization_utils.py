@@ -97,7 +97,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
                 plt.gcf().show()
     else:
         fig = plt.gcf()
-        fig.set_size_inches(len(imgs) * 2, row * 2)
+        #fig.set_size_inches(len(imgs) * 2, row * 2)
         plt.clf()
         plt.ion()  # is not None:
 
@@ -109,8 +109,8 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
         filename = save_path.format(suffix)
         plt.savefig(filename, bbox_inches='tight')
         if imshow == True:
-            plSize = fig.get_size_inches()
-            fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
+            #plSize = fig.get_size_inches()
+            #fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
             if is_in_ipython():
                 plt.ioff()
                 display.display(plt.gcf())

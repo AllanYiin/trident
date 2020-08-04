@@ -548,6 +548,7 @@ class Gelu(Layer):
         <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
 
     """
+
     def __init__(self, name=None):
         super(Gelu, self).__init__()
         self._built = True

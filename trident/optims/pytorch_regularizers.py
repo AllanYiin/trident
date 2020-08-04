@@ -15,7 +15,7 @@ _epsilon = _session.epsilon
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
 
-def l1_reg(model:nn.Module,reg_weight=1e-6):
+def l1_reg(model:nn.Module,reg_weight=1e-5):
     #with torch.enable_grad():
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
@@ -24,15 +24,15 @@ def l1_reg(model:nn.Module,reg_weight=1e-6):
         return loss
 
 
-def l2_reg(model:nn.Module,reg_weight=1e-6):
+def l2_reg(model:nn.Module,reg_weight=1e-5):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:
-            loss=loss+ reg_weight *torch.norm(param)
+            loss=loss+ reg_weight *param.norm().sum()
         return loss
 
 
-def orth_reg(model:nn.Module,reg_weight=1e-6):
+def orth_reg(model:nn.Module,reg_weight=1e-5):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:

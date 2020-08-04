@@ -35,7 +35,7 @@ if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import to_numpy, to_tensor, ReplayBuffer
     import torch
 
-__all__ = ['Dataset', 'ImageDataset', 'MaskDataset', 'LabelDataset', 'BboxDataset', 'MultipleDataset', 'Iterator',
+__all__ = ['Dataset', 'ImageDataset', 'MaskDataset', 'LabelDataset', 'BboxDataset', 'MultipleDataset','MetricDataset', 'Iterator',
            'NumpyDataset', 'RandomNoiseDataset']
 
 T = TypeVar('T', int, float, str, np.ndarray)
@@ -143,6 +143,126 @@ class ImageDataset(Dataset):
             return self.image_transform(img)
         elif self.is_pair_process == True:
             return img
+
+        return None
+
+    def image_transform(self, img_data):
+        if len(self.image_transform_funcs) == 0:
+            return image_backend_adaption(img_data)
+        if isinstance(img_data, np.ndarray):
+            for fc in self.image_transform_funcs:
+                if not fc.__qualname__.startswith(
+                        'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
+                        fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
+                    img_data = fc(img_data)
+            img_data = image_backend_adaption(img_data)
+
+            return img_data
+        else:
+            return img_data
+
+    @property
+    def reverse_image_transform_funcs(self):
+        return_list = []
+        return_list.append(reverse_image_backend_adaption)
+        for i in range(len(self.image_transform_funcs)):
+            fn = self.image_transform_funcs[-1 - i]
+            if fn.__qualname__ == 'normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean, fn.std))
+        return_list.append(array2image)
+        return return_list
+
+    def reverse_image_transform(self, img_data):
+        if len(self.reverse_image_transform_funcs) == 0:
+            return reverse_image_backend_adaption(img_data)
+        if isinstance(img_data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.reverse_image_transform_funcs:
+                img_data = fc(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
+
+            return img_data
+        else:
+            return img_data
+
+class MetricDataset(Dataset):
+    def __init__(self, identities=None, expect_data_type: ExpectDataType = ExpectDataType.array_data,
+                 get_image_mode: GetImageMode = GetImageMode.processed, symbol=None, name=''):
+        super().__init__(symbol=symbol, expect_data_type=expect_data_type, name=name)
+        _defines={'triplet loss':('anchor','positive','negative'), }
+        self.__add__(identities)
+        self.dtype = np.float32
+        self.get_image_mode = get_image_mode
+        self.image_transform_funcs = []
+        self.is_pair_process = False
+
+    def __getitem__(self, index: int):
+        anchor=None
+        positive=None
+        negative=None
+        imgs = super().__getitem__(index).value
+        index_internal=  random.choice(range(len(imgs)))
+        anchor=imgs[index_internal]
+        if len(imgs)>1:
+            available_items=range(len(imgs))
+            list(available_items).remove(index_internal)
+            index_internal2=random.choice(available_items)
+            positive=imgs[index_internal2]
+            available_items = range(len(super()))
+            list(available_items).remove(index)
+            index2=random.choice(available_items)
+            negative=random.choice(super()[index2].value)
+
+        if isinstance(anchor, str):
+            anchor = image2array(anchor)
+            positive = image2array(positive)
+            negative = image2array(negative)
+
+
+        if not isinstance(anchor, np.ndarray):
+            raise ValueError('image data should be ndarray')
+        elif isinstance(anchor, np.ndarray) and anchor.ndim not in [2, 3]:
+            raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(anchor.ndim))
+        elif self.expect_data_type == ExpectDataType.gray:
+            anchor = color.rgb2gray(anchor).astype(self.dtype)
+            positive = color.rgb2gray(positive).astype(self.dtype)
+            negative = color.rgb2gray(negative).astype(self.dtype)
+        elif self.expect_data_type == ExpectDataType.rgb and anchor.ndim == 2:
+            anchor = np.repeat(np.expand_dims(anchor, -1), 3, -1).astype(self.dtype)
+            positive = np.repeat(np.expand_dims(positive, -1), 3, -1).astype(self.dtype)
+            negative = np.repeat(np.expand_dims(negative, -1), 3, -1).astype(self.dtype)
+        elif self.expect_data_type == ExpectDataType.rgb and anchor.ndim == 3:
+            anchor = anchor[:, :, :3].astype(self.dtype)
+            positive = positive[:, :, :3].astype(self.dtype)
+            negative = negative[:, :, :3].astype(self.dtype)
+        elif self.expect_data_type == ExpectDataType.rgba:
+            if anchor.ndim == 2:
+                anchor = np.repeat(np.expand_dims(anchor, -1), 3, -1)
+                positive = np.repeat(np.expand_dims(positive, -1), 3, -1)
+                negative = np.repeat(np.expand_dims(negative, -1), 3, -1)
+            if anchor.shape[2] == 3:
+                anchor = np.concatenate([anchor, np.ones((anchor.shape[0], anchor.shape[1], 1)) * 255], axis=-1)
+                positive = np.concatenate([positive, np.ones((positive.shape[0], positive.shape[1], 1)) * 255], axis=-1)
+                negative = np.concatenate([negative, np.ones((negative.shape[0], negative.shape[1], 1)) * 255], axis=-1)
+            anchor = anchor.astype(self.dtype)
+        elif self.expect_data_type == ExpectDataType.multi_channel:
+            anchor = anchor.astype(self.dtype)
+            negative = negative.astype(self.dtype)
+            positive= positive.astype(self.dtype)
+
+        if self.get_image_mode == GetImageMode.expect and self.is_pair_process == False:
+            anchor=image_backend_adaption(anchor)
+            negative = image_backend_adaption(negative)
+            positive = image_backend_adaption(positive)
+            return  anchor,positive,positive, negative
+        elif self.get_image_mode == GetImageMode.processed and self.is_pair_process == False:
+            anchor = self.image_transform(anchor)
+            negative = self.image_transform(negative)
+            positive = self.image_transform(positive)
+
+            return anchor,positive, negative
+        elif self.is_pair_process == True:
+            return  anchor,positive, negative
 
         return None
 
@@ -380,6 +500,29 @@ class BboxDataset(Dataset):
 
 
 
+class LandmarkDataset(Dataset):
+    def __init__(self, landmarks=None, image_size=None, expect_data_type=ExpectDataType.landmarks,symbol=None, name=''):
+        super().__init__(symbol=symbol, expect_data_type=expect_data_type, name=name)
+        self.__add__(landmarks)
+        self.dtype = np.float32
+        self.image_size = image_size
+    def __getitem__(self, index: int):
+        self._current_idx = index
+        landmarks = super().__getitem__(index).astype(np.float32)
+        if  (landmarks>1).any() and (self.image_size is None):
+            raise RuntimeError('You need provide image size information for calculate landmarks. ')
+        elif (landmarks>1).any() :
+            height, width = self.image_size
+            landmarks[:, 0] = landmarks[:, 0] / width
+            landmarks[:, 1] = landmarks[:, 1] / height
+            return np.array(landmarks).astype(np.float32)
+        else:
+            return np.array(landmarks).astype(np.float32)
+
+
+
+
+
 
 class NumpyDataset(Dataset):
     def __init__(self, data=None, expect_data_type=ExpectDataType.array_data, symbol=None, name=''):
@@ -553,7 +696,7 @@ class Iterator(object):
             # stop = time.time()
             # print('get label:{0}'.format(stop - start))
             # start = stop
-            if isinstance(self.label, BboxDataset):
+            if isinstance(self.label, (BboxDataset,LandmarkDataset)):
                 data, label = self.paired_transform(data, label)
                 if hasattr(self.data, 'image_transform'):
                     data = self.data.image_transform(data)

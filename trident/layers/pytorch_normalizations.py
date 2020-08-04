@@ -15,7 +15,7 @@ from trident.backend.common import epsilon, get_function, get_session, enforce_s
 from trident.backend.pytorch_backend import Layer,get_device
 from trident.backend.pytorch_ops import *
 
-__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
+__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
 _session = get_session()
 _epsilon=_session.epsilon
 
@@ -126,7 +126,6 @@ class BatchNorm(Layer):
 
     def build(self, input_shape):
         if self._built == False:
-            self.input_filters= int(input_shape[0])
             if self.affine:
                 self.weight = Parameter(torch.Tensor(self.input_filters))
                 self.bias = Parameter(torch.Tensor(self.input_filters))
@@ -212,6 +211,7 @@ class GroupNorm(Layer):
     .. _`Group Normalization`: https://arxiv.org/abs/1803.08494
 
     """
+
     def __init__(self, num_groups=16,affine=True, eps=1e-5,name=None, **kwargs):
         """
         Args:
@@ -447,14 +447,27 @@ class LayerNorm(Layer):
             self._built=True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps)
+        return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         # mean = x.mean(dim=self.axis, keepdim=True).detach()
         # std = x.std(dim=self.axis, keepdim=True).detach()
         # return self.weight * (x - mean) / (std + self._eps) +self.bias
 
-
 LayerNorm2d=LayerNorm
 LayerNorm3d=LayerNorm
+
+
+class L2Norm(Layer):
+    def __init__(self, name=None, **kwargs):
+        super().__init__(name=name)
+        self.eps=epsilon()
+
+    def build(self, input_shape):
+        if self._built == False :
+            self._built = True
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return l2_normalize(x)
+
 
 
 class PixelNorm(Layer):

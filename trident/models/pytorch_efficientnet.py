@@ -204,6 +204,9 @@ def EfficientNet(width_coefficient, depth_coefficient, default_size, dropout_rat
             efficientnet.add_module('top_dropout', Dropout(dropout_rate, name='top_dropout'))
         efficientnet.add_module('fc', Dense(num_classes, activation=None, name='fc'))
         efficientnet.add_module('softmax', SoftMax(name='softmax'))
+
+
+
     if isinstance(default_size, int):
         default_size = default_size,
     if len(default_size) == 1:
@@ -236,11 +239,15 @@ def EfficientNetB0(include_top=True, pretrained=True, input_shape=(3, 224, 224),
             recovery_model.__delitem__(-1)
             recovery_model.__delitem__(-1)
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb0.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb0.class_names = []
+
         recovery_model.to(_device)
         effb0.model = recovery_model
 
@@ -261,11 +268,16 @@ def EfficientNetB1(include_top=True, pretrained=True, input_shape=(3, 240, 240),
         recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb1.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb1.class_names = []
         effb1.model = recovery_model
     return effb1
 
@@ -283,11 +295,16 @@ def EfficientNetB2(include_top=True, pretrained=True, input_shape=(3, 260, 260),
         recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb2.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb2.class_names = []
         effb2.model = recovery_model
     return effb2
 
@@ -305,11 +322,16 @@ def EfficientNetB3(include_top=True, pretrained=True, input_shape=(3, 300, 300),
         recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb3.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb3.class_names = []
         effb3.model = recovery_model
     return effb3
 
@@ -327,11 +349,17 @@ def EfficientNetB4(include_top=True, pretrained=True, input_shape=(3, 380, 380),
         recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb4.class_names = []
+
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb4.class_names = []
         effb4.model = recovery_model
     return effb4
 
@@ -349,11 +377,16 @@ def EfficientNetB5(include_top=True, pretrained=True, input_shape=(3, 456, 456),
         recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb5.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb5.class_names = []
         effb5.model = recovery_model
     return effb5
 
@@ -371,11 +404,16 @@ def EfficientNetB6(include_top=True, pretrained=True, input_shape=(3, 528, 528),
         recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb6.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb6.class_names = []
         effb6.model = recovery_model
     return effb6
 
@@ -393,10 +431,15 @@ def EfficientNetB7(include_top=True, pretrained=True, input_shape=(3, 600, 600),
         # recovery_model.to(_device)
         if include_top == False:
             recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            recovery_model.__delitem__(-1)
+            effb7.class_names = []
         else:
             if classes != 1000:
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape = recovery_model.fc.input_shape
                 recovery_model.fc = new_fc
+                effb7.class_names = []
         effb7.model = recovery_model
     return effb7

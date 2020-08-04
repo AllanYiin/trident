@@ -68,8 +68,8 @@ class MixupCallback(RegularizationCallbacksBase):
         else:
             lam = 1
         batch_size = int_shape(x)[0]
-        index = arange(batch_size).long()
-        index=shuffle(index)
+        index = arange(batch_size)
+        index=shuffle(index).long()
 
         mixed_x=None
         if get_backend()=='pytorch':

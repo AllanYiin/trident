@@ -6,7 +6,7 @@ import os
 import sys
 
 import PIL
-
+import matplotlib.pyplot as plt
 try:
     from PIL import ImageEnhance
     from PIL import ImageOps
@@ -46,17 +46,21 @@ def read_image(im_path:str):
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
             img=pil_image.open(im_path)
-            if isinstance(img, PngImageFile):
-                img=np.array(img).astype(np.float32)
-            return img
+            # if isinstance(img, PngImageFile):
+            #     img=np.array(img).astype(np.float32)
+            return np.array(img).astype(np.float32)
         else:
             if not os.path.exists(im_path):
                 raise ValueError('{0} not exsit'.format(im_path))
             else:
                 raise ValueError('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
-    except Exception as e:
-        sys.stderr.write(e)
-        return None
+    except :
+        try:
+            img = plt.imread(im_path)
+            return img[::-1]
+        except Exception as e:
+            sys.stderr.write(e)
+            return None
 
 def read_mask(im_path:str):
     """

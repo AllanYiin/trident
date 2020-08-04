@@ -364,6 +364,10 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                     training_context['grads_state']=OrderedDict()
                     training_context['grads_state']['first_layer']=[]
                     training_context['grads_state']['last_layer'] = []
+                if  training_context['current_batch']==0 and training_context['current_epoch']>0:
+                    #relocate the first/ last layers
+                    self.first_layer=''
+                    self.last_layer=''
                 if self.first_layer != '' and self.last_layer != '':
                     for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
                         if v is not None and v.requires_grad == True:

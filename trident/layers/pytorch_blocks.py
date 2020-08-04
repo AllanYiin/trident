@@ -850,9 +850,11 @@ class ShortCut2d(Layer):
             x = self.activation(x)
         return x
     def extra_repr(self):
-        s = ('mode={mode}, keep_output={keep_output}, activation={activation.__name__},axis={axis}')
+        s = ('mode={mode}, keep_output={keep_output},axis={axis}')
+        if self.activation is not None:
+            s +=(', activation = {activation.__name}')
         if hasattr(self, 'branch_from') and self.branch_from is not None:
-            s += ', branch_from={0}, branch_from_uuid={1}'.format(self.branch_from, self.branch_from_uuid)
+            s += (', branch_from={branch_from}, branch_from_uuid={branch_from_uuid}')
         return s.format(**self.__dict__)
 
 
@@ -912,7 +914,7 @@ class ConcateBlock(Layer):
 
 
 class SqueezeExcite(Layer):
-    def __init__(self, se_filters, num_filters, is_gather_excite=False, use_bias=False, name=''):
+    def __init__(self, se_filters, num_filters, is_gather_excite=False, activation='relu',use_bias=False, name=''):
         super(SqueezeExcite, self).__init__(name=name)
 
         self.se_filters = se_filters
@@ -921,7 +923,7 @@ class SqueezeExcite(Layer):
         self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
         self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
         self.is_gather_excite = is_gather_excite
-        self.activation = get_activation('swish')
+        self.activation = get_activation(activation)
         self.pool = GlobalAvgPool2d()
 
 

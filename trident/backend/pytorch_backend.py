@@ -19,20 +19,25 @@ import torch.onnx
 from torch._six import container_abcs
 from torch.nn.parameter import Parameter
 
-from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session
+from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session,get_session_value
 from trident.backend.pytorch_ops import *
 
 __all__ = ['get_device','set_device','Layer', 'Sequential','ModuleList' ,'print_network','summary', 'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
 
 version=torch.__version__
-sys.stderr.write('Pytorch version:{0}.\n'.format(version))
+sys.stdout.write('Pytorch version:{0}.\n'.format(version))
 
 
 pt_version=LooseVersion(vstring=version)
 base_version=LooseVersion(vstring='1.2.0')
+amp_version=LooseVersion(vstring='1.6.0')
 
-# if pt_version.version <base_version.version:
-#     raise ValueError('Not support Pytorch older then version 1.2' )
+if pt_version.version <base_version.version:
+    raise ValueError('Not support Pytorch older then version 1.2' )
+elif pt_version.version >=amp_version.version:
+    set_session('amp_available',True if torch.cuda.is_available() and pt_version>=amp_version else False)
+    if get_session_value('amp_available')==True:
+        sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(True))
 
 
 def get_device():
@@ -98,7 +103,7 @@ def reset_name(module:nn.Module, prefix_dict=None):
     prefix,seq=module._default_name.rsplit('_', 1) #if '_' in module._default_name else
     seq=int(seq)
     module.default_name = prefix + '_' + str(seq-get_uid(prefix,seq)+1)
-    module.__name__=module._name if module._name is None else module.default_name
+    module.__name__=module._name if hasattr(module,'_name')  else module.default_name
 
 
 _UID_PREFIX = defaultdict(int)
@@ -163,7 +168,7 @@ class Layer(nn.Module):
         self.training = True
         self._built = False
         self.rank= kwargs.get('rank',None)
-
+        self._non_persistent_buffers_set = set()
         self.uuid=uuid.uuid4().node
         self._nodes = None
         self._uid_prefixs = {}
@@ -201,7 +206,7 @@ class Layer(nn.Module):
     @property
     def name(self):
         """If not assign name , it will return the default_name"""
-        return self._name if self._name is not None and len(self._name)>0 else self.default_name
+        return self._name if self._name is not None and len(self._name)>0 else self.relative_name
 
     @name.setter
     def name(self,value):
@@ -417,7 +422,7 @@ class Layer(nn.Module):
         else:
             raise ValueError('not valid input_shape')
 
-
+       
         if self._built == False :
             self._input_shape =value
             if self._input_shape.ndim == 0:
@@ -703,7 +708,10 @@ class Sequential(Layer):
                 self.add_module(str(idx), module)
         else:
             for idx, module in enumerate(args):
-                self.add_module(str(idx), module)
+                if module._name is not None and  len(module._name)>0:
+                    self.add_module(module._name, module)
+                else:
+                    self.add_module(str(idx), module)
         self.to(self.device)
 
     def build(self, input_shape):
@@ -719,44 +727,26 @@ class Sequential(Layer):
             self.__getitem__(0).input_shape=self.input_shape
             self._built=True
 
-    # def add_module(self, name, module):
-    #     r"""Adds a child module to the current module.
-    #
-    #     The module can be accessed as an attribute using the given name.
-    #
-    #     Args:
-    #         name (string): name of the child module. The child module can be
-    #             accessed from this module using the given name
-    #         module (Module): child module to be added to the module.
-    #     """
-    #     if isinstance(module, (list,tuple)):
-    #         for i in range(len(module)):
-    #             m=module[i]
-    #             if isinstance(module, Layer):
-    #                 self.add_module(m.name,m)
-    #     else:
-    #         if not isinstance(module, Layer) and module is not None:
-    #             raise TypeError("{} is not a Module subclass".format(torch.typename(module)))
-    #         elif not isinstance(name, torch._six.string_classes):
-    #             raise TypeError("module name should be a string. Got {}".format(torch.typename(name)))
-    #         elif hasattr(self, name) and name not in self._modules:
-    #             raise KeyError("attribute '{}' already exists".format(name))
-    #         elif '.' in name:
-    #             raise KeyError("module name can't contain \".\"")
-    #         elif name == '':
-    #             raise KeyError("module name can't be empty string \"\"")
-    #         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
-    #             module.input_shape = self[-1]._output_shape
-    #         self._modules[name] = module
-    #         self._output_shape = module._output_shape
+    def add_module(self, name, module):
+        r"""Adds a child module to the current module.
 
-    def sync_build(self):
-        input_shape=None
-        if input_shape is not None:
-            input_shape = list(input_shape)
-            input_shape.insert(0, 2)
-            data = torch.tensor(np.random.standard_normal(input_shape))
-            out = self(data)
+        The module can be accessed as an attribute using the given name.
+
+        Args:
+            name (string): name of the child module. The child module can be
+                accessed from this module using the given name
+            module (Module): child module to be added to the module.
+        """
+
+
+        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
+            last_output=self[-1]._output_shape
+            super(Sequential, self).add_module(name, module)
+            module.input_shape = last_output
+            self._output_shape = module._output_shape
+        else:
+            super(Sequential, self).add_module(name, module)
+
     def remove_at(self,idx):
         self.__delitem__(idx)
 
@@ -830,8 +820,9 @@ class ModuleList(Layer):
                 return x
     """
 
-    def __init__(self, modules=None):
+    def __init__(self, modules=None,name=None):
         super(ModuleList, self).__init__()
+        self._name = name
         if isinstance(modules,dict):
             for key, value in modules.items():
                 self.add_module(key, value)
@@ -944,8 +935,9 @@ class Combine(Layer):
                 ]))
     """
 
-    def __init__(self, *args):
+    def __init__(self, *args,name=None):
         super(Combine, self).__init__()
+        self._name = name
         self._built = False
 
         if len(args) == 1 and isinstance(args[0], OrderedDict):
@@ -1047,12 +1039,15 @@ def print_network(net, verbose=False):
 def summary(model, input_size, batch_size=-1, device="cuda"):
     def register_hook(module):
         def hook(module, input, output):
-            class_name = str(module.__class__).split(".")[-1].split("'")[0]
+            #class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
             module_idx = len(summary)
 
-            m_key =module.name
+            m_key =module.relative_name if hasattr(module,'relative_name') else module.name
             summary[m_key] = OrderedDict()
-            summary[m_key]["keep_output"] = module.keep_output
+            if hasattr(module,'keep_output'):
+                summary[m_key]["keep_output"] = module.keep_output
+            else:
+                summary[m_key]["keep_output"] = False
             summary[m_key]["input_shape"] = list(input[0].size())
             summary[m_key]["input_shape"][0] = batch_size
             if isinstance(output, (list, tuple)):
@@ -1095,10 +1090,15 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     else:
         dtype = torch.FloatTensor
 
+    for name,module in model.named_modules():
+        module.relative_name=name
     # multiple inputs to the network
     if isinstance(input_size, tuple):
         input_size = [input_size]
 
+    #prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
+    model.to(get_device())
+    model.eval()
     if isinstance(input_size, int):
         x = [torch.rand(1, input_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu")]
     else:
@@ -1525,9 +1525,13 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
                 else:
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
             #print('arg_map',arg_map.key_list)
-            out=fn(*arg_map.value_list)
-            for item in data.value_list:
-                item.cpu()
+            if get_session_value('amp_available')==True and get_session_value('is_amp_enable') == True:
+                with torch.cuda.amp.autocast():
+                    out = fn(*arg_map.value_list)
+            else:
+                out=fn(*arg_map.value_list)
+                for item in data.value_list:
+                    item.cpu()
             return out
         elif hasattr(fn,'signature') and callable(fn):
             for arg in fn.signature.inputs.key_list:
@@ -1539,9 +1543,14 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
 
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
             #print('arg_map', arg_map.key_list)
-            out=fn(*arg_map.value_list)
-            for item in data.value_list:
-                item.cpu()
+            if get_session_value('amp_available')==True and get_session_value('is_amp_enable') == True:
+                with torch.cuda.amp.autocast():
+                    out = fn(*arg_map.value_list)
+            else:
+                out=fn(*arg_map.value_list)
+                for item in data.value_list:
+                    item.cpu()
+
             return out
         elif  callable(fn):
             args=get_signature(fn).key_list
@@ -1553,9 +1562,13 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
                 else:
                     arg_map[arg] = ''
             #print('arg_map', arg_map.key_list)
-            out = fn(*arg_map.value_list)
-            for item in data.value_list:
-                item.cpu()
+            if get_session_value('amp_available')==True and get_session_value('is_amp_enable') == True:
+                with torch.cuda.amp.autocast():
+                    out = fn(*arg_map.value_list)
+            else:
+                out = fn(*arg_map.value_list)
+                for item in data.value_list:
+                    item.cpu()
             return out
         else:
 

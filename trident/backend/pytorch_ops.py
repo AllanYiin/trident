@@ -174,7 +174,7 @@ def to_numpy(*x) -> np.ndarray:
     if isinstance(x, np.ndarray):
         return x
     elif isinstance(x, torch.Tensor):
-        return x.clone().cpu().detach_().numpy()
+        return x.clone().cpu().detach().numpy()
     elif isinstance(x, list):
         return np.array(x)
     elif isinstance(x, tuple):
@@ -1126,7 +1126,8 @@ def pow(x: torch.Tensor, y):
     """
     if not is_tensor(x):
         x = to_tensor(x, dtype=torch.float32)
-    return x.pow(y)
+        y = to_tensor(y, dtype=torch.float32)
+    return torch.pow(x,y)
 
 @numpy_compatible
 def log(x: torch.Tensor):
@@ -1469,17 +1470,21 @@ def element_cosine_distance(v1, v2, axis=-1):
     """
 
     Args:
-        v1 ():
-        v2 ():
+        v1 (ndarray, tensor): has the shape [batch: embedded dimensions]
+        v2 (ndarray, tensor)):has the shape [batch: embedded dimensions]
         axis ():
 
     Returns:
 
     """
     reduce_dim = -1
-    cos = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
-            (v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt() * (v2 * v2).sum(dim=reduce_dim,
-                                                                                 keepdims=False).sqrt())
+    x_normalized=reduce_sum(l2_normalize(v1),axis=reduce_dim, keepdims=False)
+    y_normalized =reduce_sum(l2_normalize(v1),axis=reduce_dim, keepdims=False)
+    cos= matmul(x_normalized, y_normalized,False,True)
+
+    # cos = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
+    #         (v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt() * (v2 * v2).sum(dim=reduce_dim,
+    #                                                                              keepdims=False).sqrt())
     return cos
 
 @numpy_compatible
@@ -2424,7 +2429,7 @@ def moments(x: torch.Tensor, axis, keepdims=True):
     return norm_mean, norm_variance
 
 
-def l2_normalize(x: torch.Tensor, eps=epsilon()):
+def l2_normalize(x: torch.Tensor):
     """
 
     Args:
@@ -2436,7 +2441,7 @@ def l2_normalize(x: torch.Tensor, eps=epsilon()):
 
 
     """
-    return x / (x.norm() + eps)
+    return x / (x.norm() + epsilon())
 
 
 ############################

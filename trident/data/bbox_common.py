@@ -29,18 +29,18 @@ elif _backend == 'tensorflow':
 __all__ = ['nms', 'xywh2xyxy', 'xyxy2xywh','bbox_iou','bbox_diou','bbox_giou','bbox_giou_numpy','plot_one_box']
 
 
-def plot_one_box(x, img, color=None, label=None, line_thickness=None):
+def plot_one_box(box, img, color=None, label=None, line_thickness=None):
     import cv2
     # Plots one bounding box on image img
-    tl = line_thickness if  line_thickness is not None else round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
-    c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
+    tl = line_thickness if  line_thickness is not None else  round(0.15*(box[2]-box[0]) )# round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
+    c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
     cv2.rectangle(img, c1, c2, color=color, thickness=tl)
     if label:
         tf = max(tl - 1, 1)  # font thickness
         t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
         c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
         cv2.rectangle(img, c1, c2, color, -1)  # filled
-        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3,  [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
     return img
 
 def xywh2xyxy(boxes,image_size=None):
@@ -127,10 +127,11 @@ def clip_boxes_to_image(boxes, size):
 
     """
     height,width=size
-    boxes[:,0]= clip(boxes[:,0],min=0, max=width)
-    boxes[:,1]= clip(boxes[:,1],min=0, max=height)
-    boxes[:,2]= clip(boxes[:,2],min=0, max=width)
-    boxes[:,3]= clip(boxes[:,3],min=0,max=height)
+    if len(boxes)>0:
+        boxes[:,0]= clip(boxes[:,0],min=0, max=width)
+        boxes[:,1]= clip(boxes[:,1],min=0, max=height)
+        boxes[:,2]= clip(boxes[:,2],min=0, max=width)
+        boxes[:,3]= clip(boxes[:,3],min=0,max=height)
     return boxes
 
 
@@ -163,7 +164,7 @@ def nms(boxes, threshold):
 
     area = (x2 - x1 + 1) * (y2 - y1 + 1)
 
-    sorted_index = np.argsort(score, descending=False)
+    sorted_index = np.argsort(score)
     # keep looping while some indexes still remain in the indexes list
     adjust_bbox = []
     while len(sorted_index) > 0:

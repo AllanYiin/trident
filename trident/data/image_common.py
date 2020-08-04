@@ -6,6 +6,7 @@ import math
 import os
 import random
 import re
+import builtins
 import time
 from itertools import repeat
 from functools import partial
@@ -182,7 +183,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
             sh, sw = size
 
             # aspect ratio of image
-            aspect = w / h  # if on Python 2, you might need to cast as a float: float(w)/h
+            aspect =np.true_divide(float(h),float(w))  # if on Python 2, you might need to cast as a float: float(w)/h
             target_aspect=sw/sh
             # compute scaling and pad sizing
             if aspect > target_aspect:  # horizontal image
@@ -201,8 +202,8 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                 new_h, new_w = sh, sw
                 pad_left, pad_right, pad_top, pad_btm = 0, 0, 0, 0
 
-            scalex = new_w / w
-            scaley = new_h / h
+            scalex =np.true_divide(float(new_w),float(w))
+            scaley = np.true_divide(float(new_h),float(h))
             img_op.scale = min(scalex,scaley)
             if align_corner:
                 img_op.pad_top = 0
@@ -220,8 +221,11 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                 im = results[i]
                 if im is None:
                     pass
-                elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                    im[:, 0:4]=im[:, 0:4]*img_op.scale
+                elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox [:,4]   [:,5]
+                    im[:, :4]=im[:, :4]*img_op.scale
+                    results[i] = im
+                elif im.ndim == 2 and im.shape[-1] in (2):  # landmark [:,2]
+                    im[:, :2]=im[:, :2]*img_op.scale
                     results[i] = im
                 elif im.ndim == 2 and im.dtype == np.int64:  # bbox
                     new_im = np.zeros((size[0], size[1]))
@@ -261,8 +265,8 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
             return unpack_singleton(tuple(results))
 
         else:
-            img_op.scalex = size[1] / image[0].shape[1]
-            img_op.scaley = size[0] / image[0].shape[0]
+            img_op.scalex =np.true_divide(float(size[1]),float(image[0].shape[1]))
+            img_op.scaley =np.true_divide(float(size[0]),float(image[0].shape[0]))
             img_op.scale = (img_op.scaley, img_op.scalex)
             for i in range(len(results)):
                 im = results[i]
@@ -293,6 +297,9 @@ def rescale(scale, order=1):
                 pass
             elif len(im.shape) == 2 and im.shape[-1] in (4, 5, 14, 15):  # bbox
                 im[:, 0:4]=im[:, 0:4]* img_op.scale
+                results[i] = im
+            elif len(im.shape) == 2 and im.shape[-1] ==2:  # landmark
+                im[:, :2]=im[:, :2]* img_op.scale
                 results[i] = im
             elif im.ndim == 2 and im.dtype == np.int64:  # bbox
                 results[i] = transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False,
@@ -348,8 +355,12 @@ def random_invert_color():
 
 def gray_scale():
     def img_op(image: np.ndarray):
-        if image.shape[0] == 3:
+        if image.shape[-1] == 3:
             image = color.rgb2gray(image.astype(np.float32))
+            if image.ndim==2 or (image.ndim==3 and  image.shape[-1] == 1):
+                if image.ndim == 2:
+                    image=np.expand_dims(image,-1)
+                image=np.concatenate([image,image,image],axis=-1)
         return image
 
     return img_op
@@ -401,6 +412,33 @@ def to_bgr():
     return img_op
 
 
+def adjust_brightness(src, x):
+    alpha = 1.0 + random.uniform(-x, x)
+    src *= alpha
+    return src
+
+
+def adjust_contrast(src, x):
+    alpha = 1.0 + random.uniform(-x, x)
+    coef = np.array([[[0.299, 0.587, 0.114]]])
+    gray = src * coef
+    gray = (3.0 * (1.0 - alpha) / gray.size) * np.sum(gray)
+    src *= alpha
+    src += gray
+    return src
+
+
+def adjust_saturation(src, x):
+    alpha = 1.0 + random.uniform(-x, x)
+    coef = np.array([[[0.299, 0.587, 0.114]]])
+    gray = src * coef
+    gray = np.sum(gray, axis=2, keepdims=True)
+    gray *= (1.0 - alpha)
+    src *= alpha
+    src += gray
+    return src
+
+
 def adjust_brightness_contrast(brightness=255, contrast=127):
     """
 
@@ -441,9 +479,6 @@ def adjust_brightness_contrast(brightness=255, contrast=127):
 
         return image
     return img_op
-
-
-
 
 
 def adjust_gamma(gamma=1):
@@ -568,6 +603,11 @@ def random_crop(h, w):
                     results[i] = im
                 else:
                     results[i] = None
+            elif im.ndim == 2 and im.shape[-1]==2:  # landmark
+                im[:, 0] = im[:, 0] - offset_x+offset_x1
+                im[:, 1] = im[:, 1] - offset_y+offset_y1
+                results[i] = im
+
 
             elif im.ndim == 2:
                 returnData = np.zeros((h, w), dtype=np.float32)
@@ -629,6 +669,15 @@ def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
                     results[i] = im
                 else:
                     results[i] = None
+            elif im.ndim == 2 and im.shape[-1] ==2:  # landmark
+                im[:, 0] *= scale
+                im[:, 1] *= scale
+
+
+                im[:, 0] =im[:, 0] - offset_x+offset_x1
+                im[:, 1] = im[:, 1] - offset_y+offset_y1
+                results[i] = im
+
 
             elif im.ndim == 2:
 
@@ -689,6 +738,10 @@ def random_center_crop(h,w, scale=(0.8, 1.2)):
                     results[k] = im
                 else:
                     results[k] = None
+            elif im.ndim == 2 and im.shape[-1] ==2:  # landmark
+                im[:, 0] = (im[:, 0] + j) * scale + j1 - j2
+                im[:, 1] = (im[:, 1] + i) * scale + i1 - i2
+                results[k] = im
 
             elif im.ndim == 3:
                 blank = np.zeros((max_value, max_value, im.shape[-1]))
@@ -797,7 +850,6 @@ def reverse_image_backend_adaption(image):
 def random_channel_shift(intensity=15):
     channel_axis = -1
     inten = intensity
-
     def img_op(image: np.ndarray):
         image = np.rollaxis(image, channel_axis, channel_axis)
         min_x, max_x = np.min(image), np.max(image)
@@ -1093,6 +1145,13 @@ def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,she
                     results[k] = im
                 else:
                     results[k] = None
+            elif im.ndim == 2 and im.shape[-1] ==2:  # bbox
+                for i in range(len(im)):
+                    pts = []
+                    pts.append(np.squeeze(np.array(mat_img[0]))[0] * im[i][0] + np.squeeze(np.array(mat_img[0]))[1] * im[i][1] + np.squeeze(np.array(mat_img[0]))[2])
+                    pts.append(np.squeeze(np.array(mat_img[1]))[0] * im[i][0] + np.squeeze(np.array(mat_img[1]))[1] * im[i][1] + np.squeeze(np.array(mat_img[1]))[2])
+                    new_n.append(pts)
+                results[k] = np.array(new_n)
             elif im.ndim == 3:
                 new_image = cv2.warpAffine(im.copy(), mat_img, (w, h), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
                 if rr< random_flip:

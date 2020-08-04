@@ -33,7 +33,7 @@ from trident.optims.pytorch_regularizers import get_reg
 
 from trident.layers.pytorch_layers import *
 
-from trident.callbacks.lr_schedulers import get_lr_scheduler
+from trident.callbacks.lr_schedulers import get_lr_scheduler,AdjustLRCallbackBase
 from trident.data.image_common import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 
@@ -81,6 +81,7 @@ def make_deterministic(seed: int = 19260817, cudnn_deterministic: bool = False):
 class Model(ModelBase):
     def __init__(self, inputs=None, output=None, input_shape=None):
         super(Model, self).__init__(inputs, output, input_shape)
+
 
     def _initial_graph(self, inputs=None, output=None, input_shape=None,initializer=None):
         if output is None:
@@ -135,6 +136,7 @@ class Model(ModelBase):
                 output.input_shape = input_shape
 
                 dummay_input = to_tensor(np.random.standard_normal((1,)+tuple(input_shape)).astype(np.float32)).to(get_device())
+                # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                 output.to(get_device())
                 output.eval()
                 out = output(dummay_input)
@@ -154,8 +156,12 @@ class Model(ModelBase):
             output_list = []
             model_list = []
             dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device()) if not is_tensor(inputs) else inputs.to(get_device())
+
             for op in output:
                 if isinstance(op, (Layer, nn.Module)):
+                    op.to(get_device())
+                    # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
+                    op.eval()
                     out=op(dummay_input)
                     model_list.append(op)
                     output_list.extend(*out)
@@ -186,6 +192,10 @@ class Model(ModelBase):
         save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.name))
         self.save_path =sanitize_path(make_dir_if_need(save_path))
         self.training_context['save_path'] = self.save_path
+        if isinstance(self._model,Layer):
+            for module in self._model.modules():
+                if not hasattr(module, '_non_persistent_buffers_set'):
+                    module._non_persistent_buffers_set = set()
 
     @property
     def outputs(self):
@@ -276,7 +286,7 @@ class Model(ModelBase):
             else:
                 argnames = get_signature(self._losses[alias].__call__,alias)
         elif not inspect.isfunction(loss) and callable(loss):
-            alias = loss.__class__.__name__ if len(alias) == 0 else alias
+            alias = loss.__class__.__name__ if alias is  None or len(alias) == 0 else alias
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
                 alias = alias + '_' + str(len(dup_keys) + 1)
@@ -305,13 +315,19 @@ class Model(ModelBase):
         if (len(self._losses[alias].signature.outputs) == 1 and self._losses[alias].signature.outputs.value_list[0] is None) or len(self._losses[alias].signature.outputs) == 0 :
             self._losses[alias].signature.outputs = OrderedDict()
             self._losses[alias].signature.outputs[alias] = None
-        print(self._losses[alias].signature)
         if hasattr(self._losses[alias],'is_logsoftmax'):
             if isinstance(self._model,Layer):
                 last_module=list(self._model.modules())[-1]
                 if isinstance(last_module,SoftMax):
                     self._losses[alias].is_logsoftmax=True
-
+        # if isinstance(self._losses[alias], Layer) and len(list(self._losses[alias].parameters()))>0:
+        #     para_dict={'params': list(self._losses[alias].parameters())}
+        #     for k,v in self.optimizer.param_groups[0].items():
+        #         if k!='params':
+        #             para_dict[k]=v
+        #
+        #     self.optimizer.param_groups.append(para_dict)
+        #     print('add loss parameters to optimizer ')
         print(self._losses[alias].signature)
 
         self.loss_weights[alias] = float(loss_weight)
@@ -458,13 +474,52 @@ class Model(ModelBase):
             return self
         if isinstance(lr_schedule, str):
             lr_schedule = get_lr_scheduler(lr_schedule)
+
         if callable(lr_schedule):
             lr_scheduler = lr_schedule(**kwargs)
             self.callbacks.append(lr_scheduler)
+        elif isinstance(lr_schedule,AdjustLRCallbackBase):
+            self.callbacks.append(lr_schedule)
         self.warmup = warmup
         if self.warmup > 0:
             self.optimizer.adjust_learning_rate(1e-6, False)
             self.training_context['current_lr'] = 1e-6
+        return self
+
+    def with_automatic_mixed_precision_training(self, **kwargs):
+        """Enable automatic mixed precision training
+            only enable when using pytorch 1.6 (or higher) as backend and cuda is available.
+
+        Args:
+            **kwargs ():
+
+        Returns:
+            the model self
+
+        """
+        if get_session_value('amp_available')==True :
+            set_session('is_amp_enable' ,True)
+            self.gradscaler= torch.cuda.amp.GradScaler()
+            sys.stdout.write('Automatic Mixed Precision:{0}.\n'.format('Turn On'))
+        else:
+            print('automatic mixed precision training only enable when using pytorch 1.6 (or higher) as backend and cuda is available.')
+
+        return self
+
+    def with_grad_clipping(self, clipping_threshold=3.0,**kwargs):
+        """Enable grad clipping
+
+
+        Args:
+            clipping_threshold ():
+            **kwargs ():
+
+        Returns:
+            the model self
+
+        """
+        self.grad_clipping_by_norm=True
+        self.grad_clipping_threshold=clipping_threshold
         return self
 
     def adjust_learning_rate(self, lr):
@@ -643,11 +698,26 @@ class Model(ModelBase):
     def do_gradient_update(self, log_gradients=False):
         try:
             if self.training_context['stop_update'] <1:
-                self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
-                #only check once every epoch start.
 
-                if isinstance(self._model,nn.Module):
-                    torch.nn.utils.clip_grad_norm_(self._model.parameters(), 3)
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True :
+                    if self.gradscaler is None:
+                        self.gradscaler=torch.cuda.amp.GradScaler()
+                    self.gradscaler.scale(self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
+                else:
+                    self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
+                #only check once every epoch start.
+                for callback in self.training_context['callbacks']:
+                    callback.on_optimization_step_start(self.training_context)
+
+                if isinstance(self._model,nn.Module) and self.grad_clipping_by_norm:
+
+                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                        self.gradscaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
+
+                    else:
+                        torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
+
                     # for name,para in self._model.named_parameters():
                     #     try:
                     #         if para is not None  and para.grad is not None:
@@ -666,17 +736,26 @@ class Model(ModelBase):
                         if any_abnormal_number(grad_norm):
                             raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
 
-                for callback in self.training_context['callbacks']:
-                    callback.on_optimization_step_start(self.training_context)
+
 
                 if log_gradients:
                     self.log_gradient()
 
             if self.training_context['stop_update'] == 0:
-                self.optimizer.step(self.get_current_loss)
+                #amp support
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                    self.gradscaler.step(self.optimizer)
+                    self.gradscaler.update()
+                else:
+                    self.optimizer.step(self.get_current_loss, )
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
-                    self.optimizer.step(self.get_current_loss)
+                    # amp support
+                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                        self.gradscaler.step(self.optimizer)
+                        self.gradscaler.update()
+                    else:
+                        self.optimizer.step(self.get_current_loss, )
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
@@ -690,7 +769,7 @@ class Model(ModelBase):
     def do_on_progress_end(self):
         if self.training_context['current_epoch'] > self.warmup:
             if self.lr_scheduler is not None:
-                self.lr_scheduler.step(np.array(self.training_context['metrics'][list(self._metrics.keys())[0]]).mean())
+                self.lr_scheduler.step(np.array(self.training_context['metrics'][list(self._metrics.keys())[0]]).mean(), )
                 self.training_context['current_lr'] = self.optimizer.lr
 
     def do_on_excution_exception(self):
@@ -715,16 +794,20 @@ class Model(ModelBase):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if any_abnormal_number(self._model):
-            raise ValueError(self._get_name() + '  nan detected!!')
+        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+            for para in self._model.parameters():
+                if any_abnormal_number(para):
+                    where(is_nan(para).all(), random_normal_like(para, mean=0, std=0.02).to(get_device()), para)
+
+            sys.stderr.write(self._get_name() + '  nan detected!!\n')
 
         if save_path is None or save_path=='':
-            save_path=training_context['save_path']
+            save_path=self.training_context['save_path']
 
         if isinstance(self._model,nn.Module):
             folder,filename,ext=split_path(save_path)
             if filename=='':
-                filenam=self.name
+                filename=self.name
 
             ext='.pth.tar_'
             save_path = os.path.join(folder, filename + ext)
@@ -771,18 +854,25 @@ class Model(ModelBase):
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
 
-    def save_onnx(self, file_path, dynamic_axes=None):
+    def save_onnx(self, save_path, dynamic_axes=None):
         if isinstance(self._model,nn.Module):
 
             import_or_install('torch.onnx')
             self._model.eval()
-            dummy_input = torch.randn(1, *to_list(self._model.input_shape), device=get_device(),requires_grad=True)
-            file, ext = os.path.splitext(file_path)
-            if ext is None or ext != '.onnx':
-                file_path = os.path.join(file, '.onnx')
+            dummy_input = torch.randn(1, *to_list(self.inputs.value_list[0]), device=get_device(),requires_grad=True)
+            folder,filename,ext=split_path(save_path)
+            if filename=='':
+                filenam=self.name
+
+            ext='.onnx_'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
+            save_path = sanitize_path(save_path)
+
+
             self._model.to(get_device())
             outputs = self._model(dummy_input)
-            save_path=sanitize_path(save_path)
+
 
 
             # if dynamic_axes is None:
@@ -795,7 +885,7 @@ class Model(ModelBase):
                               dummy_input,  # model input (or a tuple for multiple inputs)
                               save_path,  # where to save the model (can be a file or file-like object)
                               export_params=True,  # store the trained parameter weights inside the model file
-                              opset_version=10,  # the ONNX version to export the model to
+                              opset_version=11,  # the ONNX version to export the model to
                               do_constant_folding=True,  # whether to execute constant folding for optimization
                               input_names=self.inputs.key_list,  # the model's input names
                               output_names=self.outputs.key_list,  # the model's output names
@@ -813,9 +903,15 @@ class Model(ModelBase):
 
         if "state_dict" in pretrained_dict.keys():
             pretrained_dict = pretrained_dict['state_dict']
-        # else:
-        #     pretrained_dict = remove_prefix(pretrained_dict, 'module.')
+
         if check_keys(self._model, pretrained_dict):
+            has_abnormal=False
+            for value in pretrained_dict.values():
+                if is_tensor(value) and any_abnormal_number(value):
+                    has_abnormal=True
+                    where(is_nan(value).all(), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+
+            sys.stderr.write(self._model._name+ '  has_abnormal detected and  fixed!!\n')
             self._model.load_state_dict(pretrained_dict, strict=False)
             print('Model loaded!')
 
@@ -909,7 +1005,7 @@ class ImageClassificationModel(Model):
 
     @class_names.setter
     def class_names(self, value):
-        if self._class_names != value:
+        if self._class_names is not None and self._class_names != value:
             self._class_names = value
             self._lab2idx = {v: k for k, v in enumerate(self._class_names)}
             self._idx2lab = {k: v for k, v in enumerate(self._class_names)}

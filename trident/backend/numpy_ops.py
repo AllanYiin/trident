@@ -804,7 +804,7 @@ def pow(x:np.ndarray, y):
 
     """
 
-    return np.pow(x,y)
+    return np.power(x,y)
 
 
 def log(x:np.ndarray):

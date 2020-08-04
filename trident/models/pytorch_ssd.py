@@ -453,7 +453,7 @@ class MultiBoxLossV2(nn.Module):
             loss = -F.log_softmax(confidence, dim=2)[:, :, 0]
             mask = hard_negative_mining(loss, target_confidence, self.neg_pos_ratio)
 
-        classification_loss = CrossEntropyLabelSmooth(weight=np.array([1,1,5,25,15]),axis=-1,num_classes=5,reduction='sum')(confidence[mask, :].reshape(-1, num_classes), target_confidence[mask].reshape(-1))
+        classification_loss = CrossEntropyLoss(axis=-1,label_smooth=True,reduction='sum')(confidence[mask, :].reshape(-1, num_classes), target_confidence[mask].reshape(-1))
 
         pos_mask = target_confidence > 0
         target_locations = target_locations[pos_mask, :].reshape(-1, 4)
@@ -702,9 +702,10 @@ class SsdDetectionModel(ImageDetectionModel):
     def __init__(self, inputs=None, output=None, input_shape=None):
         super(SsdDetectionModel, self).__init__(inputs, output, input_shape)
         self.preprocess_flow = []
-        self.detection_threshold = 0.7
+        self.detection_threshold = 0.6
         self.iou_threshold = 0.3
-        self.palette = {}
+        self.palette =OrderedDict()
+
 
     def area_of(self, left_top, right_bottom):
         """Compute the areas of rectangles given two corners.
@@ -716,7 +717,7 @@ class SsdDetectionModel(ImageDetectionModel):
         Returns:
             area (N): return the area.
         """
-        hw = np.clip(right_bottom - left_top, 0.0, None)
+        hw = clip(right_bottom - left_top, 0.0, None)
         return hw[..., 0] * hw[..., 1]
 
     def iou_of(self, boxes0, boxes1, eps=1e-5):
@@ -729,8 +730,8 @@ class SsdDetectionModel(ImageDetectionModel):
         Returns:
             iou (N): IoU values.
         """
-        overlap_left_top = np.maximum(boxes0[..., :2], boxes1[..., :2])
-        overlap_right_bottom = np.minimum(boxes0[..., 2:], boxes1[..., 2:])
+        overlap_left_top = maximum(boxes0[..., :2], boxes1[..., :2])
+        overlap_right_bottom = minimum(boxes0[..., 2:], boxes1[..., 2:])
 
         overlap_area = self.area_of(overlap_left_top, overlap_right_bottom)
         area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:])
@@ -754,7 +755,7 @@ class SsdDetectionModel(ImageDetectionModel):
         boxes = box_scores[:, :4]
         picked = []
         # _, indexes = scores.sort(descending=True)
-        indexes = np.argsort(scores)
+        indexes = argsort(scores)
         # indexes = indexes[:candidate_size]
         indexes = indexes[-candidate_size:]
         while len(indexes) > 0:
@@ -767,7 +768,7 @@ class SsdDetectionModel(ImageDetectionModel):
             # indexes = indexes[1:]
             indexes = indexes[:-1]
             rest_boxes = boxes[indexes, :]
-            iou = self.iou_of(rest_boxes, np.expand_dims(current_box, axis=0), )
+            iou = self.iou_of(rest_boxes, expand_dims(current_box, axis=0), )
             indexes = indexes[iou <= iou_threshold]
 
         return box_scores[picked, :], picked
@@ -854,8 +855,8 @@ class SsdDetectionModel(ImageDetectionModel):
 
                 img = image_backend_adaption(img)
                 inp = to_tensor(np.expand_dims(img, 0)).to(
-                    torch.device("cuda" if self._model.loss_weights[0].data.is_cuda else "cpu")).to(
-                    self._model.loss_weights[0].data.dtype)
+                    torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
+                    self._model.weights[0].data.dtype)
 
                 confidence, boxes = self._model(inp)
                 boxes = boxes[0]
@@ -871,10 +872,7 @@ class SsdDetectionModel(ImageDetectionModel):
                 boxes = boxes[mask, :]
 
                 if boxes is not None and len(boxes) > 0:
-                    boxes = to_numpy(boxes)
-                    label = to_numpy(label)
-                    probs = to_numpy(probs)
-                    box_probs = np.concatenate([boxes, label.reshape(-1, 1), probs.reshape(-1, 1)], axis=1)
+                    box_probs = concate([boxes.float(), label.reshape(-1, 1).float(), probs.reshape(-1, 1).float()], axis=1)
                     if len(boxes) > 1:
                         box_probs, keep = self.hard_nms(box_probs, iou_threshold=self.iou_threshold, top_k=-1, )
                     boxes = box_probs[:, :4]
@@ -883,7 +881,7 @@ class SsdDetectionModel(ImageDetectionModel):
                     boxes[:, :4] /= scale
 
                     # boxes = boxes * (1 / scale[0])
-                    return img_orig, boxes, box_probs[:, 4].astype(np.int32), box_probs[:, 5]
+                    return img_orig, to_numpy(boxes), to_numpy(box_probs[:, 4]).astype(np.int32),to_numpy(box_probs[:, 5])
                 else:
                     return img_orig, None, None, None
             except:
@@ -905,8 +903,7 @@ class SsdDetectionModel(ImageDetectionModel):
                 this_label = labels[m]
                 cv2.rectangle(bgr_image, (this_box[0], this_box[1]), (this_box[2], this_box[3]),
                               self.palette[this_label],
-                              1 if bgr_image.shape[1] < 480 else 2 if bgr_image.shape[1] < 640 else 3 if
-                              bgr_image.shape[1] < 960 else 4)
+                              1 if bgr_image.shape[1] < 480 else 2 if bgr_image.shape[1] < 640 else 3 )
         rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
         return rgb_image
 

@@ -55,7 +55,7 @@ def unit_norm(model,axis=0):
             norm = param.norm(2, dim=axis, keepdim=True)
             param = param/ (_epsilon + norm)
 
-def min_max_norm(model,min_value=0, max_value=1, rate=3.0, axis=0):
+def min_max_norm(model,min_value=1e-8, max_value=1, rate=3.0, axis=0):
     """
     MinMaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have the norm between a lower bound and an upper bound.

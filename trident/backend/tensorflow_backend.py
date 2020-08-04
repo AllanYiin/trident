@@ -29,7 +29,7 @@ from trident.backend.common import camel2snake, to_list, unpack_singleton, enfor
 from trident.backend.tensorflow_ops import *
 from trident.data.utils import pickle_it
 
-__all__ = ['Layer', 'get_flops', 'Sequential', 'ReplayBuffer', 'summary', 'normalize_padding', 'load', 'save','try_map_args_and_call']
+__all__ = ['Layer','get_device', 'get_flops', 'Sequential', 'ReplayBuffer', 'summary', 'normalize_padding', 'load', 'save','try_map_args_and_call']
 
 gpus = tf.config.list_physical_devices('GPU')
 if gpus is not None and len(gpus)>0:
@@ -265,6 +265,8 @@ class Layer(tf.Module):
         self._state_dict_hooks = OrderedDict()
         self._load_state_dict_pre_hooks = OrderedDict()
 
+        self._non_persistent_buffers_set = set()
+
         self._input_shape = None
         self.input_filters = None
         self._output_shape = None
@@ -467,7 +469,7 @@ class Layer(tf.Module):
     def _get_name(self):
         return self.__class__.__name__
 
-    def register_buffer(self, name, tensor):
+    def register_buffer(self, name, tensor, persistent: bool = True):
         r"""Adds a persistent buffer to the module.
 
         This is typically used to register a buffer that should not to be
@@ -480,6 +482,8 @@ class Layer(tf.Module):
             name (string): name of the buffer. The buffer can be accessed
                 from this module using the given name
             tensor (Tensor): buffer to be registered.
+            persistent (bool): whether the buffer is part of this module's
+                :attr:`state_dict`.
 
         Examples:
 
@@ -502,6 +506,10 @@ class Layer(tf.Module):
                             "(torch Tensor or None required)".format(type(tensor).__name__, name))
         else:
             self._buffers[name] = tensor
+            if persistent:
+                self._non_persistent_buffers_set.discard(name)
+            else:
+                self._non_persistent_buffers_set.add(name)
 
     def register_parameter(self, name, param):
         r"""Adds a parameter to the module.

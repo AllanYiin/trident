@@ -1,5 +1,6 @@
 """ common define the session ,basic class and basic function without internal dependency """
 import collections
+import importlib
 import datetime
 import inspect
 import json
@@ -22,7 +23,7 @@ from pydoc import locate
 
 import numpy as np
 
-__all__ = ['get_session', 'get_trident_dir', 'get_signature', 'epsilon', 'floatx','Signature',
+__all__ = ['get_session','set_session','get_session_value', 'get_trident_dir', 'get_signature', 'epsilon', 'floatx','Signature','import_or_install',
            'check_keys', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
@@ -181,12 +182,12 @@ def _initialize_session():
     _SESSION.backend ='pytorch'
 
     _SESSION.image_backend ='pillow'
-    _SESSION.epoch_equivalent =200
+    _SESSION.epoch_equivalent =1000
     _SESSION.floatx = 'float32'
     _SESSION.epsilon = 1e-8
     _SESSION.plateform = get_plateform()
     _SESSION.numpy_print_format = '{0:.4e}'
-
+    _SESSION.amp_available=False
     _config_path = os.path.expanduser(os.path.join(_SESSION.trident_dir, 'trident.json'))
     if os.path.exists(_config_path):
         _config = {}
@@ -207,6 +208,16 @@ def _initialize_session():
     if 'TRIDENT_BACKEND' in os.environ:
         if _SESSION.backend != os.environ['TRIDENT_BACKEND']:
             _SESSION.backend = os.environ['TRIDENT_BACKEND']
+    else:
+        try:
+            import torch
+            os.environ['TRIDENT_BACKEND'] = 'pytorch'
+        except:
+            try:
+                import tensorflow
+                os.environ['TRIDENT_BACKEND'] = 'tensorflow'
+            except:
+                pass
     np.set_printoptions(formatter={'float_kind': lambda x: _SESSION.numpy_print_format.format(x)})
     _SESSION.device = None
 
@@ -221,6 +232,18 @@ def get_session():
 
     """
     return _SESSION
+
+def get_session_value(key):
+    """
+
+    Returns:
+        the trident _SESSION
+
+    """
+    if hasattr(_SESSION,key):
+        return getattr(_SESSION,key)
+    else:
+        return None
 
 
 def set_session(key, value):
@@ -451,6 +474,40 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+
+def import_or_install(package_name:str)->None:
+    """Import [package_name] if possibile, or install it
+
+    Args:
+        package_name (str): package_name
+
+    Returns:
+        None
+
+    Examples:
+        >>> import_or_install('onnxruntime')
+
+    """
+    try:
+        # If Module it is already installed, try to Import it
+        importlib.import_module(package_name)
+    except ImportError:
+        if os.system('PIP --version') == 0:
+            # No error from running PIP in the Command Window, therefor PIP.exe is in the %PATH%
+            os.system('PIP install {package_name}')
+        else:
+            # Error, PIP.exe is NOT in the Path!! So I'll try to find it.
+            pip_location_attempt_1 = sys.executable.replace("python.exe", "") + "pip.exe"
+            pip_location_attempt_2 = sys.executable.replace("python.exe", "") + "scripts\pip.exe"
+            if os.path.exists(pip_location_attempt_1):
+                # The Attempt #1 File exists!!!
+                os.system(pip_location_attempt_1 + " install " + package_name)
+            elif os.path.exists(pip_location_attempt_2):
+                # The Attempt #2 File exists!!!
+                os.system(pip_location_attempt_2 + " install " + package_name)
+            else:
+                # Neither Attempts found the PIP.exe file, So i Fail...
+                exit()
 
 
 
@@ -976,6 +1033,7 @@ class ExpectDataType(Enum):
     multi_channel = 'multi_channel'
     absolute_bbox = 'absolute_bbox'
     relative_bbox = 'relative_bbox'
+    landmarks = 'landmarks'
     random_noise = 'random_noise'
     classification_label = 'classification_label'
 

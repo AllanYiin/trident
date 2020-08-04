@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import json
 import os
-from sys import stderr
+from sys import stderr,stdout
 from trident.backend.common import *
 from trident.backend.model import *
 
@@ -50,12 +50,22 @@ if 'TRIDENT_BACKEND' in os.environ:
     if _session.backend!=os.environ['TRIDENT_BACKEND']:
         _session.backend = os.environ['TRIDENT_BACKEND']
         write_config(_config_path)
+else:
+    try:
+        import torch
+        os.environ['TRIDENT_BACKEND']='pytorch'
+    except:
+        try:
+            import tensorflow
+            os.environ['TRIDENT_BACKEND'] = 'tensorflow'
+        except:
+            pass
 
 
 if _session.backend == 'pytorch':
-    stderr.write('Using Pytorch backend.\n')
-    stderr.write('Image Data Format: channels_first.\n')
-    stderr.write('Image Channel Order: rgb.\n')
+    stdout.write('Using Pytorch backend.\n')
+    stdout.write('Image Data Format: channels_first.\n')
+    stdout.write('Image Channel Order: rgb.\n')
     _session.backend='pytorch'
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
@@ -67,9 +77,9 @@ if _session.backend == 'pytorch':
 
 
 elif _session.backend == 'tensorflow':
-    stderr.write('Using TensorFlow backend.\n')
-    stderr.write('Image Data Format: channels_last.\n')
-    stderr.write('Image Channel Order: rgb.\n')
+    stdout.write('Using TensorFlow backend.\n')
+    stdout.write('Image Data Format: channels_last.\n')
+    stdout.write('Image Channel Order: rgb.\n')
     _session.backend = 'tensorflow'
     _session.image_data_format = 'channels_last'
     _session.image_channel_order = 'rgb'
@@ -85,10 +95,12 @@ if 'TRIDENT_IMG_BACKEND' in os.environ:
 
 
 
+
+
 if _session.image_backend == 'opencv':
-    stderr.write('Using opencv image backend\n')
+    stdout.write('Using opencv image backend\n')
 elif _session.image_backend== 'pillow':
-    stderr.write('Using pillow image backend.\n')
+    stdout.write('Using pillow image backend.\n')
 
 
 

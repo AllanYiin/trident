@@ -1,8 +1,10 @@
 import uuid
 from abc import ABC
+from  functools import partial
+from types import MethodType
 
 from tqdm.auto import tqdm
-__all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback']
+__all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','LambdaCallback']
 
 
 
@@ -268,6 +270,41 @@ class CallbackBase(ABC):
         """
 
         pass
+
+
+
+class LambdaCallback(CallbackBase):
+    """
+    Objects of derived classes inject functionality in several points of the training process.
+    """
+
+    def __init__(self,when='on_batch_end',epoch=None,batch=None,function=None,is_shared=False):
+        super(LambdaCallback, self).__init__(is_shared=is_shared)
+        self.is_shared=is_shared
+        self.func = function
+        self.when=when
+        self.epoch=epoch
+        self.batch=batch
+
+        def on_trigger(self, training_context):
+            """
+            Called at the beginning of the training process.
+            :param training_context: Dict containing information regarding the training process.
+
+            Args:
+                self ():
+            """
+            if (self.epoch is None or training_context['current_epoch']==self.epoch )and (self.batch is None or training_context['current_batch']==self.batch) :
+                    self.func(training_context)
+
+        setattr(self,when,MethodType(on_trigger, self))
+
+
+
+
+
+
+
 
 
 class StoppingCriterionCallback(CallbackBase):

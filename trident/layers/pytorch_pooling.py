@@ -209,7 +209,7 @@ class MaxPool2d(_PoolNd):
             kh, kw = self.kernel_size[-2:]
             sh, sw = self.strides[-2:]
 
-            oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+            oh, ow = math.ceil(true_divide(ih , sh)), math.ceil(true_divide(iw , sw))
             pad_h = max((oh - 1) * sh + (kh - 1) + 1 - ih, 0)
             pad_w = max((ow - 1) * sw + (kw - 1) + 1 - iw, 0)
             if pad_h % 2 == 1 and sh > 1:
@@ -221,7 +221,7 @@ class MaxPool2d(_PoolNd):
             pad_h = self.padding[0] * 2
             pad_w = self.padding[1] * 2
 
-        self.padding = (int(pad_h / 2), int(pad_w / 2))
+        self.padding = (int(pad_h // 2), int(pad_w // 2))
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -364,6 +364,7 @@ class MaxUnpool1d(_PoolNd):
 
         >>> unpool(output, indices)
         tensor([[[ 0.,  2.,  0.,  4.,  0.,  6.,  0., 8.]]])
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
@@ -436,6 +437,7 @@ class MaxUnpool2d(_PoolNd):
                   [  0.,   0.,   0.,  14.,   0.],
                   [ 16.,   0.,   0.,   0.,   0.],
                   [  0.,   0.,   0.,   0.,   0.]]]])
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
@@ -499,6 +501,7 @@ class MaxUnpool3d(_PoolNd):
         >>> unpooled_output = unpool(output, indices)
         >>> unpooled_output.size()
         torch.Size([20, 16, 51, 33, 15])
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
@@ -551,6 +554,7 @@ class AvgPool1d(_PoolNd):
         >>> m = nn.AvgPool1d(3, strides=2)
         >>> m(torch.tensor([[[1.,2,3,4,5,6,7]]]))
         tensor([[[ 2.,  4.,  6.]]])
+
     """
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
@@ -636,7 +640,7 @@ class AvgPool2d(_PoolNd):
             kh, kw = self.kernel_size[-2:]
             sh, sw = self.strides[-2:]
 
-            oh, ow = math.ceil(ih / sh), math.ceil(iw / sw)
+            oh, ow = math.ceil(true_divide(ih,sh)), math.ceil(true_divide(iw, sw))
             pad_h = max((oh - 1) * sh + (kh - 1) + 1 - ih, 0)
             pad_w = max((ow - 1) * sw + (kw - 1) + 1 - iw, 0)
             if pad_h % 2 == 1 and sh > 1:
@@ -648,7 +652,7 @@ class AvgPool2d(_PoolNd):
             pad_h = self.padding[0] * 2
             pad_w = self.padding[1] * 2
 
-        self.padding = (int(pad_h / 2), int(pad_w / 2))
+        self.padding = (int(pad_h // 2), int(pad_w // 2))
 
     def forward(self, *x):
         x = enforce_singleton(x)

@@ -22,7 +22,7 @@ elif get_backend()=='tensorflow':
 
 
 
-__all__ = ['AdjustLRCallbackBase','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr']
+__all__ = ['AdjustLRCallbackBase','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr','CosineLR','cosine_lr']
 
 class AdjustLRCallbackBase(CallbackBase):
     """Basic class for learning rate scheduler"""
@@ -259,26 +259,63 @@ def lambda_lr(offset=0,decay_start_epoch=50):
    return LambdaLR(offset=offset,decay_start_epoch=decay_start_epoch)
 
 
-
 class RandomCosineLR(AdjustLRCallbackBase):
-    def __init__(self, period=100,cosine_weight=0.2,noise_weight=0.3, random_start_epoch=3,**kwargs):
+    def __init__(self, min_lr=1e-8,period=1000,noise_weight=0.1, random_start_epoch=3,**kwargs):
         super(RandomCosineLR, self).__init__()
+        self.max_lr = None
+
+        self.min_lr = min_lr
         self.period=period
-        self.cosine_weight=cosine_weight
+        self.T_max=period/2
+        self.T_current = 0
         self.noise_weight=noise_weight
         self.random_start_epoch=random_start_epoch
 
     def on_batch_end(self, training_context):
-        if training_context['current_epoch'] >= self.random_start_epoch:
-            factor = math.cos(math.pi * (training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch'] + 1) / self.period)
-            base_lr = training_context['base_lr']
-            training_context['optimizer'].adjust_learning_rate(base_lr * (1 + self.cosine_weight * factor + self.noise_weight * (random.random() - 0.5)),False)
+        if self.max_lr is None:
+            self.max_lr = training_context['base_lr']
+
+        self.T_current=training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']% (2 * self.T_max)
+
+        if self.T_current == 0:
+            training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
+        elif (self.T_current - 1 - self.T_max) % (2 * self.T_max) == 0:
+            training_context['optimizer'].adjust_learning_rate((self.min_lr+ (self.max_lr - self.min_lr)) *(1 - math.cos(math.pi / self.T_max)) / 2+ self.noise_weight * (random.random() - 0.5),verbose=False)
+        else:
+            training_context['optimizer'].adjust_learning_rate((( 1 + math.cos(math.pi * (self.T_current / self.T_max)) )*(self.max_lr- self.min_lr)*0.5 + self.min_lr)*(1+self.noise_weight * (random.random()- 0.5)),verbose=False)
 
 
 
-def random_cosine_lr(period=100,cosine_weight=0.2,noise_weight=0.3, random_start_epoch=3,**kwargs):
+def random_cosine_lr( min_lr=1e-8,period=100,cosine_weight=0.2,noise_weight=0.3, random_start_epoch=3,**kwargs):
    return RandomCosineLR(period=period,cosine_weight=cosine_weight,noise_weight=noise_weight, random_start_epoch=random_start_epoch,**kwargs)
 
+
+class CosineLR(AdjustLRCallbackBase):
+    def __init__(self, min_lr=1e-8,period=1000, random_start_epoch=3,**kwargs):
+        super(CosineLR, self).__init__()
+        self.max_lr = None
+        self.min_lr = min_lr
+        self.period=period
+        self.T_max=period/2
+        self.T_current = 0
+    def on_batch_end(self, training_context):
+        if self.max_lr  is None:
+            self.max_lr= training_context['base_lr']
+
+        self.T_current=training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']% (2 * self.T_max)
+
+        if self.T_current == 0:
+            training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
+        elif (self.T_current - 1 - self.T_max) % (2 * self.T_max) == 0:
+            training_context['optimizer'].adjust_learning_rate((self.min_lr+ (self.max_lr - self.min_lr)) *(1 - math.cos(math.pi / self.T_max)) / 2,verbose=False)
+        else:
+            training_context['optimizer'].adjust_learning_rate(
+                ((1 + math.cos(math.pi * (self.T_current / self.T_max))) * (self.max_lr - self.min_lr) * 0.5 + self.min_lr),
+                verbose=False)
+
+
+def cosine_lr( min_lr=1e-8,period=1000,cosine_weight=0.2,**kwargs):
+   return CosineLR(period=period,cosine_weight=cosine_weight,**kwargs)
 
 
 

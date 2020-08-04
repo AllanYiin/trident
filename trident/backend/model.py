@@ -18,7 +18,7 @@ from trident.backend.common import to_list,get_signature, addindent, get_time_su
     snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need,Signature
 
 from trident.data.image_common import *
-
+from trident.callbacks import LambdaCallback
 _session = get_session()
 _backend = _session.backend
 if _backend == 'pytorch':
@@ -75,6 +75,9 @@ class ModelBase(object):
         self.input_history = []
         self.target_history = []
         self.callbacks = []
+        self.gradscaler = None
+        self.grad_clipping_by_norm = False
+        self.grad_clipping_threshold = None
         self.training_context = {'losses': OrderedDict(),  # loss_wrapper
                                  'metrics': OrderedDict(),  # loss_wrapper
                                  'grads_state': OrderedDict(),  # loss_wrapper
@@ -294,6 +297,32 @@ class ModelBase(object):
     def with_learning_rate_scheduler(self, lr_schedule, warmup=0, **kwargs):
         return self
 
+    def with_automatic_mixed_precision_training(self, **kwargs):
+        """Enable automatic mixed precision training
+            only enable when using pytorch 1.6 (or higher) as backend and cuda is available.
+
+        Args:
+            **kwargs ():
+
+        Returns:
+            the model self
+
+        """
+        return self
+
+    def with_grad_clipping(self, **kwargs):
+        """Enable grad clipping
+
+
+               Args:
+                   **kwargs ():
+
+               Returns:
+                   the model self
+
+               """
+        return self
+
     def reset_training_context(self):
         self.training_context = {'losses': OrderedDict(),
                                  'metrics': OrderedDict(),
@@ -424,15 +453,15 @@ class ModelBase(object):
 
 
 
-    def save_model(self, file_path, ):
+    def save_model(self, save_path ):
         raise NotImplementedError
 
-    def save_onnx(self, file_path):
+    def save_onnx(self, save_path):
         raise NotImplementedError
 
-    def save_history(self, file_path=None):
+    def save_history(self, save_path=None):
         default_file_name = '{0}_history_{1}.json_'.format(self._model.name, self.training_context['execution_id'])
-        save_path = self.get_save_path(file_path, default_folder='Log',default_file_name=default_file_name)
+        save_path = self.get_save_path(save_path, default_folder='Log',default_file_name=default_file_name)
         folder,filename,ext=split_path(save_path)
         save_path=os.path.join(folder,default_file_name)
         out=OrderedDict()
@@ -446,7 +475,7 @@ class ModelBase(object):
             shutil.copy(save_path, save_path.replace('.json_', '.json'))
 
 
-    def save_weights(self, file_path):
+    def save_weights(self, save_path):
         raise NotImplementedError
 
     def load_model(self, file_path, ):
@@ -538,16 +567,26 @@ class ModelBase(object):
                 self.do_preparation_for_loss()
                 self.training_context['optimizer'] = self.optimizer
 
-            output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
+            try:
+                output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
+                if isinstance(output, (list, tuple)):
+                    for i in range(len(output)):
+                        train_data[self.outputs.key_list[i]] = output[i]
+                elif 'tensor' in output.__class__.__name__.lower():
+                    train_data[self.outputs.key_list[0]] = output
+                else:
+                    train_data[self.outputs.key_list[0]] = output
+            except Exception as e:
+                print(e)
+                PrintException()
+                if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+                    for para in self._model.parameters():
+                        if any_abnormal_number(para):
+                            where(is_nan(para).all(), random_normal_like(para, mean=0, std=0.02).to(get_device()), para)
+
             # write output in to data
 
-            if isinstance(output, (list, tuple)):
-                for i in range(len(output)):
-                    train_data[self.outputs.key_list[i]] = output[i]
-            elif 'tensor' in output.__class__.__name__.lower():
-                train_data[self.outputs.key_list[0]] =output
-            else:
-                train_data[self.outputs.key_list[0]] = output
+
 
 
             # confirm singleton
@@ -576,7 +615,7 @@ class ModelBase(object):
                                 else:
                                     # a leaf Variable that requires grad connotused in an in-place operation.
                                     overall_loss =overall_loss+ this_loss[i]
-                            self.training_context['current_loss'] =self.training_context['current_loss']+ overall_loss
+                                    self.training_context['current_loss'] =self.training_context['current_loss']+ overall_loss
                             if is_collect_data:
                                 self.training_context['losses'][k].append(float(to_numpy(overall_loss)))
                         else:
@@ -606,9 +645,9 @@ class ModelBase(object):
                     elif 'output' in v.signature.inputs:
 
                         this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
-
-                    # a leaf Variable that requires grad connotused in an in-place operation.
-                    self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
+                    if not any_abnormal_number(this_loss):
+                        # a leaf Variable that requires grad connotused in an in-place operation.
+                        self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
                     # 'current_loss'] + this_loss
                     if is_collect_data:
                         self.training_context['losses'][k + '_Loss'].append(float(to_numpy(this_loss)))
@@ -627,6 +666,11 @@ class ModelBase(object):
 
                 # ON_POSTBACKWARD_CALCULATION
                 self.do_post_gradient_update()
+
+                if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+                    for para in self._model.parameters():
+                        if any_abnormal_number(para):
+                            where(is_nan(para).all(), random_normal_like(para, mean=0, std=0.02).to(get_device()), para)
 
                 # model comfirm
                 for k, v in self._constraints.items():
@@ -770,6 +814,11 @@ class ModelBase(object):
 
     def test(self, input,target):
         raise NotImplementedError
+
+    def trigger_when(self, when='on_batch_end',epoch=None,batch=None,action=None):
+        new_callbacks=LambdaCallback(when,epoch,batch,action)
+        self.with_callbacks(new_callbacks)
+        return self
 
 
 last_time = time.time()

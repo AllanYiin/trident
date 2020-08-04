@@ -8,6 +8,7 @@ from trident.backend.load_backend import get_backend
 if get_backend()=='pytorch':
     from . import pytorch_vgg as vgg
     from . import pytorch_resnet as resnet
+    from . import pytorch_senet as senet
     from . import pytorch_densenet as densenet
     from . import pytorch_efficientnet as efficientnet
     from . import pytorch_mobilenet as mobilenet
@@ -25,6 +26,7 @@ elif get_backend()=='tensorflow':
     from . import tensorflow_densenet as densenet
     from . import tensorflow_mobilenet as mobilenet
     from . import tensorflow_deeplab as deeplab
+    from . import tensorflow_mtcnn as mtcnn
 
 #__all__ = ['vgg','resnet','densenet','efficientnet','mobilenet','gan','deeplab','arcfacenet','mtcnn','rfbnet','ssd','yolo']
 

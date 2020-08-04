@@ -13,20 +13,14 @@ from copy import copy, deepcopy
 from functools import partial
 from itertools import repeat
 
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
 from matplotlib.collections import PolyCollection
-from torch._six import container_abcs
-from torch.nn import init
-from torch.nn.parameter import Parameter
-
+import tensorflow as tf
+import numpy as np
+from tensorflow.python.ops import  image_ops
 from trident.backend.common import *
-from trident.backend.pytorch_backend import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine
-from trident.backend.pytorch_ops import *
+from trident.backend.tensorflow_backend import *
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, Combine
+from trident.backend.pytorch_ops import meshgrid
 from trident.data.bbox_common import clip_boxes_to_image, nms
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
@@ -173,7 +167,6 @@ class DetectorHead(Layer):
         self.cellsize=cellsize
         self.threshould=threshould
         self.min_size=min_size
-
         self._built =True
 
     def forward(self, input,**kwargs):
@@ -258,28 +251,24 @@ def calibrate_box(bboxes, offsets):
 
 
 class Mtcnn(ImageDetectionModel):
-    def __init__(self, pretrained=True, min_size=10,verbose=True, **kwargs):
-        self.verbose = verbose
-        pnet =p_net()
-        self.rnet = ImageDetectionModel(input_shape=(3, 24, 24), output=r_net())._model
-        self.onet = ImageDetectionModel(input_shape=(3, 48, 48), output=o_net())._model
+    def __init__(self, pretrained=True, min_size=10, **kwargs):
+        pnet = p_net()
+        self.rnet =r_net()
+        self.onet =o_net()
         if pretrained == True:
             pnet =Pnet()._model
             self.rnet = Rnet()._model
-            self.onet = Onet()._model
+            self.onet = Onet().model
         self.min_size = min_size
-
+        self.signature=get_signature(self.model.forward)
 
 
         super(Mtcnn, self).__init__(input_shape=(3,224,224),output=pnet)
         self.pnet=pnet
-
-        self.signature = get_signature(self._model.forward)
-        #data preprocess
+        self._model=pnet
         self.preprocess_flow =[normalize(0,255)]
         self.nms_threshould = [0.9, 0.9, 0.3]
         self.detection_threshould = [0.5, 0.6, 0.9]
-
         pnet.add_module('pnet_detector', DetectorHead(cellsize=12, threshould=0.5, min_size=self.min_size))
 
 
@@ -309,95 +298,19 @@ class Mtcnn(ImageDetectionModel):
         return images, scales
 
     #adjust bbox like square
-    def rerec(self, bboxA, img_shape):
+    def rerec(self,bboxA,img_shape):
         """Convert bboxA to square."""
-
+        bboxA=to_numpy(bboxA)
         h = bboxA[:, 3] - bboxA[:, 1]
         w = bboxA[:, 2] - bboxA[:, 0]
-        max_len = maximum(w, h)
+        max_len = np.maximum(w, h)
 
-        bboxA[:, 0] = round(bboxA[:, 0] - 0.5 * (max_len - w), 0)
-        bboxA[:, 1] = round(bboxA[:, 1] - 0.5 * (max_len - h), 0)
-        bboxA[:, 2] = bboxA[:, 0] + max_len
-        bboxA[:, 3] = bboxA[:, 1] + max_len
-        return bboxA
 
-    # 計算面積
-    def area_of(self,left_top, right_bottom):
-        """Compute the areas of rectangles given two corners.
-
-        Args:
-            left_top (N, 2): left top corner.
-            right_bottom (N, 2): right bottom corner.
-
-        Returns:
-            area (N): return the area.
-        """
-        hw = right_bottom - left_top
-        return clip(hw[..., 0], min=0) * clip(hw[..., 1], min=0)
-
-    # 計算IOU(交集/聯集)
-    def iou_of(self,boxes0, boxes1, eps=1e-5):
-        """Return intersection-over-union (Jaccard index) of boxes.
-
-        Args:
-            boxes0 (N, 4): ground truth boxes.
-            boxes1 (N or 1, 4): predicted boxes.
-            eps: a small number to avoid 0 as denominator.
-        Returns:
-            iou (N): IoU values.
-        """
-        overlap_left_top = maximum(boxes0[..., :2], boxes1[..., :2])
-        overlap_right_bottom = minimum(boxes0[..., 2:], boxes1[..., 2:])
-
-        overlap_area = self.area_of(overlap_left_top, overlap_right_bottom)
-        area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:])
-        area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
-        return overlap_area / (area0 + area1 - overlap_area + eps)
-
-    # 基於tensor計算nms
-    def boxes_nms(self,box_scores, overlap_threshold=0.5, top_k=-1):
-        """Non-maximum suppression.
-        Arguments:
-            box_scores: a float numpy array of shape [n, 5],
-                where each row is (xmin, ymin, xmax, ymax, score).
-            overlap_threshold: a float number.
-        Returns:
-            list with indices of the selected boxes
-        """
-        # 如果沒有有效的候選區域則回傳空的清單
-        box_scores = to_tensor(box_scores)
-        if len(box_scores) == 0:
-            return []
-        score = box_scores[:, 4]
-        boxes = box_scores[:, :4]
-        # 存放過關的索引值
-        picked = []
-        # 依照機率信心水準升冪排序
-        indexes = argsort(score, descending=False)
-
-        while len(indexes) > 0:
-            # 如此一來，最後一筆即是信心水準最高值
-            # 加入至過關清單中
-            current = indexes[-1]
-            picked.append(current.item())
-
-            # 計算其餘所有候選框與此當前框之間的IOU
-
-            if 0 < top_k == len(picked) or len(indexes) == 1:
-                break
-            current_box = boxes[current, :]
-            current_score = score[current]
-            # 除了最後一筆以外的都是其餘框
-            indexes = indexes[:-1]
-            rest_boxes = boxes[indexes, :]
-            iou = self.iou_of(
-                rest_boxes,
-                expand_dims(current_box, axis=0),
-            )
-            # IOU未超過門檻值的表示未與當前框重疊，則留下，其他排除
-            indexes = indexes[iou <= overlap_threshold]
-        return box_scores[picked]
+        bboxA[:, 0] = bboxA[:, 0] -0.5*(max_len-w)
+        bboxA[:, 1] = bboxA[:, 1] -0.5*(max_len-h)
+        bboxA[:, 2] = bboxA[:, 0]+max_len
+        bboxA[:, 3] =bboxA[:,  1]+max_len
+        return to_tensor(bboxA)
 
 
     def infer_single_image(self,img,**kwargs):
@@ -412,8 +325,7 @@ class Mtcnn(ImageDetectionModel):
             boxes_list=[]
             for i in range(len(scales)):
                 scaled_img=imgs[i]
-                inp =to_tensor(expand_dims(scaled_img, 0)).to(torch.device("cuda" if self.pnet.weights[0].data.is_cuda else "cpu")).to(self.pnet.weights[0].data.dtype)
-
+                inp = to_tensor(np.expand_dims(scaled_img, 0)).to(torch.device("cuda" if self.pnet.weights[0].data.is_cuda else "cpu")).to(self.pnet.weights[0].data.dtype)
                 boxes=self.pnet(inp)
                 if boxes is not None and len(boxes)>0:
                     scale=scales[i]
@@ -431,9 +343,8 @@ class Mtcnn(ImageDetectionModel):
 
                 #print('total {0} boxes in pnet in all scale '.format(len(boxes)))
                 boxes=clip_boxes_to_image(boxes,(img.shape[0],img.shape[1]))
-                boxes =self.boxes_nms(boxes, overlap_threshold=self.detection_threshould[0])
-                if self.verbose:
-                    print('pnet:{0} boxes '.format(len(boxes)))
+                boxes =nms(boxes, threshold=self.detection_threshould[0])
+                print('pnet:{0} boxes '.format(len(boxes)))
                 #print('total {0} boxes after nms '.format(len(boxes)))
                 #score = to_numpy(boxes[:, 4]).reshape(-1)
                 if boxes is not None:
@@ -446,7 +357,7 @@ class Mtcnn(ImageDetectionModel):
                         box = boxes[k]
                         crop_img = img.copy()[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
                         if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
-                            new_arr[k] = resize((24, 24))(crop_img).transpose([2, 0, 1]) / 255.0
+                            new_arr[k] = resize((24, 24))(crop_img / 255.0).transpose([2, 0, 1])
                         # else:
                         #     print(box)
                     new_arr = to_tensor(new_arr)
@@ -466,13 +377,10 @@ class Mtcnn(ImageDetectionModel):
                     else:
                         r_out1, r_out2, r_out3 = self.rnet(new_arr)
 
-                    probs =r_out1
-                    keep =probs[:, 0] > self.detection_threshould[1]
+                    probs = to_numpy(r_out1)
+                    keep = np.where(probs[:, 0] > self.detection_threshould[1])[0]
                     r_out1=r_out1[keep]
-
                     boxes = boxes[keep]
-                    if len(boxes)==0:
-                        return boxes
                     boxes[:, 4] = r_out1[:, 0]
                     r_out2 = r_out2[keep]
                     boxes=calibrate_box(boxes,r_out2)
@@ -481,12 +389,12 @@ class Mtcnn(ImageDetectionModel):
                     #######################################
                     #########rnet finish
                     #######################################
-                    boxes=self.boxes_nms(boxes, overlap_threshold=self.detection_threshould[1])
-                    if self.verbose:
-                        print('rnet:{0} boxes '.format(len(boxes)))
+
+                    boxes=nms(boxes,  threshold=self.detection_threshould[1],image_size=(img.shape[0],img.shape[1]),min_size=self.min_size)
+                    print('rnet:{0} boxes '.format(len(boxes)))
                     #print('total {0} boxes after nms '.format(len(boxes)))
                     boxes = clip_boxes_to_image(boxes, (img.shape[0], img.shape[1]))
-                    boxes=self.rerec(to_tensor(boxes),img.shape)
+                    boxes=self.rerec(boxes,img.shape)
                     new_arr=np.zeros((boxes.shape[0],3,48,48))
 
 
@@ -494,18 +402,17 @@ class Mtcnn(ImageDetectionModel):
                         box=boxes[k]
                         crop_img=img.copy()[int(box[1]):int(box[3]),int(box[0]):int(box[2]),:]
                         if crop_img.shape[0]>0 and crop_img.shape[1]>0:
-                            new_arr[k]=resize((48,48))(crop_img).transpose([2,0,1])/255.0
+                            new_arr[k]=resize((48,48))(crop_img/255.0).transpose([2,0,1])
                         # else:
                         #     print(box)
 
                     new_arr=to_tensor(new_arr)
                     o_out1, o_out2,o_out3  = self.onet(new_arr)
-                    probs = o_out1
-                    keep = probs[:, 0] > self.detection_threshould[2]
+                    probs = to_numpy(o_out1)
+                    keep = np.where(probs[:, 0] > self.detection_threshould[2])[0]
                     o_out1 = o_out1[keep]
                     boxes = boxes[keep]
-                    if len(boxes)==0:
-                        return boxes
+
                     boxes[:, 4] = o_out1[:, 0]
                     o_out2 = o_out2[keep]
                     o_out3=o_out3[keep]
@@ -520,10 +427,9 @@ class Mtcnn(ImageDetectionModel):
                     #######################################
                     #########onet finish
                     #######################################
-                    boxes = self.boxes_nms(boxes, overlap_threshold=self.detection_threshould[2])
-                    if self.verbose:
-                        print('onet:{0} boxes '.format(len(boxes)))
-                    return to_numpy(boxes)
+                    boxes=nms(boxes, threshold=self.detection_threshould[2],image_size=(img.shape[0],img.shape[1]),min_size=self.min_size)
+                    print('onet:{0} boxes '.format(len(boxes)))
+                    return boxes
             else:
                 return None
             #idx=int(np.argmax(result,-1)[0])

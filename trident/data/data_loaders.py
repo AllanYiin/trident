@@ -26,6 +26,16 @@ _backend = _session.backend
 if 'TRIDENT_BACKEND' in os.environ:
     _backend = os.environ['TRIDENT_BACKEND']
 
+
+if _backend=='pytorch':
+    from trident.backend.pytorch_backend import *
+    from  trident.backend.pytorch_ops import *
+
+elif _backend == 'tensorflow':
+    from trident.backend.tensorflow_backend import *
+    from trident.backend.tensorflow_ops import *
+
+
 if not os.path.exists(_trident_dir):
     try:
         os.makedirs(_trident_dir)
@@ -284,6 +294,8 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
             for i in range(len(class_names)):
                 class_name = class_names[i]
                 class_imgs = glob.glob(base_folder + '/{0}/*.*g'.format(class_name))
+                if len(class_imgs)==0:
+                    class_imgs = glob.glob(base_folder + '/{0}/*/*.*g'.format(class_name))
                 print(base_folder + '/{0}/*.*g'.format(class_name))
                 print(len(class_imgs))
                 labels.extend([i] * len(class_imgs))
@@ -362,12 +374,22 @@ def load_stanford_cars(dataset_name='cars', kind='train', is_flatten=None, is_on
     return dataset
 
 
-def load_lfw(kind='train', is_flatten=None, is_onehot=None):
-    dataset_name = 'lfw'
-    kind = kind.strip().lower().replace('ing', '')
-    if _backend in ['tensorflow', 'cntk'] and is_onehot is None:
-        is_onehot = True
+def load_lfw(format='aligned_face', is_paired=False):
+    """
 
+    Args:
+        format (str):
+        is_paired (bool): if True, will return  anchor-positive-negative pair, or return image-classification label.
+
+    Returns:
+
+    Exsamples:
+        >>> dataloader=load_lfw(only_face_area=True, only_aligned_face=True)
+        >>> len(dataloader)
+        10
+
+    """
+    dataset_name = 'lfw'
     dirname = os.path.join(_trident_dir, dataset_name)
     if not os.path.exists(dirname):
         try:
@@ -377,18 +399,96 @@ def load_lfw(kind='train', is_flatten=None, is_onehot=None):
             # in multi-threaded environments.
             pass
 
-    download_file('http://vis-www.cs.umass.edu/lfw/lfw.tgz', dirname, 'lfw.tgz')
+    tar_file_path = os.path.join(dirname, 'lfw.tgz')
+    if format=='aligned_face':
+        download_file_from_google_drive('1sVbU8NHC7kzDkqByTtPiib9_EY23eeW7', dirname, 'lfw-crop.tar')
+    elif format=='raw':
+        download_file('http://vis-www.cs.umass.edu/lfw/lfw.tgz', dirname, 'lfw.tgz')
+
     download_file('http://vis-www.cs.umass.edu/lfw/pairsDevTrain.txt', dirname, 'pairsDevTrain.txt')
     download_file('http://vis-www.cs.umass.edu/lfw/pairsDevTest.txt', dirname, 'pairsDevTest.txt')
 
+    # if only_face_area:
+    #     if only_aligned_face:
     tar_file_path = os.path.join(dirname, 'lfw.tgz')
-    extract_path = os.path.join(_trident_dir, 'lfw')
     extract_archive(tar_file_path, dirname, archive_format='tar')
-    dataset = load_folder_images(dataset_name, dirname)
+    extract_path = os.path.join(dirname,'lfw-crop' if format=='aligned_face' else 'lfw')
+    # if _backend=='tensorflow':
+    #     import trident.models.tensorflow_mtcnn as mtcnn
+    # else:
+    #     import trident.models.pytorch_mtcnn as mtcnn
+    #
+    # detector = mtcnn.Mtcnn(pretrained=True,verbose=False)
+    # detector.minsize = 70
+    #
+    # detector.detection_threshould = [0.8, 0.8, 0.9]
+    # detector.nms_threshould = [0.5, 0.5, 0.3]
+    # faces = glob.glob(os.path.join(dirname, 'lfw-deepfunneled' if only_aligned_face else 'lfw') + '/*/*.*g')
+    # faces_crop=glob.glob(os.path.join(dirname, 'lfw-crop')+ '/*/*.*g')
+    # if len(faces_crop)==0 or len(faces_crop)!=len(faces):
+    #     for  m in range(len(faces)):
+    #         img_path=faces[m]
+    #         new_path = img_path.replace(os.path.join(dirname, 'lfw-deepfunneled' if only_aligned_face else 'lfw'), os.path.join(dirname, 'lfw-crop'))
+    #
+    #         if os.path.exists(new_path) and image2array(new_path) is not None:
+    #             pass
+    #         else:
+    #             make_dir_if_need(new_path)
+    #             img = read_image(img_path)
+    #             detector.detection_threshould = [0.8, 0.8, 0.9]
+    #             results = detector.infer_single_image(img_path)
+    #             if len(results)==0 or results is None:
+    #                 detector.detection_threshould = [0.5, 0.7, 0.8]
+    #                 results = detector.infer_single_image(img_path)
+    #
+    #             results = detector.rerec(to_tensor(results), img.shape)
+    #             results[:, 0] = clip(results[:, 0], 0, img.shape[1])
+    #             results[:, 1] = clip(results[:, 1], 0, img.shape[0])
+    #             results[:, 2] = clip(results[:, 2], 0, img.shape[1])
+    #             results[:, 3] = clip(results[:, 3], 0, img.shape[0])
+    #             area=detector.area_of(results[:,:2],results[:,2:4])
+    #             area_mask=area>500
+    #             results=to_numpy(results[area_mask,:])
+    #
+    #             if len(results)>1:
+    #                 area=area[area_mask]
+    #                 idx=argmax(area).item()
+    #                 results=results[idx:idx+1]
+    #             if results is not None and len(results)>0:
+    #                 for k in range(len(results)):
+    #                     result =np.round(results[k][:4]).astype(np.uint8)
+    #                     x1, y1, x2, y2 = result[0],result[1],result[2],result[3]
+    #                     crop_img =np.clip( img.copy()[y1:y2,x1:x2, :],0,255).astype(np.uint8)
+    #
+    #                     array2image(crop_img).save(new_path)
+    #             else:
+    #
+    #                 print(img_path+' get {0} results!'.format(results))
+    #
+    #         sys.stdout.write('\r {0}/{1} image processed!'.format(m,len(faces)))
+    #         sys.stdout.flush()
+    #
+    #
+    data_provider = load_folder_images(dataset_name, os.path.join(dirname, 'lfw-crop'))
 
-    extract_archive(tar_file_path, dirname, archive_format='tar')
-    dataset = load_folder_images(dataset_name, dirname)
-    return dataset
+    if is_paired:
+        storage=OrderedDict()
+        data=list(data_provider.traindata.data)
+        label=list(data_provider.traindata.label)
+        class_names=data_provider._class_names
+        for i in range(len(data)):
+            class_label=class_names[label[i]]
+            if class_label not in storage:
+                storage[class_label] = []
+            storage[class_label].append(data[i])
+
+        metric=MetricDataset(storage.item_list)
+        data_provider = DataProvider(dataset_name, data=metric, scenario='train')
+
+
+    # extract_archive(tar_file_path, dirname, archive_format='tar')
+    # dataset = load_folder_images(dataset_name, dirname)
+    return data_provider
 
 
 def load_examples_data(dataset_name):
@@ -418,7 +518,7 @@ def load_examples_data(dataset_name):
     """
     dataset_name = dataset_name.strip().lower()
     if dataset_name.lower() not in ['pokemon', 'hanzi', 'animals', 'nsfw', 'simpsons', 'horse2zebra', 'people',
-                                    'autodrive', 'superresolution', 'anpr', 'beauty']:
+                                    'autodrive', 'superresolution', 'anpr', 'beauty','antisproofing','facelandmarks']:
         raise ValueError('Not a  valid  dataset_name.')
     dataset_name = 'examples_' + dataset_name
     dirname = os.path.join(_trident_dir, dataset_name)
@@ -562,6 +662,7 @@ def load_examples_data(dataset_name):
         imgs = glob.glob(os.path.join(dirname, '*.*g'))
         imgs.extend(glob.glob(os.path.join(dirname, '*.bmp')))
         print('get super resolution images :{0}'.format(len(imgs)))
+
         imgdata = ImageDataset(images=imgs * 2, expect_data_type=ExpectDataType.rgb, symbol='lr')
         labeldata = ImageDataset(images=imgs * 2, expect_data_type=ExpectDataType.rgb, symbol='hr')
         dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
@@ -595,6 +696,46 @@ def load_examples_data(dataset_name):
         data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
         return data_provider
 
+    elif dataset_name == 'examples_facelandmarks':
+        download_file_from_google_drive('1aJhxN9IqsxuayhRTm-gmxk6PiLe5wm9X', dirname, 'beauty.tar')
+        tar_file_path = os.path.join(dirname, 'beauty.tar')
+        extract_archive(tar_file_path, dirname, archive_format='tar')
+        # 讀取圖片數據
+        images_dict = {}
+        with open(os.path.join(dirname, 'images_dict.pkl'), 'rb') as fp:
+            images_dict = pickle.load(fp)
+
+        f = open(os.path.join(dirname, 'All_Ratings.txt'), encoding='utf-8-sig').readlines()
+        imgs = []
+        landmark = []
+        ratings = []
+        for row in f:
+            data = row.strip().split('\t')
+            if 'images\\' + data[0] in images_dict:
+                img = images_dict['images\\' + data[0]][0]
+                img = img.transpose([2, 0, 1])[::-1].transpose([1, 2, 0])
+                imgs.append(img)
+                landmark = images_dict['images\\' + data[0]][1].astype(np.float32) / 256.0
+                rating =np.zeros(2)
+                if 'm' in  data[0]:
+                    rating[0]=1
+                if 'w' in  data[0]:
+                    rating[1]=1
+
+                rating = np.concatenate([landmark.reshape(-1), rating], axis=0).astype(np.float32)
+                ratings.append(rating)
+        print('{0} faces loaded...'.format(len(imgs)))
+        imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb, symbol='faces')
+        labeldata = NumpyDataset(data=ratings, expect_data_type=ExpectDataType.array_data, symbol='ratings')
+        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
+        return data_provider
+    elif dataset_name == 'examples_antisproofing':
+        download_file_from_google_drive('1e7Zjn2MHNCvA5gXdJUECzY8NjK4KVpa7', dirname, 'antisproofing.tar')
+        tar_file_path = os.path.join(dirname, 'antisproofing.tar')
+        make_dir_if_need(os.path.join(dirname, 'antisproofing'))
+        extract_archive(tar_file_path, dirname, archive_format='tar')
+        data_provider = load_folder_images(dataset_name,os.path.join(dirname, 'antisproofing'))
+        return data_provider
     elif dataset_name == 'examples_anpr':
         download_file_from_google_drive('1uGBd8tXlP0TZAXNgrR6H0jl5MXj7VPbN', dirname, 'anpr.tar')
         tar_file_path = os.path.join(dirname, 'anpr.tar')

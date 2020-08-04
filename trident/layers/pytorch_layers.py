@@ -20,7 +20,7 @@ from torch._six import container_abcs
 from torch.nn import Module
 from torch.nn import init
 from torch.nn.parameter import Parameter
-
+from trident.optims.pytorch_regularizers import get_reg
 from trident.layers.pytorch_activations import get_activation
 from trident.layers.pytorch_normalizations import *
 from trident.backend.common import *
@@ -86,7 +86,7 @@ class Dense(Layer):
         torch.Size([2, 30])
     """
 
-    def __init__(self, num_filters, use_bias=True, activation=None,keep_output=False, name=None, **kwargs):
+    def __init__(self, num_filters, use_bias=True, activation=None,kernel_regularizer=None,keep_output=False, name=None, **kwargs):
         super(Dense, self).__init__()
         self.rank=0
         if isinstance(num_filters, int):
@@ -104,10 +104,17 @@ class Dense(Layer):
         self.weight = None
         self.bias = None
         self.use_bias = use_bias
+        if kernel_regularizer=='l2':
+            self.kernel_regularizer=l2_normalize
+        else:
+            self.kernel_regularizer=None
+
         self.activation = get_activation(activation)
 
     def build(self, input_shape):
         if self._built == False:
+            if isinstance(input_shape,int):
+                self.input_filters=input_shape
             self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters))
             init.kaiming_uniform_(self.weight, a=math.sqrt(5))
             # self._parameters['weight'] =self.weight
@@ -120,7 +127,11 @@ class Dense(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        x = F.linear(x, self.weight, self.bias)
+        if hasattr(self,'kernel_regularizer') and self.kernel_regularizer is not None:
+            x = F.linear(x,self.kernel_regularizer(self.weight), self.bias)
+        else:
+            x = F.linear(x, self.weight, self.bias)
+
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -144,6 +155,8 @@ class Flatten(Layer):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x.view(x.size(0), -1)
+
+
 
 
 class Concate(Layer):
