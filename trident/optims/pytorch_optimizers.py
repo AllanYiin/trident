@@ -734,14 +734,14 @@ class RAdam(Optimizer):
                 # more conservative since it's an approximated value
                 if N_sma >= self.N_sma_threshhold:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
+                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
                     p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
                     p.data.copy_(p_data_fp32)
                 elif step_size > 0:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
-                    p_data_fp32.add_(-step_size * group['lr'], exp_avg)
+                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
+                    p_data_fp32.add_(exp_avg,-step_size * group['lr'])
                     p.data.copy_(p_data_fp32)
 
         return loss
@@ -812,7 +812,7 @@ class PlainRAdam(Optimizer):
                 # more conservative since it's an approximated value
                 if N_sma >= 5:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
+                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] * math.sqrt(
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                                 N_sma_max - 2)) / (1 - beta1 ** state['step'])
@@ -821,9 +821,9 @@ class PlainRAdam(Optimizer):
                     p.data.copy_(p_data_fp32)
                 elif self.degenerated_to_sgd:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
+                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] / (1 - beta1 ** state['step'])
-                    p_data_fp32.add_(-step_size, exp_avg)
+                    p_data_fp32.add_(exp_avg,-step_size)
                     p.data.copy_(p_data_fp32)
 
         return loss
@@ -917,7 +917,7 @@ class AdamW(Optimizer):
                 step_size = scheduled_lr * math.sqrt(bias_correction2) / bias_correction1
 
                 if group['weight_decay'] != 0:
-                    p_data_fp32.add_(-group['weight_decay'] * scheduled_lr, p_data_fp32)
+                    p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * scheduled_lr)
 
                 p_data_fp32.addcdiv_(-step_size, exp_avg, denom)
 
@@ -1113,13 +1113,13 @@ class Ranger(Optimizer):
                     buffered[2] = step_size
 
                 if group['weight_decay'] != 0:
-                    p_data_fp32.add_(-group['weight_decay'] * group['lr'], p_data_fp32)
+                    p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
 
                 if N_sma > self.N_sma_threshhold:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
                     p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
                 else:
-                    p_data_fp32.add_(-step_size * group['lr'], exp_avg)
+                    p_data_fp32.add_(exp_avg,-step_size * group['lr'])
                 if not any_abnormal_number(p_data_fp32):
                     p.data.copy_(p_data_fp32)
 
@@ -1270,7 +1270,7 @@ class LARS(Optimizer):
                     else:
                         next_v = param_state["momentum_buffer"]
 
-                    next_v.mul_(momentum).add_(scaled_lr, grad)
+                    next_v.mul_(momentum).add_(grad,scaled_lr)
                     if self.use_nesterov:
                         update = (self.momentum * next_v) + (scaled_lr * grad)
                     else:
