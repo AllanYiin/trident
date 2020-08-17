@@ -222,7 +222,13 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                 if im is None:
                     pass
                 elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox [:,4]   [:,5]
+                    class_info = None
+                    if im.shape[-1] == 5:
+                        class_info = im[:, 4:5]
+                        im = im[:, :4]
                     im[:, :4]=im[:, :4]*img_op.scale
+                    if class_info is not None:
+                        im=np.concatenate([im,class_info],axis=-1)
                     results[i] = im
                 elif im.ndim == 2 and im.shape[-1] in (2):  # landmark [:,2]
                     im[:, :2]=im[:, :2]*img_op.scale
@@ -296,7 +302,13 @@ def rescale(scale, order=1):
             if im is None or len(im) == 0:
                 pass
             elif len(im.shape) == 2 and im.shape[-1] in (4, 5, 14, 15):  # bbox
+                class_info = None
+                if im.shape[-1] == 5:
+                    class_info = im[:, 4:5]
+                    im = im[:, :4]
                 im[:, 0:4]=im[:, 0:4]* img_op.scale
+                if class_info is not None:
+                    im = np.concatenate([im, class_info], axis=-1)
                 results[i] = im
             elif len(im.shape) == 2 and im.shape[-1] ==2:  # landmark
                 im[:, :2]=im[:, :2]* img_op.scale
@@ -590,16 +602,22 @@ def random_crop(h, w):
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-
+                class_info=None
+                if im.shape[-1] ==5:
+                    class_info=im[:,4:5]
+                    im=im[:,:4]
                 im[:, 0::2] = np.clip(im[:, 0::2] - offset_x, 0, w)
                 im[:, 1::2] = np.clip(im[:, 1::2] - offset_y, 0, h)
 
                 area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
                 im = im[area > 0]
+
                 if len(im) > 0:
                     im[:, 0::2] += offset_x1
                     im[:, 1::2] += offset_y1
-
+                    if class_info is not None:
+                        class_info= class_info[area > 0]
+                        im=np.concatenate([im,class_info],axis=-1)
                     results[i] = im
                 else:
                     results[i] = None
@@ -650,6 +668,10 @@ def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
+                class_info = None
+                if im.shape[-1] == 5:
+                    class_info = im[:, 4:5]
+                    im = im[:, :4]
                 im[:, 0] *= scale
                 im[:, 1] *= scale
                 im[:, 2] *= scale
@@ -666,6 +688,9 @@ def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
                     im[:, 1] += offset_y1
                     im[:, 2] += offset_x1
                     im[:, 3] += offset_y1
+                    if class_info is not None:
+                        class_info= class_info[area > 0]
+                        im=np.concatenate([im,class_info],axis=-1)
                     results[i] = im
                 else:
                     results[i] = None
@@ -728,6 +753,10 @@ def random_center_crop(h,w, scale=(0.8, 1.2)):
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
+                class_info = None
+                if im.shape[-1] == 5:
+                    class_info = im[:, 4:5]
+                    im = im[:, :4]
                 im[:, 0] = np.clip((im[:, 0] + j) * scale + j1 - j2, 0, w)
                 im[:, 1] = np.clip((im[:, 1] + i) * scale + i1 - i2, 0, h)
                 im[:, 2] = np.clip((im[:, 2] + j) * scale + j1 - j2, 0, w)
@@ -735,6 +764,9 @@ def random_center_crop(h,w, scale=(0.8, 1.2)):
                 area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
                 im = im[area > 0]
                 if len(im) > 0:
+                    if class_info is not None:
+                        class_info= class_info[area > 0]
+                        im=np.concatenate([im,class_info],axis=-1)
                     results[k] = im
                 else:
                     results[k] = None
@@ -778,9 +810,15 @@ def horizontal_flip():
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
+                class_info = None
+                if im.shape[-1] == 5:
+                    class_info = im[:, 4:5]
+                    im = im[:, :4]
                 im[:, 0]=width- im[:, 0]
                 im[:, 2]=width- im[:, 2]
                 if len(im) > 0:
+                    if class_info is not None:
+                        im=np.concatenate([im,class_info],axis=-1)
                     results[k] = im
                 else:
                     results[k] = None
@@ -803,13 +841,18 @@ def random_mirror():
             if im is None:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
+                class_info = None
+                if im.shape[-1] == 5:
+                    class_info = im[:, 4:5]
+                    im = im[:, :4]
                 box=im.copy()
-                print(im)
                 if img_op.rnd % 2 == 0:
                     im[:, 0] = width - box[:, 2]
                     im[:, 2] = width - box[:, 0]
-                    print(im)
-                    results[k] = im
+
+                if class_info is not None:
+                    im=np.concatenate([im,class_info],axis=-1)
+                results[k] = im
 
 
             elif im.ndim == 3:
@@ -1103,7 +1146,10 @@ def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,she
             if im is None or len(im)==0:
                 pass
             elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-
+                class_info = None
+                if im.shape[-1] == 5:
+                    class_info = im[:, 4:5]
+                    im = im[:, :4]
                 # compute the new bounding dimensions of the image
                 box_w = (im[:, 2] - im[:, 0]).reshape(-1, 1)
                 box_h = (im[:, 3] - im[:, 1]).reshape(-1, 1)
@@ -1142,10 +1188,14 @@ def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,she
                 area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
                 im = im[area > 0]
                 if len(im) > 0:
+                    if class_info is not None:
+                        class_info = class_info[area > 0]
+                        im=np.concatenate([im,class_info],axis=-1)
                     results[k] = im
                 else:
                     results[k] = None
             elif im.ndim == 2 and im.shape[-1] ==2:  # bbox
+                new_n=[]
                 for i in range(len(im)):
                     pts = []
                     pts.append(np.squeeze(np.array(mat_img[0]))[0] * im[i][0] + np.squeeze(np.array(mat_img[0]))[1] * im[i][1] + np.squeeze(np.array(mat_img[0]))[2])
