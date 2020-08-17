@@ -15,33 +15,20 @@ __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'P
            'Ranger', 'get_optimizer']
 
 
-def _filter_grads(grads_and_vars, gradient_centralization=None):
+def _filter_grads(grads, gradient_centralization=None):
     """Filter out iterable with grad equal to None or abnormal grad and do the gradient centralization."""
-    grads_and_vars = tuple(grads_and_vars)
-    if not grads_and_vars:
-        return grads_and_vars
-    filtered = []
-    vars_with_empty_grads = []
-    for grad, var in grads_and_vars:
-        if grad is None or any_abnormal_number(grad) or var._trainable == False:
-            vars_with_empty_grads.append(var)
-        else:
-            if gradient_centralization is None:
-                filtered.append((grad, var))
-            elif gradient_centralization == 'gc':
-                if len(int_shape(grad)) > 1:
-                    grad.add_(-reduce_mean(grad, axis=list(range(1, len(int_shape(grad)))), keepdims=True))
-                filtered.append((grad, var))
-            elif gradient_centralization == 'gcc':
-                if len(int_shape(grad)) > 3:
-                    grad.add_(-reduce_mean(grad, axis=list(range(1, len(int_shape(grad)))), keepdims=True))
-                filtered.append((grad, var))
-
-    filtered = tuple(filtered)
-    if not filtered:
-        raise ValueError("No gradients provided for any variable: %s." % ([v.name for _, v in grads_and_vars],))
-
-    return filtered
+    if gradient_centralization is None:
+        pass
+    elif gradient_centralization == 'all':
+        if len(int_shape(grads)) > 1:
+            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
+    elif gradient_centralization == 'gcc':
+        if len(int_shape(grads)) >3:
+            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
+    elif gradient_centralization == 'gc':
+        if len(int_shape(grads)) > 1:
+            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
+    return grads
 
 
 class Optimizer(optimizer.Optimizer):
@@ -64,6 +51,7 @@ class Optimizer(optimizer.Optimizer):
     def __init__(self, params, defaults):
         super().__init__(params, defaults)
         self._base_lr = 1e-3
+        self.gradient_centralization=None
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -545,7 +533,7 @@ class RMSprop(rmsprop.RMSprop):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
 
     """
-    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False):
+    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False,gradient_centralization=None):
         super().__init__(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay,momentum=momentum,centered=centered)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -636,7 +624,7 @@ class RAdam(Optimizer):
         """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, N_sma_threshhold=5,
-                 degenerated_to_sgd=True):
+                 degenerated_to_sgd=True,gradient_centralization=None):
         """Construct a new RAdam optimizer.
         Args:
             params: trainable parameters from model
@@ -734,21 +722,21 @@ class RAdam(Optimizer):
                 # more conservative since it's an approximated value
                 if N_sma >= self.N_sma_threshhold:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
+                        p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
+                    p_data_fp32.addcdiv_(exp_avg, denom,value=-step_size * group['lr'])
                     p.data.copy_(p_data_fp32)
                 elif step_size > 0:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
-                    p_data_fp32.add_(exp_avg,-step_size * group['lr'])
+                        p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
+                    p_data_fp32.add_(exp_avg, alpha=-step_size * group['lr'])
                     p.data.copy_(p_data_fp32)
 
         return loss
 
 
 class PlainRAdam(Optimizer):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True,gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -812,18 +800,18 @@ class PlainRAdam(Optimizer):
                 # more conservative since it's an approximated value
                 if N_sma >= 5:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
+                        p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] * math.sqrt(
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                                 N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data_fp32.addcdiv_(-step_size, exp_avg, denom)
+                    p_data_fp32.addcdiv_(_filter_grads(grad,self.gradient_centralization), denom, value=-step_size)
                     p.data.copy_(p_data_fp32)
                 elif self.degenerated_to_sgd:
                     if group['weight_decay'] != 0:
-                        p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
+                        p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] / (1 - beta1 ** state['step'])
-                    p_data_fp32.add_(exp_avg,-step_size)
+                    p_data_fp32.add_(_filter_grads(grad,self.gradient_centralization),alpha=-step_size)
                     p.data.copy_(p_data_fp32)
 
         return loss
@@ -849,7 +837,7 @@ class AdamW(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, warmup=0):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, warmup=0,gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -917,9 +905,9 @@ class AdamW(Optimizer):
                 step_size = scheduled_lr * math.sqrt(bias_correction2) / bias_correction1
 
                 if group['weight_decay'] != 0:
-                    p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * scheduled_lr)
+                    p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * scheduled_lr)
 
-                p_data_fp32.addcdiv_(-step_size, exp_avg, denom)
+                p_data_fp32.addcdiv_( _filter_grads(grad,self.gradient_centralization), denom,value=-step_size)
 
                 p.data.copy_(p_data_fp32)
 
@@ -927,7 +915,7 @@ class AdamW(Optimizer):
 
 
 class Lookahead(Optimizer):
-    def __init__(self, optimizer, k=5, alpha=0.5):
+    def __init__(self, optimizer, k=5, alpha=0.5,gradient_centralization=None):
         self.optimizer = optimizer
         self.k = k
         self.alpha = alpha
@@ -936,6 +924,8 @@ class Lookahead(Optimizer):
         self.fast_state = self.optimizer.state
         for group in self.param_groups:
             group["counter"] = 0
+        self.gradient_centralization=gradient_centralization
+        self.optimizer.gradient_centralization=gradient_centralization
 
     def update(self, group):
         for fast in group["params"]:
@@ -992,7 +982,7 @@ class Ranger(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
-                 weight_decay=0):
+                 weight_decay=0,gradient_centralization=None):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -1002,6 +992,7 @@ class Ranger(Optimizer):
             raise ValueError('Invalid Learning Rate: {lr}')
         if not eps > 0:
             raise ValueError('Invalid eps: {eps}')
+        self.gradient_centralization=gradient_centralization
 
         # parameter comments:
         # beta1 (momentum) of .95 seems to work better than .90...
@@ -1061,6 +1052,7 @@ class Ranger(Optimizer):
                 if p.grad is None:
                     continue
                 grad = p.grad.data.float()
+
                 if grad.is_sparse:
                     raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
@@ -1093,6 +1085,9 @@ class Ranger(Optimizer):
                 # compute mean moving avg
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
+
+                grad=_filter_grads(grad,self.gradient_centralization)
+
                 state['step'] += 1
 
                 buffered = self.radam_buffer[int(state['step'] % 10)]
@@ -1113,13 +1108,13 @@ class Ranger(Optimizer):
                     buffered[2] = step_size
 
                 if group['weight_decay'] != 0:
-                    p_data_fp32.add_(p_data_fp32,-group['weight_decay'] * group['lr'])
+                    p_data_fp32.add_(p_data_fp32,alpha= -group['weight_decay'] * group['lr'])
 
                 if N_sma > self.N_sma_threshhold:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
+                    p_data_fp32.add_(true_divide(exp_avg, denom),alpha=-step_size * group['lr'])
                 else:
-                    p_data_fp32.add_(exp_avg,-step_size * group['lr'])
+                    p_data_fp32.add_(exp_avg,alpha=-step_size * group['lr'])
                 if not any_abnormal_number(p_data_fp32):
                     p.data.copy_(p_data_fp32)
 
@@ -1127,7 +1122,7 @@ class Ranger(Optimizer):
                     # we do it at the param level instead of group level
                     if state['step'] % group['k'] == 0:
                         slow_p = state['slow_buffer']  # get access to slow param tensor
-                        slow_p.add_(self.alpha, p.data - slow_p)  # (fast weights - slow weights) * alpha
+                        slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
                         if not any_abnormal_number(slow_p):
                             p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
                         else:
@@ -1136,6 +1131,159 @@ class Ranger(Optimizer):
                     return
         return loss
 
+
+class RangerLars(Optimizer):
+    """
+    https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
+    """
+
+    def __init__(self, params, lr=1e-3,alpha=0.5, k=6,betas=(0.9, 0.999), eps=1e-8, weight_decay=0,gradient_centralization=None):
+        # parameter checks
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError('Invalid slow update rate: {alpha}')
+        if not 1 <= k:
+            raise ValueError('Invalid lookahead steps: {k}')
+
+        if not lr > 0:
+            raise ValueError('Invalid Learning Rate: {lr}')
+        if not eps > 0:
+            raise ValueError('Invalid eps: {eps}')
+        self.gradient_centralization=gradient_centralization
+        # parameter comments:
+        # beta1 (momentum) of .95 seems to work better than .90...
+        # N_sma_threshold of 5 seems better in testing than 4.
+        # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
+
+        # prep defaults and init torch.optim base
+        defaults = dict(lr=lr, alpha=alpha, k=k,  betas=betas, eps=eps, weight_decay=weight_decay)
+
+        super().__init__(params, defaults)
+        # radam buffer for state
+        self.buffer = [[None, None, None] for ind in range(10)]
+        self.alpha = alpha
+        self.k = k
+
+        # self.first_run_check=0
+
+        # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
+        # resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
+
+        # self.slow_weights = [[p.clone().detach() for p in group['params']]  #                     for group in
+        # self.param_groups]
+
+        # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
+
+    def __setstate__(self, state):
+        print("set state called")
+        super(RangerLars, self).__setstate__(state)
+
+    def step(self, closure=None):
+        """Performs a single optimization step.
+
+        Args:
+            closure (callable): call for get loss backward
+
+        """
+        loss = None
+        if closure is not None:
+            loss = closure()
+
+        for group in self.param_groups:
+
+            for p in group['params']:
+                if p.grad is None:
+                    continue
+                grad = p.grad.data.float()
+
+                if grad.is_sparse:
+                    raise RuntimeError('Ralamb does not support sparse gradients')
+
+                p_data_fp32 = p.data.float()
+
+                state = self.state[p]
+
+                if len(state) == 0:
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p_data_fp32)
+                    state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)
+                    state['slow_buffer'] = torch.empty_like(p.data)
+                    state['slow_buffer'].copy_(p.data)
+                else:
+                    state['exp_avg'] = state['exp_avg'].type_as(p_data_fp32)
+                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data_fp32)
+
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                beta1, beta2 = group['betas']
+
+                grad = _filter_grads(grad, self.gradient_centralization)
+                # Decay the first and second moment running average coefficient
+                # m_t
+                exp_avg.mul_(beta1).add_(grad,alpha=1- beta1)
+                # v_t
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad,value=1 - beta2)
+
+                state['step'] += 1
+                buffered = self.buffer[int(state['step'] % 10)]
+
+                if state['step'] == buffered[0]:
+                    N_sma, radam_step_size = buffered[1], buffered[2]
+                else:
+                    buffered[0] = state['step']
+                    beta2_t = beta2 ** state['step']
+                    N_sma_max = 2 / (1 - beta2) - 1
+                    N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                    buffered[1] = N_sma
+
+                    # more conservative since it's an approximated value
+                    if N_sma >= 5:
+                        radam_step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (
+                                    1 - beta1 ** state['step'])
+                    else:
+                        radam_step_size = 1.0 / (1 - beta1 ** state['step'])
+                    buffered[2] = radam_step_size
+
+                if group['weight_decay'] != 0:
+                    p_data_fp32.add_(p_data_fp32,alpha=-group['weight_decay'] * group['lr'])
+
+                # more conservative since it's an approximated value
+                radam_step = p_data_fp32.clone()
+                if N_sma >= 5:
+                    denom = exp_avg_sq.sqrt().add_(group['eps'])
+                    radam_step.addcdiv_( exp_avg,denom,value=-radam_step_size * group['lr'])
+                else:
+                    radam_step.add_(exp_avg, alpha=-radam_step_size * group['lr'])
+
+                radam_norm = radam_step.pow(2).sum().sqrt()
+                weight_norm = p.data.pow(2).sum().sqrt().clamp(0, 10)
+                if weight_norm == 0 or radam_norm == 0:
+                    trust_ratio = 1
+                else:
+                    trust_ratio = weight_norm / radam_norm
+
+                state['weight_norm'] = weight_norm
+                state['adam_norm'] = radam_norm
+                state['trust_ratio'] = trust_ratio
+
+                if N_sma >= 5:
+                    p_data_fp32.addcdiv_( exp_avg, denom,value=-radam_step_size * group['lr'] * trust_ratio)
+                else:
+                    p_data_fp32.add_(exp_avg,alpha=-radam_step_size * group['lr'] * trust_ratio)
+
+                if not any_abnormal_number(p_data_fp32):
+                    p.data.copy_(p_data_fp32)
+
+                    # integrated look ahead...
+                    # we do it at the param level instead of group level
+                    if state['step'] % group['k'] == 0:
+                        slow_p = state['slow_buffer']  # get access to slow param tensor
+                        slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                        if not any_abnormal_number(slow_p):
+                            p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+                        else:
+                            return
+                else:
+                    return
+        return loss
 
 
 
@@ -1270,7 +1418,7 @@ class LARS(Optimizer):
                     else:
                         next_v = param_state["momentum_buffer"]
 
-                    next_v.mul_(momentum).add_(grad,scaled_lr)
+                    next_v.mul_(momentum).add_(grad,alpha=scaled_lr)
                     if self.use_nesterov:
                         update = (self.momentum * next_v) + (scaled_lr * grad)
                     else:
