@@ -23,14 +23,16 @@ import matplotlib.font_manager
 
 fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
 fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
+default_font=None
+
 
 if sys.platform == 'win32':
-    if 'Microsoft YaHei' in fontnames:
-        matplotlib.rc('font', family='Microsoft YaHei')
+    if 'Microsoft Sans Serif' in fontnames:
+        default_font=matplotlib.rc('font', family='Microsoft Sans Serif' )
     else:
         for name in fontnames:
             if 'heiti' in name.lower():
-                matplotlib.rc('font', family=name)
+                default_font=matplotlib.rc('font', family=name)
                 break
 
 import PIL
@@ -65,7 +67,7 @@ def plot_bbox(x, img, color=None, label=None, line_thickness=None):
     if avg_color > 150:
         fontcolor = (0, 0, 0)
     if label and sys.platform == 'win32':
-        font = ImageFont.truetype(fonts[fontnames.index('Microsoft YaHei')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+        font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
         tf = max(tl - 1, 1)  # font thickness
         size = draw.textsize(label, font=font)
         offset = font.getoffset(label)
