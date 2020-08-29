@@ -79,7 +79,7 @@ class BatchNorm(Layer):
 
     """
 
-    def __init__(self,  momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,name=None, **kwargs):
+    def __init__(self,  momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,in_sequence=False,name=None, **kwargs):
         """
         Args:
         eps: a value added to the denominator for numerical stability.
@@ -148,6 +148,8 @@ class BatchNorm(Layer):
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
+        if self.in_sequence:
+            x=x.permute(0, 2, 1)
 
         if self.momentum is None:
             exponential_average_factor = 0.0
@@ -162,7 +164,11 @@ class BatchNorm(Layer):
                     exponential_average_factor = 1.0 / float(self.num_batches_tracked)
                 else:  # use exponential moving average
                     exponential_average_factor = self.momentum
-        return F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias, self.training or not self.track_running_stats, exponential_average_factor, self.eps)
+        x= F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias, self.training or not self.track_running_stats, exponential_average_factor, self.eps)
+        if self.in_sequence:
+            x=x.permute(0, 2, 1)
+        return x
+
     def extra_repr(self):
         return '{input_filters}, eps={eps}, momentum={momentum}, affine={affine}, ' \
                'track_running_stats={track_running_stats}'.format(**self.__dict__)
@@ -212,7 +218,7 @@ class GroupNorm(Layer):
 
     """
 
-    def __init__(self, num_groups=16,affine=True, eps=1e-5,name=None, **kwargs):
+    def __init__(self, num_groups=16,affine=True, eps=1e-5,in_sequence=False,name=None, **kwargs):
         """
         Args:
             num_groups (int): number of groups to separate the channels into
@@ -248,7 +254,13 @@ class GroupNorm(Layer):
                 self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return F.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        x= F.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
+        if self.in_sequence:
+            x=x.permute(0, 2, 1)
+        return x
+
 GroupNorm2d=GroupNorm
 GroupNorm3d=GroupNorm
 
@@ -300,7 +312,7 @@ class InstanceNorm(Layer):
         https://arxiv.org/abs/1607.08022
     """
 
-    def __init__(self,momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,axis=1,name=None, **kwargs):
+    def __init__(self,momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,in_sequence=False,axis=1,name=None, **kwargs):
         """
         Args:
             num_features: :math:`C` from an expected input of size
@@ -361,8 +373,14 @@ class InstanceNorm(Layer):
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return F.instance_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        x= F.instance_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
             self.training or not self.track_running_stats, self.momentum, self.eps)
+
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        return x
 
 InstanceNorm2d=InstanceNorm
 InstanceNorm3d=InstanceNorm
@@ -400,7 +418,7 @@ class LayerNorm(Layer):
     .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
 
     """
-    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True,name=None, **kwargs):
+    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True,in_sequence=False,name=None, **kwargs):
         """
     Args:
         normalized_shape (int or list or torch.Size): input shape from an expected input
@@ -439,15 +457,21 @@ class LayerNorm(Layer):
         self.eps = eps
         self.elementwise_affine = elementwise_affine
 
+
+
     def build(self, input_shape):
         if self._built == False :
-            if self.affine:
-                self.weight = Parameter(ones((self.normalized_shape)))
-                self.bias = Parameter(zeros((self.normalized_shape)))
+            self.register_parameter('weight',Parameter(ones((self.normalized_shape))))
+            self.register_parameter('bias', Parameter(zeros((self.normalized_shape))))
             self._built=True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        x= F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        if self.in_sequence:
+            x=x.permute(0, 2, 1)
+        return x
         # mean = x.mean(dim=self.axis, keepdim=True).detach()
         # std = x.std(dim=self.axis, keepdim=True).detach()
         # return self.weight * (x - mean) / (std + self._eps) +self.bias
@@ -457,7 +481,7 @@ LayerNorm3d=LayerNorm
 
 
 class L2Norm(Layer):
-    def __init__(self, name=None, **kwargs):
+    def __init__(self,in_sequence=False, name=None, **kwargs):
         super().__init__(name=name)
         self.eps=epsilon()
 
@@ -466,16 +490,27 @@ class L2Norm(Layer):
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return l2_normalize(x)
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        x= l2_normalize(x)
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        return x
 
 
 
 class PixelNorm(Layer):
-    def __init__(self,name=None, **kwargs):
+    def __init__(self,in_sequence=False,name=None, **kwargs):
         super(PixelNorm, self).__init__(name=name)
 
     def forward(self, x):
-        return x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8)
+        x = enforce_singleton(x)
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
+        x= x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8)
+        if self.in_sequence:
+            x=x.permute(0, 2, 1)
+        return x
 
 
 class SpectralNorm(Layer):
@@ -520,7 +555,7 @@ class SpectralNorm(Layer):
         torch.Size([40])
 
     """
-    def __init__(self, module, name='weight', power_iterations=1):
+    def __init__(self, module, name='weight', power_iterations=1,in_sequence=False,**kwargs):
         super(SpectralNorm, self).__init__()
         self.module = module
         self.name = name
@@ -574,9 +609,14 @@ class SpectralNorm(Layer):
                 self._make_params()
             self._built = True
     def forward(self, *x):
-        x=enforce_singleton(x)
+        x = enforce_singleton(x)
+        if self.in_sequence:
+            x = x.permute(0, 2, 1)
         self._update_u_v()
-        return self.module(x)
+        x= self.module(x)
+        if self.in_sequence:
+            x=x.permute(0, 2, 1)
+        return x
 
 
 class EvoNormB0(Layer):
