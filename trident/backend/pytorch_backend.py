@@ -13,30 +13,30 @@ from collections import defaultdict
 from copy import copy
 from functools import update_wrapper
 from itertools import islice
-from distutils.version import Version,LooseVersion
+from distutils.version import Version, LooseVersion
 import torch.nn as nn
 import torch.onnx
 from torch._six import container_abcs
 from torch.nn.parameter import Parameter
 
-from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session,get_session_value
+from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session, get_session_value
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device','set_device','Layer', 'Sequential','ModuleList' ,'print_network','summary', 'load','save','Combine','ReplayBuffer','try_map_args_and_call','normalize_padding']
+__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'print_network', 'summary', 'load', 'save', 'Combine', 'ReplayBuffer', 'try_map_args_and_call',
+           'normalize_padding']
 
-version=torch.__version__
+version = torch.__version__
 sys.stdout.write('Pytorch version:{0}.\n'.format(version))
 
+pt_version = LooseVersion(vstring=version)
+base_version = LooseVersion(vstring='1.2.0')
+amp_version = LooseVersion(vstring='1.6.0')
 
-pt_version=LooseVersion(vstring=version)
-base_version=LooseVersion(vstring='1.2.0')
-amp_version=LooseVersion(vstring='1.6.0')
-
-if pt_version.version <base_version.version:
-    raise ValueError('Not support Pytorch older then version 1.2' )
-elif pt_version.version >=amp_version.version:
-    set_session('amp_available',True if torch.cuda.is_available() and pt_version>=amp_version else False)
-    if get_session_value('amp_available')==True:
+if pt_version.version < base_version.version:
+    raise ValueError('Not support Pytorch older then version 1.2')
+elif pt_version.version >= amp_version.version:
+    set_session('amp_available', True if torch.cuda.is_available() and pt_version >= amp_version else False)
+    if get_session_value('amp_available') == True:
         sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(True))
 
 
@@ -47,12 +47,12 @@ def get_device():
 
 
 def set_device(device='cpu'):
-    device=device.lower().replace('gpu','cuda')
-    if device=='cuda' and not torch.cuda.is_available():
+    device = device.lower().replace('gpu', 'cuda')
+    if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
     try:
-        set_session('device',device)
-        if device=='cpu':
+        set_session('device', device)
+        if device == 'cpu':
             gcitems = gc.get_objects()
             for i in range(len(gcitems)):
                 obj = gcitems[i]
@@ -67,23 +67,20 @@ def set_device(device='cpu'):
         print(e)
 
 
-
-
-if torch.cuda.is_available() and get_device()=='cuda' :
+if torch.cuda.is_available() and get_device() == 'cuda':
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.deterministic = True
 
 
-
-
 def load(path):
-    item=torch.load(path)
-    if isinstance(item,nn.Module):
+    item = torch.load(path)
+    if isinstance(item, nn.Module):
         item.to(get_device())
     return item
 
-def save(obj,path,is_compressed=False):
-    torch.save(obj,path,_use_new_zipfile_serialization=is_compressed)
+
+def save(obj, path, is_compressed=False):
+    torch.save(obj, path, _use_new_zipfile_serialization=is_compressed)
     return True
 
 
@@ -91,19 +88,20 @@ from functools import partial
 from typing import List
 
 
-def reset_name(module:nn.Module, prefix_dict=None):
-    def get_uid(prefix,seq):
-        if prefix not in module._uid_prefixs or seq<module._uid_prefixs[prefix]:
-            module._uid_prefixs[prefix]=seq
+def reset_name(module: nn.Module, prefix_dict=None):
+    def get_uid(prefix, seq):
+        if prefix not in module._uid_prefixs or seq < module._uid_prefixs[prefix]:
+            module._uid_prefixs[prefix] = seq
         return module._uid_prefixs[prefix]
-    if not hasattr(module,'_uid_prefixs') or prefix_dict is not None:
-        module._uid_prefixs=prefix_dict
-    if not hasattr(module,'_default_name'):
+
+    if not hasattr(module, '_uid_prefixs') or prefix_dict is not None:
+        module._uid_prefixs = prefix_dict
+    if not hasattr(module, '_default_name'):
         module._default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
-    prefix,seq=module._default_name.rsplit('_', 1) #if '_' in module._default_name else
-    seq=int(seq)
-    module.default_name = prefix + '_' + str(seq-get_uid(prefix,seq)+1)
-    module.__name__=module._name if hasattr(module,'_name')  else module.default_name
+    prefix, seq = module._default_name.rsplit('_', 1)  # if '_' in module._default_name else
+    seq = int(seq)
+    module.default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
+    module.__name__ = module._name if hasattr(module, '_name') else module.default_name
 
 
 _UID_PREFIX = defaultdict(int)
@@ -112,6 +110,7 @@ _UID_PREFIX = defaultdict(int)
 def get_global_uid(prefix=''):
     _UID_PREFIX[prefix] += 1
     return _UID_PREFIX[prefix]
+
 
 class Layer(nn.Module):
     """Trident extened pytorch nn.Module as base layer class.
@@ -155,7 +154,8 @@ class Layer(nn.Module):
 
 
     """
-    def __init__(self,name=None,keep_output=False,**kwargs):
+
+    def __init__(self, name=None, keep_output=False, **kwargs):
         """
 
         Args:
@@ -165,30 +165,35 @@ class Layer(nn.Module):
 
         """
         super(Layer, self).__init__()
+        self.batch_index=0
+        self.filter_index = 1
+        self.in_sequence=kwargs.get('in_sequence',False)
+        if self.in_sequence:
+            self.filter_index = -1
         self.training = True
         self._built = False
-        self.rank= kwargs.get('rank',None)
+        self.rank = kwargs.get('rank', None)
         self._non_persistent_buffers_set = set()
-        self.uuid=uuid.uuid4().node
+        self.uuid = uuid.uuid4().node
         self._nodes = None
         self._uid_prefixs = {}
         self._name = name
 
         prefix = self.__class__.__name__
-        self._default_name= camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
-        self.default_name=self._default_name
-        self.relative_name=''
+        self._default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
+        self.default_name = self._default_name
+        self.relative_name = ''
         reset_name(self, self._uid_prefixs)
 
         self._input_shape = None
         self.input_filters = None
         self._output_shape = None
         self.keep_output = keep_output
-        self._output_tensor =None
+        self._output_tensor = None
 
-        self.signature=None
+        self.signature = None
 
-        #self.dump_patches = True
+        # self.dump_patches = True
 
     def forward(self, *input):
         r"""Defines the computation performed at every call.
@@ -206,14 +211,12 @@ class Layer(nn.Module):
     @property
     def name(self):
         """If not assign name , it will return the default_name"""
-        return self._name if self._name is not None and len(self._name)>0 else self.relative_name
+        return self._name if self._name is not None and len(self._name) > 0 else self.relative_name
 
     @name.setter
-    def name(self,value):
-        self._name=value
+    def name(self, value):
+        self._name = value
         self.__name__ = value
-
-
 
     @property
     def nodes(self):
@@ -221,11 +224,11 @@ class Layer(nn.Module):
         return self._nodes
 
     @nodes.setter
-    def nodes(self,value):
-        if self._nodes!=value:
-            self._nodes=value
+    def nodes(self, value):
+        if self._nodes != value:
+            self._nodes = value
             for mod in self.modules():
-                mod._nodes=value
+                mod._nodes = value
 
     def add_module(self, name, module):
         """Adds a child module to the current module.
@@ -243,7 +246,7 @@ class Layer(nn.Module):
             module (Module): child module to be added to the module.
 
         """
-        if not isinstance(module, (nn.Module,Layer)) and module is not None:
+        if not isinstance(module, (nn.Module, Layer)) and module is not None:
             raise TypeError("{} is not a Module subclass".format(
                 torch.typename(module)))
         elif not isinstance(name, torch._six.string_classes):
@@ -256,19 +259,19 @@ class Layer(nn.Module):
             raise KeyError("module name can't be empty string \"\"")
 
         self._modules[name] = module
-        if isinstance(module,Layer):
+        if isinstance(module, Layer):
             reset_name(module, self._uid_prefixs)
             module.relative_name = name if module.relative_name == '' else name + '.' + module.relative_name
             for mod in module.modules():
-                if isinstance(mod,Layer) and mod.uuid!=module.uuid:
-                    mod.nodes =self.nodes
-                    reset_name(mod,self._uid_prefixs)
+                if isinstance(mod, Layer) and mod.uuid != module.uuid:
+                    mod.nodes = self.nodes
+                    reset_name(mod, self._uid_prefixs)
                     mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
-        self.nodes=OrderedDict([(mod.uuid,mod)  for mod in list(self.modules()) if isinstance(mod,Layer)])
+        self.nodes = OrderedDict([(mod.uuid, mod) for mod in list(self.modules()) if isinstance(mod, Layer)])
         for mod in self.modules():
-            if isinstance(mod,Layer):
-                mod.nodes =self.nodes
+            if isinstance(mod, Layer):
+                mod.nodes = self.nodes
 
     def add(self, module):
         """Simplified add_module
@@ -282,7 +285,7 @@ class Layer(nn.Module):
         if module is None:
             raise KeyError("module  can't be None")
         elif isinstance(module, Layer):
-            self.add_module(str(len(self._modules)),module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
+            self.add_module(str(len(self._modules)), module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
 
         else:
             raise ValueError('Not valid module')
@@ -298,7 +301,6 @@ class Layer(nn.Module):
 
         """
         pass
-
 
     @property
     def trainable_weights(self) -> List[nn.Parameter]:
@@ -324,7 +326,7 @@ class Layer(nn.Module):
             necessary to ensure uniqueness.
 
         """
-        return [x for x in self.parameters() if x.requires_grad==False]
+        return [x for x in self.parameters() if x.requires_grad == False]
 
     @property
     def weights(self):
@@ -351,12 +353,12 @@ class Layer(nn.Module):
 
     @property
     def trainable(self):
-        if len(self._parameters)==0:
+        if len(self._parameters) == 0:
             return None
 
-        elif len(self._parameters)>0:
-            for k,v in self._parameters.items():
-                if (v is not None and v.requires_grad==False) :
+        elif len(self._parameters) > 0:
+            for k, v in self._parameters.items():
+                if (v is not None and v.requires_grad == False):
                     return False
                 elif v is None:
                     pass
@@ -365,22 +367,20 @@ class Layer(nn.Module):
             return True
 
     @trainable.setter
-    def trainable(self,value:bool):
-        n=0
+    def trainable(self, value: bool):
+        n = 0
         for name, para in self.named_parameters():
             if (para.requires_grad != value):
                 para.requires_grad = value
-                n+=np.prod(list(para.size()))
+                n += np.prod(list(para.size()))
         if value:
             print('{0} parameters have set trainable'.format(n))
         else:
             print('{0} parameters have set untrainable'.format(n))
 
-
-
     @property
     def device(self):
-        return  get_device()
+        return get_device()
 
     def cuda(self, device=None):
         set_device('cuda')
@@ -389,7 +389,6 @@ class Layer(nn.Module):
     def cpu(self):
         super().cpu()
         set_device('cpu')
-
 
     @property
     def built(self):
@@ -400,50 +399,52 @@ class Layer(nn.Module):
         """Shape of input tensor,not including the batch axis."""
         return self._input_shape
 
-
     @input_shape.setter
     def input_shape(self, value):
         """ Setting the input_shape, means the layer get shape information and start to do the shape inferrence """
-        if isinstance(value, (list,tuple)) and len(value)>0:
+        if isinstance(value, (list, tuple)) and len(value) > 0:
             if isinstance(value[0], torch.Size):
-                value=to_tensor(to_numpy(list(value[0]))).int()
+                value = to_tensor(to_numpy(list(value[0]))).int()
             elif isinstance(value[0], torch.Tensor):
                 value = value[0].int()
             else:
-                value=to_tensor(to_numpy(list(value)))
+                value = to_tensor(to_numpy(list(value)))
         elif isinstance(value, int):
-            value=to_tensor(to_numpy([value]))
+            value = to_tensor(to_numpy([value]))
         elif isinstance(value, torch.Size):
-            value=to_tensor(to_numpy(list(value))).int()
+            value = to_tensor(to_numpy(list(value))).int()
         elif isinstance(value, torch.Tensor):
-            value=value.int()
+            value = value.int()
         elif isinstance(value, np.ndarray) and value.ndim <= 1:
-            value=torch.tensor(value.astype(np.uint8))
+            value = torch.tensor(value.astype(np.uint8))
         else:
             raise ValueError('not valid input_shape')
 
-       
-        if self._built == False :
-            self._input_shape =value
+        if self._built == False:
+            self._input_shape = value
             if self._input_shape.ndim == 0:
                 self.input_filters = int(self._input_shape.data)
             elif len(self._input_shape) == 1:
                 self.input_filters = self._input_shape.item()
             else:
-                self.input_filters =int(self._input_shape[0])
-
+                if self.filter_index<0 :
+                    self.input_filters = int(self._input_shape[self.filter_index ])
+                elif self.filter_index>self.batch_index:
+                    self.input_filters = int(self._input_shape[self.filter_index-self.batch_index-1])
+                else:
+                    raise  NotImplementedError('filter_index>batch_index')
 
             self.build(self._input_shape)
             self._built = True
 
 
-        elif self._input_shape is not None and self._input_shape.tolist()==to_list(value):
+        elif self._input_shape is not None and self._input_shape.tolist() == to_list(value):
             'input_shape is already assigned, and shape is the same.'
             pass
 
     @property
     def output_shape(self):
-        return  to_tensor(to_numpy(list(self._output_tensor.size()[1:]))) if self._output_shape is None else self._output_shape
+        return to_tensor(to_numpy(list(self._output_tensor.size()[1:]))) if self._output_shape is None else self._output_shape
 
     @output_shape.setter
     def output_shape(self, value):
@@ -455,7 +456,7 @@ class Layer(nn.Module):
             else:
                 value = to_tensor(to_numpy(list(value)))
         elif isinstance(value, int):
-            value=to_tensor(to_numpy([value]))
+            value = to_tensor(to_numpy([value]))
         elif isinstance(value, torch.Size):
             value = to_tensor(to_numpy(list(value))).int()
         elif isinstance(value, torch.Tensor):
@@ -468,7 +469,7 @@ class Layer(nn.Module):
 
     @property
     def input(self):
-        return  NotImplemented
+        return NotImplemented
 
     @property
     def output(self):
@@ -481,11 +482,9 @@ class Layer(nn.Module):
             Output tensor or list of output tensors.
 
         """
-        if self.keep_output==False:
+        if self.keep_output == False:
             raise ValueError('Layer {0} has not set self.keep_output  to True, cannot access output '.format(self.name))
-        return list(self._output_tensor) if isinstance(self._output_tensor,tuple) else self._output_tensor
-
-
+        return list(self._output_tensor) if isinstance(self._output_tensor, tuple) else self._output_tensor
 
     def reset_parameters(self):
         pass
@@ -493,10 +492,9 @@ class Layer(nn.Module):
     def copy(self):
         return copy.deepcopy(self)
 
-
-    def save_onnx(self,file_path=''):
-        input_shape=self.input_shape.copy()
-        input_shape.insert(0,1)
+    def save_onnx(self, file_path=''):
+        input_shape = self.input_shape.copy()
+        input_shape.insert(0, 1)
         x = torch.randn(*input_shape, requires_grad=True)
         torch_out = self(x)
 
@@ -513,46 +511,46 @@ class Layer(nn.Module):
                                         'output': {0: 'batch_size'}})
 
     def __call__(self, *input, **kwargs):
-        is_all_numpy=True
+        is_all_numpy = True
         input = list(input)
-        new_input=[]
+        new_input = []
         for inp in input:
-            if isinstance(inp,np.ndarray):
-                inp=to_tensor(inp)
+            if isinstance(inp, np.ndarray):
+                inp = to_tensor(inp)
                 new_input.append(inp)
             else:
                 new_input.append(inp)
-                is_all_numpy=False
-        input=new_input
+                is_all_numpy = False
+        input = new_input
         for hook in self._forward_pre_hooks.values():
-            result  = hook(self, *input)
+            result = hook(self, *input)
             if result is not None:
                 if not isinstance(result, tuple):
                     result = (result,)
                 input = result
 
-        if self._built==False :
-            inp= unpack_singleton(input)
+        if self._built == False:
+            inp = unpack_singleton(input)
             if isinstance(inp, (tuple, list)):
-                self.build([input_tensor.shape[1:] for input_tensor in inp])
-            elif isinstance(inp,torch.Tensor):
-                self.input_shape = inp.shape[1:]
+                self.build([input_tensor.shape[self.batch_index+1:] for input_tensor in inp])
+            elif isinstance(inp, torch.Tensor):
+                self.input_shape = inp.shape[self.batch_index+1:]
             else:
                 print('input shou be tensor or tuple of tensor')
                 print(inp)
-                self.input_shape=torch.tensor(-1)
+                self.input_shape = torch.tensor(-1)
 
         if torch._C._get_tracing_state():
             result = self._slow_forward(*input, **kwargs)
         else:
             result = self.forward(*input, **kwargs)
 
-            output=unpack_singleton(result)
-            if hasattr(self,'keep_output') and self.keep_output==True:
-                self._output_tensor=output
-            if isinstance(output,torch.Tensor) :
+            output = unpack_singleton(result)
+            if hasattr(self, 'keep_output') and self.keep_output == True:
+                self._output_tensor = output
+            if isinstance(output, torch.Tensor):
                 if self._output_shape is None:
-                    self.output_shape=output.shape[1:]
+                    self.output_shape = output.shape[self.batch_index+1:]
 
         for hook in self._forward_hooks.values():
             hook_result = hook(self, input, result)
@@ -571,12 +569,12 @@ class Layer(nn.Module):
                     wrapper = partial(hook, self)
                     update_wrapper(wrapper, hook)
                     grad_fn.register_hook(wrapper)
-        if is_all_numpy==True and self.training==False:
+        if is_all_numpy == True and self.training == False:
             if is_tensor(result):
                 return to_numpy(result)
-            elif isinstance(result,(list,tuple)):
-                result=list(result)
-            return tuple([ to_numpy(res) if is_tensor(res) else res for  res in result])
+            elif isinstance(result, (list, tuple)):
+                result = list(result)
+            return tuple([to_numpy(res) if is_tensor(res) else res for res in result])
         return result
 
     def __getattr__(self, name):
@@ -623,8 +621,8 @@ class Layer(nn.Module):
                         "cannot assign module before Module.__init__() call")
                 remove_from(self.__dict__, self._parameters, self._buffers)
                 modules[name] = value
-                reset_name(value,self._uid_prefixs)
-                value.relative_name= name if not hasattr(value,'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+                reset_name(value, self._uid_prefixs)
+                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             elif modules is not None and name in modules:
                 if value is not None:
                     raise TypeError("cannot assign '{}' as child module '{}' "
@@ -668,9 +666,6 @@ class Layer(nn.Module):
         return main_str
 
 
-
-
-
 class Sequential(Layer):
     r"""A sequential container.
     Modules will be added to it in the order they are passed in the constructor.
@@ -695,20 +690,20 @@ class Sequential(Layer):
                 ]))
     """
 
-    def __init__(self, *args,name=None):
+    def __init__(self, *args, name=None):
         super(Sequential, self).__init__()
-        self._name=name
+        self._name = name
         self._built = False
         if len(args) == 1 and isinstance(args[0], OrderedDict):
             for key, module in args[0].items():
-                module.name=key
+                module.name = key
                 self.add_module(key, module)
-        elif len(args) == 1 and isinstance(args[0], (list,nn.ModuleList)):
-            for  idx, module in enumerate(args[0]):
+        elif len(args) == 1 and isinstance(args[0], (list, nn.ModuleList)):
+            for idx, module in enumerate(args[0]):
                 self.add_module(str(idx), module)
         else:
             for idx, module in enumerate(args):
-                if module._name is not None and  len(module._name)>0:
+                if module._name is not None and len(module._name) > 0:
                     self.add_module(module._name, module)
                 else:
                     self.add_module(str(idx), module)
@@ -723,9 +718,9 @@ class Sequential(Layer):
         Returns:
 
         """
-        if self._built==False and len(self._modules)>0:
-            self.__getitem__(0).input_shape=self.input_shape
-            self._built=True
+        if self._built == False and len(self._modules) > 0:
+            self.__getitem__(0).input_shape = self.input_shape
+            self._built = True
 
     def add_module(self, name, module):
         r"""Adds a child module to the current module.
@@ -738,19 +733,16 @@ class Sequential(Layer):
             module (Module): child module to be added to the module.
         """
 
-
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
-            last_output=self[-1]._output_shape
+            last_output = self[-1]._output_shape
             super(Sequential, self).add_module(name, module)
             module.input_shape = last_output
             self._output_shape = module._output_shape
         else:
             super(Sequential, self).add_module(name, module)
 
-    def remove_at(self,idx):
+    def remove_at(self, idx):
         self.__delitem__(idx)
-
-
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -763,7 +755,7 @@ class Sequential(Layer):
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
-            returnDict=OrderedDict()
+            returnDict = OrderedDict()
             for k, v in list(self._modules.items())[idx]:
                 returnDict[k] = v
             return returnDict
@@ -791,10 +783,11 @@ class Sequential(Layer):
         return keys
 
     def forward(self, *x):
-        x = enforce_singleton(x)
         for module in self._modules.values():
+            x=enforce_singleton(x)
             x = module(x)
         return x
+
 
 class ModuleList(Layer):
     r"""Holds submodules in a list.
@@ -820,13 +813,13 @@ class ModuleList(Layer):
                 return x
     """
 
-    def __init__(self, modules=None,name=None):
+    def __init__(self, modules=None, name=None):
         super(ModuleList, self).__init__()
         self._name = name
-        if isinstance(modules,dict):
+        if isinstance(modules, dict):
             for key, value in modules.items():
                 self.add_module(key, value)
-        elif isinstance(modules,(list,tuple)):
+        elif isinstance(modules, (list, tuple)):
             for i, value in enumerate(modules):
                 self.add_module(str(i), value)
 
@@ -838,7 +831,6 @@ class ModuleList(Layer):
         if idx < 0:
             idx += len(self)
         return str(idx)
-
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
@@ -860,17 +852,14 @@ class ModuleList(Layer):
         str_indices = [str(i) for i in range(len(self._modules))]
         self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
 
-
     def __len__(self):
         return len(self._modules)
-
 
     def __iter__(self):
         return iter(self._modules.values())
 
     def __iadd__(self, modules):
         return self.extend(modules)
-
 
     def __dir__(self):
         keys = super(ModuleList, self).__dir__()
@@ -911,6 +900,7 @@ class ModuleList(Layer):
             self.add_module(str(offset + i), module)
         return self
 
+
 class Combine(Layer):
     r"""A sequential container.
     Modules will be added to it in the order they are passed in the constructor.
@@ -935,7 +925,7 @@ class Combine(Layer):
                 ]))
     """
 
-    def __init__(self, *args,name=None):
+    def __init__(self, *args, name=None):
         super(Combine, self).__init__()
         self._name = name
         self._built = False
@@ -943,14 +933,13 @@ class Combine(Layer):
         if len(args) == 1 and isinstance(args[0], OrderedDict):
             for key, module in args[0].items():
                 self.add_module(key, module)
-        elif len(args) == 1 and isinstance(args[0], (list,nn.ModuleList)):
-            for  idx, module in enumerate(args[0]):
+        elif len(args) == 1 and isinstance(args[0], (list, nn.ModuleList)):
+            for idx, module in enumerate(args[0]):
                 self.add_module(str(idx), module)
         else:
             for idx, module in enumerate(args):
                 self.add_module(str(idx), module)
         self.to(self.device)
-
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -988,7 +977,7 @@ class Combine(Layer):
         return keys
 
     def forward(self, *x):
-        outputs=[]
+        outputs = []
         for module in self._modules.values():
             outputs.append(module(*x))
         return tuple(outputs)
@@ -1002,9 +991,9 @@ class ReplayBuffer:
 
     def push_and_pop(self, data):
         to_return = []
-        keep_idx=random.choice(range(data.data.size(0)))
+        keep_idx = random.choice(range(data.data.size(0)))
         for i in range(data.data.size(0)):
-            element=data.data[i]
+            element = data.data[i]
             element = torch.unsqueeze(element, 0)
 
             if len(self.data) > 10 and random.uniform(0, 1) > 0.7:
@@ -1013,16 +1002,16 @@ class ReplayBuffer:
             else:
                 to_return.append(element)
 
-            if 0<len(self.data) < self.max_size and keep_idx==i:
+            if 0 < len(self.data) < self.max_size and keep_idx == i:
                 self.data.append(element)
-            elif len(self.data) == self.max_size and random.randint(0,10)%3==0 and keep_idx==i:
+            elif len(self.data) == self.max_size and random.randint(0, 10) % 3 == 0 and keep_idx == i:
                 self.data[random.randint(0, self.max_size - 1)] = element
 
-        to_return=shuffle(torch.cat(to_return))
+        to_return = shuffle(torch.cat(to_return))
         return to_return
 
     def push_only(self, data):
-        element=random_choice(data)
+        element = random_choice(data)
         element = torch.unsqueeze(element, 0)
         if len(self.data) < self.max_size:
             self.data.append(element)
@@ -1036,46 +1025,47 @@ def print_network(net, verbose=False):
         logging.info(net)
     logging.info('Total number of parameters: %d\n' % num_params)
 
+
 def summary(model, input_size, batch_size=-1, device="cuda"):
     def register_hook(module):
         def hook(module, input, output):
-            #class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
+            # class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
             module_idx = len(summary)
 
-            m_key =module.relative_name if hasattr(module,'relative_name') else module.name
+            m_key = module.relative_name if hasattr(module, 'relative_name') else module.name
             summary[m_key] = OrderedDict()
-            if hasattr(module,'keep_output'):
+            if hasattr(module, 'keep_output'):
                 summary[m_key]["keep_output"] = module.keep_output
             else:
                 summary[m_key]["keep_output"] = False
             summary[m_key]["input_shape"] = list(input[0].size())
             summary[m_key]["input_shape"][0] = batch_size
             if isinstance(output, (list, tuple)):
-                summary[m_key]["output_shape"] = [
-                    [-1] + list(o.size())[1:] for o in output ]
+                summary[m_key]["output_shape"] =output[0].shape
             else:
                 summary[m_key]["output_shape"] = list(output.size())
                 summary[m_key]["output_shape"][0] = batch_size
 
             params = 0
-            summary[m_key]["flops"]=np.array([0],dtype=np.float64)
+            summary[m_key]["flops"] = np.array([0], dtype=np.float64)
             summary[m_key]["macc"] = np.array([0], dtype=np.float64)
             if hasattr(module, "weight") and hasattr(module.weight, "size"):
                 params += torch.prod(torch.LongTensor(list(module.weight.shape)))
-                summary[m_key]["weight"] =list(module.weight.shape)
+                summary[m_key]["weight"] = list(module.weight.shape)
                 summary[m_key]["trainable"] = module.weight.requires_grad
-                summary[m_key]["flops"] += (2*np.prod(np.array(summary[m_key]["weight"]).astype(np.float64))-1) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
+                summary[m_key]["flops"] += (2 * np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) - 1) * np.prod(
+                    np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
                 summary[m_key]["macc"] += np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
 
             if hasattr(module, "bias") and module.bias is not None and hasattr(module.bias, "size"):
                 params += torch.prod(torch.LongTensor(list(module.bias.shape)))
-                summary[m_key]["bias"] =list(module.bias.shape)
-                summary[m_key]["flops"]+=np.prod(np.array(summary[m_key]["bias"]).astype(np.float64))*np.prod(np.array( summary[m_key]["output_shape"][2:]).astype(np.float64))
+                summary[m_key]["bias"] = list(module.bias.shape)
+                summary[m_key]["flops"] += np.prod(np.array(summary[m_key]["bias"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
             summary[m_key]["nb_params"] = params
 
         if (
-            not isinstance(module, (nn.Sequential,Sequential,nn.ModuleList,ModuleList))
-            and not (module == model)
+                not isinstance(module, (nn.Sequential, Sequential, nn.ModuleList, ModuleList))
+                and not (module == model)
         ):
             hooks.append(module.register_forward_hook(hook))
 
@@ -1090,13 +1080,13 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     else:
         dtype = torch.FloatTensor
 
-    for name,module in model.named_modules():
-        module.relative_name=name
+    for name, module in model.named_modules():
+        module.relative_name = name
     # multiple inputs to the network
     if isinstance(input_size, tuple):
         input_size = [input_size]
 
-    #prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
+    # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
     model.to(get_device())
     model.eval()
     if isinstance(input_size, int):
@@ -1122,28 +1112,28 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         h.remove()
 
     print("--------------------------------------------------------------------------------------------------------------------------------")
-    line_new = "{0:^40s} {1:^20s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^12s}".format("Layer (type)", "Output Shape","Weight ","Bias", "Param #", "FLOPS #")
+    line_new = "{0:^40s} {1:^20s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^12s}".format("Layer (type)", "Output Shape", "Weight ", "Bias", "Param #", "FLOPS #")
     print(line_new)
     print("==============================================================================")
     total_params = 0
     total_output = 0
     trainable_params = 0
-    flops=np.array([0],dtype=np.float64)
-    macc=0
+    flops = np.array([0], dtype=np.float64)
+    macc = 0
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
         is_keep = '★' if summary[layer]["keep_output"] else ''
         line_new = "{0:<40s} {1:<20s}  {2:<20s} {3:<8s}  {4:<8}  {5:<12}".format(
             layer,
-            is_keep+str(summary[layer]["output_shape"]),
+            is_keep + str(summary[layer]["output_shape"]),
             str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
             str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
             summary[layer]["nb_params"],
             summary[layer]["flops"][0]
         )
         total_params += summary[layer]["nb_params"]
-        flops+= float(summary[layer]["flops"])
-        macc += float(summary[layer]["macc"][0])
+        flops += float(summary[layer]["flops"])
+        macc += float(summary[layer]["macc"].sum())
         total_output += np.prod(summary[layer]["output_shape"])
         if "trainable" in summary[layer]:
             if summary[layer]["trainable"] == True:
@@ -1156,13 +1146,12 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
 
-
     print("================================================================")
     print("Total params: {0:,}".format(total_params))
     print("Trainable params: {0:,}".format(trainable_params))
     print("Non-trainable params: {0:,}".format(total_params - trainable_params))
-    print("Total MACC: {0:,}".format(round(macc,0)))
-    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10.**9, 5)[0]))
+    print("Total MACC: {0:,}".format(int(macc)))
+    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]))
     print("----------------------------------------------------------------")
     print("Input size (MB): %0.2f" % total_input_size)
     print("Forward/backward pass size (MB): %0.2f" % total_output_size)
@@ -1192,32 +1181,33 @@ def normalize_padding(padding, rank):
         (0, 0, 1, 1)
     """
     if padding is None:
-        padding=(0,)*(2*rank)
-    elif isinstance(padding,int):
+        padding = (0,) * (2 * rank)
+    elif isinstance(padding, int):
         padding = (padding,) * (2 * rank)
-    elif isinstance(padding,(list,tuple)) and len(padding)==1:
+    elif isinstance(padding, (list, tuple)) and len(padding) == 1:
         padding = padding * (2 * rank)
-    elif isinstance(padding,(list,tuple)) and len(padding)==rank and  isinstance(padding[0],int):
+    elif isinstance(padding, (list, tuple)) and len(padding) == rank and isinstance(padding[0], int):
         # rank=2 (1,1)=>(1,1,1,1)   (1,0)=>(0,0,1,1)
-        reversed_padding=list(padding)
+        reversed_padding = list(padding)
         reversed_padding.reverse()
-        return_padding=[]
+        return_padding = []
         for i in range(rank):
             return_padding.append(reversed_padding[i])
             return_padding.append(reversed_padding[i])
 
         padding = tuple(return_padding)
-    elif isinstance(padding, (list,tuple)) and len(padding) == rank and isinstance(padding[0], (list,tuple)):
+    elif isinstance(padding, (list, tuple)) and len(padding) == rank and isinstance(padding[0], (list, tuple)):
         # rank=2  ((1,0),(1,0)=>(1,0,1,0)
-        padding= tuple(list(itertools.chain(*list(padding))))
-    elif isinstance(padding, (list,tuple)) and len(padding) == 2*rank and isinstance(padding[0], int):
-        padding=padding
+        padding = tuple(list(itertools.chain(*list(padding))))
+    elif isinstance(padding, (list, tuple)) and len(padding) == 2 * rank and isinstance(padding[0], int):
+        padding = padding
     return padding
 
 
 def summary_str(model):
     """ Get a string representation of model building blocks and parameter counts. """
     indent_list, name_list, count_list = [], [], []
+
     def module_info(m, name, indent_level):
         count_list.append(sum([np.prod(list(p.size())) for p in m.parameters()]))
         indent_list.append(indent_level)
@@ -1225,20 +1215,20 @@ def summary_str(model):
         for name, child in m.named_children():
             if name.isdigit():
                 name = child._get_name()
-            module_info(child, name, indent_level+1)
-    module_info(model, model._get_name(), 0)
-    max_indent = max(indent_list)*4
-    max_name = max(len(x) for x in name_list)+max_indent+2
-    max_param = len(str(count_list[0]))+max_name+2
-    out = ['Blocks{:>{w}}'.format('Params', w=max_param-6)]
-    out += ['-'*max_param]
-    for indent, name, param in zip(indent_list, name_list, count_list):
-        s0 = '    '*indent
-        s1 = '{:{w}}'.format(name, w=max_name-len(s0))
-        s2 = '{:>{w}}'.format(param, w=max_param-len(s1)-len(s0))
-        out += [s0+s1+s2]
-    return '\n'.join(out)
+            module_info(child, name, indent_level + 1)
 
+    module_info(model, model._get_name(), 0)
+    max_indent = max(indent_list) * 4
+    max_name = max(len(x) for x in name_list) + max_indent + 2
+    max_param = len(str(count_list[0])) + max_name + 2
+    out = ['Blocks{:>{w}}'.format('Params', w=max_param - 6)]
+    out += ['-' * max_param]
+    for indent, name, param in zip(indent_list, name_list, count_list):
+        s0 = '    ' * indent
+        s1 = '{:{w}}'.format(name, w=max_name - len(s0))
+        s2 = '{:>{w}}'.format(param, w=max_param - len(s1) - len(s0))
+        out += [s0 + s1 + s2]
+    return '\n'.join(out)
 
 
 import gc
@@ -1502,7 +1492,7 @@ def get_human_readable_count(number):
     return '{int(number):,d} {labels[index]}'
 
 
-def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
+def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
     """This function is the core function for mapping callable and argments
 
     Args:
@@ -1514,55 +1504,57 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
         The result of the callable base on data_feed
 
     """
-    if isinstance(fn,torch.Tensor):
+    if isinstance(fn, torch.Tensor):
         return fn
     else:
         arg_map = OrderedDict()
-        if isinstance(fn,Layer) :
+        if isinstance(fn, Layer):
             for arg in fn.signature.inputs.key_list:
                 if arg in data_feed:
-                    arg_map[arg]=to_tensor(data[data_feed[arg]]).to(get_device())
+                    arg_map[arg] = to_tensor(data[data_feed[arg]]).to(get_device())
+                elif arg in data:
+                    arg_map[arg] = to_tensor(data[arg]).to(get_device())
                 else:
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-            #print('arg_map',arg_map.key_list)
-            if get_session_value('amp_available')==True and get_session_value('is_amp_enable') == True:
+            # print('arg_map',arg_map.key_list)
+            if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
                 with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
             else:
-                out=fn(*arg_map.value_list)
+                out = fn(*arg_map.value_list)
                 for item in data.value_list:
                     item.cpu()
             return out
-        elif hasattr(fn,'signature') and callable(fn):
+        elif hasattr(fn, 'signature') and callable(fn):
             for arg in fn.signature.inputs.key_list:
                 if arg in data:
-                    arg_map[arg]=data[arg].to(get_device())
+                    arg_map[arg] = data[arg].to(get_device())
                 elif arg in data_feed:
-                    arg_map[arg]=data[data_feed[arg]].to(get_device())
+                    arg_map[arg] = data[data_feed[arg]].to(get_device())
                 else:
 
                     raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-            #print('arg_map', arg_map.key_list)
-            if get_session_value('amp_available')==True and get_session_value('is_amp_enable') == True:
+            # print('arg_map', arg_map.key_list)
+            if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
                 with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
             else:
-                out=fn(*arg_map.value_list)
+                out = fn(*arg_map.value_list)
                 for item in data.value_list:
                     item.cpu()
 
             return out
-        elif  callable(fn):
-            args=get_signature(fn).key_list
+        elif callable(fn):
+            args = get_signature(fn).key_list
             for arg in args:
                 if arg in data:
-                    arg_map[arg]=data[arg].to(get_device())
-                elif arg in  data_feed:
-                    arg_map[arg]=data[data_feed[arg]].to(get_device())
+                    arg_map[arg] = data[arg].to(get_device())
+                elif arg in data_feed:
+                    arg_map[arg] = data[data_feed[arg]].to(get_device())
                 else:
                     arg_map[arg] = ''
-            #print('arg_map', arg_map.key_list)
-            if get_session_value('amp_available')==True and get_session_value('is_amp_enable') == True:
+            # print('arg_map', arg_map.key_list)
+            if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
                 with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
             else:
@@ -1573,8 +1565,6 @@ def try_map_args_and_call(fn, data: OrderedDict,data_feed=None):
         else:
 
             print('uncomplete arg_map', arg_map.key_list)
-
-
 
 
 def force_deterministic(seed):
