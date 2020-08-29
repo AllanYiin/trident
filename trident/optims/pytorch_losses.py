@@ -21,7 +21,7 @@ _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 __all__ = ['_ClassificationLoss','MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
            'ExponentialLoss','ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss','WingLoss','AdaptiveWingLoss',
-           'IouLoss',  'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss',
+           'IouLoss',  'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss','TripletMarginLoss',
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
 
@@ -92,22 +92,23 @@ class _ClassificationLoss(Layer):
 
         """
         #check num_clases
-        #check num_clases
         if self.num_classes is None:
             self.num_classes=output.shape[self.axis]
 
+
+
         output_exp = exp(output)
 
-        if self.is_logsoftmax:
-            output = clip(output,max=-1e-8)
-        elif self.from_logits:
-            output = clip(output, min=1e-8, max=1 - 1e-8)
-        elif (reduce_min(output) >= 0 and reduce_max(output) <= 1 and reduce_mean(
-                abs(reduce_sum(output, self.axis) - 1)) < 1e-4):
+        # if self.is_logsoftmax:
+        #     output = clip(output,max=-1e-8)
+        # elif self.from_logits:
+        #     output = clip(output, min=1e-8, max=1 - 1e-8)
+
+        if (output.min() >= 0 and output.max()<= 1 and abs(output.sum(-1).mean() - 1) < 1e-4):
             self.from_logits = True
             output = clip(output, min=1e-8, max=1 - 1e-8)
-        elif (reduce_min(output_exp) >= 0 and reduce_max(output_exp) <= 1 and reduce_mean(
-                abs(reduce_sum(output_exp, self.axis) - 1)) < 1e-4):
+
+        elif (output_exp.min() >= 0 and output_exp.max() <= 1 and abs(output_exp.sum(-1).mean() - 1) < 1e-4):
             self.is_logsoftmax = True
             self.from_logits = True
             output = clip(output, max=-1e-8)
@@ -133,6 +134,11 @@ class _ClassificationLoss(Layer):
                     self.loss_weights[idx] = 0
         if self.label_smooth:
             self.need_target_onehot=True
+
+        if target.dtype!=str2dtype('long') and  (target.min() >= 0 and target.max() <= 1 and abs(output_exp.sum(-1).mean() - 1)< 1e-4):
+            target = clip(target, min=1e-8, max=1 - 1e-8)
+            self.is_target_onehot = True
+
         #need target onehot but currently not
         if self.need_target_onehot==True and (target>1).float().sum()>0:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(output.device)
@@ -140,9 +146,10 @@ class _ClassificationLoss(Layer):
                 target=target*(torch.Tensor(target.size()).uniform_(0.9,1).to(output.device))
                 self.is_target_onehot = True
 
+
         #setting cutoff
         if self.cutoff is not None:
-            mask= (output > self.cutoff).float()
+            mask= (output > self.cutoff).to(output.dtype)
             output=output*mask
         return output, target
 
@@ -290,7 +297,7 @@ class CrossEntropyLoss(_ClassificationLoss):
         Returns:
 
         """
-        if not self.need_target_onehot:
+        if not self.need_target_onehot and not self.is_target_onehot:
             if self.is_logsoftmax==False:
                 loss=torch.nn.functional.cross_entropy(output,target,self.loss_weights,reduction= 'none')
             else:
@@ -299,9 +306,9 @@ class CrossEntropyLoss(_ClassificationLoss):
             reshape_shape = [1] * ndim(output)
             reshape_shape[self.axis] = self.num_classes
             if self.is_logsoftmax==False:
-                loss = -reduce_sum(target *nn.LogSoftmax(dim=self.axis)(output) * reshape(self.loss_weights,tuple(reshape_shape)),axis=self.axis)
+                loss = -reduce_sum(target *nn.LogSoftmax(dim=self.axis)(output) * reshape(self.loss_weights,tuple(reshape_shape)),axis=self.axis,keepdims=True)
             else:
-                loss = -reduce_sum(target * output * reshape(self.loss_weights, tuple(reshape_shape)),axis=self.axis)
+                loss = -reduce_sum(target * output * reshape(self.loss_weights, tuple(reshape_shape)),axis=self.axis,keepdims=True)
         return loss
 
 
@@ -1106,49 +1113,223 @@ class LovaszSoftmax(_Loss):
         return losses
 
 
+
+
+
 class TripletLoss(_Loss):
-    """Triplet loss with hard positive/negative mining.
-    Reference:
-        Hermans et al. In Defense of the Triplet Loss for Person Re-Identification. arXiv:1703.07737.
-    Imported from `<https://github.com/Cysu/open-reid/blob/master/reid/loss/triplet.py>`_.
+    r"""Creates a criterion that measures the triplet loss given an input
+    tensors :math:`x1`, :math:`x2`, :math:`x3` and a margin with a value greater than :math:`0`.
+    This is used for measuring a relative similarity between samples. A triplet
+    is composed by `a`, `p` and `n` (i.e., `anchor`, `positive examples` and `negative
+    examples` respectively). The shapes of all input tensors should be
+    :math:`(N, D)`.
+
+    The distance swap is described in detail in the paper `Learning shallow
+    convolutional feature descriptors with triplet losses`_ by
+    V. Balntas, E. Riba et al.
+
+    The loss function for each sample in the mini-batch is:
+
+    .. math::
+        L(a, p, n) = \max \{d(a_i, p_i) - d(a_i, n_i) + {\rm margin}, 0\}
+
+
+    where
+
+    .. math::
+        d(x_i, y_i) = \left\lVert {\bf x}_i - {\bf y}_i \right\rVert_p
 
     Args:
-        margin (float, optional): margin for triplet. Default is 0.3.
+        margin (float, optional): Default: :math:`1`.
+        p (int, optional): The norm degree for pairwise distance. Default: :math:`2`.
+        swap (bool, optional): The distance swap is described in detail in the paper
+            `Learning shallow convolutional feature descriptors with triplet losses` by
+            V. Balntas, E. Riba et al. Default: ``False``.
+        size_average (bool, optional): Deprecated (see :attr:`reduction`). By default,
+            the losses are averaged over each loss element in the batch. Note that for
+            some losses, there are multiple elements per sample. If the field :attr:`size_average`
+            is set to ``False``, the losses are instead summed for each minibatch. Ignored
+            when reduce is ``False``. Default: ``True``
+        reduce (bool, optional): Deprecated (see :attr:`reduction`). By default, the
+            losses are averaged or summed over observations for each minibatch depending
+            on :attr:`size_average`. When :attr:`reduce` is ``False``, returns a loss per
+            batch element instead and ignores :attr:`size_average`. Default: ``True``
+        reduction (string, optional): Specifies the reduction to apply to the output:
+            ``'none'`` | ``'mean'`` | ``'sum'``. ``'none'``: no reduction will be applied,
+            ``'mean'``: the sum of the output will be divided by the number of
+            elements in the output, ``'sum'``: the output will be summed. Note: :attr:`size_average`
+            and :attr:`reduce` are in the process of being deprecated, and in the meantime,
+            specifying either of those two args will override :attr:`reduction`. Default: ``'mean'``
+
+    Shape:
+        - Input: :math:`(N, D)` where :math:`D` is the vector dimension.
+        - Output: scalar. If :attr:`reduction` is ``'none'``, then :math:`(N)`.
+
+    >>> triplet_loss = nn.TripletMarginLoss(margin=1.0, p=2)
+    >>> anchor = torch.randn(100, 128, requires_grad=True)
+    >>> positive = torch.randn(100, 128, requires_grad=True)
+    >>> negative = torch.randn(100, 128, requires_grad=True)
+    >>> output = triplet_loss(anchor, positive, negative)
+    >>> output.backward()
+
+    .. _Learning shallow convolutional feature descriptors with triplet losses:
+        http://www.bmva.org/bmvc/2016/papers/paper119/index.html
     """
+    __constants__ = ['margin', 'p', 'eps', 'swap', 'reduction']
+    margin: float
+    p: float
+    eps: float
+    swap: bool
 
-    def __init__(self, global_feat, labels, margin=0.3, reduction="mean", reduced=False):
-        super(TripletLoss, self).__init__()
-        self.reduction = reduction
-        self.reduced = reduced
+    def __init__(self, margin: float = 1.0, p: float = 2., eps: float = 1e-6, swap: bool = False,reduction: str = 'mean'):
+        super(TripletLoss, self).__init__(reduction= reduction)
         self.margin = margin
-        self.ranking_loss = nn.MarginRankingLoss(margin=margin, reduction=reduction)
+        self.p = p
+        self.eps = eps
+        self.swap = swap
 
-    def forward(self, output, target) ->'loss':
+    def forward(self, anchor, positive, negative) :
+        return F.triplet_margin_loss(anchor, positive, negative, margin=self.margin, p=self.p,
+                                     eps=self.eps, swap=self.swap, reduction=self.reduction)
+
+
+
+TripletMarginLoss=TripletLoss
+
+
+class HardTripletLoss(_Loss):
+    """Hard/Hardest Triplet Loss
+    (pytorch implementation of https://omoindrot.github.io/triplet-loss)
+
+    For each anchor, we get the hardest positive and hardest negative to form a triplet.
+    """
+    def __init__(self, margin=0.1, hardest=False, squared=False):
         """
         Args:
-            output (torch.Tensor): feature matrix with shape (batch_size, feat_dim).
-            target (torch.LongTensor): ground truth labels with shape (num_classes).
+            margin: margin for triplet loss
+            hardest: If true, loss is considered only hardest triplets.
+            squared: If true, output is the pairwise squared euclidean distance matrix.
+                If false, output is the pairwise euclidean distance matrix.
         """
-        n = output.size(0)
-        # Compute pairwise distance, replace by the official when merged
-        dist = torch.pow(output, 2).sum(dim=1, keepdim=True).expand(n, n)
-        dist = dist + dist.t()
-        dist.addmm_(1, -2, output, output.t())
-        dist = dist.clamp(min=1e-12).sqrt()  # for numerical stability
-        # For each anchor, find the hardest positive and negative
-        mask = target.expand(n, n).eq(target.expand(n, n).t())
-        dist_ap, dist_an = [], []
-        for i in range(n):
-            dist_ap.append(dist[i][mask[i]].max().unsqueeze(0))
-            dist_an.append(dist[i][mask[i] == 0].min().unsqueeze(0))
-        dist_ap = torch.cat(dist_ap)
-        dist_an = torch.cat(dist_an)
-        # Compute ranking hinge loss
-        y = torch.ones_like(dist_an)
-        if self.reduction == 'mean':
-            return self.ranking_loss(dist_an, dist_ap, y).mean()
+        super(HardTripletLoss, self).__init__()
+        self.margin = margin
+        self.hardest = hardest
+        self.squared = squared
+
+    def _pairwise_distance(self,x, squared=False, eps=1e-16):
+        # Compute the 2D matrix of distances between all the embeddings.
+
+        cor_mat = torch.matmul(x, x.t())
+        norm_mat = cor_mat.diag()
+        distances = norm_mat.unsqueeze(1) - 2 * cor_mat + norm_mat.unsqueeze(0)
+        distances = F.relu(distances)
+
+        if not squared:
+            mask = torch.eq(distances, 0.0).float()
+            distances = distances + mask * eps
+            distances = torch.sqrt(distances)
+            distances = distances * (1.0 - mask)
+
+        return distances
+
+    def _get_anchor_positive_triplet_mask(self,labels):
+        # Return a 2D mask where mask[a, p] is True iff a and p are distinct and have same label.
+
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        indices_not_equal = torch.eye(labels.shape[0]).to(device).byte() ^ 1
+
+        # Check if labels[i] == labels[j]
+        labels_equal = torch.unsqueeze(labels, 0) == torch.unsqueeze(labels, 1)
+
+        mask = indices_not_equal * labels_equal
+
+        return mask
+
+    def _get_anchor_negative_triplet_mask(self,labels):
+        # Return a 2D mask where mask[a, n] is True iff a and n have distinct labels.
+
+        # Check if labels[i] != labels[k]
+        labels_equal = torch.unsqueeze(labels, 0) == torch.unsqueeze(labels, 1)
+        mask = labels_equal ^ 1
+
+        return mask
+
+    def _get_triplet_mask(self,labels):
+        """Return a 3D mask where mask[a, p, n] is True iff the triplet (a, p, n) is valid.
+
+        A triplet (i, j, k) is valid if:
+            - i, j, k are distinct
+            - labels[i] == labels[j] and labels[i] != labels[k]
+        """
+        device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+        # Check that i, j and k are distinct
+        indices_not_same = torch.eye(labels.shape[0]).to(device).byte() ^ 1
+        i_not_equal_j = torch.unsqueeze(indices_not_same, 2)
+        i_not_equal_k = torch.unsqueeze(indices_not_same, 1)
+        j_not_equal_k = torch.unsqueeze(indices_not_same, 0)
+        distinct_indices = i_not_equal_j * i_not_equal_k * j_not_equal_k
+
+        # Check if labels[i] == labels[j] and labels[i] != labels[k]
+        label_equal = torch.eq(torch.unsqueeze(labels, 0), torch.unsqueeze(labels, 1))
+        i_equal_j = torch.unsqueeze(label_equal, 2)
+        i_equal_k = torch.unsqueeze(label_equal, 1)
+        valid_labels = i_equal_j * (i_equal_k ^ 1)
+
+        mask = distinct_indices * valid_labels  # Combine the two masks
+
+        return mask
+
+    def forward(self, embeddings, labels):
+        """
+        Args:
+            labels: labels of the batch, of size (batch_size,)
+            embeddings: tensor of shape (batch_size, embed_dim)
+
+        Returns:
+            triplet_loss: scalar tensor containing the triplet loss
+        """
+        pairwise_dist = self._pairwise_distance(embeddings, squared=self.squared)
+
+        if self.hardest:
+            # Get the hardest positive pairs
+            mask_anchor_positive = self._get_anchor_positive_triplet_mask(labels).float()
+            valid_positive_dist = pairwise_dist * mask_anchor_positive
+            hardest_positive_dist, _ = torch.max(valid_positive_dist, dim=1, keepdim=True)
+
+            # Get the hardest negative pairs
+            mask_anchor_negative = self._get_anchor_negative_triplet_mask(labels).float()
+            max_anchor_negative_dist, _ = torch.max(pairwise_dist, dim=1, keepdim=True)
+            anchor_negative_dist = pairwise_dist + max_anchor_negative_dist * (1.0 - mask_anchor_negative)
+            hardest_negative_dist, _ = torch.min(anchor_negative_dist, dim=1, keepdim=True)
+
+            # Combine biggest d(a, p) and smallest d(a, n) into final triplet loss
+            triplet_loss = F.relu(hardest_positive_dist - hardest_negative_dist + 0.1)
+            triplet_loss = torch.mean(triplet_loss)
         else:
-            return self.ranking_loss(dist_an, dist_ap, y).sum()
+            anc_pos_dist = pairwise_dist.unsqueeze(dim=2)
+            anc_neg_dist = pairwise_dist.unsqueeze(dim=1)
+
+            # Compute a 3D tensor of size (batch_size, batch_size, batch_size)
+            # triplet_loss[i, j, k] will contain the triplet loss of anc=i, pos=j, neg=k
+            # Uses broadcasting where the 1st argument has shape (batch_size, batch_size, 1)
+            # and the 2nd (batch_size, 1, batch_size)
+            loss = anc_pos_dist - anc_neg_dist + self.margin
+
+            mask = self._get_triplet_mask(labels).float()
+            triplet_loss = loss * mask
+
+            # Remove negative losses (i.e. the easy triplets)
+            triplet_loss = F.relu(triplet_loss)
+
+            # Count number of hard triplets (where triplet_loss > 0)
+            hard_triplets = torch.gt(triplet_loss, 1e-16).float()
+            num_hard_triplets = torch.sum(hard_triplets)
+
+            triplet_loss = torch.sum(triplet_loss) / (num_hard_triplets + 1e-16)
+
+        return triplet_loss
 
 
 class CenterLoss(_Loss):
