@@ -1,9 +1,11 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import copy
 import hashlib
+import inspect
 import itertools
+import builtins
 import os
 import pickle
 import random
@@ -13,7 +15,6 @@ import threading
 import time
 from enum import Enum, unique
 from typing import List, TypeVar, Iterable, Tuple, Union
-
 import numpy as np
 from skimage import color
 
@@ -22,8 +23,9 @@ from trident.data.image_common import gray_scale, image2array, mask2array, image
     unnormalize, array2image, ExpectDataType, GetImageMode
 from trident.data.label_common import label_backend_adaptive
 from trident.data.mask_common import mask_backend_adaptive, color2label
+from trident.data.text_common import text_backend_adaption,reverse_text_backend_adaption
 from trident.data.samplers import *
-from trident.backend.common import DataSpec, PrintException, OrderedDict,Signature
+from trident.backend.common import DataSpec, PrintException, OrderedDict, Signature,ExpectDataType
 from trident.backend.load_backend import get_backend
 
 try:
@@ -35,7 +37,7 @@ if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import to_numpy, to_tensor, ReplayBuffer
     import torch
 
-__all__ = ['Dataset', 'ImageDataset', 'MaskDataset', 'LabelDataset', 'BboxDataset', 'MultipleDataset','MetricDataset', 'Iterator',
+__all__ = ['Dataset', 'ImageDataset', 'MaskDataset','TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'MultipleDataset', 'Iterator', 'MetricIterator',
            'NumpyDataset', 'RandomNoiseDataset']
 
 T = TypeVar('T', int, float, str, np.ndarray)
@@ -58,11 +60,16 @@ class Dataset(List):
 
     def __len__(self):
         return super().__len__()
+    @property
+    def length(self):
+        return self.__len__()
 
+    def len(self):
+        return self.__len__()
 
 
 class MultipleDataset(List):
-    def __init__(self, datasets,symbol=None, expect_data_type=None, name=''):
+    def __init__(self, datasets, symbol=None, expect_data_type=None, name=''):
         super().__init__()
         self.parameter = None
         self.name = name
@@ -73,25 +80,26 @@ class MultipleDataset(List):
             self.__add__(d)
 
     def __add__(self, other):
-        if super().__len__()==0 and isinstance(other,Dataset):
+        if super().__len__() == 0 and isinstance(other, Dataset):
             super().append(other)
-        elif isinstance(other,Dataset):
-            if len(super().__getitem__(0))==len(other):
+        elif isinstance(other, Dataset):
+            if len(super().__getitem__(0)) == len(other):
                 super().append(other)
             else:
                 raise ValueError('the dataset you add does not have same length with the existing dataset')
 
-    def add(self,other):
+    def add(self, other):
         self.__add__(other)
 
     def __getitem__(self, index: int):
-        results=[]
+        results = []
         for i in range(super().__len__()):
-            results.append(super().__getitem__(i).__getitem__(index) )
+            results.append(super().__getitem__(i).__getitem__(index))
         return tuple(results)
 
     def __len__(self):
         return len(super().__getitem__(0))
+
 
 class ImageDataset(Dataset):
     def __init__(self, images=None, expect_data_type: ExpectDataType = ExpectDataType.rgb,
@@ -143,126 +151,6 @@ class ImageDataset(Dataset):
             return self.image_transform(img)
         elif self.is_pair_process == True:
             return img
-
-        return None
-
-    def image_transform(self, img_data):
-        if len(self.image_transform_funcs) == 0:
-            return image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
-            for fc in self.image_transform_funcs:
-                if not fc.__qualname__.startswith(
-                        'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
-                        fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
-                    img_data = fc(img_data)
-            img_data = image_backend_adaption(img_data)
-
-            return img_data
-        else:
-            return img_data
-
-    @property
-    def reverse_image_transform_funcs(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
-        for i in range(len(self.image_transform_funcs)):
-            fn = self.image_transform_funcs[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
-        return_list.append(array2image)
-        return return_list
-
-    def reverse_image_transform(self, img_data):
-        if len(self.reverse_image_transform_funcs) == 0:
-            return reverse_image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
-            # if img_data.ndim>=2:
-            for fc in self.reverse_image_transform_funcs:
-                img_data = fc(img_data)
-            img_data = reverse_image_backend_adaption(img_data)
-
-            return img_data
-        else:
-            return img_data
-
-class MetricDataset(Dataset):
-    def __init__(self, identities=None, expect_data_type: ExpectDataType = ExpectDataType.array_data,
-                 get_image_mode: GetImageMode = GetImageMode.processed, symbol=None, name=''):
-        super().__init__(symbol=symbol, expect_data_type=expect_data_type, name=name)
-        _defines={'triplet loss':('anchor','positive','negative'), }
-        self.__add__(identities)
-        self.dtype = np.float32
-        self.get_image_mode = get_image_mode
-        self.image_transform_funcs = []
-        self.is_pair_process = False
-
-    def __getitem__(self, index: int):
-        anchor=None
-        positive=None
-        negative=None
-        imgs = super().__getitem__(index).value
-        index_internal=  random.choice(range(len(imgs)))
-        anchor=imgs[index_internal]
-        if len(imgs)>1:
-            available_items=range(len(imgs))
-            list(available_items).remove(index_internal)
-            index_internal2=random.choice(available_items)
-            positive=imgs[index_internal2]
-            available_items = range(len(super()))
-            list(available_items).remove(index)
-            index2=random.choice(available_items)
-            negative=random.choice(super()[index2].value)
-
-        if isinstance(anchor, str):
-            anchor = image2array(anchor)
-            positive = image2array(positive)
-            negative = image2array(negative)
-
-
-        if not isinstance(anchor, np.ndarray):
-            raise ValueError('image data should be ndarray')
-        elif isinstance(anchor, np.ndarray) and anchor.ndim not in [2, 3]:
-            raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(anchor.ndim))
-        elif self.expect_data_type == ExpectDataType.gray:
-            anchor = color.rgb2gray(anchor).astype(self.dtype)
-            positive = color.rgb2gray(positive).astype(self.dtype)
-            negative = color.rgb2gray(negative).astype(self.dtype)
-        elif self.expect_data_type == ExpectDataType.rgb and anchor.ndim == 2:
-            anchor = np.repeat(np.expand_dims(anchor, -1), 3, -1).astype(self.dtype)
-            positive = np.repeat(np.expand_dims(positive, -1), 3, -1).astype(self.dtype)
-            negative = np.repeat(np.expand_dims(negative, -1), 3, -1).astype(self.dtype)
-        elif self.expect_data_type == ExpectDataType.rgb and anchor.ndim == 3:
-            anchor = anchor[:, :, :3].astype(self.dtype)
-            positive = positive[:, :, :3].astype(self.dtype)
-            negative = negative[:, :, :3].astype(self.dtype)
-        elif self.expect_data_type == ExpectDataType.rgba:
-            if anchor.ndim == 2:
-                anchor = np.repeat(np.expand_dims(anchor, -1), 3, -1)
-                positive = np.repeat(np.expand_dims(positive, -1), 3, -1)
-                negative = np.repeat(np.expand_dims(negative, -1), 3, -1)
-            if anchor.shape[2] == 3:
-                anchor = np.concatenate([anchor, np.ones((anchor.shape[0], anchor.shape[1], 1)) * 255], axis=-1)
-                positive = np.concatenate([positive, np.ones((positive.shape[0], positive.shape[1], 1)) * 255], axis=-1)
-                negative = np.concatenate([negative, np.ones((negative.shape[0], negative.shape[1], 1)) * 255], axis=-1)
-            anchor = anchor.astype(self.dtype)
-        elif self.expect_data_type == ExpectDataType.multi_channel:
-            anchor = anchor.astype(self.dtype)
-            negative = negative.astype(self.dtype)
-            positive= positive.astype(self.dtype)
-
-        if self.get_image_mode == GetImageMode.expect and self.is_pair_process == False:
-            anchor=image_backend_adaption(anchor)
-            negative = image_backend_adaption(negative)
-            positive = image_backend_adaption(positive)
-            return  anchor,positive,positive, negative
-        elif self.get_image_mode == GetImageMode.processed and self.is_pair_process == False:
-            anchor = self.image_transform(anchor)
-            negative = self.image_transform(negative)
-            positive = self.image_transform(positive)
-
-            return anchor,positive, negative
-        elif self.is_pair_process == True:
-            return  anchor,positive, negative
 
         return None
 
@@ -436,7 +324,7 @@ class LabelDataset(Dataset):
 
             self.__default_language__ = language
             self._lab2idx = dict(zip(self.class_names[language], range(len(self.class_names[language]))))
-            self._idx2lab = dict(zip(range(len(self.class_names[language])),self.class_names[language]))
+            self._idx2lab = dict(zip(range(len(self.class_names[language])), self.class_names[language]))
 
     def __getitem__(self, index: int):
         label = super().__getitem__(index)
@@ -445,7 +333,7 @@ class LabelDataset(Dataset):
     def label_transform(self, label_data):
         label_data = label_backend_adaptive(label_data, self.class_names)
         if isinstance(label_data, list) and all(isinstance(elem, np.ndarray) for elem in label_data):
-            label_data = np.asarray(label_data)
+            label_data = np.asarray(label_data).astype(np.int64)
         if isinstance(label_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.label_transform_funcs:
@@ -499,29 +387,25 @@ class BboxDataset(Dataset):
         return bbox
 
 
-
 class LandmarkDataset(Dataset):
-    def __init__(self, landmarks=None, image_size=None, expect_data_type=ExpectDataType.landmarks,symbol=None, name=''):
+    def __init__(self, landmarks=None, image_size=None, expect_data_type=ExpectDataType.landmarks, symbol=None, name=''):
         super().__init__(symbol=symbol, expect_data_type=expect_data_type, name=name)
         self.__add__(landmarks)
         self.dtype = np.float32
         self.image_size = image_size
+
     def __getitem__(self, index: int):
         self._current_idx = index
         landmarks = super().__getitem__(index).astype(np.float32)
-        if  (landmarks>1).any() and (self.image_size is None):
+        if (landmarks > 1).any() and (self.image_size is None):
             raise RuntimeError('You need provide image size information for calculate landmarks. ')
-        elif (landmarks>1).any() :
+        elif (landmarks > 1).any():
             height, width = self.image_size
             landmarks[:, 0] = landmarks[:, 0] / width
             landmarks[:, 1] = landmarks[:, 1] / height
             return np.array(landmarks).astype(np.float32)
         else:
             return np.array(landmarks).astype(np.float32)
-
-
-
-
 
 
 class NumpyDataset(Dataset):
@@ -555,8 +439,136 @@ class RandomNoiseDataset(Dataset):
         return sys.maxsize
 
 
+
+
+class TextSequenceDataset(Dataset):
+    def __init__(self, corpus=None, is_sparse=False,sequence_offset=0,stopwords=None, sequence_length:int=64,symbol=None, name=''):
+        super().__init__(symbol=symbol, name=name)
+        self.text2index=None
+        self.index2text = None
+        self.is_sparse=is_sparse
+        if hasattr(corpus,"__iter__"):
+            new_corpus=[]
+            new_corpus.append('<start/>')
+            for i in range(len(corpus)):
+                item=corpus[i]
+                if  item=='\n':
+                    new_corpus.append('<end/>')
+                    if  i<len(corpus)-1 :
+                        new_corpus.append('<start/>')
+                elif  item=='\r' and corpus[i-1]=='\n':
+                    pass
+                else:
+                    new_corpus.append(item)
+                    if i == len(corpus) - 1:
+                        new_corpus.append('<end/>')
+
+            self.__add__(new_corpus)
+            chars = sorted(list(set(corpus)))
+            print('total distinct chars:', len(chars))
+            chars.insert(0, '<start/>')
+            chars.insert(1, '<end/>')
+            chars.insert(2, '<unknown/>')
+            chars.insert(3, '<pad/>')
+
+            self.text2index = dict((c, i) for i, c in enumerate(chars))
+            self.index2text = dict((i, c) for i, c in enumerate(chars))
+        else:
+            raise ValueError('corpus should be a collection.')
+
+
+        self.sequence_offset=sequence_offset
+        self.dtype = np.float32
+        self.text_transform_funcs = []
+        self.is_pair_process = False
+        self.sequence_length=sequence_length
+
+
+
+    def _get_item_by_idx(self, iterator, idx):
+        """Get the idx-th item of the iterator"""
+        size = len(self)
+        idx = idx.__index__()
+        if not -size <= idx < size:
+            raise IndexError('index {} is out of range'.format(idx))
+        idx %= size
+        return next(itertools.islice(iterator, idx, None))
+
+    def __getitem__(self, index: int):
+        sequencetext=list(self.__iter__())[index+self.sequence_offset:builtins.min(index+self.sequence_offset+self.sequence_length,self.len())]
+        if len(sequencetext) != self.sequence_length:
+            sequencetext.extend(['<pad/>']*(self.sequence_length-len(sequencetext)))
+        arr=None
+        if self.is_sparse:
+            arr=np.zeros((self.sequence_length,len(self.text2index)))
+            for i in range(self.sequence_length):
+                this_char=sequencetext[i]
+                if this_char in self.text2index:
+                    arr[i,self.text2index[this_char]]=1
+                else:
+                    arr[i, self.text2index['<unknown/>']] = 1
+            arr = arr.astype(np.float32)
+        else:
+            arr = np.zeros((self.sequence_length))
+            for i in range(self.sequence_length):
+                this_char = sequencetext[i]
+                if this_char in self.text2index:
+                    arr[i] =self.text2index[this_char]
+                else:
+                    arr[i] =self.text2index['<unknown/>']
+            arr=arr.astype(np.int64)
+
+        if self.is_pair_process == False and len(self.text_transform_funcs)==0:
+            return text_backend_adaption(arr)
+        elif  self.is_pair_process == False:
+            return self.text_transform(arr)
+        elif self.is_pair_process == True:
+            return arr
+
+        return None
+
+    def text_transform(self, text_data):
+        if len(self.text_transform_funcs) == 0:
+            return text_backend_adaption(text_data)
+        if isinstance(text_data, np.ndarray):
+            for fc in self.text_transform_funcs:
+                if not fc.__qualname__.startswith(
+                        'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
+                        fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
+                    text_data = fc(text_data)
+            text_data = text_backend_adaption(text_data)
+
+            return text_data
+        else:
+            return text_data
+
+    @property
+    def reverse_text_transform_funcs(self):
+        return_list = []
+        return_list.append(reverse_text_backend_adaption)
+        for i in range(len(self.text_transform_funcs)):
+            fn = self.text_transform_funcs[-1 - i]
+            # if fn.__qualname__ == 'normalize.<locals>.text_op':
+            #     return_list.append(unnormalize(fn.mean, fn.std))
+        #return_list.append(array2image)
+        return return_list
+
+    def reverse_text_transform(self, text_data):
+        if len(self.reverse_text_transform_funcs) == 0:
+            return reverse_text_backend_adaption(text_data)
+        if isinstance(text_data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.reverse_text_transform_funcs:
+                text_data = fc(text_data)
+            text_data = reverse_text_backend_adaption(text_data)
+
+            return text_data
+        else:
+            return text_data
+
+
 class Iterator(object):
-    def __init__(self, data=None, label=None, mask=None, unpair=None, minibatch_size=8):
+    def __init__(self, data=None, label=None, mask=None, unpair=None,sample_filter=None, minibatch_size=8):
         self.is_pair_process = False
         self.signature = None
         self._data = NumpyDataset()
@@ -564,11 +576,13 @@ class Iterator(object):
         self._unpair = NumpyDataset()
         self.workers = 2
         self.itr = 0
-        if data is not None and isinstance(data, (Dataset,MultipleDataset)):
+        if data is not None and isinstance(data, (Dataset, MultipleDataset,TextSequenceDataset)):
             self._data = data
-        if label is not None and isinstance(label, (Dataset,MultipleDataset)):
+        if label is not None and isinstance(label, (Dataset, MultipleDataset,TextSequenceDataset)):
             self._label = label
-            if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset,MultipleDataset)) and isinstance(self._data, ImageDataset) and len( self._label) == len(self._data):
+            if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset, MultipleDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(self._data):
+                self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = True
+            elif isinstance(self._label, TextSequenceDataset) and isinstance(self._data, TextSequenceDataset) and len(self._label) == len(self._data):
                 self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = True
             else:
                 self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = False
@@ -582,6 +596,10 @@ class Iterator(object):
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 10
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)
+        self.sample_filter = None
+        if inspect.isfunction(sample_filter) or callable(sample_filter) :
+            self.sample_filter = sample_filter
+            self.batch_sampler.sample_filter = self.sample_filter
 
     @property
     def data(self):
@@ -590,13 +608,16 @@ class Iterator(object):
     @data.setter
     def data(self, value):
         self._data = value
-        if self._label is not None and isinstance(self._label, (MaskDataset,BboxDataset,ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(self._data):
+        if self._label is not None and isinstance(self._label, (MaskDataset, BboxDataset, ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(
+                self._data):
             self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = True
         else:
             self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = False
 
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
+
 
     @property
     def label(self):
@@ -606,11 +627,11 @@ class Iterator(object):
     def label(self, value):
         self._label = value
         if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(
-            self._label) == len(self._data):
+                self._label) == len(self._data):
             self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = True
         else:
             self._label.is_pair_process = self._data.is_pair_process = self.is_pair_process = False
-
+        self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
     @property
@@ -620,11 +641,12 @@ class Iterator(object):
     @unpair.setter
     def unpair(self, value):
         self._unpair = value
+        self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
     @property
     def palette(self):
-        if isinstance(self._label, MaskDataset) and self._label.expect_data_type in [ExpectDataType.label_mask,   ExpectDataType.color_mask]:
+        if isinstance(self._label, MaskDataset) and self._label.expect_data_type in [ExpectDataType.label_mask, ExpectDataType.color_mask]:
             return self._label.palette
         else:
             return None
@@ -637,18 +659,19 @@ class Iterator(object):
     def minibatch_size(self, value):
         self._minibatch_size = value
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
     def update_signature(self, arg_names):
         iterdata = self.next()
-        if self.signature is None or not isinstance(self.signature,Signature):
+        if self.signature is None or not isinstance(self.signature, Signature):
             self.signature = Signature()
             self.signature.name = 'data_provider'
-        if isinstance(arg_names, (list, tuple)) and len(iterdata)==len(arg_names):
+        if isinstance(arg_names, (list, tuple)) and len(iterdata) == len(arg_names):
             for i in range(len(arg_names)):
                 arg = arg_names[i]
                 data = iterdata[i]
-                self.signature.outputs[arg] =(-1,)+ data.shape[1:] if data.ndim>1 else (-1)
+                self.signature.outputs[arg] = (-1,) + data.shape[1:] if data.ndim > 1 else (-1)
 
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
@@ -657,8 +680,6 @@ class Iterator(object):
         else:
             self.signature = None
             iterdata = self.next()
-
-
 
     def paired_transform(self, img_data, paired_img):
 
@@ -696,7 +717,7 @@ class Iterator(object):
             # stop = time.time()
             # print('get label:{0}'.format(stop - start))
             # start = stop
-            if isinstance(self.label, (BboxDataset,LandmarkDataset)):
+            if isinstance(self.label, (BboxDataset, LandmarkDataset)):
                 data, label = self.paired_transform(data, label)
                 if hasattr(self.data, 'image_transform'):
                     data = self.data.image_transform(data)
@@ -706,8 +727,10 @@ class Iterator(object):
                         bbox, label = new_label
                     else:
                         bbox = new_label
+                        label=None
                 else:
                     bbox = label
+                    label = None
             elif isinstance(self.label, MaskDataset):
                 data, label = self.paired_transform(data, label)
                 if hasattr(self.data, 'image_transform'):
@@ -727,7 +750,7 @@ class Iterator(object):
                 # print('paired_transform:{0}'.format(stop - start))
                 # start = stop
                 if hasattr(self.data, 'image_transform'):
-                    data = self.data.image_transform(data) # stop = time.time()  # print('data image_transform:{0}'.format(stop - start))  #
+                    data = self.data.image_transform(data)  # stop = time.time()  # print('data image_transform:{0}'.format(stop - start))  #
                     # start = stop
                 if hasattr(self.label, 'image_transform'):
                     label = self.label.image_transform(label)  # stop = time.time()  # print('label image_transform:{0}'.format(stop - start))  #
@@ -743,18 +766,22 @@ class Iterator(object):
 
             return_data = []
             if self.signature is None or len(self.signature) == 0:
-                self.signature=Signature()
-                self.signature.name='data_provider'
+                self.signature = Signature()
+                self.signature.name = 'data_provider'
                 if data is not None:
-                    self.signature.outputs['data' if self.data.symbol is None or len(self.data.symbol) == 0 else self.data.symbol] = (-1,)+data.shape
+                    self.signature.outputs['data' if self.data.symbol is None or len(self.data.symbol) == 0 else self.data.symbol] = (-1,) + data.shape
                 if bbox is not None:
-                    self.signature.outputs['bbox' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] =(-1,)+ bbox.shape
+                    self.signature.outputs['bbox' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] = (-1,) + bbox.shape
                 if mask is not None:
-                    self.signature.outputs['mask' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] = (-1,)+mask.shape
+                    self.signature.outputs['mask' if self.label.symbol is None or len(self.label.symbol) == 0 else self.label.symbol] = (-1,) + mask.shape
                 if label is not None:
-                    self.signature.outputs['label' if self.label.symbol is None or len(self.label.symbol) == 0 or self.label.symbol in self.signature else self.label.symbol] =(-1,)+ label.shape if isinstance(label, np.ndarray) else (-1,)
+                    self.signature.outputs['label' if self.label.symbol is None or len(self.label.symbol) == 0 or self.label.symbol in self.signature else self.label.symbol] = (
+                                                                                                                                                                                -1,) + label.shape if isinstance(
+                        label, np.ndarray) else (-1,)
                 if unpair is not None:
-                    self.signature.outputs['unpair' if self.unpair.symbol is None or len(self.unpair.symbol) == 0 else self.unpair.symbol] = (-1,)+unpair.shape  # stop = time.time()  #
+                    self.signature.outputs['unpair' if self.unpair.symbol is None or len(self.unpair.symbol) == 0 else self.unpair.symbol] = (
+                                                                                                                                             -1,) + unpair.shape  # stop =
+                    # time.time()  #
                     # print('signature:{0}'.format(stop - start))  # start = stop
 
             if data is not None:
@@ -811,3 +838,75 @@ class Iterator(object):
 
     def __len__(self):
         return max([len(self.data) if self.data is not None else 0, len(self.unpair) if self.unpair is not None else 0])
+
+
+class MetricIterator(Iterator):
+    """An Iterator
+
+    """
+
+    def __init__(self, data=None, label=None,minibatch_size=8):
+        super().__init__(data, minibatch_size)
+        self.is_pair_process = False
+        self.signature = None
+        self._data = ImageDataset()
+        if data is not None and isinstance(data, (Dataset, MultipleDataset)):
+            self._data = data
+        elif data is not None and isinstance(data, list):
+            self._data = ImageDataset(images=data)
+        self._label = LabelDataset()
+        if label is not None and isinstance(label, (LabelDataset)):
+            self._label= label
+        elif label is not None and isinstance(label, list):
+            self._label = LabelDataset(labels=label)
+        self._unpair = ImageDataset()
+        self.workers = 2
+        self.itr = 0
+
+        self._minibatch_size = minibatch_size
+        self.paired_transform_funcs = []
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self._sample_iter = iter(self.batch_sampler)
+        self.buffer_size = 10
+        self.out_queue = Queue.Queue(maxsize=self.buffer_size)
+
+    def __getitem__(self, index: int):
+        # start = time.time()
+
+        try:
+
+            anchor = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
+            positive = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
+            label = self.label.__getitem__(index % len(self.label)) if self.label is not None and len(self.label) > 0 else None
+
+            available_list = list(range(len(self.data)))
+            available_list.remove(index % len(self.data))
+
+            negative = self.data.__getitem__(random.choice(available_list)) if self.data is not None and len(self.data) > 0 else None
+
+            return_data = []
+            if self.signature is None or len(self.signature) == 0:
+                self.signature = Signature()
+                self.signature.name = 'data_provider'
+                if anchor is not None:
+                    self.signature.outputs['anchor'] = (-1,) + anchor.shape
+                if positive is not None:
+                    self.signature.outputs['positive'] = (-1,) + positive.shape
+                if negative is not None:
+                    self.signature.outputs['negative'] = (-1,) + negative.shape
+                if label is not None:
+                    self.signature.outputs['label'] = (-1,)
+
+            if anchor is not None:
+                return_data.append(anchor)
+            if positive is not None:
+                return_data.append(positive)
+            if negative is not None:
+                return_data.append(negative)
+            if label is not None:
+                return_data.append(label)
+
+            return tuple(return_data)
+        except:
+            PrintException()
+

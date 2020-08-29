@@ -4,14 +4,14 @@ from __future__ import division
 from __future__ import print_function
 
 import pickle
-
+import io
 import numpy as np
-
+import copy
 from trident.data.data_provider import *
 from trident.data.dataset import *
 from trident.data.mask_common import *
 from trident.data.utils import *
-from trident.backend.common import floatx
+from trident.backend.common import floatx,ExpectDataType,OrderedDict
 from trident.misc.ipython_utils import *
 
 try:
@@ -242,34 +242,27 @@ def load_birdsnap(dataset_name='birdsnap', kind='train', is_flatten=None, is_one
     return (images, labels)
 
 
-def load_text(filname, delimiter=',', skiprows=0, label_index=None, is_onehot=None, shuffle=True):
-    if _backend in ['tensorflow', 'cntk'] and is_onehot is None:
-        is_onehot = True
-    arr = np.genfromtxt(filname, delimiter=delimiter, skip_header=skiprows, dtype=floatx(), filling_values=0,
-                        autostrip=True)
-    data, labels = None, None
-    if label_index is None:
-        data = arr
-    else:
-        if label_index == 0:
-            data, labels = arr[:, 1:], arr[:, 0:1]
-        elif label_index == -1 or label_index == len(arr) - 1:
-            data, labels = arr[:, :-1], arr[:, -1:]
-        else:
-            rdata, labels = np.concatenate([arr[:, :label_index], arr[:, label_index + 1:]], axis=0), arr[:,
-                                                                                                      label_index:label_index + 1]
-    labels = np.squeeze(labels)
-    if _backend == 'pytorch':
-        labels = np.squeeze(labels).astype(np.int64)
-    if is_onehot == True:
-        if _backend == 'pytorch':
-            warnings.warn('Pytorch not prefer onehot label, are you still want onehot label?', category='data loading',
-                          stacklevel=1, source='load_text')
-        labels = to_onehot(labels)
-    idxes = np.arange(len(data))
-    dataset = DataProvider(filname.split('/')[-1].strip().split('.')[0], data=data, labels=labels, scenario='train')
+def load_text(filname, unit='char',is_sparse=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False):
+    original_corpus = None
+    corpus = None
+    with io.open(filname, encoding=encoding) as f:
+        original_corpus = f.read().lower()
+        if unit == 'char':
+            corpus = list(original_corpus)
+        elif unit == 'word':
+            corpus = original_corpus.split(' \t')
 
-    return dataset
+    corpus1=copy.deepcopy(corpus)
+    corpus2= copy.deepcopy(corpus)
+    data=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_sparse=is_sparse,symbol='input',sequence_offset=0)
+    labels =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_sparse=is_sparse,symbol='label',sequence_offset=1)
+    traindata=Iterator(data=data,label=labels)
+
+    dataset = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata)
+    if return_corpus:
+        return dataset,original_corpus
+    else:
+        return dataset
 
 
 def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=True, folder_as_label=True,
