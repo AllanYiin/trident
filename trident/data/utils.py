@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import base64
 import glob
 import glob
 import gzip
@@ -17,7 +17,7 @@ import urllib.request
 import warnings
 import zipfile
 from sys import stderr
-
+import datetime
 import numpy as np
 import requests
 import six
@@ -29,7 +29,7 @@ from six.moves.urllib.request import urlopen
 from tqdm import tqdm
 from urllib3.exceptions import NewConnectionError
 
-from trident.backend.common import OrderedDict, PrintException,get_session,make_dir_if_need
+from trident.backend.common import OrderedDict, PrintException, get_session, make_dir_if_need, get_file_modified_time,_get_trident_dir
 
 try:
     from urllib.request import urlretrieve
@@ -75,8 +75,6 @@ def calculate_md5(fpath, chunk_size=1024 * 1024):
     return md5.hexdigest()
 
 
-def check_md5(fpath, md5, **kwargs):
-    return md5 == calculate_md5(fpath, **kwargs)
 
 
 def check_integrity(fpath, md5=None):
@@ -84,7 +82,8 @@ def check_integrity(fpath, md5=None):
         return False
     if md5 is None:
         return True
-    return check_md5(fpath, md5)
+    fmd5=calculate_md5(fpath)
+    return  md5 == fmd5
 
 def _write_h(dirname,is_downloaded=False,is_extracted=False):
     _h_path = os.path.join(dirname, 'status.json')
@@ -133,6 +132,25 @@ def download_file(src, dirname, filename, desc=''):
 
 
 
+def get_onedrive_directdownload(onedrive_link):
+    """
+
+    Args:
+        onedrive_link ():
+
+    Returns:
+
+    Examples:
+        >>> link='https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=JW28uv'
+        >>> new_link=get_onedrive_directdownload(link)
+        >>> print(new_link)
+        'https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=JW28uv'
+
+    """
+    data_bytes64 = base64.b64encode(bytes(onedrive_link, 'utf-8'))
+    data_bytes64_String = data_bytes64.decode('utf-8').replace('/','_').replace('+','-').rstrip("=")
+    resultUrl = f"https://api.onedrive.com/v1.0/shares/u!{data_bytes64_String}/root/content"
+    return resultUrl
 
 def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
     """Download a Google Drive file from  and place it in root.
@@ -149,11 +167,9 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
 
     if not filename:
         filename = file_id
-    fpath = os.path.join(dirname, filename)
-    _h=_read_h(dirname)
-    # if os.path.exists(os.path.join(dirname, filename)):
-    #     print('archive file is already existing, donnot need download again.')
-    if os.path.exists(os.path.join(dirname, filename)) and _h!={} and  _h.get('is_downloaded', False)==True:
+
+    dest_path = os.path.join(os.path.join(_get_trident_dir(), 'models'), filename)
+    if os.path.exists(dest_path) and os.path.isfile(dest_path) and (datetime.datetime.now() - get_file_modified_time(dest_path)).seconds < 12 * 60 * 60:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
@@ -164,7 +180,7 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
             if token:
                 params = {'id': file_id, 'confirm': token}
                 response = session.get(url, params=params, stream=True)
-            _save_response_content(response, fpath)
+            _save_response_content(response, dest_path)
             _write_h(dirname,True,False)
             return True
         except Exception as e:
@@ -172,6 +188,51 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
             print( '***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
             print(e)
             return False
+
+def download_file_from_onedrive(onedrive_path, dirname, filename=None, md5=None):
+    """Download a OneDrive file from  and place it in root.
+
+    Args:
+        onedrive_path (str): id of file to be downloaded
+        dirname (str): Directory to place downloaded file in
+        filename (str, optional): Name to save the file under. If None, use the id of the file.
+        md5 (str, optional): MD5 checksum of the download. If None, do not check
+
+
+    Examples:
+    >>> link='https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=JW28uv'
+    >>> new_link=get_onedrive_directdownload(link)
+    >>> download_file_from_onedrive(link,'~/.trident/models','models_md5.json')
+    archive file is already existing, donnot need download again.
+    True
+    >>> print(new_link)
+    https://api.onedrive.com/v1.0/shares/u!aHR0cHM6Ly8xZHJ2Lm1zL3UvcyFBc3FPVjM4cXJvb2ZpWnJxTkFRdm8yQ3VYX2N5V1FFP2U9SlcyOHV2/root/content
+
+    """
+    # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
+    import requests
+    url=get_onedrive_directdownload(onedrive_path)
+    # if os.path.exists(os.path.join(dirname, filename)):
+    #     print('archive file is already existing, donnot need download again.')
+    dest_path=os.path.join(os.path.join(_get_trident_dir(),'models'), filename)
+    if os.path.exists(dest_path) and os.path.isfile(dest_path) and (datetime.datetime.now()-get_file_modified_time(dest_path)).seconds<12*60*60:
+        print('archive file is already existing, donnot need download again.')
+        return True
+    else:
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+
+        try:
+            with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10, desc='') as t:  # all optional kwargs
+                urlretrieve(url, filename=dest_path, reporthook=t.update_to, data=None)
+            return True
+        except Exception as e:
+            print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
+            print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0} '.format(dirname), flush=True)
+
+            print(e)
+            return False
+
 
 def get_image_from_google_drive(file_id):
     """Download a Google Drive image  and place it in root.
