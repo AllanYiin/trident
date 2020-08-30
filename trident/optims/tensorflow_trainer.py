@@ -26,7 +26,7 @@ from trident.backend.common import *
 from trident.backend.model import ModelBase, progress_bar
 from trident.backend.tensorflow_backend import Sequential, Layer, try_map_args_and_call, summary,get_device
 from trident.backend.tensorflow_ops import *
-from trident.backend.tensorflow_serialization import save, load
+from trident.backend.tensorflow_serialization import save, load,new_load
 from trident.callbacks.lr_schedulers import get_lr_scheduler,AdjustLRCallbackBase
 from trident.data.image_common import *
 from trident.layers.tensorflow_layers import SoftMax
@@ -58,10 +58,12 @@ def _to_tuple(x):
 
 
 class Model(ModelBase):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(Model, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None, input_shape=None,output=None):
+        super(Model, self).__init__(inputs, input_shape,output)
+        self.batch_index=0
+        self.filter_index=-1
 
-    def _initial_graph(self, inputs=None, output=None, input_shape=None):
+    def _initial_graph(self, inputs=None,  input_shape=None,output=None):
         input_var = inputs
         out_var = output
         if output is None:
@@ -71,22 +73,31 @@ class Model(ModelBase):
             if input_shape is None:
                 pass
             else:
-                input_shape = tf.TensorShape(to_list(input_shape))
                 input_name = 'input'
                 # input_var =tf.placeholder(dtype=tf.float32, shape=[None])
                 # input_var = Input(input_shape, name=input_name)
                 self.inputs[input_name] = input_shape
 
         elif isinstance(inputs, (tuple, list)):
-            for inp in inputs:
-                if isinstance(inp, tf.keras.Input):
-                    input_name = inp.name if inp.name != '' else 'input_{0}'.format(len(self.inputs) + 1)
-                    self.inputs[input_name] = inp.get_shape()[1:]
+            if len(inputs) == 1 and is_tensor(inputs[0]):
+                input_name = 'input'
+                self.inputs[input_name] = int_shape(inputs[0])
+            else:
+                for m in range(len(inputs)):
+                    inp = inputs[m]
+                    if is_tensor(inp) or isinstance(inp, np.ndarray):
+                        input_name = 'input_{0}'.format(m)
+                        self.inputs[input_name] = list(int_shape(inp))[self.batch_index + 1:]
         elif isinstance(inputs, dict):
             input_var = list(inputs.values())
             for k, v in inputs.items():
                 if isinstance(v, tf.keras.Input):
-                    self.inputs[k] = v.get_shape()[1:]
+                    self.inputs[k] =  int_shape(v)[self.batch_index+1:]
+        elif is_tensor(inputs):
+            self.inputs['input'] = list(int_shape(inputs))[self.batch_index+1:]
+        elif isinstance(inputs,np.ndarray):
+            inputs=to_numpy(inputs)
+            self.inputs['input'] = list(int_shape(inputs))[self.batch_index+1:]
 
         if isinstance(output, (Layer, tf.Module)):
             # update notes
@@ -100,32 +111,47 @@ class Model(ModelBase):
                 self._model = output
                 self._outputs['output'] = to_list(output._output_shape)
                 self._targets['target'] = to_list(output._output_shape)
-            else:
-                dummay_input = to_tensor(np.random.standard_normal((1, *input_shape)).astype(np.float32))
-                out = out_var(dummay_input)
-                # out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
-                self._model = out_var
-
-                if is_tensor(out):
-                    self._outputs['output'] = out.get_shape()[1:]
-                    self._targets['target'] = out.get_shape()[1:]
-                else:
-                    for i in range(len(out)):
-                        self._outputs['output_{0}'.format(i)] = out[i].get_shape()[1:]
-                        self._targets['target_{0}'.format(i)] = out[i].get_shape()[1:]
                 self._model.signature = get_signature(self._model.forward, 'model')
                 self._model.signature.inputs = copy.deepcopy(self.inputs)
                 self._model.signature.outputs = copy.deepcopy(self._outputs)
                 self._signature = self._model.signature
+            else:
+                out = None
+                if inputs is not None:
+                    args = None
+                    if isinstance(inputs, dict):
+                        out = output(*list(inputs.values()))
+                    elif isinstance(inputs, (list, tuple)):
+                        out = output(*inputs)
+                    else:
+                        out = output(inputs)
 
+                else:
+                    output.input_shape = input_shape
+                    dummay_input = to_tensor(np.random.standard_normal((1, *input_shape)).astype(np.float32))
+                    out = out_var(dummay_input)
+                    # out_var=out_var,input_signature=tf.TensorSpec(shape, dtype=tf.dtypes.float32))
+                    self._model = out_var
+
+                    if is_tensor(out):
+                        self._outputs['output'] =  int_shape(out)[self.batch_index+1:]
+                        self._targets['target'] =  int_shape(out)[self.batch_index+1:]
+                    else:
+                        for i in range(len(out)):
+                            self._outputs['output_{0}'.format(i)] =  int_shape(out[i])[self.batch_index+1:]
+                            self._targets['target_{0}'.format(i)] =  int_shape(out[i])[self.batch_index+1:]
+                    self._model.signature = get_signature(self._model.forward, 'model')
+                    self._model.signature.inputs = copy.deepcopy(self.inputs)
+                    self._model.signature.outputs = copy.deepcopy(self._outputs)
+                    self._signature = self._model.signature
 
         elif is_tensor(out_var):
             self._model = out_var
-            self._outputs['output'] = out_var.get_shape()[1:]
-            self._targets['target'] = out_var.get_shape()[1:]
+            self._outputs['output'] =  int_shape(out_var)[self.batch_index+1:]
+            self._targets['target'] =   int_shape(out_var)[self.batch_index+1:]
 
             self._model.signature = Signature('model')
-            self._model.signature.inputs['x'] = list(int_shape(self._model))[1:]
+            self._model.signature.inputs['x'] =  int_shape(self._model)[self.batch_index+1:]
             self._model.signature.outputs = copy.deepcopy(self._outputs)
             self._signature = self._model.signature
 
@@ -216,17 +242,20 @@ class Model(ModelBase):
             alias = loss.__name__
 
         if isinstance(loss, str):
-
-            loss_class = get_loss(loss)
-            alias = loss if loss_class is not None else alias
-            if alias in self._losses:
-                dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
-                alias = alias + '_' + str(len(dup_keys) + 1)
-            self._losses[alias] = loss_class(**kwargs) if len(kwargs) > 0 else loss()
-            if hasattr(loss, 'forward'):
-                argnames = get_signature(self._losses[alias].forward, alias)
+            if loss=='output':
+                self.use_output_as_loss = True
+                return self
             else:
-                argnames = get_signature(self._losses[alias].__call__, alias)
+                loss_class = get_loss(loss)
+                alias = loss if loss_class is not None else alias
+                if alias in self._losses:
+                    dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
+                    alias = alias + '_' + str(len(dup_keys) + 1)
+                self._losses[alias] = loss_class(**kwargs) if len(kwargs) > 0 else loss()
+                if hasattr(loss, 'forward'):
+                    argnames = get_signature(self._losses[alias].forward, alias)
+                else:
+                    argnames = get_signature(self._losses[alias].__call__, alias)
         elif inspect.isclass(loss) and inspect._is_type(loss):
             alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
             if alias in self._losses:
@@ -522,42 +551,43 @@ class Model(ModelBase):
                             Warning(
                                 'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
                                     arg))
-
-                    if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
-                        self.training_context['data_feed'] = data_feed
+                    #
+                    # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
+                    #     self.training_context['data_feed'] = data_feed
 
                     # check for target
-                    for i in range(len(self.targets)):
-                        arg = self.targets.key_list[i]
-                        data_feed[arg] = ''
-                        if len(train_data) == 1:
-                            data_feed[self.targets.key_list[0]] = train_data.key_list[0]
-                        elif arg in available_fields:
-                            data_feed[arg] = arg
-                            available_fields.remove(arg)
-                        elif arg == 'target' and 'label' in available_fields:
-                            data_feed[arg] = 'label'
-                            available_fields.remove('label')
-                        elif arg == 'target' and len(available_fields) == 1:
-                            data_feed[arg] = available_fields[0]
-                            available_fields.remove(available_fields[0])
-                        elif len(available_fields) > 0:
-                            target_shape = outshapes[i]
-                            for item in available_fields:
-                                data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
-                                if target_shape == data_shape:
-                                    data_feed[arg] = item
-                                    available_fields.remove(item)
-                                elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                        train_data[item].dtype)) and target_shape[:-1] == data_shape:
-                                    data_feed[arg] = item
-                                    available_fields.remove(item)
-                                else:
-                                    Warning(
-                                        'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                            arg))
-                    if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
-                        self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
+                    if len(available_fields)>0:
+                        for i in range(len(self.targets)):
+                            arg = self.targets.key_list[i]
+                            data_feed[arg] = ''
+                            if len(train_data) == 1:
+                                data_feed[self.targets.key_list[0]] = train_data.key_list[0]
+                            elif arg in available_fields:
+                                data_feed[arg] = arg
+                                available_fields.remove(arg)
+                            elif arg == 'target' and 'label' in available_fields:
+                                data_feed[arg] = 'label'
+                                available_fields.remove('label')
+                            elif arg == 'target' and len(available_fields) == 1:
+                                data_feed[arg] = available_fields[0]
+                                available_fields.remove(available_fields[0])
+                            elif len(available_fields) > 0:
+                                target_shape = outshapes[i]
+                                for item in available_fields:
+                                    data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
+                                    if target_shape == data_shape:
+                                        data_feed[arg] = item
+                                        available_fields.remove(item)
+                                    elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
+                                            train_data[item].dtype)) and target_shape[:-1] == data_shape:
+                                        data_feed[arg] = item
+                                        available_fields.remove(item)
+                                    else:
+                                        Warning(
+                                            'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                                arg))
+                        if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
+                            self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
 
                     self.training_context['data_feed'] = data_feed
                     print('data_feed', data_feed)
@@ -693,7 +723,7 @@ class Model(ModelBase):
                 'trident_version': __version__,
                 'tensorflow_version': tf.version.VERSION,
                 'signature': self.signature
-            }, save_path,_use_new_zipfile_serialization=True)
+            }, save_path,is_compressed=True)
 
 
             self._model.train()
@@ -751,17 +781,19 @@ class Model(ModelBase):
 
     def load_model(self, file_path):
         print('Loading pretrained model from {}'.format(file_path))
-        pretrained_dict = load(file_path)
-
+        pretrained_dict = new_load(file_path)
+        state_dict=None
         if "state_dict" in pretrained_dict.keys():
-            pretrained_dict = pretrained_dict['state_dict']
+            state_dict = pretrained_dict['state_dict']
 
             # pretrained_dict = remove_prefix(pretrained_dict, 'module.')
-        if check_keys(self._model, pretrained_dict):
-            self._model.load_state_dict(pretrained_dict, strict=False)
+        if check_keys(self._model, state_dict):
+            self._model.load_state_dict(state_dict, strict=False)
             print('Model loaded!')
 
         if self.signature is None:
+            if 'signature' in pretrained_dict:
+                self.signature=pretrained_dict['signature']
             self.signature = get_signature(self._model.forward)
 
     def merge_grads(self, old_grads, new_grades):
@@ -838,8 +870,8 @@ class Model(ModelBase):
 
 
 class ImageClassificationModel(Model):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(ImageClassificationModel, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None,  input_shape=None,output=None):
+        super(ImageClassificationModel, self).__init__(inputs, input_shape,output)
 
         self._class_names = []
         self.preprocess_flow = []
@@ -905,8 +937,8 @@ class ImageClassificationModel(Model):
 
 
 class ImageDetectionModel(Model):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(ImageDetectionModel, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None,  input_shape=None,output=None):
+        super(ImageDetectionModel, self).__init__(inputs, input_shape,output)
         self.preprocess_flow = []
         self.detection_threshould = 0.5
 
@@ -939,12 +971,12 @@ class ImageDetectionModel(Model):
 
 
 class ImageSegmentationModel(Model):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(ImageSegmentationModel, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None,  input_shape=None,output=None):
+        super(ImageSegmentationModel, self).__init__(inputs, input_shape,output)
         self.preprocess_flow = []
 
 
 class LanguageModel(Model):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(LanguageModel, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None,  input_shape=None,output=None):
+        super(LanguageModel, self).__init__(inputs, input_shape,output)
         self.preprocess_flow = []

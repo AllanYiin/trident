@@ -63,7 +63,7 @@ except Exception as e:
 
 
 def load(path):
-    item = serialization.load(path)
+    item = serialization.new_load(path)
     return item
 
 
@@ -251,9 +251,13 @@ class Layer(tf.Module):
 
         """
         super(Layer, self).__init__()
+        self.batch_index = 0
+        self.filter_index = -1
+        self.in_sequence = False
         self.training = True
         self._built = False
         self.rank = kwargs.get('rank', None)
+
 
         self._uid_prefixs = {}
         self._modules = OrderedDict()
@@ -644,9 +648,16 @@ class Layer(tf.Module):
         if self._built == False:
             self._input_shape = value
             if len(self._input_shape) == 0:
-                self.input_filters =  int(self._input_shape)
+                self.input_filters = int(to_numpy(self._input_shape).data)
+            elif len(self._input_shape) == 1:
+                self.input_filters = int(to_numpy(self._input_shape)[-1])
             else:
-                self.input_filters = int(self._input_shape[-1])
+                if self.filter_index < 0:
+                    self.input_filters = int(self._input_shape[self.filter_index])
+                elif self.filter_index > self.batch_index:
+                    self.input_filters = int(self._input_shape[self.filter_index - self.batch_index - 1])
+                else:
+                    raise NotImplementedError('filter_index>batch_index')
 
             self.build(self._input_shape)
             self._built = True
@@ -943,9 +954,9 @@ class Layer(tf.Module):
         if self._built==False :
             inp= unpack_singleton(input)
             if isinstance(inp, (tuple, list)):
-                self.build([input_tensor.shape[1:] for input_tensor in inp])
+                self.build([input_tensor.shape[self.batch_index+1:] for input_tensor in inp])
             elif is_tensor(inp):
-                self.input_shape = inp.shape[1:]
+                self.input_shape = inp.shape[self.batch_index+1:]
             else:
                 print('input shou be tensor or tuple of tensor')
                 print(inp)
@@ -958,7 +969,7 @@ class Layer(tf.Module):
                 self._output_tensor = output
             if is_tensor(output):
                 if self._output_shape is None:
-                    self.output_shape = output.shape[1:]
+                    self.output_shape = output.shape[self.batch_index+1:]
 
             for hook in self._forward_hooks.values():
                 hook_result = hook(self, input, result)

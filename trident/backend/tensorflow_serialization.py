@@ -14,15 +14,20 @@ import pathlib
 import inspect
 import tensorflow as tf
 from trident.backend.tensorflow_ops import *
-__all__ = ['save','load']
+from trident.data.utils import unpickle, pickle_it
+
+__all__ = ['save', 'load', 'new_load']
 
 string_classes = (str, bytes)
+
+
 def _import_dotted_name(name):
     components = name.split('.')
     obj = __import__(components[0])
     for component in components[1:]:
         obj = getattr(obj, component)
     return obj
+
 
 def get_source_lines_and_file(obj, error_msg=None):
     """
@@ -43,17 +48,18 @@ def get_source_lines_and_file(obj, error_msg=None):
 
     return sourcelines, file_lineno, filename
 
+
 def typename(o):
-    #'DoubleTensor', 'FloatTensor', 'LongTensor', 'IntTensor','ShortTensor', 'CharTensor', 'ByteTensor', 'BoolTensor'
+    # 'DoubleTensor', 'FloatTensor', 'LongTensor', 'IntTensor','ShortTensor', 'CharTensor', 'ByteTensor', 'BoolTensor'
     if is_tensor(o):
-        if o.dtype==tf.float32:
+        if o.dtype == tf.float32:
             return 'FloatTensor'
-        elif o.dtype==tf.int64:
+        elif o.dtype == tf.int64:
             return 'LongTensor'
     module = ''
     class_name = ''
     if hasattr(o,
-               '__module__') and o.__module__ != 'builtins' and o.__module__ != '__builtin__' and o.__module__ is not\
+               '__module__') and o.__module__ != 'builtins' and o.__module__ != '__builtin__' and o.__module__ is not \
             None:
         module = o.__module__ + '.'
 
@@ -73,7 +79,8 @@ def is_storage(obj):
         obj (Object): Object to test
     """
     return type(obj) in ['DoubleStorage', 'FloatStorage', 'LongStorage', 'IntStorage',
-    'ShortStorage', 'CharStorage', 'ByteStorage', 'BoolStorage',]
+                         'ShortStorage', 'CharStorage', 'ByteStorage', 'BoolStorage', ]
+
 
 DEFAULT_PROTOCOL = 2
 
@@ -84,8 +91,6 @@ SHORT_SIZE = struct.Struct('=h').size
 MAGIC_NUMBER = 0x1950a86a20f9469cfc6c
 PROTOCOL_VERSION = 1001
 STORAGE_KEY_SEPARATOR = ','
-
-
 
 
 class SourceChangeWarning(Warning):
@@ -159,11 +164,11 @@ def check_module_version_greater_or_equal(module, req_version_tuple, error_if_ma
 
     except Exception as e:
         message = (
-            "'%s' module version string is malformed '%s' and cannot be compared"
-            " with tuple %s"
-        ) % (
-            module.__name__, module.__version__, str(req_version_tuple)
-        )
+                      "'%s' module version string is malformed '%s' and cannot be compared"
+                      " with tuple %s"
+                  ) % (
+                      module.__name__, module.__version__, str(req_version_tuple)
+                  )
         if error_if_malformed:
             raise RuntimeError(message)
         else:
@@ -176,9 +181,6 @@ def check_module_version_greater_or_equal(module, req_version_tuple, error_if_ma
 def _cpu_tag(obj):
     if type(obj).__module__ == 'torch':
         return 'cpu'
-
-
-
 
 
 def _cpu_deserialize(obj, location):
@@ -212,8 +214,7 @@ def default_restore_location(storage, location):
 
 def normalize_storage_type(storage_type):
     return storage_type.__name__
-    #return getattr(trident.backend, storage_type.__name__)
-
+    # return getattr(trident.backend, storage_type.__name__)
 
 
 def storage_to_tensor_type(storage):
@@ -224,7 +225,7 @@ def storage_to_tensor_type(storage):
 
 def _is_path(name_or_buffer):
     return isinstance(name_or_buffer, str) or \
-        (sys.version_info[0] == 3 and isinstance(name_or_buffer, pathlib.Path))
+           (sys.version_info[0] == 3 and isinstance(name_or_buffer, pathlib.Path))
 
 
 class _opener(object):
@@ -271,12 +272,12 @@ def _open_file_like(name_or_buffer, mode):
 
 class _open_zipfile_reader(_opener):
     def __init__(self, name_or_buffer):
-        super(_open_zipfile_reader, self).__init__(tarfile.open(name_or_buffer,'r'))
+        super(_open_zipfile_reader, self).__init__(tarfile.open(name_or_buffer, 'r'))
 
 
 class _open_zipfile_writer_file(_opener):
     def __init__(self, name):
-        super(_open_zipfile_writer_file, self).__init__(tarfile.open(name,'w'))
+        super(_open_zipfile_writer_file, self).__init__(tarfile.open(name, 'w'))
 
     def __exit__(self, *args):
         self.file_like.write_end_of_file()
@@ -285,7 +286,7 @@ class _open_zipfile_writer_file(_opener):
 class _open_zipfile_writer_buffer(_opener):
     def __init__(self, buffer):
         self.buffer = buffer
-        super(_open_zipfile_writer_buffer, self).__init__(tarfile.open(buffer,'w'))
+        super(_open_zipfile_writer_buffer, self).__init__(tarfile.open(buffer, 'w'))
 
     def __exit__(self, *args):
         self.file_like.write_end_of_file()
@@ -325,13 +326,12 @@ def _should_read_directly(f):
 
 
 def _check_seekable(f):
-
     def raise_err_msg(patterns, e):
         for p in patterns:
             if p in str(e):
                 msg = (str(e) + ". You can only torch.load from a file that is seekable."
-                                + " Please pre-load the data into a buffer like io.BytesIO and"
-                                + " try to load from it instead.")
+                       + " Please pre-load the data into a buffer like io.BytesIO and"
+                       + " try to load from it instead.")
                 raise type(e)(msg)
         raise e
 
@@ -340,6 +340,7 @@ def _check_seekable(f):
         return True
     except (io.UnsupportedOperation, AttributeError) as e:
         raise_err_msg(["seek", "tell"], e)
+
 
 def _check_dill_version(pickle_module):
     """Checks if using dill as the pickle module, and if so, checks if it is the correct version.
@@ -353,14 +354,15 @@ def _check_dill_version(pickle_module):
         required_dill_version = (0, 3, 1)
         if not check_module_version_greater_or_equal(pickle_module, required_dill_version, False):
             raise ValueError((
-                "'torch' supports dill >= %s, but you have dill %s."
-                " Please upgrade dill or switch to 'pickle'"
-            ) % (
-                '.'.join([str(num) for num in required_dill_version]),
-                pickle_module.__version__
-            ))
+                                 "'torch' supports dill >= %s, but you have dill %s."
+                                 " Please upgrade dill or switch to 'pickle'"
+                             ) % (
+                                 '.'.join([str(num) for num in required_dill_version]),
+                                 pickle_module.__version__
+                             ))
 
-def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, _use_new_zipfile_serialization=False):
+
+def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, is_compressed=False):
     """Saves an object to a disk file.
 
     See also: :ref:`recommend-saving-models`
@@ -388,15 +390,24 @@ def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, _use_ne
         >>> buffer = io.BytesIO()
         >>> torch.save(x, buffer)
     """
+    _use_new_zipfile_serialization = False
     _check_dill_version(pickle_module)
-
-    if _use_new_zipfile_serialization:
-        with _open_zipfile_writer(f) as opened_file:
-            _save(obj, opened_file, pickle_module, pickle_protocol)
-            return
 
     with _open_file_like(f, 'wb') as opened_file:
         _legacy_save(obj, opened_file, pickle_module, pickle_protocol)
+
+    if is_compressed:
+        f_pickle = ''
+        if isinstance(f, str):
+            f_pickle = f
+        elif hasattr(f, 'flush') and hasattr(f, 'write'):
+            f_pickle = f.name
+
+        fp = tarfile.open(f_pickle + '_', 'w')
+        fp.add(f_pickle)
+        fp.close()
+        os.remove(f_pickle)
+        os.rename(f_pickle + '_', f_pickle)
 
 
 def _legacy_save(obj, f, pickle_module, pickle_protocol):
@@ -408,7 +419,6 @@ def _legacy_save(obj, f, pickle_module, pickle_protocol):
                    'Please use something like io.BytesIO for torch.save instead.')
             raise RuntimeError(msg)
 
-
     serialized_container_types = {}
     serialized_storages = {}
 
@@ -418,7 +428,7 @@ def _legacy_save(obj, f, pickle_module, pickle_protocol):
         # see
         # https://docs.python.org/2/library/pickle.html#pickling-and-unpickling-external-objects
         # https://github.com/python/cpython/blob/master/Lib/pickle.py#L527-L537
-        if isinstance(obj, type) and issubclass(obj,tf.Module):
+        if isinstance(obj, type) and issubclass(obj, tf.Module):
             if obj in serialized_container_types:
                 return None
             serialized_container_types[obj] = True
@@ -429,7 +439,7 @@ def _legacy_save(obj, f, pickle_module, pickle_protocol):
             except Exception:  # saving the source is optional, so we can ignore any errors
                 warnings.warn("Couldn't retrieve source code for container of "
                               "type " + obj.__name__ + ". It won't be checked "
-                              "for correctness upon loading.")
+                                                       "for correctness upon loading.")
             return 'module', obj, source_file, source
 
         elif is_tensor(obj):
@@ -437,12 +447,12 @@ def _legacy_save(obj, f, pickle_module, pickle_protocol):
             # Offset is always 0, but we keep it for backwards compatibility
             # with the old serialization format (which supported storage views)
             offset = 0
-            if hasattr(obj,'_unique_id'):
-                obj_key =obj. _unique_id
-            elif hasattr(obj,'_id'):
-                obj_key =str(obj. _id)
+            if hasattr(obj, '_unique_id'):
+                obj_key = obj._unique_id
+            elif hasattr(obj, '_id'):
+                obj_key = str(obj._id)
             else:
-                obj_key =''
+                obj_key = ''
             location = 'cpu'
             serialized_storages[obj_key] = obj
             return ('storage',
@@ -467,7 +477,7 @@ def _legacy_save(obj, f, pickle_module, pickle_protocol):
     pickle_module.dump(PROTOCOL_VERSION, f, protocol=pickle_protocol)
     pickle_module.dump(sys_info, f, protocol=pickle_protocol)
     pickler = pickle_module.Pickler(f, protocol=pickle_protocol)
-    #pickler.persistent_id = persistent_id
+    # pickler.persistent_id = persistent_id
     pickler.dump(obj)
 
     # serialized_storage_keys = sorted(serialized_storages.keys())
@@ -523,6 +533,25 @@ def _save(obj, zip_file, pickle_module, pickle_protocol):
             storage._write_file(buf, _should_read_directly(buf))
             buf_value = buf.getvalue()
             zip_file.write_record(name, buf_value, len(buf_value))
+
+
+def load_pthtar(f, pickle_module=pickle, **pickle_load_args):
+    _check_dill_version(pickle_module)
+
+    if sys.version_info >= (3, 0) and 'encoding' not in pickle_load_args.keys():
+        pickle_load_args['encoding'] = 'utf-8'
+
+    with _open_file_like(f, 'rb') as opened_file:
+        deserialize_obj = None
+        if '.tar' in opened_file.name:
+            with closing(tarfile.open(fileobj=opened_file, mode='r:', format=tarfile.PAX_FORMAT)) as tar, mkdtemp() as tmpdir:
+                members = tar.getmembers()
+                tar.extract(members[0], path=tmpdir)
+                deserialize_obj = load(os.path.join(tmpdir, members[0].name), 'rb')
+                return deserialize_obj
+
+        deserialize_obj = _legacy_load(opened_file, map_location=None, pickle_module=pickle_module, **pickle_load_args)
+        return deserialize_obj
 
 
 def load(f, map_location=None, pickle_module=pickle, **pickle_load_args):
@@ -639,7 +668,9 @@ def _get_layout(name):
 
 
 _get_layout.cache = {}
-#copyreg.pickle(torch.layout, lambda obj: (_get_layout, (str(obj),)))
+
+
+# copyreg.pickle(torch.layout, lambda obj: (_get_layout, (str(obj),)))
 
 
 def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
@@ -653,7 +684,7 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
         except Exception:  # saving the source is optional, so we can ignore any errors
             warnings.warn("Couldn't retrieve source code for container of "
                           "type " + container_type.__name__ + ". It won't be checked "
-                          "for correctness upon loading.")
+                                                              "for correctness upon loading.")
             return
         if original_source != current_source:
             if container_type.dump_patches:
@@ -672,13 +703,13 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
                         elif file_size != len(lines) or f.read() != lines:
                             raise IOError
                     msg = ("Saved a reverse patch to " + file_name + ". "
-                           "Run `patch -p0 < " + file_name + "` to revert your "
-                           "changes.")
+                                                                     "Run `patch -p0 < " + file_name + "` to revert your "
+                                                                                                       "changes.")
                 except IOError:
                     msg = ("Tried to save a patch, but couldn't create a "
                            "writable file " + file_name + ". Make sure it "
-                           "doesn't exist and your working directory is "
-                           "writable.")
+                                                          "doesn't exist and your working directory is "
+                                                          "writable.")
             else:
                 msg = ("you can retrieve the original source code by "
                        "accessing the object's source attribute or set "
@@ -701,9 +732,10 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
 
         with closing(tarfile.open(fileobj=f, mode='r:', format=tarfile.PAX_FORMAT)) as tar, \
                 mkdtemp() as tmpdir:
+            members = tar.getmembers()
+            tar.extract(members[0], path=tmpdir)
 
-            tar.extract('storages', path=tmpdir)
-            with open(os.path.join(tmpdir, 'storages'), 'rb', 0) as f:
+            with open(os.path.join(tmpdir, members[0].name), 'rb', 0) as f:
                 num_storages = pickle_module.load(f, **pickle_load_args)
                 for i in range(num_storages):
                     args = pickle_module.load(f, **pickle_load_args)
@@ -801,10 +833,10 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
 
     _sys_info = pickle_module.load(f, **pickle_load_args)
     unpickler = pickle_module.Unpickler(f, **pickle_load_args)
-    #unpickler.persistent_load = persistent_load
+    # unpickler.persistent_load = persistent_load
     result = unpickler.load()
 
-    #deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
+    # deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
 
     # offset = f.tell() if f_should_read_directly else None
     # for key in deserialized_storage_keys:
