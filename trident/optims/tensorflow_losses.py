@@ -98,19 +98,19 @@ class _ClassificationLoss(Layer):
 
         output_exp = exp(output)
 
-        if self.is_logsoftmax:
-            output = clip(output, max=-1e-8)
-        elif self.from_logits:
-            output = clip(output, min=1e-8, max=1 - 1e-8)
-        elif (reduce_min(output) >= 0 and reduce_max(output) <= 1 and reduce_mean(
-                abs(reduce_sum(output, self.axis) - 1)) < 1e-4):
+        # if self.is_logsoftmax:
+        #     output = clip(output,max=-1e-8)
+        # elif self.from_logits:
+        #     output = clip(output, min=1e-8, max=1 - 1e-8)
+
+        if (output.min() >= 0 and output.max() <= 1 and abs(output.sum(-1).mean() - 1) < 1e-4):
             self.from_logits = True
             output = clip(output, min=1e-8, max=1 - 1e-8)
-        elif (reduce_min(output_exp) >= 0 and reduce_max(output_exp) <= 1 and reduce_mean(
-                abs(reduce_sum(output_exp, self.axis) - 1)) < 1e-4):
+
+        elif (output_exp.min() >= 0 and output_exp.max() <= 1 and abs(output_exp.sum(-1).mean() - 1) < 1e-4):
             self.is_logsoftmax = True
             self.from_logits = True
-            output = clip(output, max=-1e-8)
+            output = clip(output,  max= - 1e-8)
         else:
             output = clip(softmax(output, self.axis), epsilon(), 1.0 - epsilon())
             self.from_logits = True
@@ -120,26 +120,33 @@ class _ClassificationLoss(Layer):
         if self.loss_weights is not None and len(self.loss_weights) != self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
         if self.loss_weights is None:
-            self.loss_weights = ones(self.num_classes)
+            self.loss_weights = ones(self.num_classes,requires_grad=False)
         else:
-            self.loss_weights = to_tensor(self.loss_weights)
+            self.loss_weights = to_tensor(self.loss_weights,requires_grad=False)
 
         # ignore_index
+
         if isinstance(self.ignore_index, int) and 0 <= self.ignore_index < int_shape(output)[self.axis]:
-            filter = np.ones(int_shape(self.loss_weights))
-            filter[self.ignore_index] = 0
-            self.loss_weights = self.loss_weights * to_tensor(filter)
+            self.loss_weights[self.ignore_index] = 0
         elif isinstance(self.ignore_index, (list, tuple)):
+
             for idx in self.ignore_index:
                 if isinstance(idx, int) and 0 <= idx < int_shape(output)[self.axis]:
                     self.loss_weights[idx] = 0
         if self.label_smooth:
             self.need_target_onehot = True
+
+        if target.dtype != str2dtype('int') and (target.min() >= 0 and target.max() <= 1 and abs(output_exp.sum(-1).mean() - 1) < 1e-4):
+            target = clip(target, min=1e-8, max=1 - 1e-8)
+            self.is_target_onehot = True
+
         # need target onehot but currently not
-        if self.need_target_onehot == True and reduce_sum(cast((target > 1), 'float')) > 0:
-            target = make_onehot(target, classes=self.num_classes, axis=self.axis)
+        if self.need_target_onehot == True and cast((target > 1),'float32').sum() > 0:
+            target = make_onehot(target, num_classes=self.num_classes, axis=self.axis)
             if self.label_smooth:
-                target = target * to_tensor(np.random.uniform(0.9, 1, int_shape(target)))
+                target = target * to_tensor(np.random.uniform(0.9, 1,target.shape))
+                self.need_target_onehot = True
+                self.is_target_onehot = True
 
         # setting cutoff
         if self.cutoff is not None:
@@ -219,7 +226,7 @@ class CrossEntropyLoss(_ClassificationLoss):
 
     """
 
-    def __init__(self, axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False,
+    def __init__(self, axis=-1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False,
                  reduction='mean', name='CrossEntropyLoss'):
         super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
         self._built = True
@@ -235,12 +242,13 @@ class CrossEntropyLoss(_ClassificationLoss):
         Returns:
 
         """
-        reshape_shape = [1] * ndim(output)
-        reshape_shape[self.axis] = self.num_classes
         if self.is_logsoftmax == False:
-            loss = -reduce_sum(target * log(output) * reshape(self.loss_weights, reshape_shape), axis=self.axis)
+            if not self.from_logits:
+                output=softmax(output,self.axis)
+            loss =tf.nn.weighted_cross_entropy_with_logits(target,output,self.loss_weights)
         else:
-            loss = -reduce_sum(target * output * reshape(self.loss_weights, reshape_shape), axis=self.axis)
+
+            loss= -reduce_sum(target * output * self.loss_weights.expand_dims(0), axis=self.axis, keepdims=True)
         return loss
 
 
@@ -271,7 +279,7 @@ class NLLLoss(_ClassificationLoss):
 
     """
 
-    def __init__(self, axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False,
+    def __init__(self, axis=-1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False,
                  reduction='mean', name='CrossEntropyLoss'):
         super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
         self._built = True
@@ -320,7 +328,7 @@ class F1ScoreLoss(_ClassificationLoss):
 
     """
 
-    def __init__(self,num_classes=None, beta=1, axis=1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,
+    def __init__(self,num_classes=None, beta=1, axis=-1, loss_weights=None, from_logits=False, ignore_index=-100, cutoff=None,
                  label_smooth=False, reduction='mean', name='CrossEntropyLoss'):
         super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
         self.beta = beta
@@ -358,7 +366,7 @@ class FocalLoss(_ClassificationLoss):
         https://github.com/open-mmlab/mmdetection/blob/master/mmdet/core/loss/losses.py
     """
 
-    def __init__(self, alpha=0.5, gamma=2, normalized=False, threshold=None, axis=1, loss_weights=None,
+    def __init__(self, alpha=0.5, gamma=2, normalized=False, threshold=None, axis=-1, loss_weights=None,
                  from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean',
                  name='FocalLoss'):
         super().__init__(axis, loss_weights, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
