@@ -1,26 +1,23 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import random
-import math
-import os
-import sys
+
 import builtins
+import math
+import random
 from collections import Sized, Iterable
-from functools import partial
-from typing import Tuple, List, Optional, Union
 from functools import wraps
+from typing import Tuple, List, Optional
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 
-__all__ = ['is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor', 'ndim', 'cast','str2dtype', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor', 'ndim','numel', 'cast','str2dtype', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -31,8 +28,8 @@ __all__ = ['is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor', 'ndim', 'cast
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu',
            'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
-           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'gram_matrix', 'set_seed', 'shuffle',
-           'random_choice', 'random_normal', 'random_normal_like', 'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
+           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split', 'gram_matrix', 'set_seed', 'shuffle',
+           'random_choice', 'random_normal', 'random_normal_like','multinomial' ,'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
 
 
 def numpy_compatible(func):
@@ -279,6 +276,18 @@ def ndim(x: torch.Tensor):
 
     """
     return x.ndim
+
+def numel(x: torch.Tensor):
+    """Number of elements of a tensor
+
+    Args:
+        x (torch.Tensor): input tensor.
+
+    Returns:
+        (int) Number of elements
+
+    """
+    return x.numel()
 
 
 @numpy_compatible
@@ -676,7 +685,7 @@ def maximum(x: torch.Tensor, other: (torch.Tensor, int, float)) -> torch.Tensor:
     if isinstance(other, torch.Tensor):
         return torch.max(x, other)
     elif isinstance(other, (int, float)):
-        return x.clamp(min=other)
+        return torch.clamp(x,min=other)
 
 
 @numpy_compatible
@@ -684,7 +693,7 @@ def minimum(x: torch.Tensor, other: (torch.Tensor, int, float)) -> torch.Tensor:
     if isinstance(other, torch.Tensor):
         return torch.min(x, other)
     elif isinstance(other, (int, float)):
-        return x.clamp(max=other)
+        return torch.clamp(x,max=other)
 
 
 ############################
@@ -843,7 +852,7 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
      equivalent:
 
      >>> d = a @ b @ [[10], [11]]
-     >>> d = matmul(tf.matmul(a, b), [[10], [11]])
+     >>> d = matmul(matmul(a, b), [[10], [11]])
 
      Args:
        a: `Tensor` and rank > 1.
@@ -1001,7 +1010,7 @@ def sqrt(x: torch.Tensor):
     Note: This operation does not support integer types.
 
     >>> x = to_tensor([[4.0], [16.0]])
-    >>> tf.sqrt(x)
+    >>> sqrt(x)
     <tf.Tensor: shape=(2, 1), dtype=float32, numpy=
       array([[2.],
              [4.]], dtype=float32)>
@@ -1010,7 +1019,7 @@ def sqrt(x: torch.Tensor):
     <tf.Tensor: shape=(2, 1), dtype=float32, numpy=
       array([[nan],
              [ 4.]], dtype=float32)>
-    >>> z = to_tensor([[-1.0], [16.0]], dtype=tf.complex128)
+    >>> z = to_tensor([[-1.0], [16.0]], dtype=complex128)
     >>> sqrt(z)
     <tf.Tensor: shape=(2, 1), dtype=complex128, numpy=
       array([[0.0+1.j],
@@ -1484,11 +1493,13 @@ def element_cosine_distance(v1, v2, axis=-1):
 
     """
     reduce_dim = -1
-    # x_normalized=reduce_sum(l2_normalize(v1),axis=reduce_dim, keepdims=False)
-    # y_normalized =reduce_sum(l2_normalize(v2),axis=reduce_dim, keepdims=False)
-    # cos= matmul(x_normalized, y_normalized,False,True)
+    x_normalized=l2_normalize(v1,axis=-1, keepdims=True)
+    y_normalized =l2_normalize(v2,axis=-1, keepdims=True)
 
-    cos = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
+    cos=matmul(x_normalized,y_normalized,False,True)
+
+
+    cos1 = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
             (v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt() * (v2 * v2).sum(dim=reduce_dim,
                                                                                  keepdims=False).sqrt())
     return cos
@@ -1551,12 +1562,13 @@ def reduce_mean(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     if axis is None:
         return torch.mean(x,dim=axis,keepdim=keepdims)
     elif isinstance(axis, int):
-        return torch.mean(x,dim=axis,keepdim=keepdims)
+        return torch.mean(x,dim=[axis],keepdim=keepdims)
     elif isinstance(axis, list):
+        axis = [a if a >= 0 else x.ndim + a for a in axis]
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            x = torch.mean(x,dim=axis,keepdim=keepdims)
+            x = torch.mean(x,dim=a,keepdim=keepdims)
         return x
 
 @numpy_compatible
@@ -1595,10 +1607,11 @@ def reduce_sum(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
     elif isinstance(axis, int):
         return torch.sum(x,dim=axis,keepdim=keepdims)
     elif isinstance(axis, list):
+        axis = [a if a >= 0 else x.ndim + a for a in axis]
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            x =torch.sum(x,dim=axis,keepdim=keepdims)
+            x =torch.sum(x,dim=a,keepdim=keepdims)
         return x
 
 @numpy_compatible
@@ -1653,10 +1666,11 @@ def reduce_max(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
         arr, idx = torch.max(x,dim=axis,keepdim=keepdims)
         return arr
     elif isinstance(axis, list):
+        axis = [a if a >= 0 else x.ndim + a for a in axis]
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr, idx = torch.max(x,dim=axis,keepdim=keepdims)
+            arr, idx = torch.max(x,dim=a,keepdim=keepdims)
             x = arr
         return x
 
@@ -1713,10 +1727,11 @@ def reduce_min(x: torch.Tensor, axis=None, keepdims=False, **kwargs):
         arr, idx = torch.min(x,dim=axis,keepdim=keepdims)
         return arr
     elif isinstance(axis, list):
+        axis = [a if a >= 0 else x.ndim + a for a in axis]
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr, idx = torch.min(x,dim=axis,keepdim=keepdims)
+            arr, idx = torch.min(x,dim=a,keepdim=keepdims)
             x = arr
         return x
 
@@ -2438,7 +2453,7 @@ def moments(x: torch.Tensor, axis, keepdims=True):
     return norm_mean, norm_variance
 
 @numpy_compatible
-def l2_normalize(x: torch.Tensor,axis=None, keepdims=False, eps=epsilon()):
+def l2_normalize(x: torch.Tensor,axis=1, keepdims=True, eps=epsilon()):
     """
 
     Args:
@@ -2453,8 +2468,9 @@ def l2_normalize(x: torch.Tensor,axis=None, keepdims=False, eps=epsilon()):
 
 
     """
+    if ndim(x)==1:
+        axis=0
     return x / (x.norm(dim=axis, keepdim=keepdims) + eps)
-
 
 ############################
 ## tensor shape operation
@@ -2830,8 +2846,11 @@ def make_onehot(label, num_classes, axis=-1):
     """
 
     onehot = torch.nn.functional.one_hot(label, num_classes)
-    if axis is not None and axis != -1:
-        onehot = transpose(onehot, (-1, axis)).float()
+    last_index=ndim(onehot)-1
+    if axis is not None and axis<0:
+        axis+=ndim(onehot)
+    if axis is not None and axis not in [-1,last_index] :
+        onehot=onehot.transpose(last_index, axis)
     return onehot
 
 @numpy_compatible
@@ -2940,6 +2959,65 @@ def stack(x: List[torch.Tensor], axis=1):
     """
     return torch.stack(x, dim=axis)
 
+def split(x: torch.Tensor, num_splits=2,axis=-1):
+    """Splits a tensor `value` into a list of sub tensors.
+
+      See also `tf.unstack`.
+
+      If `num_or_size_splits` is an integer,  then `value` is split along the
+      dimension `axis` into `num_or_size_splits` smaller tensors. This requires that
+      `value.shape[axis]` is divisible by `num_or_size_splits`.
+
+      If `num_or_size_splits` is a 1-D Tensor (or list), then `value` is split into
+      `len(num_or_size_splits)` elements. The shape of the `i`-th
+      element has the same size as the `value` except along dimension `axis` where
+      the size is `num_or_size_splits[i]`.
+
+      For example:
+
+      >>> x = to_tensor(np.random.uniform([5, 30]))
+      >>>
+      >>> # Split `x` into 3 tensors along dimension 1
+      >>> s0, s1, s2 = split(x, num_splits=3, axis=1)
+      >>> int_shape(s0)
+      array([ 5, 10], dtype=int32)
+      >>>
+      >>> # Split `x` into 3 tensors with sizes [4, 15, 11] along dimension 1
+      >>> split0, split1, split2 = split(x, [4, 15, 11], 1)
+      >>> int_shape(split0)
+      array([5, 4], dtype=int32)
+      >>> int_shape(split1)
+      array([ 5, 15], dtype=int32)
+      >>>int_shape(split2)
+      array([ 5, 11], dtype=int32)
+
+      Args:
+        x: The `Tensor` to split.
+        num_splits: Either an integer indicating the number of splits along
+          `axis` or a 1-D integer `Tensor` or Python list containing the sizes of
+          each output tensor along `axis`. If a scalar, then it must evenly divide
+          `value.shape[axis]`; otherwise the sum of sizes along the split axis
+          must match that of the `value`.
+        axis: An integer or scalar `int32` `Tensor`. The dimension along which to
+          split. Must be in the range `[-rank(value), rank(value))`. Defaults to 0.
+
+
+      Returns:
+        if `num_or_size_splits` is a scalar returns a list of `num_or_size_splits`
+        `Tensor` objects; if `num_or_size_splits` is a 1-D Tensor returns
+        `num_or_size_splits.get_shape[0]` `Tensor` objects resulting from splitting
+        `value`.
+
+      Raises:
+        ValueError: If `num` is unspecified and cannot be inferred.
+      """
+
+    return torch.chunk(x, dim=axis, chunks=num_splits)
+
+
+
+
+
 @numpy_compatible
 def gram_matrix(x: torch.Tensor):
     """
@@ -2981,25 +3059,25 @@ def set_seed(seed: int) -> None:
         torch.cuda.manual_seed_all(seed)
 
 
-def shuffle(t: torch.Tensor):
+def shuffle(x: torch.Tensor):
     """
 
     Args:
-        t (torch.Tensor): input tensor.
+        x (torch.Tensor): input tensor.
 
     Returns:
 
     """
-    order = np.random.shuffle(np.array(range(t.size(0))))
-    t[np.array(range(t.size(0)))] = t[order]
-    return t
+    order = np.random.shuffle(np.array(range(x.size(0))))
+    x[np.array(range(x.size(0)))] = x[order]
+    return x
 
 
 def random_choice(x: torch.Tensor,n:int=1):
     """Generates a random sample from a given 1-D array
 
     Args:
-        t (torch.Tensor): input tensor (1-D  tensor).
+        x (torch.Tensor): input tensor (1-D  tensor).
         n (int): how many items
 
     Returns:
@@ -3098,6 +3176,10 @@ def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
     if dtype is not None:
         return cast(torch.normal(mean=mean, std=std, size=a.shape), dtype=dtype)
     return cast(torch.normal(mean=mean, std=std, size=a.shape), dtype=torch.float32)
+
+
+def multinomial(x:torch.Tensor,num_samples: int=1):
+    return  torch.multinomial(x,num_samples)
 
 
 ############################
