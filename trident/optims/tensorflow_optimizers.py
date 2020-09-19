@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import sys
 from functools import reduce
 import collections
 import copy
@@ -16,7 +18,7 @@ _session = get_session()
 _epsilon = _session.epsilon
 _backend = _session.backend
 
-__all__ = ['Adam', 'Adam1', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger', 'get_optimizer']
+__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger', 'get_optimizer']
 
 from collections import defaultdict
 
@@ -40,14 +42,103 @@ def gc_grads(grads, gradient_centralization=None):
         pass
     elif gradient_centralization == 'all':
         if len(int_shape(grads)) > 1:
-            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
+            grads+=(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
     elif gradient_centralization == 'gcc':
         if len(int_shape(grads)) > 3:
-            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
+            grads+=(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
     elif gradient_centralization == 'gc':
         if len(int_shape(grads)) > 1:
-            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
+            grads+=(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
     return grads
+
+
+
+class OptimizerWrapper(object):
+    """Wrapper class that provides proxy access to an instance of some
+       internal instance."""
+
+    __wraps__  =tf.keras.optimizers.Optimizer
+    __ignore__ = "class mro new init setattr getattr getattribute"
+
+    def __init__(self, tf_optimizer):
+        if self.__wraps__ is None:
+            raise TypeError("base class Wrapper may not be instantiated")
+        elif isinstance(tf_optimizer, self.__wraps__):
+            self._tf_optimizer = tf_optimizer
+        else:
+            raise ValueError("wrapped object must be of %s" % self.__wraps__)
+
+    # provide proxy access to regular attributes of wrapped object
+    def __getattr__(self, name):
+        return getattr(self._tf_optimizer, name)
+
+
+    def step(self, grads_and_vars=None, **kwargs):
+        r"""Performs a single optimization step (parameter update).
+
+        Arguments:
+            grads_and_vars (callable): A closure that reevaluates the model and
+                returns the loss. Optional for most optimizers.
+
+        """
+        self._tf_optimizer.apply_gradients(grads_and_vars)
+
+        # create proxies for wrapped object's double-underscore attributes
+
+
+    def adjust_learning_rate(self, new_lr, verbose=True):
+        """
+
+        Args:
+            new_lr (float):  new learning rate value
+            verbose (bool): if True, will print the learning rate change information.
+
+        """
+
+        old_lr = self._tf_optimizer._get_hyper('learning_rate').value().numpy()
+        if old_lr != new_lr:
+            self._tf_optimizer._set_hyper('learning_rate',new_lr)
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def lr(self):
+        """str: The getter method of the 'learning rate' property."""
+        return self._tf_optimizer._get_hyper('learning_rate').value().numpy()
+
+    @lr.setter
+    def lr(self, value: float):
+        if self.lr != value:
+            old_lr = self._tf_optimizer ._get_hyper('learning_rate').value().numpy()
+            new_lr = value
+            self._tf_optimizer._set_hyper('learning_rate',new_lr)
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+
+    @property
+    def base_lr(self):
+        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
+        excluding warmup )."""
+        return self._base_lr
+
+    @base_lr.setter
+    def base_lr(self, value):
+        self._base_lr = value
+
+    class __metaclass__(type):
+        def __init__(cls, name, bases, dct):
+
+            def make_proxy(name):
+                def proxy(self, *args):
+                    return getattr(self._tf_optimizer, name)
+                return proxy
+
+            type.__init__(cls, name, bases, dct)
+            if cls.__wraps__:
+                ignore = set("__%s__" % n for n in cls.__ignore__.split())
+                for name in dir(cls.__wraps__):
+                    if name.startswith("__"):
+                        if name not in ignore and name not in dct:
+                            setattr(cls, name, property(make_proxy(name)))
 
 
 class Optimizer(object):
@@ -115,8 +206,6 @@ class Optimizer(object):
         filtered_var = []
         vars_with_empty_grads = []
         for grad, var in grads_and_vars:
-            grad_np = to_numpy(grad)
-            var_np = to_numpy(var)
             if grad is None or any_abnormal_number(grad) or var._trainable == False:
                 vars_with_empty_grads.append(var)
             else:
@@ -125,8 +214,7 @@ class Optimizer(object):
                     filtered_var.append(var)
                 elif gradient_centralization == 'gc':
                     if len(int_shape(grad)) > 1:
-
-                        filtered_grad.append(new_grad)
+                        filtered_grad.append(grad)
                         filtered_var.append(var)
                     else:
                         filtered_grad.append(grad)
@@ -143,7 +231,7 @@ class Optimizer(object):
                     filtered_grad.append(grad)
                     filtered_var.append(var)
 
-        filtered =zip(filtered_grad, filtered_var)
+        filtered = zip(filtered_grad, filtered_var)
         if not filtered:
             raise ValueError("No gradients provided for any variable: %s." % ([v.name for _, v in grads_and_vars],))
 
@@ -239,6 +327,7 @@ class Optimizer(object):
             for g, p in self.grads_and_vars:
                 g = zeros_like(g)
 
+
     def step(self, grads_and_vars=None, **kwargs):
         r"""Performs a single optimization step (parameter update).
 
@@ -332,107 +421,7 @@ class Optimizer(object):
         self._base_lr = value
 
 
-class Adam1(Optimizer):
-    """Implements Adam algorithm.
 
-    It has been proposed in `Adam: A Method for Stochastic Optimization`_.
-
-    Args:
-        params (iterable): iterable of parameters to optimize or dicts defining
-            parameter groups
-        lr (float, optional): learning rate (default: 1e-3)
-        betas (Tuple[float, float], optional): coefficients used for computing
-            running averages of gradient and its square (default: (0.9, 0.999))
-        eps (float, optional): term added to the denominator to improve
-            numerical stability (default: 1e-8)
-        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
-        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
-            algorithm from the paper `On the Convergence of Adam and Beyond`_
-            (default: False)
-
-    References
-        .. _Adam\: A Method for Stochastic Optimization:
-            https://arxiv.org/abs/1412.6980
-        .. _On the Convergence of Adam and Beyond:
-            https://openreview.net/forum?id=ryQu7f-RZ
-
-    """
-
-    def __init__(self, params=None, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
-                 gradient_centralization=None):
-
-        if not 0.0 <= lr:
-            raise ValueError("Invalid learning rate: {}".format(lr))
-        if not 0.0 <= eps:
-            raise ValueError("Invalid epsilon value: {}".format(eps))
-        if not 0.0 <= betas[0] < 1.0:
-            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
-        if not 0.0 <= betas[1] < 1.0:
-            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
-        if not 0.0 <= weight_decay:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
-        self.grad_tape = None
-        self.amsgrad = amsgrad
-        self.eps = eps
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
-
-        self._base_lr = lr
-        defaults = dict(lr=lr, beta_1=betas[0], beta_2=betas[1], eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
-        self.otz = adam.Adam(learning_rate=lr, beta_1=betas[0], beta_2=betas[1])
-        super(Adam1, self).__init__(params, defaults)
-
-    def step(self, grads_and_vars=None):
-        """Performs a single optimization step.
-
-        Args:
-            grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
-
-        """
-        self.grads_and_vars = self._filter_grads(grads_and_vars, self.gradient_centralization)
-        # grads_and_vars=zip(new_grads, new_vars)
-
-        self.otz.apply_gradients(self.grads_and_vars)
-
-        return True
-
-    def adjust_learning_rate(self, new_lr, verbose=True):
-        """
-
-        Args:
-            new_lr (float):  new learning rate value
-            verbose (bool): if True, will print the learning rate change information.
-
-        """
-
-        old_lr = tf.keras.backend.get_value(self.otz._get_hyper('learning_rate'))
-        if old_lr != new_lr:
-            self.otz._set_hyper('learning_rate', new_lr)
-
-            if verbose:
-                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
-
-    @property
-    def lr(self):
-        """str: The getter method of the 'learning rate' property."""
-        return tf.keras.backend.get_value(self.otz._get_hyper('learning_rate'))
-
-    @lr.setter
-    def lr(self, value: float):
-        if self.lr != value:
-            old_lr = self.lr
-            new_lr = value
-            self.otz._set_hyper('learning_rate', new_lr)
-            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
-
-    @property
-    def base_lr(self):
-        """str: The getter method of the 'base learning rate' property (mean the starting learning rate ,
-        excluding warmup )."""
-        return self._base_lr
-
-    @base_lr.setter
-    def base_lr(self, value):
-        self._base_lr = value
 
 
 class Adam(Optimizer):
@@ -491,12 +480,11 @@ class Adam(Optimizer):
             grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
 
         """
-        self.grads_and_vars = self._filter_grads(grads_and_vars, self.gradient_centralization)
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
@@ -611,7 +599,7 @@ class RMSprop(Optimizer):
             group.setdefault('momentum', 0)
             group.setdefault('centered', False)
 
-    def step(self, grads_and_vars=None):
+    def step(self, grads_and_vars=None, **kwargs):
         """Performs a single optimization step.
 
         Arguments:
@@ -622,8 +610,8 @@ class RMSprop(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
@@ -742,7 +730,7 @@ class SGD(Optimizer):
         for group in self.param_groups:
             group.setdefault('nesterov', False)
 
-    def step(self, grads_and_vars=None):
+    def step(self, grads_and_vars=None, **kwargs):
         """Performs a single optimization step.
 
         Args:
@@ -755,8 +743,8 @@ class SGD(Optimizer):
         group = self.param_groups[0]
         dampening = group['dampening']
         nesterov = group['nesterov']
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
@@ -842,7 +830,7 @@ class SGD(Optimizer):
 #     def __setstate__(self, state):
 #         super(Adagrad, self).__setstate__(state)
 #
-#     def step(self, grads_and_vars=None):
+#     def step(self, grads_and_vars=None,**kwargs):
 #         """Performs a single optimization step.
 #
 #         Args:
@@ -855,8 +843,8 @@ class SGD(Optimizer):
 #         group = self.param_groups[0]
 #         dampening = group['dampening']
 #         nesterov = group['nesterov']
-#         for grad, p in self.grads_and_vars:
-#             if grad is None or not p.trainable:
+#         for grad, p in grads_and_vars:
+#             if grad is None or any_abnormal_number(p) or not p.trainable:
 #                 continue
 #
 #             if is_sparse(grad):
@@ -931,7 +919,7 @@ class SGD(Optimizer):
 #     def __setstate__(self, state):
 #         super(Adadelta, self).__setstate__(state)
 #
-#     def step(self, grads_and_vars=None):
+#     def step(self, grads_and_vars=None,**kwargs):
 #         """Performs a single optimization step.
 #
 #         Args:
@@ -944,8 +932,8 @@ class SGD(Optimizer):
 #         group = self.param_groups[0]
 #         dampening = group['dampening']
 #         nesterov = group['nesterov']
-#         for grad, p in self.grads_and_vars:
-#             if grad is None or not p.trainable:
+#         for grad, p in grads_and_vars:
+#             if grad is None or any_abnormal_number(p) or not p.trainable:
 #                 continue
 #
 #             if is_sparse(grad):
@@ -1028,7 +1016,7 @@ class SGD(Optimizer):
 #     def __setstate__(self, state):
 #         super(RAdam, self).__setstate__(state)
 #
-#     def step(self, grads_and_vars=None):
+#     def step(self, grads_and_vars=None,**kwargs):
 #         """Performs a single optimization step.
 #
 #         Args:
@@ -1060,8 +1048,8 @@ class SGD(Optimizer):
 #         flat_grad = []
 #
 #
-#         for grad, p in self.grads_and_vars:
-#             if grad is None or not p.trainable:
+#         for grad, p in grads_and_vars:
+#             if grad is None or any_abnormal_number(p) or not p.trainable:
 #                 continue
 #             flat_grad.append(reshape(grad,(-1)))
 #
@@ -1311,8 +1299,8 @@ class RAdam(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
@@ -1343,6 +1331,7 @@ class RAdam(Optimizer):
             state['m'] = m_t
             state['v'] = v_t
 
+            grad = gc_grads(grad, self.gradient_centralization)
             state['step'] += 1
 
             buffered = self.buffer[int(state['step'] % 10)]
@@ -1366,14 +1355,15 @@ class RAdam(Optimizer):
                     step_size = 1.0
 
                 buffered[2] = step_size
-                p_data = p.value()
-                if group['weight_decay'] != 0:
-                    p_data = p_data - group['weight_decay'] * group['lr'] * p_data
 
-                p_t = where(N_sma > self.N_sma_threshhold,
-                            p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps']),
-                            p_data - group['lr'] * step_size * m_t)
-                p.assign(p_t)
+            p_data = p.value()
+            if group['weight_decay'] != 0:
+                p_data = p_data - group['weight_decay'] * group['lr'] * p_data
+
+            p_t = where(N_sma > self.N_sma_threshhold,
+                        p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps']),
+                        p_data - group['lr'] * step_size * m_t)
+            p.assign(p_t)
 
         return True
 
@@ -1408,8 +1398,8 @@ class PlainRAdam(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
@@ -1512,8 +1502,8 @@ class AdamW(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
 
         group = self.param_groups[0]
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
@@ -1553,12 +1543,12 @@ class AdamW(Optimizer):
             else:
                 scheduled_lr = group['lr']
 
-                step_size = scheduled_lr * math.sqrt(bias_correction2) / bias_correction1
+            step_size = scheduled_lr * math.sqrt(bias_correction2) / bias_correction1
 
-                if group['weight_decay'] != 0:
-                    p_data = p_data + group['weight_decay'] * scheduled_lr * p_data
-
-                p.assign(p_data - step_size * m_t / denom)
+            if group['weight_decay'] != 0:
+                p_data = p_data + group['weight_decay'] * scheduled_lr * p_data
+            p_data=p_data - step_size * m_t / denom
+            p.assign(p_data)
 
         return True
 
@@ -1590,14 +1580,14 @@ class Lookahead(Optimizer):
         self.fast_state = self.optimizer.state
         for group in self.param_groups:
             group["counter"] = 0
-
-    @property
-    def grad_tape(self):
-        return self.optimizer.grad_tape
-
-    @grad_tape.setter
-    def grad_tape(self, value):
-        self.optimizer.grad_tape = value
+    #
+    # @property
+    # def grad_tape(self):
+    #     return self.optimizer.grad_tape
+    #
+    # @grad_tape.setter
+    # def grad_tape(self, value):
+    #     self.optimizer.grad_tape = value
 
     @property
     def grads_and_vars(self):
@@ -1610,13 +1600,13 @@ class Lookahead(Optimizer):
     def update(self, group):
         for fast in group["params"]:
             param_state = self.state[fast.ref()]
-            fast_data = to_tensor(to_numpy(fast))
+            fast_data = fast.value()
             if "slow_param" not in param_state:
                 param_state["slow_param"] = zeros_like(fast)
                 param_state["slow_param"] = fast_data
             slow = param_state["slow_param"]
             slow += (fast_data - slow) * self.alpha
-            fast.assign(tf.Variable(slow))
+            fast.assign(slow)
             param_state["slow_param"] = slow
 
     def update_lookahead(self):
@@ -1630,8 +1620,8 @@ class Lookahead(Optimizer):
             grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
 
         """
-        self.grads_and_vars = self._filter_grads(grads_and_vars, self.gradient_centralization)
-        _ = self.optimizer.step(self.grads_and_vars, )
+
+        _ = self.optimizer.step(grads_and_vars, )
         for group in self.param_groups:
             if group["counter"] == 0:
                 self.update(group)
@@ -1658,6 +1648,34 @@ class Lookahead(Optimizer):
         param_group["counter"] = 0
         self.optimizer.add_param_group(param_group)
 
+#
+# class Ranger(Lookahead):
+#     """Variant of the Adam optimizer whose adaptive learning rate is rectified
+#
+#     so as to have a consistent variance.
+#     It implements the Rectified Adam (a.k.a. RAdam) proposed by
+#     Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
+#     And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
+#
+#     Examples:
+#         >>> opt =RAdam(lr=1e-3)
+#
+#
+#     Note: `amsgrad` is not described in the original paper. Use it with
+#           caution.
+#
+#     RAdam is not a placement of the heuristic warmup, the settings should be
+#     kept if warmup has already been employed and tuned in the baseline method.
+#
+#     """
+#
+#     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
+#                  weight_decay=0, gradient_centralization=None):
+#
+#         optimizer=RAdam(params, lr=lr,  N_sma_threshhold=N_sma_threshhold, betas=betas, eps=eps,
+#                  weight_decay=weight_decay, gradient_centralization=gradient_centralization)
+#         super().__init__(optimizer, k=k, alpha=alpha)
+
 
 class Ranger(Optimizer):
     """Variant of the Adam optimizer whose adaptive learning rate is rectified
@@ -1679,27 +1697,51 @@ class Ranger(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
-                 weight_decay=0, gradient_centralization=None):
-        # parameter checks
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6,eps=1e-8, N_sma_threshhold=5, weight_decay=0,
+                 degenerated_to_sgd=False, gradient_centralization=None):
+        """Construct a new RAdam optimizer.
+         Args:
+             params: trainable parameters from model
+
+             lr (float): The learning rate.
+             betas:  beta1 means the exponential decay rate for the 1st moment estimates.
+                 beta_2 means he exponential decay rate for the 2nd moment estimates.
+             eps (float): A small constant for numerical stability.
+             weight_decay(float): A floating point value. Weight decay for each param.
+
+             N_sma_threshhold (float). The threshold for simple mean average.
+
+             degenerated_to_sgd(bool): If True will be degenerated as sgd.
+
+             gradient_centralization (None,string):
+                if None, do nothing.
+                if 'gcc' , means only convolution layer will apply 'Gradient Centralization'
+                if 'gc', means convolution layer  and dense layer will apply 'Gradient Centralization'
+
+         References:
+             Gradient Centralization: A New Optimization Technique for Deep Neural Networks
+             https://arxiv.org/abs/2004.01461
+
+
+         """
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
         if not 1 <= k:
             raise ValueError('Invalid lookahead steps: {k}')
-        if not lr > 0:
-            raise ValueError('Invalid Learning Rate: {lr}')
-        if not eps > 0:
-            raise ValueError('Invalid eps: {eps}')
+        if not 0.0 <= lr:
+            raise ValueError("Invalid learning rate: {}".format(lr))
+        if not 0.0 <= eps:
+            raise ValueError("Invalid epsilon value: {}".format(eps))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
 
-        # parameter comments:
-        # beta1 (momentum) of .95 seems to work better than .90...
-        # N_sma_threshold of 5 seems better in testing than 4.
-        # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
+        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+        self.degenerated_to_sgd = degenerated_to_sgd
 
-        # prep defaults and init torch.optim base
-        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,
-                        eps=eps, weight_decay=weight_decay)
-        super().__init__(params, defaults)
+        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,eps=eps, weight_decay=weight_decay)
+        super(Ranger, self).__init__(params, defaults)
 
         # adjustable threshold
         self.N_sma_threshhold = N_sma_threshhold
@@ -1716,7 +1758,7 @@ class Ranger(Optimizer):
 
         # radam buffer for state
         self.radam_buffer = [[None, None, None] for ind in range(10)]
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+
         # self.first_run_check=0
 
         # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
@@ -1727,14 +1769,15 @@ class Ranger(Optimizer):
 
         # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
 
+
     def __setstate__(self, state):
-        print("set state called")
         super(Ranger, self).__setstate__(state)
 
     def step(self, grads_and_vars=None, **kwargs):
         """Performs a single optimization step.
 
         Args:
+            **kwargs ():
             grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
 
         """
@@ -1743,13 +1786,12 @@ class Ranger(Optimizer):
 
         group = self.param_groups[0]
         for grad, p in grads_and_vars:
-            if grad is None or not p.trainable:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
 
-            p_data = p.value()
             state = self.state[p.ref()]
 
             # State initialization
@@ -1757,10 +1799,11 @@ class Ranger(Optimizer):
                 state['step'] = 0
                 state['m'] = zeros_like(p)
                 state['v'] = zeros_like(p)
-                state['slow_buffer'] = p_data
+                # look ahead weight storage now in state dict
+                state['slow_buffer'] =tf.raw_ops.DeepCopy(x=p.value())
             else:
-                state['m'] = cast(state['m'], p_data.dtype)
-                state['v'] = cast(state['v'], p_data.dtype)
+                state['m'] = cast(state['m'], p.dtype)
+                state['v'] = cast(state['v'], p.dtype)
 
             m, v = state['m'], state['v']
             beta1, beta2 = group['betas']
@@ -1775,39 +1818,55 @@ class Ranger(Optimizer):
             v_t = beta2 * v + (1 - beta2) * (grad * grad)
             state['m'] = m_t
             state['v'] = v_t
-            # self._filter_grads(grads_and_vars, self.gradient_centralization)
-            state['step'] += 1
-            buffered = self.radam_buffer[int(state['step'] % 10)]
 
+            grad = gc_grads(grad, self.gradient_centralization)
+            state['step'] += 1
+
+            buffered = self.radam_buffer[int(state['step'] % 10)]
             if state['step'] == buffered[0]:
                 N_sma, step_size = buffered[1], buffered[2]
             else:
                 buffered[0] = state['step']
                 beta2_t = beta2 ** state['step']
-                N_sma_max = 2 / (1 - beta2) - 1
-                N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                N_sma_max = 2.0 / (1.0 - beta2) - 1.0
+                N_sma = N_sma_max - 2.0 * state['step'] * beta2_t / (1.0 - beta2_t)
                 buffered[1] = N_sma
-                if N_sma > self.N_sma_threshhold:
+
+                step_size = 1.0 / (1.0 - beta1 ** state['step'])
+                if N_sma >= 5:
                     step_size = math.sqrt(
-                        (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                        (1.0 - beta2_t) * (N_sma - 4.0) / (N_sma_max - 4.0) * (N_sma - 2.0) / N_sma * N_sma_max / (
+                                N_sma_max - 2.0)) / (1.0 - beta1 ** state['step'])
                 else:
                     step_size = 1.0 / (1 - beta1 ** state['step'])
+                if self.degenerated_to_sgd:
+                    step_size = 1.0
+
                 buffered[2] = step_size
 
-                if group['weight_decay'] != 0:
-                    p_data = p_data - group['weight_decay'] * group['lr'] * p_data
+            p_data =tf.raw_ops.DeepCopy(x=p.value())
+            if group['weight_decay'] != 0:
+                p_data = p_data - group['weight_decay'] * group['lr'] * p_data
 
-                if N_sma > self.N_sma_threshhold:
-                    # p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
-                    p_data = p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps'])
-                else:
-                    # p_data_fp32.add_(-step_size * group['lr'], exp_avg)
-                    p_data = p_data - group['lr'] * step_size * m_t
+            p_t = where(N_sma > self.N_sma_threshhold,
+                        p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps']),
+                        p_data - group['lr'] * step_size * m_t)
+            p.assign(p_t)
 
-                p.assign(p_data)
+            # integrated look ahead...
+            # we do it at the param level instead of group level
+            if state['step'] % group['k'] == 0:
+                slow_p = state['slow_buffer']  # get access to slow param tensor
+                slow_p+=(self.alpha*(p_t- slow_p))  # (fast weights - slow weights) * alpha
+                state['slow_buffer']=slow_p
+                if any_abnormal_number(slow_p):
+                    sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                    slow_p = where(is_nan(slow_p), p_t, slow_p)
+                p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
 
         return True
+
+
 
 
 class LARS(Optimizer):
@@ -1895,8 +1954,8 @@ class LARS(Optimizer):
             self.epoch += 1
 
         group = self.param_groups[0]
-        for grad, p in self.grads_and_vars:
-            if grad is None or not p.trainable:
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
             weight_decay = group["weight_decay"]

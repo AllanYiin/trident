@@ -34,7 +34,7 @@ from trident.layers.tensorflow_layers import SoftMax
 from trident.optims.tensorflow_constraints import get_constraint
 from trident.optims.tensorflow_losses import get_loss, _ClassificationLoss
 from trident.optims.tensorflow_metrics import get_metric
-from trident.optims.tensorflow_optimizers import get_optimizer
+from trident.optims.tensorflow_optimizers import get_optimizer,OptimizerWrapper
 from trident.optims.tensorflow_regularizers import *
 
 # from tensorflow.python.framework.ops import EagerTensor
@@ -96,7 +96,7 @@ class Model(ModelBase):
         elif is_tensor(inputs):
             self.inputs['input'] = list(int_shape(inputs))[self.batch_index+1:]
         elif isinstance(inputs,np.ndarray):
-            inputs=to_numpy(inputs)
+            inputs=to_tensor(inputs)
             self.inputs['input'] = list(int_shape(inputs))[self.batch_index+1:]
 
         if isinstance(output, (Layer, tf.Module)):
@@ -125,6 +125,20 @@ class Model(ModelBase):
                         out = output(*inputs)
                     else:
                         out = output(inputs)
+                    self._model=output
+
+                    if is_tensor(out):
+                        self._outputs['output'] = int_shape(out)[self.batch_index + 1:]
+                        self._targets['target'] = int_shape(out)[self.batch_index + 1:]
+                    else:
+                        for i in range(len(out)):
+                            self._outputs['output_{0}'.format(i)] = int_shape(out[i])[self.batch_index + 1:]
+                            self._targets['target_{0}'.format(i)] = int_shape(out[i])[self.batch_index + 1:]
+
+                    self._model.signature = get_signature(self._model.forward, 'model')
+                    self._model.signature.inputs = copy.deepcopy(self.inputs)
+                    self._model.signature.outputs = copy.deepcopy(self._outputs)
+                    self._signature = self._model.signature
 
                 else:
                     output.input_shape = input_shape
@@ -159,7 +173,7 @@ class Model(ModelBase):
             raise ValueError('')
 
         self.training_context['current_model'] = self._model
-        save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.name))
+        save_path = os.path.join('Models', '{0}.pth.tar_'.format(self._model.default_name))
         self.save_path = sanitize_path(make_dir_if_need(save_path))
         self.training_context['save_path'] = self.save_path
 
@@ -224,8 +238,17 @@ class Model(ModelBase):
             optimizer_class = get_optimizer(optimizer)
             self.optimizer = optimizer_class(
                 self._model.parameters() if isinstance(self._model, Layer) else [self._model], **kwargs)
+        elif inspect.isclass(optimizer) and issubclass(optimizer,tf.keras.optimizers.Optimizer):
+            if 'learning_rate' not in kwargs:
+                kwargs['learning_rate']=kwargs.get('lr')
+                kwargs.pop('lr')
+            if 'betas' in kwargs:
+                kwargs['beta_1'] = kwargs.get('betas')[0]
+                kwargs['beta_2'] =kwargs.get('betas')[1]
+                kwargs.pop('betas')
 
-
+            opt=optimizer(name=None,**kwargs)
+            self.optimizer=OptimizerWrapper(opt)
         else:
             self.optimizer = optimizer(self._model.parameters() if isinstance(self._model, Layer) else [self._model],**kwargs)
         self.base_lr = kwargs.get('lr', 1e-3)
@@ -370,7 +393,7 @@ class Model(ModelBase):
         else:
             self._metrics[alias].signature = argnames
         self._metrics[alias].signature.name = alias
-        if (len(self._metrics[alias].signature.outputs) == 1 and self._metrics[alias].outputs.value_list[
+        if (len(self._metrics[alias].signature.outputs) == 1 and self._metrics[alias].signature.outputs.value_list[
             0] is None) or len(self._metrics[alias].signature.outputs) == 0:
             self._metrics[alias].signature.outputs = OrderedDict()
             self._metrics[alias].signature.outputs[alias] = None
@@ -622,12 +645,6 @@ class Model(ModelBase):
 
         except:
             PrintException()
-        if self.optimizer.grad_tape is None:
-            self.optimizer.grad_tape = tf.GradientTape()
-            self.optimizer.grad_tape.__enter__()
-
-        if len(self.optimizer.grad_tape.watched_variables()) == 0:
-            sys.stderr.write('There is no trainable parameters in GradientTape.')
 
         return train_data, test_data
 
@@ -637,19 +654,18 @@ class Model(ModelBase):
     def get_current_loss(self):
         return self.training_context['current_loss']
 
+
     def do_gradient_update(self, log_gradients=False):
-        grads = self.optimizer.grad_tape
-        vars = grads.watched_variables()
-        cal_grads = grads.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
-        if self.optimizer.grad_tape._recording:
-            self.optimizer.grad_tape._pop_tape()
-        self.optimizer.grad_tape = None
+        if isinstance(self._model, (Layer, tf.Module)):
+            # double check!!!
+            self._model.train()
+        # vars=self.training_context['vars']
+        # cal_grads=self.training_context['grads']
+        #
+        # if isinstance(self._model,Layer) and self.grad_clipping_by_norm:
+        #     cal_grads = [(tf.clip_by_norm(grad, -1.0*self.grad_clipping_threshold, 1.0*self.grad_clipping_threshold)) for grad in cal_grads]
+        #
 
-        if isinstance(self._model,Layer) and self.grad_clipping_by_norm:
-            cal_grads = [(tf.clip_by_norm(grad, -1.0*self.grad_clipping_threshold, 1.0*self.grad_clipping_threshold)) for grad in cal_grads]
-
-        grads_and_vars = zip(cal_grads, vars)
-        grads_and_vars = self.optimizer._filter_grads(grads_and_vars, None)
 
         if self.training_context['stop_update'] < 1:
             for callback in self.training_context['callbacks']:
@@ -657,11 +673,11 @@ class Model(ModelBase):
 
 
             if self.training_context['stop_update'] == 0:
-                self.optimizer.step(grads_and_vars, )
+                self.optimizer.step(self.optimizer.grads_and_vars )
 
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
-                    self.optimizer.step(grads_and_vars, )
+                    self.optimizer.step(self.optimizer.grads_and_vars )
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
@@ -678,8 +694,7 @@ class Model(ModelBase):
                 self.training_context['current_lr'] = self.optimizer.lr
 
     def do_on_excution_exception(self):
-        if self.optimizer.grad_tape._recording:
-            self.optimizer.grad_tape._pop_tape()
+        pass
 
     def log_gradient(self, grads=None):
         grads=tuple(grads)
@@ -751,6 +766,9 @@ class Model(ModelBase):
         else:
             raise ValueError(
                 'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_end(self.training_context)
+
 
     def save_onnx(self, file_path):
         pass
@@ -804,6 +822,298 @@ class Model(ModelBase):
             return result
         else:
             raise ValueError('In tensorflow ,grads should be list in eager mode')
+
+    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
+                    is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
+                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False):
+        try:
+            self.training_context['current_epoch'] = current_epoch
+            self.training_context['current_batch'] = current_batch
+            self.training_context['total_epoch'] = total_epoch
+            self.training_context['total_batch'] = total_batch
+            self.training_context['is_collect_data'] = is_collect_data
+            self.training_context['log_gradients'] = log_gradients
+            self.training_context['log_weights'] = log_weights
+            self.training_context['current_model'] = self._model
+            self.training_context['current_lr'] = self.optimizer.lr
+            self.training_context['train_data'] = train_data
+            self.training_context['test_data'] = test_data
+
+            self.sample_collect_history.append(1 if is_collect_data else 0)
+
+            if self.training_context['current_batch'] == 0:
+                if self.training_context['current_epoch'] == 0:
+                    self.do_on_training_start()
+                    # epoch is not the logical inteval for us to control the flow
+                    self.training_context['tmp_losses'] = []
+                    self.training_context['tmp_metrics'] = OrderedDict()
+                    self.training_context['losses'] = OrderedDict()
+                    self.training_context['losses']['total_losses'] = []
+                    self.training_context['metrics'] = OrderedDict()
+                    self.training_context['grads_state'] = OrderedDict()
+                    self.training_context['grads_state']['first_layer'] = []
+                    self.training_context['grads_state']['last_layer'] = []
+
+                self.training_context['print_batch_progress_frequency'] = 1
+                self.training_context['print_epoch_progress_frequency'] = 1
+
+                self.do_on_epoch_start()
+                for callback in self.callbacks:
+                    callback.on_epoch_start(self.training_context)
+
+            self.do_on_batch_start()
+            for callback in self.callbacks:
+                callback.on_batch_start(self.training_context)
+
+            train_data, test_data = self.do_on_data_received(train_data, test_data)
+
+            for callback in self.callbacks:
+                callback.on_data_received(self.training_context)
+
+            if accumulate_grads == False:
+                self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
+                self.do_preparation_for_loss()
+                self.training_context['optimizer'] = self.optimizer
+
+            current_loss=to_tensor(0.0)
+
+            with tf.GradientTape() as grad_tape:
+                #grad_tape.watch(self._model.trainable_variables)
+                try:
+                    output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
+                    if isinstance(output, (list, tuple)):
+                        for i in range(len(output)):
+                            train_data[self.outputs.key_list[i]] = output[i]
+
+                    elif is_tensor(output):
+                        train_data[self.outputs.key_list[0]] = output
+                        if self.use_output_as_loss == True:
+                            if 'self.outputs.key_list[0]' not in self.training_context['losses']:
+                                self.training_context['losses'][self.outputs.key_list[0]] = []
+                            this_loss = output.sum()
+                            self.training_context['losses'][self.outputs.key_list[0]].append(this_loss)
+                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                    else:
+                        train_data[self.outputs.key_list[0]] = output
+                        if self.use_output_as_loss == True:
+                            if 'self.outputs.key_list[0]' not in self.training_context['losses']:
+                                self.training_context['losses'][self.outputs.key_list[0]] = []
+                            this_loss = output.sum()
+                            self.training_context['losses'][self.outputs.key_list[0]].append(this_loss)
+                            current_loss = current_loss + this_loss
+                except Exception as e:
+                    print(e)
+                    PrintException()
+                    if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+                        for para in self._model.parameters():
+                            if any_abnormal_number(para):
+                                para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+
+                # write output in to data
+
+                # confirm singleton
+                # output=unpack_singleton(output)
+
+                # losss
+                for k, v in self._losses.items():
+                    if not hasattr(v, 'start_epoch') or (hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
+                        if k not in self.training_context['losses']:
+                            self.training_context['losses'][k] = []
+                        try:
+                            loss_weight = 1.0
+                            if k in self.loss_weights:
+                                loss_weight = self.loss_weights[k]
+                            loss_weight = to_tensor(loss_weight, 'float32')
+                            this_loss = loss_weight * try_map_args_and_call(v, train_data,
+                                                                            self.training_context['data_feed'])  # v.forward(output, target) if hasattr(v, 'forward') else v(
+                            if self.training_context['stop_update'] >= 1:
+                                pass  # this_loss= to_tensor(0.0,requires_grad=True)
+                            # output, target)
+
+                            if isinstance(this_loss, tuple):
+                                overall_loss = to_tensor(0.0)
+                                for i in range(len(this_loss)):
+                                    if any_abnormal_number(this_loss[i]):
+                                        sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
+                                    else:
+                                        # a leaf Variable that requires grad connotused in an in-place operation.
+                                        overall_loss = overall_loss + this_loss[i]
+                                current_loss = current_loss+ overall_loss
+                                if is_collect_data:
+                                    self.training_context['losses'][k].append(float(to_numpy(overall_loss)))
+                            else:
+                                if any_abnormal_number(this_loss):
+                                    sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
+                                else:
+                                    # a leaf Variable that requires grad connotused in an in-place operation.
+                                    current_loss=current_loss+ this_loss
+
+                                if is_collect_data:
+                                    self.training_context['losses'][k].append(float(to_numpy(this_loss)))
+                        except Exception as e:
+                            print(e)
+                            PrintException()
+
+                self.do_post_loss_calculation()
+                for callback in self.callbacks:
+                    callback.on_loss_calculation_end(self.training_context)
+
+                if accumulate_grads == False:
+                    # regularizer
+                    for k, v in self._regs.items():
+                        if k + '_Loss' not in self.training_context['losses']:
+                            self.training_context['losses'][k + '_Loss'] = []
+                        this_loss = to_tensor(0.0)
+                        if 'model' in v.signature.inputs:
+                            this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
+                        elif 'output' in v.signature.inputs:
+
+                            this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
+                        if not any_abnormal_number(this_loss):
+                            # a leaf Variable that requires grad connotused in an in-place operation.
+                            current_loss = current_loss + this_loss  # self.training_context[
+                        # 'current_loss'] + this_loss
+                        if is_collect_data:
+                            self.training_context['losses'][k + '_Loss'].append(float(to_numpy(this_loss)))
+
+            vars = grad_tape.watched_variables()
+            grads = grad_tape.gradient(current_loss, vars,unconnected_gradients=tf.UnconnectedGradients.ZERO)
+            grads=tuple([where(is_nan(grad),zeros_like(grad),grad)for grad in grads ])
+            self.optimizer.grads_and_vars=zip(grads,vars)
+            # self.training_context['grads'] = grads
+            # self.training_context['vars'] = vars
+            self.training_context['current_loss'] = current_loss
+
+            self.do_pre_optimization_step()
+            #self.optimizer.step(zip(grads,vars))
+            self.do_gradient_update(log_gradients and is_collect_data)
+            self.training_context['current_lr'] = self.optimizer.lr
+
+            # ON_POSTBACKWARD_CALCULATION
+            self.do_post_gradient_update()
+
+            # if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+            #     for para in self._model.parameters():
+            #         if any_abnormal_number(para):
+            #             para.assign(where(is_nan(para), random_normal_like(para, mean=0, std=0.02), para.value()))
+
+            # model comfirm
+            for k, v in self._constraints.items():
+                if self.training_context['stop_update'] == 0:
+                    v(self._model)
+
+            if log_weights and is_collect_data:
+                if isinstance(self._model, Layer):
+                    self.log_weight(weghts=self._model.weights)
+                elif is_tensor(self._model):
+                    self.log_weight(weghts=self._model)
+
+            if test_data is not None and len(test_data) > 0 and self.training_context['stop_update'] < 1:
+                tmp_output = try_map_args_and_call(self._model, test_data, self.training_context['data_feed'])
+                if isinstance(tmp_output, (list, tuple)):
+                    for i in range(len(tmp_output)):
+                        test_data[self.outputs.key_list[i]] = tmp_output[i]
+                elif 'tensor' in tmp_output.__class__.__name__.lower():
+                    test_data[self.outputs.key_list[0]] = tmp_output
+                else:
+                    test_data[self.outputs.key_list[0]] = tmp_output
+
+            # ON_EVALUATION_START
+            self.do_on_metrics_evaluation_start()
+            for callback in self.training_context['callbacks']:
+                callback.on_metrics_evaluation_start(self.training_context)
+
+            for k, v in self._metrics.items():
+                collect_history = getattr(v, 'collect_history')
+                if k not in self.training_context['metrics']:
+                    self.training_context['tmp_metrics'][k] = []
+                    self.training_context['metrics'][k] = []
+                    if not collect_history == False:
+                        self.training_context['metrics'][k] = []
+
+                this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
+                self.training_context['tmp_metrics'][k].append(to_numpy(this_metric).mean())
+
+                if test_data is not None and len(test_data) > 0 and collect_history != False:
+                    if k not in self.training_context['out_sample_metrics']:
+                        self.training_context['out_sample_metrics'][k] = []
+
+                    this_out_metric = try_map_args_and_call(v, test_data, self.training_context['data_feed'])
+                    self.training_context['out_sample_metrics'][k].append(to_numpy(this_out_metric).mean())
+
+                # ON_EVALUATION_END
+            self.do_on_metrics_evaluation_end()
+            for callback in self.training_context['callbacks']:
+                callback.on_metrics_evaluation_end(self.training_context)
+
+            # callback's metric can keep in epoch_metric_history
+            for k, v in self.training_context['tmp_metrics'].items():
+                if not getattr(self._metrics[k], 'collect_history') == False:
+                    if k not in self.epoch_metric_history:
+                        self.epoch_metric_history[k] = []
+
+            if is_collect_data:
+                for k, v in self.training_context['tmp_metrics'].items():
+                    if not getattr(self._metrics[k], 'collect_history') == False:
+                        self.training_context['metrics'][k].append(float(to_numpy(v).mean()))
+                        self.training_context['tmp_metrics'][k] = []
+
+            # print batch progresss
+            if is_print_batch_progress:
+                self.do_on_progress_start()
+                for callback in self.training_context['callbacks']:
+                    callback.on_progress_start(self.training_context)
+
+                self.print_batch_progress(self.training_context['print_batch_progress_frequency'])
+
+                self.training_context['print_batch_progress_frequency'] = 1
+                self.do_on_progress_end()
+                for callback in self.training_context['callbacks']:
+                    callback.on_progress_end(self.training_context)
+            else:
+                self.training_context['print_batch_progress_frequency'] += 1
+
+            if test_data is not None and len(test_data) > 0:
+                print(self.training_context['model_name'] + ': out-of-sample evaluation: ',
+                      ','.join(['{0}: {1:<8.3%}'.format(k, v[-1]) for k, v in self.training_context['out_sample_metrics'].items()]))
+
+            # ON_BATCH_END
+            self.do_on_batch_end()
+            for callback in self.training_context['callbacks']:
+                callback.on_batch_end(self.training_context)
+
+            if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
+                self.do_on_epoch_end()
+
+                slice_cnt = np.sum(to_numpy(self.sample_collect_history[-1 * total_batch:]))
+                self.epoch_loss_history['total_losses'].append(
+                    np.array(self.training_context['losses']['total_losses'][-1 * slice_cnt:]).mean())
+                for k, v in self.training_context['metrics'].items():
+                    if len(v) >= slice_cnt:
+                        self.epoch_metric_history[k].append(np.array(v[-1 * slice_cnt:]).mean())
+
+                if is_print_epoch_progress:
+                    self.do_on_progress_start()
+                    for callback in self.training_context['callbacks']:
+                        callback.on_progress_start(self.training_context)
+                    self.print_epoch_progress(self.training_context['print_epoch_progress_frequency'])
+                    self.training_context['print_epoch_progress_frequency'] = 1
+                    self.do_on_progress_end()
+                    for callback in self.training_context['callbacks']:
+                        callback.on_progress_end(self.training_context)
+                else:
+                    self.training_context['print_epoch_progress_frequency'] += 1
+
+                for callback in self.training_context['callbacks']:
+                    callback.on_epoch_end(self.training_context)
+
+                if self.training_context['current_epoch'] == self.training_context['total_epoch'] - 1:
+                    self.do_on_training_end()
+                    for callback in self.training_context['callbacks']:
+                        callback.on_training_end(self.training_context)
+        except Exception:
+            self.do_on_excution_exception()
+            PrintException()
 
     def summary(self):
         if self._model.built:
