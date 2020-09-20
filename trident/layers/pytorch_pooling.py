@@ -2,7 +2,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import builtins
 import inspect
 import math
 from collections import OrderedDict
@@ -22,6 +22,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
+from trident.backend.pytorch_ops import *
 from trident.backend.pytorch_backend import Layer, Sequential
 
 __all__ = [ 'MaxPool1d','MaxPool2d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
@@ -209,7 +210,7 @@ class MaxPool2d(_PoolNd):
             kh, kw = self.kernel_size[-2:]
             sh, sw = self.strides[-2:]
 
-            oh, ow = math.ceil(true_divide(ih , sh)), math.ceil(true_divide(iw , sw))
+            oh, ow =ceil(true_divide(ih , sh)),ceil(true_divide(iw , sw))
             pad_h = max((oh - 1) * sh + (kh - 1) + 1 - ih, 0)
             pad_w = max((ow - 1) * sw + (kw - 1) + 1 - iw, 0)
             if pad_h % 2 == 1 and sh > 1:
@@ -640,7 +641,7 @@ class AvgPool2d(_PoolNd):
             kh, kw = self.kernel_size[-2:]
             sh, sw = self.strides[-2:]
 
-            oh, ow = math.ceil(true_divide(ih,sh)), math.ceil(true_divide(iw, sw))
+            oh, ow = ceil(true_divide(ih,sh)), ceil(true_divide(iw, sw))
             pad_h = max((oh - 1) * sh + (kh - 1) + 1 - ih, 0)
             pad_w = max((ow - 1) * sw + (kw - 1) + 1 - iw, 0)
             if pad_h % 2 == 1 and sh > 1:
@@ -730,8 +731,9 @@ class AvgPool3d(_PoolNd):
         self.count_include_pad = kwargs.get('count_include_pad', False)
         self.divisor_override = kwargs.get('divisor_override', None)
 
-    def forward(self, input):
-        return F.avg_pool3d(input, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad,
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return F.avg_pool3d(x, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad,
                             self.divisor_override)
 
     def __setstate__(self, d):
@@ -743,20 +745,19 @@ class AvgPool3d(_PoolNd):
 
 class GlobalAvgPool2d(Layer):
     """Global Average Pooling Imprementation """
-    def __init__(self, keepdim=False, name='avg_pool'):
+    def __init__(self, keepdims=False, name='global_avg_pool',**kwargs):
         """
 
         Args:
-            keepdim ():
+            keepdims ():
             name ():
         """
-        super(GlobalAvgPool2d, self).__init__()
-        self.keepdim = keepdim
-        self.name = name
+        super(GlobalAvgPool2d, self).__init__(name=name)
+        self.keepdims = kwargs.get('keepdim',keepdims)
 
     def build(self, input_shape):
         if self._built == False:
-            if self.keepdim == True:
+            if self.keepdims == True:
                 output_shape = input_shape.clone()
                 output_shape[1] = 1
                 output_shape[2] = 1
@@ -768,7 +769,7 @@ class GlobalAvgPool2d(Layer):
     def forward(self, *x):
         x = enforce_singleton(x)
         N,C,H,W=x.size()
-        x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdim)
+        x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdims)
         return x
 
 

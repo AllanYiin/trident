@@ -48,7 +48,7 @@ class _PoolNd(Layer):
     __constants__ = ['kernel_size', 'strides', 'auto_pad', 'padding', 'dilation']
 
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', dilation=1, name=None, **kwargs):
-        super(_PoolNd, self).__init__()
+        super(_PoolNd, self).__init__(name=name)
         self.kernel_size = kernel_size
         self.strides = strides or kernel_size
         self.auto_pad = auto_pad
@@ -58,7 +58,7 @@ class _PoolNd(Layer):
         self.return_indices = kwargs.get('return_indices', False)
         # self.ceil_mode = kwargs.get('ceil_mode', False)
         # self.count_include_pad = kwargs.get('count_include_pad', False)
-        self.name = name
+
 
     def extra_repr(self):
         return 'kernel_size={kernel_size}, strides={strides}, padding={padding}' \
@@ -565,13 +565,13 @@ class AvgPool3d(_PoolNd):
 
 
 class GlobalAvgPool2d(Layer):
-    def __init__(self, keepdim=False, name='avg_pool'):
+    def __init__(self, keepdims=False, name='global_avg_pool',**kwargs):
         super(GlobalAvgPool2d, self).__init__(name=name)
-        self.keepdim = keepdim
+        self.keepdims = kwargs.get('keepdim',keepdims)
 
     def build(self, input_shape):
         if self._built == False:
-            if self.keepdim == True:
+            if self.keepdims == True:
                 self.output_shape = tf.TensorShape([1, 1, self.input_filters])
             else:
                 self.output_shape = input_shape[-1]
@@ -579,9 +579,5 @@ class GlobalAvgPool2d(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.keepdim == True:
-            x = tf.reduce_mean(x, [1, 2], keepdims=True)
-
-        else:
-            x = tf.reduce_mean(x, [1, 2], keepdims=False)
+        x = tf.reduce_mean(x, [1, 2], keepdims=self.keepdims)
         return x
