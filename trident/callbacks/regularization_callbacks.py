@@ -69,8 +69,8 @@ class MixupCallback(RegularizationCallbacksBase):
             lam = 1
         batch_size = int_shape(x)[0]
         index = arange(batch_size)
-        index=shuffle(index).long()
-
+        index=cast(shuffle(index),'long')
+        this_loss=None
         mixed_x=None
         if get_backend()=='pytorch':
             mixed_x = lam * x + (1 - lam) * x[index, :]
@@ -86,17 +86,15 @@ class MixupCallback(RegularizationCallbacksBase):
 
             this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
 
+        training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
+        if training_context['is_collect_data']:
+            training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
         if training_context['current_batch']==0:
             for item in mixed_x:
                 item=unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                 item=unnormalize(0, 255)(item)
                 array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
-
-        if 'mixup_loss' not in training_context['losses']:
-            training_context['losses']['mixup_loss'] = []
-        training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
-        if training_context['is_collect_data']:
-            training_context['losses']['mixup_loss'].append(float(to_numpy(this_loss) * self.loss_weight))
 
 class CutMixCallback(RegularizationCallbacksBase):
     """Implementation. of the cutmix regularization
@@ -166,7 +164,6 @@ class CutMixCallback(RegularizationCallbacksBase):
         index = cast(arange(batch_size),'int64')
         index=shuffle(index)
 
-        pred = model(to_tensor(x, requires_grad=True))
         this_loss=None
         if get_backend()=='pytorch':
             y_a, y_b = y, y[index]
@@ -174,6 +171,7 @@ class CutMixCallback(RegularizationCallbacksBase):
             x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
+            pred = model(to_tensor(x, requires_grad=True))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
         elif get_backend() == 'tensorflow':
 
@@ -188,6 +186,7 @@ class CutMixCallback(RegularizationCallbacksBase):
             #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
+            pred = model(to_tensor(x, requires_grad=True))
             loss1=self.loss_criterion(pred, y_a)
             loss2=self.loss_criterion(pred, y_b)
             this_loss = lam *loss1  + (1 - lam) * loss2
@@ -201,11 +200,10 @@ class CutMixCallback(RegularizationCallbacksBase):
 
 
 
-        if 'mixup_loss' not in training_context['losses']:
-            training_context['losses']['cutmix_loss'] = []
         training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
         if training_context['is_collect_data']:
-            training_context['losses']['cutmix_loss'].append(float(to_numpy(this_loss) * self.loss_weight))
+            training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
 
 
 
