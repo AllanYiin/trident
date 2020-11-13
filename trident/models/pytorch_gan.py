@@ -22,6 +22,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
 from trident.data.image_common import *
 from trident.data.utils import download_file_from_google_drive

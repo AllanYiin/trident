@@ -9,7 +9,7 @@ import numpy as np
 
 from trident.backend.common import *
 from trident.backend.load_backend import get_backend
-from trident.callbacks.callback_base import CallbackBase
+from trident.callbacks.callback_base import CallbackBase,_valid_when
 from trident.data.image_common import *
 
 if get_backend()=='pytorch':
@@ -24,8 +24,12 @@ elif get_backend()=='tensorflow':
 __all__ = ['DataProcessCallback']
 
 class DataProcessCallback(CallbackBase):
-    def __init__(self, policy=None, **kwargs):
+    def __init__(self, when='on_data_received',policy=None, **kwargs):
         super(DataProcessCallback, self).__init__()
+        if when in _valid_when:
+            self.when = when
+        else:
+            raise ValueError("{0} is not valid event trigger.".format(when))
         self.policy = policy
 
     def on_batch_start(self, training_context):

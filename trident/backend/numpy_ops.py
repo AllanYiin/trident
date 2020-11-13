@@ -48,6 +48,18 @@ def ndim(x:np.ndarray):
     """
     return x.ndim
 
+def numel(x: np.ndarray):
+    """Number of elements of a tensor
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+        (int) Number of elements
+
+    """
+    return x.size()
+
 
 def int_shape(x:np.ndarray):
     """Shape of a tensor in tuple of integer format
@@ -378,6 +390,34 @@ def argsort(x:np.ndarray, axis=1, descending=True) ->np.ndarray:
     else:
         return np.argsort(x,axis=axis)
 
+
+def topk(x: np.ndarray,  k=1) -> np.ndarray:
+    """Finds values and indices of the `k` largest entries for the last dimension.
+
+     If the input is a vector (rank=1), finds the `k` largest entries in the vector
+     and outputs their values and indices as vectors.  Thus `values[j]` is the
+     `j`-th largest entry in `input`, and its index is `indices[j]`.
+
+     For matrices (resp. higher rank input), computes the top `k` entries in each
+     row (resp. vector along the last dimension).  Thus,
+
+         values.shape = indices.shape = input.shape[:-1] + [k]
+
+     If two elements are equal, the lower-index element appears first.
+
+     Args:
+       x: 1-D or higher `Tensor` with last dimension at least `k`.
+       k: 0-D `int32` `Tensor`.  Number of top elements to look for along the last
+         dimension (along each row for matrices).
+
+
+
+     Returns:
+       values: The `k` largest elements along each last dimensional slice.
+       indices: The indices of `values` within the last dimension of `input`.
+     """
+    full_sort = np.argsort(x)
+    return full_sort.take(np.arange(k))
 
 def maximum(x:np.ndarray, other: (np.ndarray, int, float)) ->np.ndarray:
     if isinstance(other,np.ndarray):
@@ -1468,6 +1508,24 @@ def reduce_prod(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         return x
 
 
+    axis = kwargs.get('dim', axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+    if  x.size== 0:
+        return zeros(1).astype(np.float32)
+    x=greater(x,0)
+    if axis is None:
+        return np.any(x,keepdims=keepdims)
+    if isinstance(axis, int):
+        arr, idx = np.any(x,axis=axis, keepdims=keepdims)
+        return arr
+    elif isinstance(axis, list):
+        axis = sorted(axis)
+        axis.reverse()
+        for a in axis:
+            arr, idx = np.any(x,axis=a, keepdims=keepdims)
+            x = arr
+        return x
+
 # reduce_log_sum_exp
 # reduce_prod
 # reduce_l1
@@ -1487,12 +1545,21 @@ def max(*args, **kwargs):
     Returns:
 
     """
-    if len(args) > 1 and all([str(a).isnumeric() for a in args]):
-        return builtins.max(*args)
-    elif len(args) == 1 and isinstance(args[0], np.ndarray):
+    allargs = args + tuple(list(kwargs.values()))
+    if len(allargs) == 1 and is_numpy(allargs[0]) and numel(allargs[0])== 0:
+        return allargs[0]
+    elif len(allargs) == 1 and is_numpy(allargs[0]) and numel(allargs[0]) > 0:
+        return np.max(allargs[0])
+    elif len(allargs) > 1 and is_numpy(allargs[0]) and not is_numpy(allargs[1]) and ('axis' in kwargs or 'dim' in kwargs or 'keepdims' in kwargs or 'keepdim' in kwargs):
         axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
-        return np.max(args[0], axis=axis, keepdims=keepdims)
+        return reduce_max(allargs[0], axis=axis, keepdims=keepdims)
+    elif len(args) > 1 and is_numpy(args[0]) and isinstance(args[1],np.ndarray) :
+        return np.maximum(x1=args[0],x2=args[1])
+    elif len(args) > 1 and is_numpy(args[0]) and isinstance(args[1],(int,float)) :
+        return np.clip(args[0],a_min=args[1],a_max=np.inf)
+    else:
+        raise NotImplementedError('Max({0},{1}) is not implemented yet '.format(*args, **kwargs))
 
 
 
@@ -1505,12 +1572,21 @@ def min(*args, **kwargs):
     Returns:
 
     """
-    if len(args) > 1 and all([str(a).isnumeric() for a in args]):
-        return builtins.min(*args)
-    elif len(args) == 1 and isinstance(args[0], np.ndarray):
+    allargs = args +  tuple(list(kwargs.values()))
+    if len(allargs) == 1 and is_numpy(allargs[0]) and numel(allargs[0]) == 0:
+        return allargs[0]
+    elif len(allargs) == 1 and is_numpy(allargs[0]) and numel(allargs[0]) > 0:
+        return np.min(allargs[0])
+    elif len(allargs) > 1 and is_numpy(allargs[0]) and not is_numpy(allargs[1]) and ('axis' in kwargs or 'dim' in kwargs or 'keepdims' in kwargs or 'keepdim' in kwargs):
         axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
-        return np.min(args[0], axis=axis, keepdims=keepdims)
+        return reduce_min(allargs[0], axis=axis, keepdims=keepdims)
+    elif len(args) > 1 and is_numpy(args[0]) and isinstance(args[1], np.ndarray):
+        return np.minimum(x1=args[0], x2=args[1])
+    elif len(args) > 1 and is_numpy(args[0]) and isinstance(args[1], (int, float)):
+        return np.clip(args[0],a_min=-np.inf, a_max=args[1])
+    else:
+        raise NotImplementedError('Min({0},{1}) is not implemented yet '.format(*args, **kwargs))
 
 
 ############################
@@ -1577,7 +1653,7 @@ def relu6(x):
     return np.clip(x,a_min=0,a_max=6)
 
 
-def leaky_relu(x, slope=0.2):
+def leaky_relu(x, slope=0.2,**kwargs):
     """Leaky version of a Rectified Linear Unit.
         It allows a small gradient when the unit is not active:
         ```
@@ -1586,16 +1662,18 @@ def leaky_relu(x, slope=0.2):
         ```
     Args:
         x (np.ndarray): input tensor.
+        slope (float): slope
 
     Returns:
         (np.ndarray): output tensor and have same shape with x.
 
 
     """
+    slope=kwargs.get('alpha',slope)
     return np.clip(x,a_min=0)+np.clip(-x*slope,a_max=0)
 
 
-def leaky_relu6(x, slope=0.2):
+def leaky_relu6(x, slope=0.2,**kwargs):
     """Leaky version of a Rectified Linear Unit.6
           It allows a small gradient when the unit is not active:
           ```
@@ -1606,12 +1684,14 @@ def leaky_relu6(x, slope=0.2):
 
     Args:
         x (np.ndarray): input tensor.
+        slope (float): slope
 
     Returns:
         (np.ndarray): output tensor and have same shape with x.
 
 
     """
+    slope = kwargs.get('alpha', slope)
     return np.clip(x,a_min=0,a_max=6)+np.clip(-x*slope,a_min=-6,a_max=0)
 
 
@@ -1983,6 +2063,7 @@ def softmax(x, axis=1):
     """
 
     return np.true_divide(np.exp(x) ,np.clip(np.sum(np.exp(x),axis=axis),a_min=epsilon()))
+
 
 
 def log_softmax(x, axis=1):
@@ -2431,30 +2512,29 @@ def eye_like(a, dtype=np.float32):
         raise ValueError('input tensor must have exactly two axe.')
 
 #
-# def make_onehot(label, num_classes, axis=-1):
-#     """
-#     Create one hot tensor based on the input tensor
-#     Args:
-#         label: input tensor, the value must be positive integer and less than num_class
-#         num_classes: the number of class in one hot tensor
-#         axis: The axis to fill (default: -1, a new inner-most axis).
-#     Returns:
-#         :onehot tensor
-#     Examples:
-#     >>> make_onehot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
-#     tensor([[[0., 1., 1., 0.],
-#              [0., 1., 0., 1.]],
-#     <BLANKLINE>
-#             [[0., 0., 0., 0.],
-#              [0., 0., 0., 0.]]])
-#
-#     """
-#
-#     onehot =np. torch.nn.functional.one_hot(label, num_classes)
-#     if axis is not None and axis != -1:
-#         onehot = transpose(onehot, (-1, axis)).float()
-#     return onehot
-#
+def make_onehot(label, num_classes, axis=-1):
+    """
+    Create one hot tensor based on the input tensor
+    Args:
+        label: input tensor, the value must be positive integer and less than num_class
+        num_classes: the number of class in one hot tensor
+        axis: The axis to fill (default: -1, a new inner-most axis).
+    Returns:
+        :onehot tensor
+    Examples:
+    >>> make_onehot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
+    tensor([[[0., 1., 1., 0.],
+             [0., 1., 0., 1.]],
+    <BLANKLINE>
+            [[0., 0., 0., 0.],
+             [0., 0., 0., 0.]]])
+
+    """
+
+
+    onehot=np.put(label, num_classes, 1)
+    return onehot
+
 
 def arange(*args, dtype=np.int32):
     """

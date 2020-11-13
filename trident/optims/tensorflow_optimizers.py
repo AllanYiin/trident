@@ -751,7 +751,12 @@ class SGD(Optimizer):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
 
             state = self.state[p.ref()]
-            state['step'] += 1
+
+            # State initialization
+            if len(state) == 0:
+                state['step'] = 0.0
+            else:
+                state['step'] += 1
             lr = group['lr']
             if group['weight_decay'] > 0:
                 lr = lr * (1. / (1. + group['weight_decay'] * state['step']))

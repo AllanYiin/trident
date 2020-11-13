@@ -14,45 +14,51 @@ from trident.backend.tensorflow_ops import *
 __all__ = ['accuracy','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 
-def accuracy(output,target, topk=1, axis=-1, **kwargs):
+def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
-    if  int_shape(target)!=int_shape(output):
-        raise  ValueError('output shape {0} is not competable with target shape {1}'.format(output.shape, target.shape))
+    input_tensor = output.copy().detach()
+    target_tensor = target.copy().detach()
 
-    if topk==1:
-        return reduce_mean(equal(argmax(target, axis), argmax(output, axis)))
+    input_tensor_exp = exp(input_tensor)
+    is_logsoftmax = None
+    from_logits = None
+    output_exp = exp(input_tensor)
+    if (ndim(output) >= 1 and 'float' in str(output.dtype) and output.min() >= 0 and output.max() <= 1):
+        is_logsoftmax = False
+        from_logits = True
+        output = clip(output, min=1e-8, max=1 - 1e-8)
+
+    elif (ndim(output) >= 1 and 'float' in str(output.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+        is_logsoftmax = True
+        from_logits = True
+        output = clip(output, max=- 1e-8)
     else:
-        return reduce_mean(cast(tf.nn.in_top_k(predictions=output, targets=target, k=topk), tf.float32))
+        is_logsoftmax = False
+        from_logits = False
 
-def accuracy(output, target, topk=1,axis=-1,exclude_mask=False):
-    """Computes the precision@k for the specified values of k
-    prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
-    """
-    input_tensor=copy.deepcopy(output)
-    target_tensor=copy.deepcopy(target)
-
-
+    if is_logsoftmax:
+        input_tensor = exp(input_tensor)
+    if input_tensor.dtype != tf.int64 and topk == 1:
+        if len(int_shape(input_tensor)) == 1:  # binary
+            input_tensor =greater_equal(input_tensor,0.5)
+        else:
+            input_tensor = argmax(input_tensor, axis).squeeze()
+    if target_tensor.dtype != tf.int64:
+        target_tensor = argmax(target_tensor, axis).squeeze()
+    if input_tensor.shape != target_tensor.shape and topk == 1:
+        raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
 
     batch_size = int_shape(target_tensor)[0]
-    if  topk==1:
-        input_tensor = cast(squeeze(argmax(input_tensor, axis)),'float32')
-        target_tensor = cast(squeeze(argmax(target_tensor, axis)),'float32')
-        if input_tensor.shape != target_tensor.shape and topk == 1:
-            raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,
-                                                                                              target_tensor.shape))
-
-        return mean(equal(input_tensor,target_tensor))
+    if topk == 1:
+        return equal(input_tensor,target_tensor).mean()
     else:
-        _,pred = tf.nn.top_k(input_tensor,topk,  True)
-        target_tensor= expand_dims(argmax(target_tensor, axis),-1)
-        target_tensor=cast(tf.repeat(target_tensor,topk,axis=-1),'float32')
-        return reduce_mean(reduce_max(equal(cast(pred,'float32'),target_tensor),-1))
-
-
-
-
+        _,pred = input_tensor.topk(topk)
+        pred = cast(tf.transpose(pred),'float32')
+        target_tensor= cast(repeat_elements(expand_dims(target_tensor,0),topk,axis=0),'float32')
+        correct = equal(pred,target_tensor).sum()
+        return correct/batch_size
 
 
 def psnr(output, target):

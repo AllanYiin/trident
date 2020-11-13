@@ -23,11 +23,11 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, SpectralNorm
 from trident.layers.pytorch_pooling import *
 from trident.backend.common import *
-from trident.backend.pytorch_backend import Layer, Sequential
+from trident.backend.pytorch_backend import Layer, Sequential, ModuleList
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'GcdConv2d_Block',
-           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite', 'For']
+           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d','Hourglass', 'ConcateBlock', 'SqueezeExcite', 'For']
 
 _session = get_session()
 
@@ -51,17 +51,20 @@ _quadruple = _ntuple(4)
 
 class Conv1d_Block(Layer):
     def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
+                 normalization=None, use_spectral=False,use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
                  dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,sequence_rank='cna',**kwargs):
         super(Conv1d_Block, self).__init__(name=name,keep_output=keep_output)
-        if hasattr(self,'sequence_rank') and  sequence_rank in ['cna','nac']:
+        if sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
+        else:
+            self.sequence_rank = 'cna'
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
         self.auto_pad = auto_pad
         self.padding = 0
         self.padding_mode = padding_mode
+
         # if self.auto_pad == False:
         #     self.padding = 0
         # else:
@@ -71,37 +74,38 @@ class Conv1d_Block(Layer):
         self.use_bias = use_bias
         self.dilation = dilation
         self.groups = groups
-
+        self.depth_multiplier = depth_multiplier
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
+
+        norm = get_normalization(normalization)
+        conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                      auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                      use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                      depth_multiplier=self.depth_multiplier).to(self.device)
+        self.use_spectral = use_spectral
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            conv= nn.utils.spectral_norm(conv)
         if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
-            self.conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                                   auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                                   depth_multiplier=self.depth_multiplier).to(self.device)
-            self.norm = get_normalization(normalization)
+            self.conv = conv
+            self.norm = norm
             self.activation = get_activation(activation)
         elif self.sequence_rank=='nac':
-            self.norm = get_normalization(normalization)
+            self.norm = norm
             self.activation = get_activation(activation)
-            self.conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                                   auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                                   depth_multiplier=self.depth_multiplier).to(self.device)
+            self.conv = conv
 
-        self.depth_multiplier = depth_multiplier
-        self._name = name
 
     def build(self, input_shape):
-        if self._built == False or self.conv is None:
-            self.conv.input_shape = input_shape
-
-            output_shape = self._input_shape.clone().tolist()
-            output_shape[0] = self.num_filters
-            if self.norm != None:
-                self.norm.input_shape = output_shape
-            self.to(self.device)
+        if self._built == False:
+            if self.use_spectral:
+                self.conv = nn.utils.spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm=None
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -136,6 +140,9 @@ class Conv1d_Block(Layer):
         return s.format(**self.__dict__)
 
 
+
+
+
 class Conv2d_Block(Layer):
     def __init__(self,kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
@@ -145,6 +152,8 @@ class Conv2d_Block(Layer):
 
         if sequence_rank in ['cna','nac']:
             self.sequence_rank=sequence_rank
+        else:
+            self.sequence_rank = 'cna'
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -181,26 +190,23 @@ class Conv2d_Block(Layer):
         self.keep_output = keep_output
 
         norm = get_normalization(normalization)
+        conv = Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                      auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                      use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                      depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(self.device)
         self.use_spectral = use_spectral
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
+            conv = nn.utils.spectral_norm(conv)
         if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
-            self.conv=Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                                           auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                                           use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                                           depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(self.device)
+            self.conv=conv
             self.norm = norm
             self.activation = get_activation(activation)
         elif self.sequence_rank == 'nac':
-
-            self.norm = norm if not self.use_spectral else None
+            self.norm = norm
             self.activation = get_activation(activation)
-            self.conv=Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                                   auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                                   depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(
-                                self.device)
+            self.conv=conv
 
 
         self._name = name
@@ -282,7 +288,7 @@ class TransConv2d_Block(Layer):
         self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
-        self.depth_multiplier = depth_multiplier
+
         self.keep_output = keep_output
         self._name = name
 
@@ -335,7 +341,7 @@ class TransConv2d_Block(Layer):
 class DepthwiseConv2d_Block(Layer):
     def __init__(self,  kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, add_noise=False,
-                 noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False,sequence_rank='cna', **kwargs):
+                 noise_intensity=0.005, dropout_rate=0, name=None,keep_output=False,sequence_rank='cna', **kwargs):
         super(DepthwiseConv2d_Block, self).__init__(name=name,keep_output=keep_output)
         if not hasattr(self,'sequence_rank'):
             setattr(self,'sequence_rank','cna')
@@ -360,6 +366,7 @@ class DepthwiseConv2d_Block(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
+
         self.conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
                                    strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
                                    activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(self.device)
@@ -857,6 +864,57 @@ class ShortCut2d(Layer):
             s += (', branch_from={branch_from}, branch_from_uuid={branch_from_uuid}')
         return s.format(**self.__dict__)
 
+class Hourglass(Layer):
+    """HourGlass Block
+
+        Example:
+            >>> input = to_tensor(torch.randn(1,128,128,128))
+            >>> from trident.models.pytorch_resnet import bottleneck
+            >>> block=bottleneck(num_filters=64,strides=1,expansion = 2,conv_shortcut=False)
+            >>> hgnet = Hourglass(block,depth=2,blocks_repeat=2)
+            >>> out=hgnet(input)
+            >>> print(out.shape)
+            torch.Size([1, 128, 128, 128])
+            >>> print(list(hgnet.named_modules()))
+
+
+    """
+    def __init__(self,block,depth=2,blocks_repeat=2,keep_output=False,name=None,**kwargs):
+        super(Hourglass, self).__init__(keep_output=keep_output,name=name)
+        self.depth = depth
+        self.block = block
+        self.pool=MaxPool2d((2,2),strides=2)
+        self.upsample = Upsampling2d(scale_factor=2,mode='bilinear')
+
+        hg = []
+        for i in range(depth):
+            res = []
+            for j in range(3):
+                res.append(self._make_residual(block, blocks_repeat))
+            if i == 0:
+                res.append(self._make_residual(block, blocks_repeat))
+            hg.append(ModuleList(res))
+        self.hg=ModuleList(hg)
+
+
+    def _make_residual(self,block,blocks_repeat):
+        return Sequential([block]*blocks_repeat)
+
+    def _hour_glass_forward(self, depth_id, x):
+        up1 = self.hg[depth_id][0](x)
+        low1 = self.pool(x)
+        low1 = self.hg[depth_id][1](low1)
+        if depth_id ==0:
+            low2 = self.hg[depth_id][3](low1)
+        else:
+            low2 = self._hour_glass_forward(depth_id + 1, low1)
+        low3 = self.hg[depth_id][2](low2)
+        up2 = self.upsample(low3)
+        return up1 + up2
+
+    def forward(self, x):
+        x=self._hour_glass_forward(0, x)
+        return x
 
 
 class ConcateBlock(Layer):

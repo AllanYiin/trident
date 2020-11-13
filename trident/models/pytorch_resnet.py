@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -49,6 +49,7 @@ if not os.path.exists(dirname):
         pass
 
 model_urls = {
+    'resnet18': '156C4a0_nts8QbjCE8YWbA-QbvCnTrfb5',
     'resnet50': '1dYlgpFtqi87KDG54_db4ALWKLARxCWMS',
     'resnet101': '17moUOsGynsWALLHyv3yprHWbbDMrdiOP',
     'resnet152': '1BIaHb7_qunUVvt4TDAwonSKI2jYg4Ybj',
@@ -70,9 +71,9 @@ def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bia
     if strides>1 or conv_shortcut is True:
         shortcut =Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_downsample')
         shortcut_name = 'downsample'
-    return ShortCut2d({'branch1':Sequential(Conv2d_Block((1,1),num_filters=num_filters ,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias,name=name + '_0_conv'),
-                                 Conv2d_Block((3, 3), num_filters=num_filters , strides=1, auto_pad=True,padding_mode='zero',normalization='batch', activation='relu',use_bias=use_bias,name=name + '_1_conv'),
-                                 Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_2_conv')),
+    return ShortCut2d({'branch1':Sequential(Conv2d_Block((1,1),num_filters=num_filters ,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias),
+                                 Conv2d_Block((3, 3), num_filters=num_filters , strides=1, auto_pad=True,padding_mode='zero',normalization='batch', activation='relu',use_bias=use_bias),
+                                 Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias)),
                       shortcut_name:shortcut},activation='relu')
 
 
@@ -116,12 +117,11 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
         conv_shortcut=False
         if strides!=1 or block is bottleneck:
             conv_shortcut=True
-
         layers = []
-        layers.append(block(num_filters=num_filters, strides=strides, expansion = 4, conv_shortcut=conv_shortcut,use_bias=use_bias, name=layer_name+'.0'))
+        layers.append(block(num_filters=num_filters, strides=strides, expansion = 4, conv_shortcut=conv_shortcut,use_bias=use_bias, name=layer_name+'_0'))
 
         for k in range(1, blocklayers):
-            layers.append(block(num_filters=num_filters,  strides=1, expansion = 4, conv_shortcut=False, use_bias=use_bias,name=layer_name+'.{0}'.format(k)))
+            layers.append(block(num_filters=num_filters,  strides=1, expansion = 4, conv_shortcut=False, use_bias=use_bias,name=layer_name+'_{0}'.format(k)))
 
         laters_block=Sequential(*layers)
         laters_block.name=layer_name
@@ -153,6 +153,7 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
 #
 def ResNet18(include_top=True,
              pretrained=True,
+             freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -161,26 +162,34 @@ def ResNet18(include_top=True,
     else:
         input_shape=(3, 224, 224)
     resnet18 = ResNet(basic_block, [2, 2, 2, 2], input_shape, model_name='resnet18')
+
     if pretrained == True:
         download_model_from_google_drive(model_urls['resnet18'], dirname, 'resnet18.pth')
         recovery_model = torch.load(os.path.join(dirname, 'resnet18.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable=False
         recovery_model.name = 'resnet18'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes != 1000:
                 resnet18.class_names = []
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape = recovery_model.avg_pool.output_shape
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
+
         resnet18.model = recovery_model
     return resnet18
 
 def ResNet50(include_top=True,
              pretrained=True,
+             freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -192,25 +201,31 @@ def ResNet50(include_top=True,
     if pretrained==True:
         download_model_from_google_drive(model_urls['resnet50'],dirname,'resnet50.pth')
         recovery_model=torch.load(os.path.join(dirname,'resnet50.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable=False
         recovery_model.name = 'resnet50'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             resnet50.class_names = []
         else:
             if classes!=1000:
                 resnet50.class_names = []
-                recovery_model.fc= Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
 
         resnet50.model=recovery_model
     return resnet50
 
 def ResNet101(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -222,26 +237,31 @@ def ResNet101(include_top=True,
     if pretrained==True:
         download_model_from_google_drive(model_urls['resnet101'],dirname,'resnet101.pth')
         recovery_model=torch.load(os.path.join(dirname,'resnet101.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable=False
         recovery_model.name = 'resnet101'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             resnet101.class_names = []
         else:
             if classes != 1000:
                 resnet101.class_names = []
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
-
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
         resnet101.model=recovery_model
     return resnet101
 
 
 def ResNet152(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -253,20 +273,24 @@ def ResNet152(include_top=True,
     if pretrained==True:
         download_model_from_google_drive(model_urls['resnet152'],dirname,'resnet152.pth')
         recovery_model=torch.load(os.path.join(dirname,'resnet152.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable=False
         recovery_model.name = 'resnet152'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             resnet152.class_names = []
         else:
             if classes != 1000:
                 resnet152.class_names=[]
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
-
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
         resnet152.model=recovery_model
     return resnet152
 

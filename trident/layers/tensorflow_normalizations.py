@@ -8,9 +8,10 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import variables as tf_variables
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
-    format_time, get_terminal_size, snake2camel, camel2snake
+    format_time, get_terminal_size, snake2camel, camel2snake,Signature
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
+from  trident.layers import initializers
 
 __all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','PixelNorm','EvoNormB0','EvoNormS0','get_normalization']
 
@@ -112,10 +113,11 @@ class BatchNorm(Layer):
         if isinstance(axis, (list, tuple)):
             self.axis = axis[:]
         elif isinstance(axis, int):
-            self.axis = axis
+            self.axis = [axis]
         else:
             raise TypeError('Expected an int or a list/tuple of ints for the '
                             'argument \'axis\', but received: %r' % axis)
+
         self.eps = eps
         self.momentum = momentum
         self.affine = affine
@@ -147,13 +149,12 @@ class BatchNorm(Layer):
 
     def build(self, input_shape):
         if self._built == False:
-            self.input_filters= input_shape.as_list()[-1]
+            self.input_filters= to_numpy(input_shape)[self.filter_index]
 
-            ndims = len(input_shape.dims)
+            ndims = len(input_shape)
 
             # Convert axis to list and resolve negatives
-            if isinstance(self.axis, int):
-                self.axis = [self.axis]
+
 
 
             if self.affine:
@@ -537,7 +538,7 @@ class SpectralNorm(Layer):
             self.w_shape = self.w.shape.as_list()
             self.u = self.add_variable(shape=tuple([1, self.w_shape[-1]]),
                 initializer=initializers.TruncatedNormal(stddev=0.02), name='sn_u', trainable=False,
-                dtype=dtypes.float32)
+                dtype=tf.float32)
 
     def forward(self, *x):
         x = enforce_singleton(x)

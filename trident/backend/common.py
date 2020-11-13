@@ -3,6 +3,7 @@ import collections
 import importlib
 import datetime
 import inspect
+import builtins
 import json
 import linecache
 import math
@@ -23,15 +24,15 @@ from pydoc import locate
 
 import numpy as np
 
-__all__ = ['get_session','set_session','get_session_value', 'get_trident_dir', 'get_signature', 'epsilon', 'floatx','Signature','import_or_install',
+__all__ = ['get_session','set_session','get_session_value','get_backend','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
            'check_keys', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
-           'get_time_suffix', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
+           'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
-           'OrderedDict', 'get_python_function_arguments', 'map_function_arguments', 'ClassfierType', 'PaddingMode',
-           'DataRole',
+           'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature',
+           'DataRole','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
 
-           'ExpectDataType', 'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
-           'DataSpec', 'get_args_spec','update_signature', 'get_gpu_memory_map']
+           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
+          'get_args_spec', 'get_gpu_memory_map']
 
 
 _SESSION = threading.local()
@@ -153,6 +154,18 @@ def _get_trident_dir():
             print(e)
 
     return _trident_dir
+def get_trident_dir():
+    """Method for access trident_dir attribute in session
+
+    Returns:
+        trident_dir in _SESSION
+    Example
+        >>> print(get_trident_dir())
+        '~/.trident'
+
+    """
+    return _SESSION.trident_dir
+
 
 def get_plateform():
     """
@@ -259,6 +272,12 @@ def set_session(key, value):
     setattr(_SESSION, key, value)
     return _SESSION
 
+def get_backend():
+    return _SESSION.backend
+
+def get_image_backend():
+    return _SESSION.image_backend
+
 
 def _is_c_contiguous(data):
     while isinstance(data, list):
@@ -266,17 +285,7 @@ def _is_c_contiguous(data):
     return data.flags.c_contiguous
 
 
-def get_trident_dir():
-    """Method for access trident_dir attribute in session
 
-    Returns:
-        trident_dir in _SESSION
-    Example
-        >>> print(get_trident_dir())
-        '~/.trident'
-
-    """
-    return _SESSION.trident_dir
 
 def epsilon():
     """Method for access epsilon attribute in session
@@ -352,8 +361,9 @@ def PrintException():
     linecache.checkcache(filename)
     line = linecache.getline(filename, lineno, f.f_globals)
     print('EXCEPTION IN ({}, LINE {} "{}"): {}\n'.format(filename, lineno, line.strip(), exc_obj))
-    traceback.print_tb(tb, limit=1, file=sys.stdout)
-    traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
+    traceback.print_exc(limit=None, file=sys.stderr)
+    # traceback.print_tb(tb, limit=1, file=sys.stdout)
+    # traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
 
 
 class OrderedDict(collections.OrderedDict):
@@ -391,70 +401,34 @@ class OrderedDict(collections.OrderedDict):
     def __repr__(self):
         return '{ ' + (', '.join(['{0}: {1}'.format(k, v if v is not None else 'none') for k, v in self.item_list])) + ' }'
 
-class Signature(OrderedDict):
+
+class Signature(object):
     """ more easy-to-use OrderedDict"""
+
     def __init__(self, name=None):
-        self.name=name
-        self.inputs=OrderedDict()
-        self.outputs=OrderedDict()
-    def get_kvsting(self,k,v):
+        super().__init__()
+        self.name = name
+        self.inputs = OrderedDict()
+        self.outputs = OrderedDict()
+
+    def get_kvsting(self, k, v):
         if v is None:
             return '{0}'.format(k)
-        elif isinstance(v,(list,tuple)):
-            return '{0}: Tensor[{1}]'.format(k,v)
+        elif isinstance(v, (list, tuple)):
+            return '{0}: Tensor[{1}]'.format(k, v)
+        elif  v.__class__.__name__== "TensorSpec":
+            return '{0}: Tensor[{1}]'.format(k, v._shape_tuple)
         else:
             return '{0}:{1}'.format(k, v)
+
     def __len__(self):
-        return len(self.inputs)+len(self.outputs)
+        return len(self.inputs) + len(self.outputs)
 
     def __repr__(self):
-        #ElementTimes(x: Tensor[13]) -> Tensor[13]
-        input_str= ', '.join([self.get_kvsting(k,v) for k,v in self.inputs.item_list]) if len(self.inputs.item_list)>0 else ''
-        output_str= ', '.join([self.get_kvsting(k,v) for k,v in self.outputs.item_list]) if len(self.outputs.item_list)>0 else ''
-        return '{0}( {1}) -> {2} '.format(self.name,input_str,output_str)
-
-
-
-def get_signature(fn,name=None):
-    """
-
-    Args:
-        name ():
-        fn ():
-
-
-    Returns:
-
-    Examples:
-        >>> get_signature(split_path)
-        split_path( path:<class 'str'>) -> folder, filename, ext
-
-
-    """
-
-    signature = Signature()
-    func_code = fn.__code__
-    annotations = fn.__annotations__
-    sig=inspect.signature(fn)
-    paras=list(sig.parameters.items())
-
-    if sig.return_annotation is not  inspect._empty:
-        returns=sig.return_annotation.split(',')
-        for r in returns:
-            signature.outputs[r]=None
-
-
-    for p in paras:
-        if p[0] not in ['kwargs','self','args'] and p[1].default is inspect._empty:
-            signature.inputs[p[0]]=None
-
-    if name is not None:
-        signature.name=name
-    else:
-        signature.name=func_code.co_name
-
-    return signature
-
+        # ElementTimes(x: Tensor[13]) -> Tensor[13]
+        input_str = ', '.join([self.get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(self.inputs.item_list) > 0 else ''
+        output_str = ', '.join([self.get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(self.outputs.item_list) > 0 else ''
+        return '{0}( {1}) -> {2} '.format(self.name, input_str, output_str)
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -575,7 +549,8 @@ def to_list(x):
         except:
             return x.tolist()
 
-
+def is_numpy(x):
+    return isinstance(x,np.ndarray)
 
 
 def unpack_singleton(x):
@@ -643,10 +618,122 @@ def check_keys(model, pretrained_state_dict):
     unused_pretrained_keys = ckpt_keys - model_keys
     missing_keys = model_keys - ckpt_keys
     print('Missing keys:{}'.format(len(missing_keys)))
+    print('\n\t'.join(missing_keys))
     print('Unused checkpoint keys:{}'.format(len(unused_pretrained_keys)))
+    print('\n\t'.join(unused_pretrained_keys))
     print('Used keys:{}'.format(len(used_pretrained_keys)))
+    print('\n\t'.join(used_pretrained_keys))
+
     assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
     return True
+
+
+
+def levenshtein(seq1, seq2):
+    """ calculate levenshtein edit distance
+
+    Args:
+        seq1 (list(string):
+        seq2 (list(string)):
+
+    Returns:
+
+    Examples
+        >>> seq1=list('block5a.3.norm.num_batches_tracked')
+        >>> seq2=list('block5a.sequential_2.norm.num_batches_tracked')
+        >>> levenshtein(seq1,seq2)
+        12.0
+
+    """
+    size_x = len(seq1) + 1
+    size_y = len(seq2) + 1
+    matrix = np.zeros ((size_x, size_y))
+    for x in range(size_x):
+        matrix [x, 0] = x
+    for y in range(size_y):
+        matrix [0, y] = y
+
+    for x in range(1, size_x):
+        for y in range(1, size_y):
+            if seq1[x-1] == seq2[y-1]:
+                matrix [x,y] = min(
+                    matrix[x-1, y] + 1,
+                    matrix[x-1, y-1],
+                    matrix[x, y-1] + 1
+                )
+            else:
+                matrix [x,y] = min(
+                    matrix[x-1,y] + 1,
+                    matrix[x-1,y-1] + 1,
+                    matrix[x,y-1] + 1
+                )
+    return (matrix[size_x - 1, size_y - 1])
+
+def jaccard_similarity(list1, list2):
+    s1 = set(list1)
+    s2 = set(list2)
+    intersects=s1.intersection(s2)
+    return len(s1.intersection(s2)) / len(s1.union(s2))
+
+def text_similarity(list1, list2):
+    # if len(list1)>0:
+    #     first=list1[0]
+    #     last=list1[-1]
+    tmp_list1=list1.copy()
+    tmp_list2 = list2.copy()
+    overlap=0
+    forward_idx=0
+    backward_idx=-1
+    for i in range(len(list1)):
+        if list1[i]==list2[i] and i==0:
+            overlap+=2
+            forward_idx=i
+            tmp_list1[i]=''
+            tmp_list2[i] = ''
+        elif list1[i]==list2[i] :
+            overlap += 1
+            forward_idx=i
+            tmp_list1[i] = ''
+            tmp_list2[i] = ''
+        else:
+            break
+    if forward_idx<len(list1):
+        for i in range(len(list1)-forward_idx):
+            backward_idx=-1-i
+            if list1[backward_idx] == list2[backward_idx] and backward_idx == -1:
+                overlap += 2
+                tmp_list1[backward_idx] = ''
+                tmp_list2[backward_idx] = ''
+            elif list1[backward_idx] == list2[backward_idx]:
+                overlap += 1
+                tmp_list1[backward_idx] = ''
+                tmp_list2[backward_idx] = ''
+            else:
+                break
+    tmp_list1=list('.'.join([s for s in tmp_list1 if s!='']))
+    tmp_list2 =list('.'.join([s for s in tmp_list2 if s != '']))
+    edit_distance=levenshtein(tmp_list1,tmp_list2)
+    max_edit_length=builtins.max(len(tmp_list1),len(tmp_list2))
+    score=overlap+(builtins.max(max_edit_length-edit_distance,0)/max_edit_length)
+    return score/float(builtins.max(len(list1),1))
+
+
+
+def find_minimal_edit_distance_key(key,lookup_keys):
+    candidates_keys=None
+    if not '.' in key:
+        candidates_keys = [1-(levenshtein(list(key), list(k))/builtins.max(len(key),len(k))) for k in lookup_keys]
+    else:
+        sections=key.split('.')
+        candidates_keys=[s for s in lookup_keys if s.startswith(sections[0])]
+        candidates_keys=[ text_similarity(sections,key.split('.')) for key in candidates_keys]
+    candidates_keys=np.array(candidates_keys)
+    candidate_idx=np.argmax(candidates_keys)
+    returnkey=lookup_keys[candidate_idx]
+    return returnkey,candidates_keys[candidate_idx]
+
+
+
 
 
 def addindent(s_, numSpaces):
@@ -713,6 +800,28 @@ def get_time_suffix():
     prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-', '').replace( '.', '')
     return prefix
 
+def get_file_modified_time(file_path):
+    """
+    Try to get the date that a file was modified, falling back to when it was
+    last modified if that isn't possible.
+    See http://stackoverflow.com/a/39501288/1709587 for explanation.
+    """
+    t=None
+    try:
+        t= os.path.getmtime(file_path)
+    except :
+        stat = os.stat(file_path)
+        try:
+            t= stat.st_birthtime
+        except AttributeError:
+            # We're probably on Linux. No easy way to get creation dates here,
+            # so we'll settle for when its content was last modified.
+            t= stat.st_mtime
+    if t is not None:
+        return datetime.datetime.fromtimestamp(t)
+    else:
+        return None
+
 
 def get_function(fn_name, module_paths=None):
     """
@@ -735,15 +844,21 @@ def get_function(fn_name, module_paths=None):
     """
     if callable(fn_name):
         return fn_name
-    fn = locate(fn_name)
-    if (fn is None) and (module_paths is not None):
+    fn=None
+    if (fn_name is not None) and (module_paths is not None):
         for module_path in module_paths:
             fn = locate('.'.join([module_path, fn_name]))
             if fn is not None:
                 break
+
     if fn is None:
-        raise ValueError("Method not found in {}: {}".format(module_paths, fn_name))
-    return fn  # type: ignore
+        fn = locate(fn_name)
+        if fn is not None:
+            return fn
+        else:
+            return None
+    else:
+        return fn  # type: ignore
 
 
 def get_class(class_name, module_paths=None):
@@ -765,13 +880,15 @@ def get_class(class_name, module_paths=None):
             :attr:`module_paths`.
 
     """
-    class_ = locate(class_name)
-    if (class_ is None) and (module_paths is not None):
+    class_ =None
+    if (class_name is not None) and (module_paths is not None):
         for module_path in module_paths:
             class_ = locate('.'.join([module_path, class_name]))
             if class_ is not None:
                 break
+
     if class_ is None:
+        class_ = locate(class_name)
         raise ValueError("Class not found in {}: {}".format(module_paths, class_name))
     return class_  # type: ignore
 
@@ -858,6 +975,8 @@ def get_terminal_size():
 
 
 
+
+
 def gcd(x, y):
     gcds = []
     gcd = 1
@@ -909,20 +1028,7 @@ def nearest_prime(n):
         return nextp
 
 
-def get_python_function_arguments(f):
-    """
-    Helper to get the parameter names and annotations of a Python function.
-    """
-    # Note that we only return non-optional arguments (we assume that any optional args are not specified).
-    # This allows to, e.g., accept max(a, b, *more, name='') as a binary function
-    param_specs = inspect.getfullargspec(f)
-    annotations = param_specs.annotations
-    arg_names = param_specs.args
-    defaults = param_specs.defaults  # "if this tuple has n elements, they correspond to the last n elements listed
-    # in args"
-    if defaults:
-        arg_names = arg_names[:-len(defaults)]
-    return (arg_names, annotations)
+
 
 
 def map_function_arguments(params, params_dict, *args, **kwargs):
@@ -952,41 +1058,6 @@ def map_function_arguments(params, params_dict, *args, **kwargs):
 
 
 
-
-class OrderedDict(collections.OrderedDict):
-    """ more easy-to-use OrderedDict"""
-    def __init__(self, *args, **kwds):
-        super(OrderedDict, self).__init__(*args, **kwds)
-
-    @property
-    def key_list(self):
-        """
-        Returns:
-            list of keys
-
-        """
-        return list(super().keys())
-
-    @property
-    def value_list(self):
-        """
-        Returns:
-            list of values
-
-        """
-        return list(super().values())
-
-    @property
-    def item_list(self):
-        """
-        Returns:
-            list of items
-
-        """
-        return list(super().items())
-
-    def __repr__(self):
-        return '{ ' + (', '.join(['{0}: {1}'.format(k, v if v is not None else 'none') for k, v in self.item_list])) + ' }'
 
 
 class ClassfierType(Enum):
@@ -1021,21 +1092,8 @@ class DataRole(Enum):
     mask = 'mask'
 
 
-class ExpectDataType(Enum):
-    array_data = 'array_data'
-    gray = 'gray'
-    rgb = 'rgb'
-    rgba = 'rgba'
-    label_mask = 'label_mask'
-    color_mask = 'color_mask'
-    binary_mask = 'binary_mask'
-    alpha_mask = 'alpha_mask'
-    multi_channel = 'multi_channel'
-    absolute_bbox = 'absolute_bbox'
-    relative_bbox = 'relative_bbox'
-    landmarks = 'landmarks'
-    random_noise = 'random_noise'
-    classification_label = 'classification_label'
+
+
 
 
 class GetImageMode(Enum):
@@ -1049,73 +1107,7 @@ class _empty:
     """Marker object for Signature.empty and Parameter.empty."""
 
 
-class DataSpec:
-    def __init__(self, name, symbol=None, kind='array', shape=None, annotation=_empty):
-        self._name = name
-        self._kind = kind
-        self._shape = shape
-        self._symbol = symbol
-        self._annotation = annotation
 
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def kind(self):
-        return self._kind
-
-    @kind.setter
-    def kind(self, value):
-        self._kind = value
-
-    @property
-    def symbol(self):
-        return self._symbol
-
-    @symbol.setter
-    def symbol(self, value):
-        self._symbol = value
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @shape.setter
-    def shape(self, value):
-        if value is None:
-            self._shape = None
-        elif isinstance(value, tuple):
-            self._shape = value
-        elif isinstance(value, [int, float]):
-            self.shape = (int(value),)
-        else:
-            try:
-                self.shape = tuple(to_list(value))
-            except:
-                PrintException()
-
-    @property
-    def annotation(self):
-        return self._annotation
-
-    @annotation.setter
-    def annotation(self, value):
-        self._annotation = value
-
-    # x:Image[(3,128,128)]
-    def __str__(self):
-        strs = []
-        if self.symbol is not None:
-            strs.append('{0}: '.format(self.symbol))
-        else:
-            strs.append('{0}: '.format(self.name))
-        strs.append('{0}[{1}]'.format(snake2camel(self.kind), self._shape))
-
-        return ' '.join(strs)
-
-    def __repr__(self):
-        return self.__str__()
 
 
 def get_args_spec(fn):
@@ -1131,19 +1123,6 @@ def format_arg_spec(v, is_output=False):
     return s + str(v._type)
 
 
-def update_signature(fn: callable, args: list):
-    sig=None
-    if hasattr(fn,'signature') and  fn.signature is not None:
-        sig = fn.signature
-    else:
-        sig=get_signature(fn)
-
-    new_sig=Signature(name=sig.name)
-    for i in range(len(args)):
-        new_sig.inputs[args[i]]=sig.inputs.value_list[i]
-    new_sig.outputs=sig.outputs
-    fn.signature=new_sig
-    print(fn.signature)
 
 
 def get_gpu_memory_map():

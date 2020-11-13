@@ -29,7 +29,7 @@ from six.moves.urllib.request import urlopen
 from tqdm import tqdm
 from urllib3.exceptions import NewConnectionError
 
-from trident.backend.common import OrderedDict, PrintException, get_session, make_dir_if_need, get_file_modified_time,_get_trident_dir
+from trident.backend.common import *
 
 try:
     from urllib.request import urlretrieve
@@ -68,6 +68,15 @@ class TqdmProgress(tqdm):
         self.update(b * bsize - self.n)  # will also set self.n = b * bsize
 
 def calculate_md5(fpath, chunk_size=1024 * 1024):
+    """Calculate whether the file 's md5 hash is the same as given md5 .
+
+    Args:
+        fpath ():
+        chunk_size ():
+
+    Returns:
+
+    """
     md5 = hashlib.md5()
     with open(fpath, 'rb') as f:
         for chunk in iter(lambda: f.read(chunk_size), b''):
@@ -152,7 +161,7 @@ def get_onedrive_directdownload(onedrive_link):
     resultUrl = f"https://api.onedrive.com/v1.0/shares/u!{data_bytes64_String}/root/content"
     return resultUrl
 
-def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
+def download_file_from_google_drive(file_id, dirname, filename=None, md5=None,need_up_to_date=False):
     """Download a Google Drive file from  and place it in root.
 
     Args:
@@ -168,8 +177,8 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None):
     if not filename:
         filename = file_id
 
-    dest_path = os.path.join(os.path.join(_get_trident_dir(), 'models'), filename)
-    if os.path.exists(dest_path) and os.path.isfile(dest_path) and (datetime.datetime.now() - get_file_modified_time(dest_path)).seconds < 12 * 60 * 60:
+    dest_path = os.path.join(dirname, filename)
+    if os.path.exists(dest_path) and os.path.isfile(dest_path) :
         print('archive file is already existing, donnot need download again.')
         return True
     else:
@@ -214,7 +223,7 @@ def download_file_from_onedrive(onedrive_path, dirname, filename=None, md5=None)
     url=get_onedrive_directdownload(onedrive_path)
     # if os.path.exists(os.path.join(dirname, filename)):
     #     print('archive file is already existing, donnot need download again.')
-    dest_path=os.path.join(os.path.join(_get_trident_dir(),'models'), filename)
+    dest_path=os.path.join(os.path.join(get_trident_dir(),'models'), filename)
     if os.path.exists(dest_path) and os.path.isfile(dest_path) and (datetime.datetime.now()-get_file_modified_time(dest_path)).seconds<12*60*60:
         print('archive file is already existing, donnot need download again.')
         return True
@@ -299,20 +308,24 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
     isload = False
     models_md5 = None
     need_download = True
-
+    check_internet = None
     try:
-        session = requests.Session()
-        response = session.get(url, params={'id': '12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_'}, stream=False)
-        if response.status_code==200:
-            if os.path.exists(os.path.join(dirname, 'models_md5.json')):
-                os.remove(os.path.join(dirname, 'models_md5.json'))
-            with open(os.path.join(dirname, 'models_md5.json'),"wb") as f:
-                f.write(response.content)
-
-        check_internet = True
-        if os.path.exists(os.path.join(dirname, 'models_md5.json')):
+        if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(os.path.join(dirname, 'models_md5.json')) and (datetime.datetime.now() - get_file_modified_time(os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
             with open(os.path.join(dirname, 'models_md5.json')) as f:
                 models_md5 = json.load(f)
+        else:
+            session = requests.Session()
+            response = session.get(url, params={'id': '12XLjt9Zcaoo90WGG6R5N0U6Sf_KBZZn_'}, stream=False)
+            if response.status_code==200:
+                if os.path.exists(os.path.join(dirname, 'models_md5.json')):
+                    os.remove(os.path.join(dirname, 'models_md5.json'))
+                with open(os.path.join(dirname, 'models_md5.json'),"wb") as f:
+                    f.write(response.content)
+
+            check_internet = True
+            if os.path.exists(os.path.join(dirname, 'models_md5.json')):
+                with open(os.path.join(dirname, 'models_md5.json')) as f:
+                    models_md5 = json.load(f)
     except Exception:
         PrintException()
         check_internet=False
@@ -445,10 +458,16 @@ def extract_archive(file_path, target_folder=None, archive_format='auto'):
   return False
 
 
-def pickle_it(file_path,dict):
+def pickle_it(file_path,obj):
+    """Pickle the obj
+
+    Args:
+        file_path (str):
+        obj (obj):
+    """
     import pickle as pickle
     with open(file_path, 'wb') as handle:
-        pickle.dump(dict, handle, protocol=2)
+        pickle.dump(obj, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
 def unpickle(file):
     import _pickle as pickle

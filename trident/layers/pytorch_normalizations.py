@@ -37,6 +37,7 @@ def group_std(x, groups, eps = 1e-5):
 
 class BatchNorm(Layer):
     """Applies Batch Normalization over a 4D input (a mini-batch of 2D inputs
+
     with additional channel dimension) as described in the paper
     `Batch Normalization: Accelerating Deep Network Training by Reducing Internal Covariate Shift`_ .
 
@@ -78,7 +79,7 @@ class BatchNorm(Layer):
         https://arxiv.org/abs/1502.03167
 
     """
-
+    _version = 2
     def __init__(self,  momentum=0.1, affine=True, track_running_stats=True, eps=1e-5,in_sequence=False,name=None, **kwargs):
         """
         Args:
@@ -102,27 +103,40 @@ class BatchNorm(Layer):
 
         """
 
-        super().__init__(name=name)
-
+        super().__init__(in_sequence=in_sequence,name=name)
         self.eps = eps
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
+
 
     def reset_running_stats(self):
         if self.track_running_stats:
             self.running_mean.zero_()
             self.running_var.fill_(1)
             self.num_batches_tracked.zero_()
-        if self.affine :
-            init.ones_(self.weight)
-            init.zeros_(self.bias)
+
+
     def reset_parameters(self):
         self.reset_running_stats()
         if self.affine:
             init.ones_(self.weight)
             init.zeros_(self.bias)
 
+    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+                              missing_keys, unexpected_keys, error_msgs):
+        version = local_metadata.get('version', None)
+
+        if (version is None or version < 2) and self.track_running_stats:
+            # at version 2: added num_batches_tracked buffer
+            #               this should have a default value of 0
+            num_batches_tracked_key = prefix + 'num_batches_tracked'
+            if num_batches_tracked_key not in state_dict:
+                state_dict[num_batches_tracked_key] = torch.tensor(0, dtype=torch.long)
+
+        super(BatchNorm, self)._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict,
+            missing_keys, unexpected_keys, error_msgs)
 
     def build(self, input_shape):
         if self._built == False:
@@ -143,14 +157,19 @@ class BatchNorm(Layer):
                 self.register_parameter('running_mean', None)
                 self.register_parameter('running_var', None)
                 self.register_parameter('num_batches_tracked', None)
+
             self.reset_parameters()
             self.to(get_device())
             self._built = True
+
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
 
+        # exponential_average_factor is set to self.momentum
+        # (when it is available) only so that it gets updated
+        # in ONNX graph when this node is exported to ONNX.
         if self.momentum is None:
             exponential_average_factor = 0.0
         else:
@@ -159,13 +178,32 @@ class BatchNorm(Layer):
         if self.training and self.track_running_stats:
             # TODO: if statement only here to tell the jit to skip emitting this when it is None
             if self.num_batches_tracked is not None:
-                self.num_batches_tracked += 1
+                self.num_batches_tracked = self.num_batches_tracked + 1
                 if self.momentum is None:  # use cumulative moving average
                     exponential_average_factor = 1.0 / float(self.num_batches_tracked)
                 else:  # use exponential moving average
                     exponential_average_factor = self.momentum
-        x= F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias, self.training or not self.track_running_stats, exponential_average_factor, self.eps)
-        if self.in_sequence:
+
+        """ Decide whether the mini-batch stats should be used for normalization rather than the buffers.
+                Mini-batch stats are used in training mode, and in eval mode when buffers are None.
+                """
+        if self.training:
+            bn_training = True
+        else:
+            bn_training = (self.running_mean is None) and (self.running_var is None)
+
+        """Buffers are only updated if they are to be tracked and we are in training mode. Thus they only need to be
+                passed when the update should occur (i.e. in training mode when they are tracked), or when buffer stats are
+                used for normalization (i.e. in eval mode when buffers are not None).
+                """
+        x= F.batch_norm(
+            x,
+            # If buffers are not to be tracked, ensure that they won't be updated
+            self.running_mean if not self.training or self.track_running_stats else None,
+            self.running_var if not self.training or self.track_running_stats else None,
+            self.weight, self.bias, bn_training, exponential_average_factor, self.eps)
+
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
         return x
 
@@ -175,6 +213,7 @@ class BatchNorm(Layer):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
+
         version = local_metadata.get('version', None)
 
         if (version is None or version < 2) and self.track_running_stats:
@@ -187,6 +226,7 @@ class BatchNorm(Layer):
         super(BatchNorm, self)._load_from_state_dict(
             state_dict, prefix, local_metadata, strict,
             missing_keys, unexpected_keys, error_msgs)
+        self.eval()
 BatchNorm1d=BatchNorm
 BatchNorm2d=BatchNorm
 BatchNorm3d=BatchNorm
@@ -234,7 +274,7 @@ class GroupNorm(Layer):
             (2, 64, 128, 128)
 
         """
-        super().__init__(name=name)
+        super().__init__(in_sequence=in_sequence,name=name)
         self.affine=affine
         self.num_groups = num_groups
         self.eps = eps
@@ -254,10 +294,10 @@ class GroupNorm(Layer):
                 self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= F.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
         return x
 
@@ -334,7 +374,7 @@ class InstanceNorm(Layer):
             (2, 64, 128, 128)
 
         """
-        super().__init__(name=name)
+        super().__init__(in_sequence=in_sequence,name=name)
         self.eps = _epsilon
         self.momentum = momentum
         self.affine = affine
@@ -373,12 +413,12 @@ class InstanceNorm(Layer):
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= F.instance_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
             self.training or not self.track_running_stats, self.momentum, self.eps)
 
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         return x
 
@@ -450,7 +490,7 @@ class LayerNorm(Layer):
         >>> output = m(input)
 
         """
-        super().__init__(name=name)
+        super().__init__(in_sequence=in_sequence,name=name)
         if isinstance(normalized_shape, numbers.Integral):
             normalized_shape = (normalized_shape,)
         self.normalized_shape = tuple(normalized_shape)
@@ -466,10 +506,10 @@ class LayerNorm(Layer):
             self._built=True
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
         return x
         # mean = x.mean(dim=self.axis, keepdim=True).detach()
@@ -481,19 +521,20 @@ LayerNorm3d=LayerNorm
 
 
 class L2Norm(Layer):
-    def __init__(self,in_sequence=False, name=None, **kwargs):
-        super().__init__(name=name)
+    def __init__(self,in_sequence=False, axis=1,name=None, **kwargs):
+        super().__init__(in_sequence=in_sequence,name=name)
         self.eps=epsilon()
+        self.axis=axis
 
     def build(self, input_shape):
         if self._built == False :
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
-        x= l2_normalize(x)
-        if self.in_sequence:
+        x= l2_normalize(x,axis=self.axis,keepdims=True)
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         return x
 
@@ -501,14 +542,14 @@ class L2Norm(Layer):
 
 class PixelNorm(Layer):
     def __init__(self,in_sequence=False,name=None, **kwargs):
-        super(PixelNorm, self).__init__(name=name)
+        super(PixelNorm, self).__init__(in_sequence=in_sequence,name=name)
 
     def forward(self, x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= x / torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
         return x
 
@@ -556,7 +597,7 @@ class SpectralNorm(Layer):
 
     """
     def __init__(self, module, name='weight', power_iterations=1,in_sequence=False,**kwargs):
-        super(SpectralNorm, self).__init__()
+        super(SpectralNorm, self).__init__(in_sequence=in_sequence,name=name)
         self.module = module
         self.name = name
         self.power_iterations = power_iterations
@@ -610,11 +651,11 @@ class SpectralNorm(Layer):
             self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         self._update_u_v()
         x= self.module(x)
-        if self.in_sequence:
+        if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
         return x
 

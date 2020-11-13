@@ -22,7 +22,7 @@ from trident.backend.pytorch_ops import *
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
-           'LogLog', 'Mish', 'Softmax', 'Gelu', 'GptGelu','SIREN', 'LogSoftmax', 'get_activation']
+           'LogLog', 'Mish','HardMish', 'Softmax', 'Gelu', 'GptGelu','SIREN', 'LogSoftmax', 'get_activation']
 
 
 class Identity(Layer):
@@ -497,6 +497,31 @@ class Mish(Layer):
         return mish(x)
 
 
+class HardMish(Layer):
+    """Self Regularized Non-Monotonic Neural Activation Function.
+
+    it follows:
+    ::
+
+        f(x) =  x * hard_tanh(softplus(x))
+
+
+    References:
+        Mish: A Self Regularized Non-Monotonic Neural Activation Function
+        https://arxiv.org/abs/1908.08681
+
+    Examples:
+        >>> HardMish()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
+
+    """
+    def __init__(self,name=None):
+        super(HardMish, self).__init__(name=name)
+        self._built = True
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        return hard_mish(x)
+
 class Softmax(Layer):
     """Softmax activation layer.
     Args
@@ -510,13 +535,14 @@ class Softmax(Layer):
            ValueError: In case `dim(x) == 1`.
     """
 
-    def __init__(self, name=None):
+    def __init__(self, axis=1,name=None):
         super(Softmax, self).__init__()
+        self.axis=axis
         self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        return softmax(x)
+        return softmax(x,axis=self.axis)
 
 
 class LogSoftmax(Layer):
@@ -582,10 +608,10 @@ class SIREN(Layer):
     Sitzmann et. al. (https://arxiv.org/abs/2006.09661)
     """
 
-    def __init__(self, name=None):
+    def __init__(self, w0=30.0,name=None):
         super(SIREN, self).__init__()
         self._built = True
-        self.w0=Parameter(data=to_tensor(30.0,requires_grad=True))
+        self.w0=Parameter(data=to_tensor(w0,requires_grad=True))
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -612,7 +638,7 @@ def get_activation(fn_name):
     fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops', 'torch.nn.functional']
     try:
         if isinstance(fn_name, str):
-            if fn_name.lower() == fn_name:
+            if camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name:
                 if fn_name == 'p_relu' or fn_name == 'prelu':
                     return PRelu()
                 activation_fn = get_function(fn_name, ['trident.backend.pytorch_ops',
@@ -634,6 +660,9 @@ def get_activation(fn_name):
                 return fn_name()
             elif isinstance(fn_name, Layer):
                 return fn_name
+        elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.pytorch_ops':
+                return fn_name
+
         else:
             if callable(fn_name):
                 result = inspect.getfullargspec(fn_name)

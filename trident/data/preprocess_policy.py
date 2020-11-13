@@ -21,8 +21,10 @@ class PreprocessPolicy(object):
 
     """
 
-    def __init__(self):
+    def __init__(self,*args):
         self.policies = []
+        for arg in args:
+            self.add(arg)
 
     def add(self, item):
         if isinstance(item, PreprocessPolicyItem):
@@ -79,7 +81,11 @@ class PreprocessPolicyItem(object):
         self.count_false = 0
 
     def __call__(self, img):
-        bool_if =self.condition_if(img)
+        bool_if=None
+        if isinstance(self.condition_if,bool):
+            bool_if=self.condition_if
+        elif inspect.isfunction(condition_if) or callable(condition_if) :
+            bool_if =self.condition_if(img)
 
         if bool_if==True:
             if isinstance(self.then_process, list):

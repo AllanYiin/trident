@@ -9,7 +9,7 @@ from trident.callbacks.lr_schedulers import AdjustLRCallbackBase,ReduceLROnPlate
 # from trident.callbacks.saving_strategies import *
 from trident.callbacks.visualization_callbacks import *
 #
-from trident.callbacks.regularization_callbacks import RegularizationCallbacksBase, MixupCallback, CutMixCallback
+from trident.callbacks.regularization_callbacks import RegularizationCallbacksBase, MixupCallback, CutMixCallback,GradientClippingCallback
 # from trident.callbacks.data_flow_callbacks import DataProcessCallback
 # from trident.callbacks import gan_callbacks
 #

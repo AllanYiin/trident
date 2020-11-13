@@ -15,6 +15,7 @@ from itertools import repeat
 import numpy as np
 import tensorflow as tf
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.model import *
 from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load
 from trident.data.image_common import *
@@ -154,10 +155,12 @@ def VGG16(include_top=True,
         recovery_model.eval()
 
         if include_top==False:
-            [recovery_model.__delitem__(-1) for i in range(7)]
+            [recovery_model.remove_at(-1) for i in range(7)]
         else:
             if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc3', Dense(classes, activation=None, name='fc3'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
         vgg16.model=recovery_model
     return vgg16
@@ -181,9 +184,12 @@ def VGG19(include_top=True,
         recovery_model.eval()
 
         if include_top==False:
-            [recovery_model.__delitem__(-1) for i in range(7)]
+            [recovery_model.remove_at(-1) for i in range(7)]
         else:
             if classes!=1000:
-                recovery_model.fc3=Dense(classes,use_bias=True,activation='softmax')
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc3', Dense(classes, activation=None, name='fc3'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+
         vgg19.model=recovery_model
     return vgg19

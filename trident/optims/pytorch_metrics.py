@@ -41,7 +41,26 @@ def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
     """
     input_tensor=output.clone().detach()
     target_tensor=target.clone().detach()
+    
+    input_tensor_exp=exp(input_tensor)
+    is_logsoftmax = None
+    from_logits = None
+    output_exp = exp(input_tensor)
+    if (ndim(output) >= 1 and 'float' in str(output.dtype) and output.min() >= 0 and output.max() <= 1):
+        is_logsoftmax = False
+        from_logits = True
+        output = clip(output, min=1e-8, max=1 - 1e-8)
 
+    elif (ndim(output) >= 1 and 'float' in str(output.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+        is_logsoftmax = True
+        from_logits = True
+        output = clip(output, max=- 1e-8)
+    else:
+        is_logsoftmax = False
+        from_logits = False
+
+    if is_logsoftmax:
+        input_tensor= exp(input_tensor)
     if input_tensor.dtype!=torch.int64 and topk==1:
         if len(input_tensor.size())==1: #binary
             input_tensor=input_tensor.gt(0.5).float()
@@ -53,14 +72,12 @@ def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
         raise  ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,target_tensor.shape))
 
     batch_size = target_tensor.size(0)
-    if len(target_tensor.size())>=3 or topk==1:
+    if topk==1:
         return input_tensor.eq(target_tensor).float().mean()
     else:
         _, pred = input_tensor.topk(topk, -1, True, True)
         pred = pred.t()
         correct = pred.eq(target_tensor.view(1, -1).expand_as(pred))
-        res = []
-
         correct_k = correct[:topk].view(-1).float().sum(0, keepdim=True)
         return correct_k.mul_(1 / batch_size)
 

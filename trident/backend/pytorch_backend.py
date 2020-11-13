@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import os
+import numbers
 import copy
 import itertools
 import logging
@@ -11,19 +12,25 @@ import sys
 import uuid
 from collections import defaultdict
 from copy import copy
-from functools import update_wrapper
+from functools import update_wrapper,partial
+from typing import List, Tuple, Optional, Union
 from itertools import islice
 from distutils.version import Version, LooseVersion
 import torch.nn as nn
 import torch.onnx
 from torch._six import container_abcs
 from torch.nn.parameter import Parameter
-
-from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_signature, get_session, set_session, get_session_value
+from  trident.backend.tensorspec import *
+from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
+    PrintException,Signature
+from trident.backend.tensorspec import *
 from trident.backend.pytorch_ops import *
 
-__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'print_network', 'summary', 'load', 'save', 'Combine', 'ReplayBuffer', 'try_map_args_and_call',
-           'normalize_padding']
+__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'print_network', 'summary', 'load', 'save', 'Combine',  'try_map_args_and_call','print_mem_stack',
+           'normalize_padding','fix_layer']
+
+
+
 
 version = torch.__version__
 sys.stdout.write('Pytorch version:{0}.\n'.format(version))
@@ -38,9 +45,16 @@ elif pt_version.version >= amp_version.version:
     set_session('amp_available', True if torch.cuda.is_available() and pt_version >= amp_version else False)
     if get_session_value('amp_available') == True:
         sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(True))
+    else:
+        sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(False))
 
 
 def get_device():
+    """get current device
+
+    Returns: device string ('cpu', 'cuda)
+
+    """
     if get_session().device is None:
         set_device("cuda" if torch.cuda.is_available() else "cpu")
     return get_session().device
@@ -68,24 +82,46 @@ def set_device(device='cpu'):
 
 
 if torch.cuda.is_available() and get_device() == 'cuda':
+    torch.backends.cudnn.enabled=True
     torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.deterministic = False
 
 
-def load(path):
-    item = torch.load(path)
+def load(f):
+    """
+
+    Args:
+        f: a file-like object (has to implement :meth:`read`, :meth`readline`, :meth`tell`, and :meth`seek`),
+            or a string or os.PathLike object containing a file name
+
+    Returns:
+
+    """
+
+    item = torch.load(f)
     if isinstance(item, nn.Module):
+        item.eval()
         item.to(get_device())
     return item
 
 
-def save(obj, path, is_compressed=False):
-    torch.save(obj, path, _use_new_zipfile_serialization=is_compressed)
+def save(obj, f, is_compressed=False):
+    """
+
+    Args:
+        obj ():
+        f: a file-like object (has to implement write and flush) or a string or
+           os.PathLike object containing a file name
+        is_compressed ():
+
+    Returns:
+
+    """
+    torch.save(obj, f, _use_new_zipfile_serialization=is_compressed)
     return True
 
 
-from functools import partial
-from typing import List
+
 
 
 def reset_name(module: nn.Module, prefix_dict=None):
@@ -177,25 +213,25 @@ class Layer(nn.Module):
         self.uuid = uuid.uuid4().node
         self._nodes = None
         self._uid_prefixs = {}
-        self._name = name
+        self._name =name
 
         prefix = self.__class__.__name__
-        self._default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
-        self.default_name = self._default_name
+        self.default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
         self.relative_name = ''
         reset_name(self, self._uid_prefixs)
 
         self._input_shape = None
         self.input_filters = None
+        self.input_spec=None
         self._output_shape = None
         self.keep_output = keep_output
         self._output_tensor = None
 
-        self.signature = None
+        self._signature = None
 
         # self.dump_patches = True
 
-    def forward(self, *input):
+    def forward(self, *input,**kwargs):
         r"""Defines the computation performed at every call.
 
         Should be overridden by all subclasses.
@@ -217,6 +253,7 @@ class Layer(nn.Module):
     def name(self, value):
         self._name = value
         self.__name__ = value
+        self.signature=None
 
     @property
     def nodes(self):
@@ -254,6 +291,7 @@ class Layer(nn.Module):
         elif hasattr(self, name) and name not in self._modules:
             raise KeyError("attribute '{}' already exists".format(name))
         elif '.' in name:
+            #name=name.replace('.','_')
             raise KeyError("module name can't contain \".\"")
         elif name == '':
             raise KeyError("module name can't be empty string \"\"")
@@ -379,7 +417,7 @@ class Layer(nn.Module):
             print('{0} parameters have set untrainable'.format(n))
 
     @property
-    def device(self):
+    def device(self)->str:
         return get_device()
 
     def cuda(self, device=None):
@@ -400,29 +438,21 @@ class Layer(nn.Module):
         return self._input_shape
 
     @input_shape.setter
-    def input_shape(self, value):
+    def input_shape(self, value)->Union[Tensor, Tuple[Tensor]]:
         """ Setting the input_shape, means the layer get shape information and start to do the shape inferrence """
-        if isinstance(value, (list, tuple)) and len(value) > 0:
-            if isinstance(value[0], torch.Size):
-                value = to_tensor(to_numpy(list(value[0]))).int()
-            elif isinstance(value[0], torch.Tensor):
-                value = value[0].int()
-            else:
-                value = to_tensor(to_numpy(list(value)))
-        elif isinstance(value, int):
-            value = to_tensor(to_numpy([value]))
-        elif isinstance(value, torch.Size):
-            value = to_tensor(to_numpy(list(value))).int()
-        elif isinstance(value, torch.Tensor):
-            value = value.int()
-        elif isinstance(value, np.ndarray) and value.ndim <= 1:
-            value = torch.tensor(value.astype(np.uint8))
-        else:
-            raise ValueError('not valid input_shape')
 
-        if self._built == False:
+        if isinstance(value, torch.Size):
+            value = to_tensor(to_numpy(list(value))).int()
+        elif isinstance(value, (list, tuple)) and len(value) > 0:
+            value = tuple([to_tensor(to_numpy(list(tensor_shape))).int() if isinstance(tensor_shape, torch.Size) else to_tensor(tensor_shape).int() for tensor_shape in value])
+
+        else:
+            value =to_tensor(value).int()
+
+        self.input_spec=TensorSpec(value)
+        if self._built == False or  self._input_shape is None:
             self._input_shape = value
-            if self._input_shape.ndim == 0:
+            if len(self._input_shape) == 0:
                 self.input_filters = int(self._input_shape.data)
             elif len(self._input_shape) == 1:
                 self.input_filters = self._input_shape.item()
@@ -436,36 +466,55 @@ class Layer(nn.Module):
 
             self.build(self._input_shape)
             self._built = True
+            self._signature = None
 
 
-        elif self._input_shape is not None and self._input_shape.tolist() == to_list(value):
+        elif self._input_shape is not None and to_list(self._input_shape) == to_list(value):
             'input_shape is already assigned, and shape is the same.'
             pass
 
     @property
-    def output_shape(self):
-        return to_tensor(to_numpy(list(self._output_tensor.size()[1:]))) if self._output_shape is None else self._output_shape
+    def output_shape(self)->Union[Tensor, Tuple[Tensor]]:
+        return self._output_shape
 
     @output_shape.setter
     def output_shape(self, value):
-        if isinstance(value, (list, tuple)) and len(value) > 0:
-            if isinstance(value[0], torch.Size):
-                value = to_tensor(to_numpy(list(value[0]))).int()
-            elif isinstance(value[0], torch.Tensor):
-                value = value[0].int()
-            else:
-                value = to_tensor(to_numpy(list(value)))
-        elif isinstance(value, int):
-            value = to_tensor(to_numpy([value]))
-        elif isinstance(value, torch.Size):
+        if isinstance(value, torch.Size):
             value = to_tensor(to_numpy(list(value))).int()
-        elif isinstance(value, torch.Tensor):
-            value = value.int()
-        elif isinstance(value, np.ndarray) and value.ndim <= 1:
-            value = torch.tensor(value.astype(np.uint8))
+        elif isinstance(value, (list, tuple)) and len(value) > 0:
+            value = tuple([to_tensor(to_numpy(list(tensor_shape))).int() if isinstance(tensor_shape, torch.Size) else to_tensor(tensor_shape).int() for tensor_shape in value])
+
         else:
-            self._output_shape = value
+            value = to_tensor(value).int()
         self._output_shape = value
+        self._signature = None
+
+
+    @property
+    def signature(self):
+        if self._signature is None:
+            self._signature=Signature(name=self.name)
+            if self._input_shape is not None:
+                if is_tensor(self._input_shape):
+                    self._signature.inputs["input"] = TensorSpec(shape=self._input_shape, name="input")
+                elif isinstance(self._input_shape, tuple) and isinstance(self._input_shape[0], int):
+                    self._signature.inputs["input"] = TensorSpec(shape=to_tensor(self._input_shape).int(), name="input")
+                elif isinstance(self._input_shape, tuple):
+                    for i in range(len(self._input_shape)):
+                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=self._input_shape[i], name="input_{0}".format(i))
+            if self._output_shape is not None:
+                if is_tensor(self._output_shape):
+                    self._signature.outputs["output"] = TensorSpec(shape=self._output_shape, name="output")
+                elif isinstance(self._output_shape, tuple) and isinstance(self._output_shape[0], int):
+                    self._signature.outputs["output"] = TensorSpec(shape=to_tensor(self._output_shape).int(), name="output")
+                elif isinstance(self._output_shape, tuple):
+                    for i in range(len(self._output_shape)):
+                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=self._output_shape[i], name="output_{0}".format(i))
+        return self._signature
+
+    @signature.setter
+    def signature(self, value):
+        self._signature=value
 
     @property
     def input(self):
@@ -490,12 +539,17 @@ class Layer(nn.Module):
         pass
 
     def copy(self):
+        """copy the layer
+
+        Returns: The copy of this layer.
+
+        """
         return copy.deepcopy(self)
 
     def save_onnx(self, file_path=''):
         input_shape = self.input_shape.copy()
         input_shape.insert(0, 1)
-        x = torch.randn(*input_shape, requires_grad=True)
+        x = torch.randn(*input_shape, requires_grad=False)
         torch_out = self(x)
 
         # Export the model
@@ -532,7 +586,7 @@ class Layer(nn.Module):
         if self._built == False:
             inp = unpack_singleton(input)
             if isinstance(inp, (tuple, list)):
-                self.build([input_tensor.shape[self.batch_index+1:] for input_tensor in inp])
+                self.build(*[input_tensor.shape[self.batch_index+1:] for input_tensor in inp])
             elif isinstance(inp, torch.Tensor):
                 self.input_shape = inp.shape[self.batch_index+1:]
             else:
@@ -548,9 +602,12 @@ class Layer(nn.Module):
             output = unpack_singleton(result)
             if hasattr(self, 'keep_output') and self.keep_output == True:
                 self._output_tensor = output
-            if isinstance(output, torch.Tensor):
-                if self._output_shape is None:
-                    self.output_shape = output.shape[self.batch_index+1:]
+            if isinstance(output, torch.Tensor):# one output
+                if self._output_shape is None or self._output_shape!=output.shape[self.batch_index+1:]:
+                    self._output_shape = to_tensor(output.shape[self.batch_index+1:])
+            elif isinstance(output, (list,tuple)):
+                self._output_shape=tuple([to_tensor(output_tensor.shape[self.batch_index+1:]) for output_tensor in output])
+
 
         for hook in self._forward_hooks.values():
             hook_result = hook(self, input, result)
@@ -709,6 +766,7 @@ class Sequential(Layer):
                     self.add_module(str(idx), module)
         self.to(self.device)
 
+
     def build(self, input_shape):
         """
 
@@ -736,13 +794,20 @@ class Sequential(Layer):
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
             last_output = self[-1]._output_shape
             super(Sequential, self).add_module(name, module)
-            module.input_shape = last_output
-            self._output_shape = module._output_shape
+
+            dummay_input=random_normal((2,)+tuple(to_list(last_output))).to(self.device)
+            out=module(dummay_input)
+            self._output_shape =to_tensor(self[-1]._output_shape)
         else:
             super(Sequential, self).add_module(name, module)
 
+        self._signature=None
+
     def remove_at(self, idx):
         self.__delitem__(idx)
+        if len(self._modules) > 0:
+            self._output_shape = to_tensor(self[-1]._output_shape)
+            self._signature = None
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -983,38 +1048,6 @@ class Combine(Layer):
         return tuple(outputs)
 
 
-class ReplayBuffer:
-    def __init__(self, max_size=1000):
-        assert max_size > 0, "Empty buffer or trying to create a black hole. Be careful."
-        self.max_size = max_size
-        self.data = []
-
-    def push_and_pop(self, data):
-        to_return = []
-        keep_idx = random.choice(range(data.data.size(0)))
-        for i in range(data.data.size(0)):
-            element = data.data[i]
-            element = torch.unsqueeze(element, 0)
-
-            if len(self.data) > 10 and random.uniform(0, 1) > 0.7:
-                i = random.randint(0, self.max_size - 1)
-                to_return.append(self.data[i].clone())
-            else:
-                to_return.append(element)
-
-            if 0 < len(self.data) < self.max_size and keep_idx == i:
-                self.data.append(element)
-            elif len(self.data) == self.max_size and random.randint(0, 10) % 3 == 0 and keep_idx == i:
-                self.data[random.randint(0, self.max_size - 1)] = element
-
-        to_return = shuffle(torch.cat(to_return))
-        return to_return
-
-    def push_only(self, data):
-        element = random_choice(data)
-        element = torch.unsqueeze(element, 0)
-        if len(self.data) < self.max_size:
-            self.data.append(element)
 
 
 def print_network(net, verbose=False):
@@ -1141,7 +1174,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = np.abs(np.prod(np.array(list(input_size))) * batch_size * 4. / (1024 ** 2.))
+    total_input_size = np.asarray([np.abs(np.prod(to_numpy(shp)) * batch_size * 4. / (1024 ** 2.)) for shp in input_size]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
@@ -1392,6 +1425,9 @@ class ModelSummary(object):
 
 
 def print_mem_stack():  # pragma: no cover
+    """
+
+    """
     for obj in gc.get_objects():
         try:
             if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
@@ -1507,64 +1543,71 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
     if isinstance(fn, torch.Tensor):
         return fn
     else:
-        arg_map = OrderedDict()
-        if isinstance(fn, Layer):
-            for arg in fn.signature.inputs.key_list:
-                if arg in data_feed:
-                    arg_map[arg] = to_tensor(data[data_feed[arg]]).to(get_device())
-                elif arg in data:
-                    arg_map[arg] = to_tensor(data[arg]).to(get_device())
+        try:
+            arg_map = OrderedDict()
+            if isinstance(fn, Layer):
+                for arg in fn.signature.inputs.key_list:
+                    if arg in data_feed:
+                        arg_map[arg] = to_tensor(data[data_feed[arg]]).to(get_device())
+                    elif arg in data:
+                        arg_map[arg] = to_tensor(data[arg]).to(get_device())
+                    else:
+                        raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
+                # print('arg_map',arg_map.key_list)
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                    with torch.cuda.amp.autocast():
+                        out = fn(*arg_map.value_list)
                 else:
-                    raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-            # print('arg_map',arg_map.key_list)
-            if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
-                with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
-            else:
-                out = fn(*arg_map.value_list)
-                for item in data.value_list:
-                    item.cpu()
-            return out
-        elif hasattr(fn, 'signature') and callable(fn):
-            for arg in fn.signature.inputs.key_list:
-                if arg in data:
-                    arg_map[arg] = data[arg].to(get_device())
-                elif arg in data_feed:
-                    arg_map[arg] = data[data_feed[arg]].to(get_device())
+                    for item in data.value_list:
+                        if hasattr(item, 'cpu'):
+                            item.cpu()
+                return out
+            elif hasattr(fn, 'signature') and callable(fn):
+                for arg in fn.signature.inputs.key_list:
+                    if arg in data_feed:
+                        arg_map[arg] = data[data_feed[arg]].to(get_device())
+                    elif arg in data:
+                        arg_map[arg] = data[arg].to(get_device())
+
+                    else:
+
+                        raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
+                # print('arg_map', arg_map.key_list)
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                    with torch.cuda.amp.autocast():
+                        out = fn(*arg_map.value_list)
                 else:
-
-                    raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
-            # print('arg_map', arg_map.key_list)
-            if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
-                with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
-            else:
-                out = fn(*arg_map.value_list)
-                for item in data.value_list:
-                    item.cpu()
+                    for item in data.value_list:
+                        if hasattr(item,'cpu'):
+                            item.cpu()
 
-            return out
-        elif callable(fn):
-            args = get_signature(fn).key_list
-            for arg in args:
-                if arg in data:
-                    arg_map[arg] = data[arg].to(get_device())
-                elif arg in data_feed:
-                    arg_map[arg] = data[data_feed[arg]].to(get_device())
+                return out
+            elif callable(fn):
+                args = get_signature(fn).key_list
+                for arg in args:
+                    if arg in data_feed:
+                        arg_map[arg] = data[data_feed[arg]].to(get_device())
+                    elif arg in data:
+                        arg_map[arg] = data[arg].to(get_device())
+                    else:
+                        arg_map[arg] = ''
+                # print('arg_map', arg_map.key_list)
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                    with torch.cuda.amp.autocast():
+                        out = fn(*arg_map.value_list)
                 else:
-                    arg_map[arg] = ''
-            # print('arg_map', arg_map.key_list)
-            if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
-                with torch.cuda.amp.autocast():
                     out = fn(*arg_map.value_list)
+                    for item in data.value_list:
+                        if is_tensor(item):
+                            item.cpu()
+                return out
             else:
-                out = fn(*arg_map.value_list)
-                for item in data.value_list:
-                    item.cpu()
-            return out
-        else:
-
-            print('uncomplete arg_map', arg_map.key_list)
+                print('uncomplete arg_map', arg_map.key_list)
+        except Exception as e:
+            print(e)
+            PrintException()
 
 
 def force_deterministic(seed):
@@ -1579,6 +1622,105 @@ def force_deterministic(seed):
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
     os.environ['PYTHONHASHSEED'] = str(seed)
+
+
+
+
+def fix_layer(layer:Layer):
+    """fix existing out-of-date model compatibility
+
+    Args:
+        layer (trident Layer):
+
+    Returns: fixed layer
+
+    """
+
+    if layer._input_shape is not None and isinstance(layer._input_shape,torch.Size):
+        layer._input_shape = to_tensor(to_numpy(layer._input_shape)).int()
+    if layer._output_shape is not None and isinstance(layer._output_shape,torch.Size):
+        layer._output_shape = to_tensor(to_numpy(layer._output_shape)).int()
+
+    for module in layer.modules():
+        class_name = module.__class__.__name__
+        if not hasattr(module, '_uid_prefixs'):
+            module._uid_prefixs = {}
+        if not hasattr(module, '_name'):
+            module._name = None
+            reset_name(module, module._uid_prefixs)
+
+        if not hasattr(module, 'name'):
+            module.name=module._name if module._name is not None and len(module._name) > 0 else module.relative_name
+
+        if not hasattr(module, '_built'):
+            setattr(module, 'built', True)
+
+        if hasattr(module, 'keepdim'):
+            value = getattr(module, 'keepdim')
+            delattr(module, 'keepdim')
+            setattr(module, 'keepdims', value)
+
+        if not hasattr(module, '_non_persistent_buffers_set'):
+            module._non_persistent_buffers_set = set()
+
+        if not hasattr(module, 'input_spec'):
+            module.input_spec = None
+            if module.input_shape is not None:
+                module.input_spec=TensorSpec(shape=module.input_shape)
+
+
+
+        if not hasattr(module, 'batch_index'):
+            setattr(module, 'batch_index', 0)
+        if not hasattr(module, 'filter_index'):
+            setattr(module, 'filter_index', 1)
+        if not hasattr(module, 'in_sequence'):
+            setattr(module, 'in_sequence', False)
+
+
+
+        if not hasattr(module, 'in_sequence'):
+            if 'lstm' in class_name.lower() or 'gru' in class_name.lower() or 'rnn' in class_name.lower():
+                module.in_sequence = True
+            else:
+                module.in_sequence = False
+
+        if 'Conv' in class_name and 'Block' in class_name :
+            if not hasattr(module, 'sequence_rank'):
+                module.sequence_rank = 'cna'
+
+        if 'Conv' in class_name :
+            if not hasattr(module, 'depth_multiplier'):
+                if 'Depthwise' in class_name or 'Separable' in class_name :
+                    module.depth_multiplier=1
+                else:
+                    module.depth_multiplier =None
+            if not hasattr(module, 'use_spectral'):
+                module.use_spectral = False
+
+
+    if not hasattr(layer,'signature'):
+        layer._signature = Signature()
+        if layer._input_shape is not None:
+            if is_tensor(layer._input_shape):
+                layer._signature.inputs["input"] = TensorSpec(shape=layer._input_shape,name="input")
+            elif isinstance(layer._input_shape, tuple) and isinstance(layer._input_shape[0], int):
+                layer._signature.inputs["input"] = TensorSpec(shape=to_tensor(layer._input_shape).int(), name="input")
+            elif isinstance(layer._input_shape, tuple):
+                for i in range(len(layer._input_shape)):
+                    layer._signature.inputs["input_{0}".format(i)] =  TensorSpec(shape=layer._input_shape[i], name="input_{0}".format(i))
+        if layer._output_shape is not None:
+            if is_tensor(layer._output_shape):
+                layer._signature.outputs["output"] =  TensorSpec(shape=layer._output_shape,name="output")
+            elif isinstance(layer._output_shape, tuple) and isinstance(layer._output_shape[0],int):
+                layer._signature.outputs["output"] = TensorSpec(shape=to_tensor(layer._output_shape).int(), name="output")
+            elif isinstance(layer._output_shape, tuple):
+                for i in range(len(layer._output_shape)):
+                    layer._signature.outputs["output_{0}".format(i)] =  TensorSpec(shape=layer._output_shape[i], name="output_{0}".format(i))
+        layer.signature=layer._signature
+
+
+    return layer
 
 
 

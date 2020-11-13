@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -49,7 +49,7 @@ if not os.path.exists(dirname):
         pass
 
 model_urls = {
-    'se_resnet50': '1dYlgpFtqi87KDG54_db4ALWKLARxCWMS',
+    'se_resnet50': '1vq0uueiHXuHSEFhb02GoEuPzLwrDW_Mb',
     'se_resnet101': '17moUOsGynsWALLHyv3yprHWbbDMrdiOP',
     'se_resnet152': '1BIaHb7_qunUVvt4TDAwonSKI2jYg4Ybj',
 }
@@ -172,13 +172,14 @@ def SE_ResNet50(include_top=True,
     if pretrained==True:
         download_model_from_google_drive(model_urls['se_resnet50'],dirname,'se_resnet50.pth')
         recovery_model=torch.load(os.path.join(dirname,'se_resnet50.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet50'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             resnet50.class_names = []
         else:
             if classes!=1000:
@@ -202,13 +203,14 @@ def SE_ResNet101(include_top=True,
     if pretrained==True:
         download_model_from_google_drive(model_urls['se_resnet101'],dirname,'se_resnet101.pth')
         recovery_model=torch.load(os.path.join(dirname,'se_resnet101.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet101'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             resnet101.class_names = []
         else:
             if classes != 1000:
@@ -231,15 +233,16 @@ def SE_ResNet152(include_top=True,
         input_shape=(3, 224, 224)
     resnet152 =SE_ResNet(se_bottleneck [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     if pretrained==True:
-        download_model_from_google_drive(model_urls['resnet152'],dirname,'se_resnet152.pth')
+        download_model_from_google_drive(model_urls['se_resnet50'],dirname,'se_resnet152.pth')
         recovery_model=torch.load(os.path.join(dirname,'se_resnet152.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet152'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             resnet152.class_names = []
         else:
             if classes != 1000:

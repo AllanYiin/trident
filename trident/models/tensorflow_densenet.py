@@ -16,7 +16,8 @@ import numpy as np
 
 
 from trident.backend.common import *
-from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, summary
+from trident.backend.tensorspec import *
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer
 from trident.backend.tensorflow_ops import *
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
@@ -322,16 +323,21 @@ def DenseNet121(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('16N2BECErDMRTV5JqESEBWyylXbQmKAIk',dirname,'densenet121.pth')
         recovery_model=load(os.path.join(dirname,'densenet121.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
         recovery_model.eval()
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+                densenet121.class_names = []
+
         densenet121.model=recovery_model
 
         densenet121.signature = get_signature(densenet121.model.forward)
@@ -372,16 +378,18 @@ def DenseNet161(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1n3HRkdPbxKrLVua9gOCY6iJnzM8JnBau',dirname,'densenet161.pth')
         recovery_model=load(os.path.join(dirname,'densenet161.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet161'
         recovery_model.eval()
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
         densenet161.model=recovery_model
         densenet161.signature = get_signature(densenet161.model.forward)
     return densenet161
@@ -422,15 +430,17 @@ def DenseNet169(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1QV73Th0Wo4SCq9AFPVEKqnzs7BUvIG5B',dirname,'densenet169.pth')
         recovery_model=load(os.path.join(dirname,'densenet169.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
         recovery_model.eval()
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
         densenet169.model=recovery_model
         densenet169.signature = get_signature(densenet169.model.forward)
     return densenet169
@@ -470,15 +480,18 @@ def DenseNet201(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1V2JazzdnrU64lDfE-O4bVIgFNQJ38q3J',dirname,'densenet201.pth')
         recovery_model=load(os.path.join(dirname,'densenet201.pth'))
-        recovery_model.name = 'densenet201'
+        recovery_model = fix_layer(recovery_model)
+        recovery_model._name = 'densenet201'
         recovery_model.eval()
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
         densenet201.model=recovery_model
         densenet201.signature = get_signature(densenet201.model.forward)
     return densenet201

@@ -9,15 +9,23 @@ import re
 
 import numpy as np
 import six
-
+import numbers
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.load_backend import *
 
 __all__ = ['label_backend_adaptive','get_onehot','check_is_onehot']
 
+_session = get_session()
+_backend = _session.backend
 
-_session=get_session()
-
+if _backend== 'pytorch':
+    from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
+    from trident.backend.pytorch_ops import int_shape
+    import torch
+elif _backend== 'tensorflow':
+    from trident.backend.tensorflow_backend import to_numpy, to_tensor,ObjectType
+    from trident.backend.tensorflow_ops import int_shape
 
 
 def get_onehot(idx,len):
@@ -37,11 +45,11 @@ def check_is_onehot(label):
     else:
         return False
 
-def label_backend_adaptive(label,label_mapping=None,expect_image_type=None):
-    if get_backend() == 'pytorch':
+def label_backend_adaptive(label,label_mapping=None,object_type=None,**kwargs):
+    if _backend== 'pytorch':
         if isinstance(label,np.ndarray):
             # binary mask
-            if expect_image_type == ExpectDataType.binary_mask:
+            if object_type == ObjectType.binary_mask:
                 if label.ndim==2 :
                     label[label > 0] = 1
                     return label.astype(np.int64)
@@ -52,7 +60,7 @@ def label_backend_adaptive(label,label_mapping=None,expect_image_type=None):
                         label = label[:, :,0]
                     label[label > 0] = 1
                     return label.astype(np.int64)
-            elif expect_image_type == ExpectDataType.label_mask:
+            elif object_type == ObjectType.label_mask:
                 if label.ndim==2 :
                     return label.astype(np.int64)
                 if label.ndim == 3 and label.shape[-1] >2:
@@ -63,8 +71,8 @@ def label_backend_adaptive(label,label_mapping=None,expect_image_type=None):
         elif isinstance(label, int):
             return label
         return label
-    elif get_backend()== 'tensorflow':
-        if isinstance(label, int):
+    elif _backend== 'tensorflow':
+        if isinstance(label, numbers.Integral):
             if isinstance(label_mapping, dict) and len(label_mapping) > 0:
                 label_mapping = list(label_mapping.values())[0]
                 label = get_onehot(label, len(label_mapping))

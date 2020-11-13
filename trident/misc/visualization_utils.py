@@ -7,6 +7,8 @@ import math
 
 if is_in_ipython():
     from IPython import display
+
+
 from tkinter import *
 
 if not is_in_colab:
@@ -118,34 +120,28 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
                 display.display(plt.gcf())
             else:
                 plt.ioff()
-                plt.gcf().show()
+                plt.show(block=False)
 
 
-def loss_metric_curve(losses, metrics, sample_collected=None, legend=None, calculate_base='epoch', max_iteration=None,
+def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max_iteration=None,
                       save_path=None, imshow=False):
     fig = plt.gcf()
     fig.set_size_inches(18, 8)
     plt.clf()
     plt.ion()  # is not None:
-    collected_samples = []
-    if sample_collected is not None and len(sample_collected) > 0:
-        sample_collected = np.array(sample_collected)
-        sample = np.arange(len(sample_collected))
-        collected_samples = sample[sample_collected == 1]
+
+
 
     plt.subplot(2, 2, 1)
-    if isinstance(losses, dict):
-        if len(collected_samples) > 0:
-            plt.plot(collected_samples, losses['total_losses'])
-        else:
-            plt.plot(losses['total_losses'])
+    if losses.__class__.__name__=='HistoryBase':
+        steps,values=losses.get_series('total_losses')
+        plt.plot(steps,values)
         plt.legend(['loss'], loc='upper left')
     elif isinstance(losses, list):
         for item in losses:
-            if len(collected_samples) > 0:
-                plt.plot(collected_samples, np.array(item['total_losses']))
-            else:
-                plt.plot(np.array(item['total_losses']))
+            if  item.__class__.__name__=='HistoryBase':
+                steps, values = item.get_series('total_losses')
+                plt.plot(steps,values)
         if legend is not None:
             plt.legend(['{0}'.format(lg) for lg in legend], loc='upper right')
         else:
@@ -159,26 +155,23 @@ def loss_metric_curve(losses, metrics, sample_collected=None, legend=None, calcu
         plt.xlim(0, max_iteration)
 
     plt.subplot(2, 2, 2)
-    if isinstance(metrics, dict):
+    if  metrics.__class__.__name__=='HistoryBase':
         for k, v in metrics.items():
-            if len(collected_samples) > 0:
-                plt.plot(collected_samples, metrics[k])
-            else:
-                plt.plot(metrics[k])
+            steps, values = metrics.get_series(k)
+            plt.plot(steps, values)
         plt.legend(list(metrics.keys()), loc='upper left')
     elif isinstance(metrics, list):
         legend_list = []
         for i in range(len(metrics)):
             item = metrics[i]
-            for k, v in item.items():
-                if len(collected_samples) == len(v) > 0:
-                    plt.plot(collected_samples, np.array(item[k]))
-                elif len(v) > 0:
-                    plt.plot(np.array(item[k]))
-                if len(v) > 0 and legend is not None:
-                    legend_list.append(['{0} {1}'.format(k, legend[i])])
-                elif len(v) > 0:
-                    legend_list.append(['{0} {1}'.format(k, i)])
+            if  item.__class__.__name__=='HistoryBase':
+                for k, v in item.items():
+                    steps, values = item.get_series(k)
+                    plt.plot(steps, values)
+                    if len(v) > 0 and legend is not None:
+                        legend_list.append(['{0} {1}'.format(k, legend[i])])
+                    elif len(v) > 0:
+                        legend_list.append(['{0} {1}'.format(k, i)])
         plt.legend(legend_list, loc='upper left')
 
     plt.title('model metrics')
@@ -196,6 +189,7 @@ def loss_metric_curve(losses, metrics, sample_collected=None, legend=None, calcu
             display.display(plt.gcf())
         else:
             plt.ioff()
+            plt.draw()
             plt.show(block=False)
 
 
@@ -365,7 +359,7 @@ def plot_centerloss(plt, feat, labels, num_class=10, title=''):
 
 
 def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, title="Confusion matrix", fname=None,
-                          noshow=False, ):
+                          noshow=False ):
     """Render the confusion matrix and return matplotlib's figure with it.
     Normalization can be applied by setting `normalize=True`.
     """

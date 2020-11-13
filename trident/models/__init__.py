@@ -3,7 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from trident.backend.load_backend import get_backend
+from trident.backend.common import get_backend
 
 if get_backend()=='pytorch':
     from . import pytorch_vgg as vgg

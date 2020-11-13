@@ -21,7 +21,8 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary
+from trident.backend.tensorspec import *
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -328,19 +329,20 @@ def DenseNet121(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('16N2BECErDMRTV5JqESEBWyylXbQmKAIk',dirname,'densenet121.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet121.pth'))
+        recovery_model=fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             densenet121.class_names = []
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+
                 densenet121.class_names = []
         densenet121.model=recovery_model
 
@@ -382,19 +384,19 @@ def DenseNet161(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1n3HRkdPbxKrLVua9gOCY6iJnzM8JnBau',dirname,'densenet161.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet161.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet161'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             densenet161.class_names = []
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
                 densenet161.class_names = []
         densenet161.model=recovery_model
         densenet161.signature = get_signature(densenet161.model.forward)
@@ -436,19 +438,19 @@ def DenseNet169(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1QV73Th0Wo4SCq9AFPVEKqnzs7BUvIG5B',dirname,'densenet169.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet169.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             densenet169.class_names = []
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
                 densenet169.class_names = []
         densenet169.model=recovery_model
         densenet169.signature = get_signature(densenet169.model.forward)
@@ -489,19 +491,19 @@ def DenseNet201(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1V2JazzdnrU64lDfE-O4bVIgFNQJ38q3J',dirname,'densenet201.pth')
         recovery_model=torch.load(os.path.join(dirname,'densenet201.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet201'
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             densenet201.class_names = []
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='classifier')
-                new_fc.input_shape=recovery_model.classifier.input_shape
-                recovery_model.classifier=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
                 densenet201.class_names = []
         densenet201.model=recovery_model
         densenet201.signature = get_signature(densenet201.model.forward)

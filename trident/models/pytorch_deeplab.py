@@ -54,7 +54,8 @@ def DeepLabHead(classes=20, atrous_rates=(6, 12, 18,24),num_filters=256):
     return Sequential(
         ASPP(atrous_rates,num_filters=num_filters),
         Conv2d_Block((3,3),num_filters,auto_pad=True,use_bias=False,activation='relu',normalization='batch'),
-        Conv2d((1,1),num_filters=classes,strides=1,auto_pad=True,activation='sigmoid',name='classifier')
+        Conv2d((1,1),num_filters=classes,strides=1,auto_pad=True,activation=None,name='classifier'),
+        SoftMax()
         )
 
 
@@ -130,7 +131,8 @@ class _DeeplabV3_plus(Layer):
         self.decoder=Sequential(
             DepthwiseConv2d_Block((3,3),depth_multiplier=0.5,strides=1,use_bias=False,activation='leaky_relu',normalization='batch',dropout_rate=0.5),
             DepthwiseConv2d_Block((3,3),depth_multiplier=1,strides=1,use_bias=False,activation='leaky_relu',normalization='batch',dropout_rate=0.1),
-            Conv2d((1, 1), num_filters=self.classes, strides=1, use_bias=False, activation='sigmoid'),
+            Conv2d((1, 1), num_filters=self.classes, strides=1, use_bias=False, activation=None),
+            SoftMax()
 
         )
 

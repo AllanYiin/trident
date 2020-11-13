@@ -13,6 +13,7 @@ from itertools import product as product
 import cv2
 from trident.data.dataset import BboxDataset
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,ModuleList
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import xywh2xyxy, xyxy2xywh,bbox_giou,bbox_giou_numpy
@@ -124,6 +125,7 @@ def match(truths, priors, variances, labels, threshold=0.3):
 
     loc = encode(matches, priors2, variances)
     return loc, conf
+
 
 def encode(matched, priors, variances):
     """
@@ -699,8 +701,8 @@ class Ssd(Layer):
 
 
 class SsdDetectionModel(ImageDetectionModel):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(SsdDetectionModel, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None,  input_shape=None,output=None):
+        super(SsdDetectionModel, self).__init__(inputs, input_shape,output)
         self.preprocess_flow = []
         self.detection_threshold = 0.6
         self.iou_threshold = 0.3

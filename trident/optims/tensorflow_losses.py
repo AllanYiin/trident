@@ -9,6 +9,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops.losses import loss_reduction
 from tensorflow.python.ops.losses import util as tf_losses_utils
 from trident.backend.common import camel2snake, get_class, epsilon, PrintException
+from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.optims.losses import Loss
@@ -119,6 +120,20 @@ class _ClassificationLoss(Loss):
             else:
                 total_loss = math_ops.reduce_sum(loss)
                 return math_ops.div_no_nan(total_loss, num_present, name='value')
+
+    def flatten_check(self, output, target):
+        "Check that `out` and `targ` have the same number of elements and flatten them."
+        if ndim(output) > 2:
+            output = output.view(-1, output.size(-1))
+        if ndim(target) > 2:
+
+            target = target.view(-1, target.size(-1))
+
+        if len(output) == len(target):
+            return output, target
+        else:
+            raise ValueError('output and target have diffent elements.')
+
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
 
@@ -133,7 +148,7 @@ class _ClassificationLoss(Loss):
         # check num_clases
         if self.num_classes is None:
             self.num_classes = int_shape(output)[self.axis]
-
+        output, target = self.flatten_check(output, target)
         if self.sample_weight is None:
             self.sample_weight = ones(self.num_classes, requires_grad=False)
         elif len(self.sample_weight) != self.num_classes:
@@ -220,6 +235,156 @@ class _ClassificationLoss(Loss):
             raise e
 
 
+
+class _PairwiseLoss(Loss):
+    """Calculate loss for  complex classification task."""
+
+    def __init__(self, axis=-1,  reduction='batch_mean', name=None, **kwargs):
+        """
+
+        Args:
+            axis (int): the position where the classes is.
+            sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+            number of classes.
+            from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+            ignore_index (int or list of int):
+            cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+            less than 1..
+            is_target_onehot (bool): Is the target tensor in onehot format?
+            label_smooth (bool): Should use label smoothing?
+            reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+                'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+                summation them.
+
+        Attributes:
+            need_target_onehot (bool): If True, means the before loss calculation , need to transform target as one-hot format, ex. label-smooth, default is False.
+            is_multiselection (bool): If True, means the classification model is multi-selection, so cannot use  any softmax process, use sigmoid and binary_crosss_entropy
+            insteaded.
+            is_target_onehot (bool):  If True, means we have confirmed (not just declare) the target is transformed as  one-hot format
+            reduction(str): The aggregation function for loss, available options are 'sum', 'mean 'and 'batch_mean', default is 'mean'
+            axis (None or int): The axis we according with for loss calculation. Default is 1.
+            from_logits (bool):If True, means  the sum of all probability will equal 1.
+            is_logsoftmax (bool):If True, means model  use SoftMax as last layer or use any equivalent calculation.
+            sample_weight(1D tensor):The loss weight for all classes.
+            ignore_index(int , list, tuple): The classes we want to ignore in the loss calculation.
+            cutoff(float): Means the decision boundary in this classification model, default=0.5.
+            num_classes(int):number of  all the classes.
+            label_smooth (bool):If True, mean we will apply label-smoothing in loss calculation.
+
+        """
+        super(_PairwiseLoss, self).__init__(reduction=reduction,axis=axis,name=name)
+        self._set_name_scope()
+
+
+        # initilize weight
+
+    def _set_name_scope(self):
+        """Creates a valid `name_scope` name."""
+        if self.name is None:
+            name = self.__class__.__name__
+        elif self.name == '<lambda>':
+            name = 'lambda'
+        else:
+            # E.g. '_my_loss' => 'my_loss'
+            name = self.name.strip('_')
+        with ops.name_scope_v2(name) as scope_name:
+            self._name_scope = ops.name_scope_v2(scope_name)
+
+    def _get_reduction(self, loss):
+        with self._name_scope:
+            if ndim(loss) <= 1 or self.reduction == 'none':
+                return loss
+            num_present = math_ops.cast(array_ops.size(loss, name='num_elements'), dtype=loss.dtype)
+            batch_size=math_ops.cast(tf.constant(array_ops.shape(loss,name='shape')[0]), dtype=loss.dtype)
+
+            if ndim(loss) >= 2 and self.reduction == 'batch_sum':
+                total_loss = math_ops.div_no_nan(math_ops.reduce_sum(loss),batch_size, name='value')
+                return loss.mean(1).sum()
+            elif ndim(loss) >= 2 and self.reduction == 'batch_mean':
+                total_loss = math_ops.reduce_sum(loss)
+                return math_ops.div_no_nan(total_loss, math_ops.div_no_nan(num_present,batch_size), name='value')
+            elif self.reduction in ('mean', 'batch_mean'):
+                total_loss = math_ops.reduce_sum(loss)
+                return math_ops.div_no_nan(total_loss, num_present, name='value')
+            elif self.reduction == ('sum', 'batch_sum'):
+                return math_ops.reduce_sum(loss)
+            else:
+                total_loss = math_ops.reduce_sum(loss)
+                return math_ops.div_no_nan(total_loss, num_present, name='value')
+
+
+    def flatten_check(self, output, target):
+        "Check that `out` and `targ` have the same number of elements and flatten them."
+        if ndim(output) > 2:
+            output = output.view(-1, output.size(-1))
+        if ndim(target) > 2:
+
+            target = target.view(-1, target.size(-1))
+
+        if len(output) == len(target):
+            return output, target
+        else:
+            raise ValueError('output and target have diffent elements.')
+
+    def preprocess(self, output: Tensor, target: Tensor, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+        output, target = self.flatten_check(output, target)
+        if output.shape == target.shape:
+            return output, target
+
+        elif target.dtype == tf.int64 and ndim(output) == ndim(target) + 1:
+            num_class = int_shape(output)[self.axis]
+            target = make_onehot(target, num_class, self.axis).float()
+        return output, target
+
+    def calculate_loss(self, output, target, **kwargs):
+        """ Calculate the unaggregate loss.
+        The loss function calculation logic should define here., please dont't aggregate the loss in this phase.
+
+        Args:
+            output (tf.Tensor):
+            target (tf.Tensor):
+        """
+        ##dont do aggregation
+        raise NotImplementedError
+
+    def __call__(self, output: Tensor, target: Tensor, **kwargs):
+        result = self.forward(output, target, **kwargs)
+        return result
+
+    def forward(self, output: Tensor, target: Tensor, **kwargs) -> 'loss':
+        """
+
+            Args:
+                output (tf.Tensor):
+                target (tf.Tensor):
+
+            Returns:
+                calculated loss
+
+            """
+        try:
+            loss = self.calculate_loss(*self.preprocess(output, target,**kwargs))
+            loss=self._get_reduction(loss)
+            return loss
+        except Exception as e:
+            print(e)
+            PrintException()
+            raise e
+
+
+
+
+
 class CrossEntropyLoss(_ClassificationLoss):
     """
     Calculate the cross entropy loss
@@ -264,12 +429,29 @@ class CrossEntropyLoss(_ClassificationLoss):
         Returns:
 
         """
-        if self.is_logsoftmax == False:
-            if not self.from_logits:
-                output=softmax(output,self.axis)
-            loss =tf.nn.sparse_softmax_cross_entropy_with_logits(target,output,self.sample_weight,name='weighted_cross_entropy')
+        # if self.is_logsoftmax == False:
+        #     if not self.from_logits:
+        #         output=softmax(output,self.axis)
+        #     loss =tf.nn.sparse_softmax_cross_entropy_with_logits(target,output,self.sample_weight,name='weighted_cross_entropy')
+        # else:
+        #     loss= -cast(target,output.dtype)*output*self.sample_weight
+        # return loss
+
+
+        sample_weight = self.sample_weight * self.ignore_index_weight
+        if ndim(output) == 2:
+            pass
         else:
-            loss= -cast(target,output.dtype)*output*self.sample_weight
+            reshape_shape = [1] * ndim(output)
+            reshape_shape[self.axis] = self.num_classes
+            sample_weight = self.sample_weight.view(*reshape_shape)
+            if self.is_logsoftmax == True:
+                sample_weight = self.sample_weight.view(*reshape_shape) * self.ignore_index_weight.view(*reshape_shape)
+        # -sum([p[i] * log2(q[i]) for i in range(len(p))])
+        if self.is_logsoftmax == False:
+            loss = -(target * log_softmax(output, axis=self.axis) * sample_weight)
+        else:
+            loss = -(target * output * sample_weight)
         return loss
 
 
@@ -429,136 +611,6 @@ class FocalLoss(_ClassificationLoss):
 
         return loss
 
-
-
-class _PairwiseLoss(Loss):
-    """Calculate loss for  complex classification task."""
-
-    def __init__(self, axis=-1,  reduction='batch_mean', name=None, **kwargs):
-        """
-
-        Args:
-            axis (int): the position where the classes is.
-            sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
-            number of classes.
-            from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
-            ignore_index (int or list of int):
-            cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-            less than 1..
-            is_target_onehot (bool): Is the target tensor in onehot format?
-            label_smooth (bool): Should use label smoothing?
-            reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
-                'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
-                summation them.
-
-        Attributes:
-            need_target_onehot (bool): If True, means the before loss calculation , need to transform target as one-hot format, ex. label-smooth, default is False.
-            is_multiselection (bool): If True, means the classification model is multi-selection, so cannot use  any softmax process, use sigmoid and binary_crosss_entropy
-            insteaded.
-            is_target_onehot (bool):  If True, means we have confirmed (not just declare) the target is transformed as  one-hot format
-            reduction(str): The aggregation function for loss, available options are 'sum', 'mean 'and 'batch_mean', default is 'mean'
-            axis (None or int): The axis we according with for loss calculation. Default is 1.
-            from_logits (bool):If True, means  the sum of all probability will equal 1.
-            is_logsoftmax (bool):If True, means model  use SoftMax as last layer or use any equivalent calculation.
-            sample_weight(1D tensor):The loss weight for all classes.
-            ignore_index(int , list, tuple): The classes we want to ignore in the loss calculation.
-            cutoff(float): Means the decision boundary in this classification model, default=0.5.
-            num_classes(int):number of  all the classes.
-            label_smooth (bool):If True, mean we will apply label-smoothing in loss calculation.
-
-        """
-        super(_PairwiseLoss, self).__init__(reduction=reduction,axis=axis,name=name)
-        self._set_name_scope()
-
-
-        # initilize weight
-
-    def _set_name_scope(self):
-        """Creates a valid `name_scope` name."""
-        if self.name is None:
-            name = self.__class__.__name__
-        elif self.name == '<lambda>':
-            name = 'lambda'
-        else:
-            # E.g. '_my_loss' => 'my_loss'
-            name = self.name.strip('_')
-        with ops.name_scope_v2(name) as scope_name:
-            self._name_scope = ops.name_scope_v2(scope_name)
-
-    def _get_reduction(self, loss):
-        with self._name_scope:
-            if ndim(loss) <= 1 or self.reduction == 'none':
-                return loss
-            num_present = math_ops.cast(array_ops.size(loss, name='num_elements'), dtype=loss.dtype)
-            batch_size=math_ops.cast(tf.constant(array_ops.shape(loss,name='shape')[0]), dtype=loss.dtype)
-
-            if ndim(loss) >= 2 and self.reduction == 'batch_sum':
-                total_loss = math_ops.div_no_nan(math_ops.reduce_sum(loss),batch_size, name='value')
-                return loss.mean(1).sum()
-            elif ndim(loss) >= 2 and self.reduction == 'batch_mean':
-                total_loss = math_ops.reduce_sum(loss)
-                return math_ops.div_no_nan(total_loss, math_ops.div_no_nan(num_present,batch_size), name='value')
-            elif self.reduction in ('mean', 'batch_mean'):
-                total_loss = math_ops.reduce_sum(loss)
-                return math_ops.div_no_nan(total_loss, num_present, name='value')
-            elif self.reduction == ('sum', 'batch_sum'):
-                return math_ops.reduce_sum(loss)
-            else:
-                total_loss = math_ops.reduce_sum(loss)
-                return math_ops.div_no_nan(total_loss, num_present, name='value')
-
-    def preprocess(self, output: Tensor, target: Tensor, **kwargs):
-        """
-
-        Args:
-            output ():
-            target ():
-            **kwargs ():
-
-        Returns:
-
-        """
-        if output.shape == target.shape:
-            return output, target
-        elif target.dtype == tf.int64 and ndim(output) == ndim(target) + 1:
-            num_class = int_shape(output)[self.axis]
-            target = make_onehot(target, num_class, self.axis).float()
-        return output, target
-
-    def calculate_loss(self, output, target, **kwargs):
-        """ Calculate the unaggregate loss.
-        The loss function calculation logic should define here., please dont't aggregate the loss in this phase.
-
-        Args:
-            output (tf.Tensor):
-            target (tf.Tensor):
-        """
-        ##dont do aggregation
-        raise NotImplementedError
-
-    def __call__(self, output: Tensor, target: Tensor, **kwargs):
-        result = self.forward(output, target, **kwargs)
-        return result
-
-    def forward(self, output: Tensor, target: Tensor, **kwargs) -> 'loss':
-        """
-
-            Args:
-                output (tf.Tensor):
-                target (tf.Tensor):
-
-            Returns:
-                calculated loss
-
-            """
-        try:
-            loss = self.calculate_loss(*self.preprocess(output, target,**kwargs))
-            loss=self._get_reduction(loss)
-            return loss
-        except Exception as e:
-            print(e)
-            PrintException()
-            raise e
 
 
 

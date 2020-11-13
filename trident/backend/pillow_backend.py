@@ -46,9 +46,10 @@ def read_image(im_path:str):
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
             img=pil_image.open(im_path)
-            # if isinstance(img, PngImageFile):
-            #     img=np.array(img).astype(np.float32)
-            return np.array(img).astype(np.float32)
+            img=np.array(img).astype(np.float32)
+            if img.max()<=1:
+                img=img*255.0
+            return img
         else:
             if not os.path.exists(im_path):
                 raise ValueError('{0} not exsit'.format(im_path))
@@ -59,7 +60,7 @@ def read_image(im_path:str):
             img = plt.imread(im_path)
             return img[::-1]
         except Exception as e:
-            sys.stderr.write(e)
+            print(e)
             return None
 
 def read_mask(im_path:str):
@@ -84,7 +85,7 @@ def read_mask(im_path:str):
             else:
                 raise ValueError('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
     except Exception as e:
-        sys.stderr.write(e)
+        print(e)
         return None
 
 def save_image(arr,file_path):
@@ -157,7 +158,7 @@ def array2image(arr:np.ndarray):
 
     """
     # confirm back to numpy
-    arr=np.squeeze(arr)
+    arr=np.clip(np.squeeze(arr),0,255)
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     mode = None

@@ -39,7 +39,7 @@ class ImageDataProvider(object):
     supporting integer indexing in range from 0 to len(self) exclusive.
     """
 
-    def __init__(self, dataset_name='',traindata=None,testdata=None,minibatch_size=8,**kwargs):
+    def __init__(self, dataset_name='',traindata=None,testdata=None,minibatch_size=8,mode='tuple',**kwargs):
         self.__name__=dataset_name
 
         self.traindata = traindata
@@ -48,6 +48,10 @@ class ImageDataProvider(object):
 
         self.scenario='train'
         self._class_names={}
+        if mode in ['tuple','dict']:
+            self.mode=mode
+        else:
+            raise ValueError("Valid mode should be tuple or dict ")
 
         self._minibatch_size = minibatch_size
         self.is_flatten=bool(kwargs['is_flatten']) if 'is_flatten' in kwargs else False
@@ -135,14 +139,18 @@ class ImageDataProvider(object):
     @image_transform_funcs.setter
     def image_transform_funcs(self, value):
         self._image_transform_funcs = value
-        if self.traindata is not None and hasattr(self.traindata.data, 'image_transform_funcs'):
-            self.traindata.data.image_transform_funcs = self._image_transform_funcs
+        if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
+            self.traindata.data.transform_funcs = self._image_transform_funcs
             if len(self.traindata.unpair) > 0:
-                self.traindata.unpair.image_transform_funcs = self._image_transform_funcs
-        if self.testdata is not None and len(self.testdata.data)>0 and hasattr(self.testdata.data, 'image_transform_funcs'):
-            self.testdata.data.image_transform_funcs = self._image_transform_funcs
-        if self.testdata is not None and len(self.testdata.data)>0 and len(self.testdata.unpair) > 0:
-            self.testdata.unpair.image_transform_funcs = self._image_transform_funcs
+                self.traindata.unpair.transform_funcs = self._image_transform_funcs
+            self.traindata.update_data_template()
+        if self.testdata is not None and len(self.testdata.data)>0 and hasattr(self.testdata.data, 'transform_funcs'):
+            self.testdata.data.transform_funcs = self._image_transform_funcs
+            if len(self.testdata.unpair) > 0:
+                self.testdata.unpair.transform_funcs = self._image_transform_funcs
+            self.testdata.update_data_template()
+
+
 
     def image_transform(self, img_data):
         if img_data.ndim==4:
@@ -211,20 +219,6 @@ class ImageDataProvider(object):
             self.testdata.paired_transform_funcs = self._paired_transform_funcs
 
 
-    def image_transform(self, img_data):
-        if img_data.ndim==4:
-            return [self.image_transform(im) for im in img_data]
-        if len(self.image_transform_funcs) == 0:
-            return image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
-            for fc in self.image_transform_funcs:
-                if fc.__qualname__.startswith('random_') and random.randint(10)%2==0:
-                    img_data = fc(img_data)
-            img_data = image_backend_adaption(img_data)
-
-            return img_data
-        else:
-            return img_data
 
 
 
@@ -260,10 +254,16 @@ class ImageDataProvider(object):
     def next(self):
         if self.scenario == 'test' and self.testdata is not None:
             result = self.testdata.next()
-            return result
+            if self.mode=='tuple':
+                return tuple(result.value_list)
+            else:
+                return result
         else:
             result= self.traindata.next()
-            return result
+            if self.mode == 'tuple':
+                return tuple(result.value_list)
+            else:
+                return result
 
     def __next__(self):
         if self.scenario == 'test' and self.testdata is not None:
@@ -272,11 +272,20 @@ class ImageDataProvider(object):
             return next(self.traindata)
 
     def next_train(self):
-        return self.traindata.next()
+        result= self.traindata.next()
+
+        if self.mode == 'tuple':
+            return tuple(result.value_list)
+        else:
+            return self.traindata
 
     def next_test(self):
         if self.testdata is not None:
-            return self.testdata.next()
+            result= self.testdata.next()
+            if self.mode == 'tuple':
+                return tuple(result.value_list)
+            else:
+                return self.traindata
         else:
             return None
 
@@ -601,6 +610,41 @@ class TextSequenceDataProvider(object):
             return text2indexdict[text_data]
         else:
             return text2indexdict['<unknown/>']
+
+
+    def index2label(self,idx:int):
+        index2textdict=None
+        if self.scenario == 'test' and self.testdata is not None and self.testdata.label is not None:
+            index2textdict= self.testdata.label.index2text
+        else:
+            index2textdict= self.traindata.label.index2text
+        return index2textdict[idx]
+
+
+    def label2index(self,text_data:str ):
+        text2indexdict = None
+        if self.scenario == 'test' and self.testdata is not None and self.testdata.label is not None :
+            text2indexdict= self.testdata.label.text2index
+        else:
+            text2indexdict= self.traindata.label.text2index
+        if text_data in text2indexdict:
+            return text2indexdict[text_data]
+        else:
+            return text2indexdict['<unknown/>']
+
+    @property
+    def vocabs(self):
+        if self.scenario == 'test' and self.testdata is not None:
+            return self.testdata.data.vocabs
+        else:
+            return self.traindata.data.vocabs
+
+    @property
+    def label_vocabs(self):
+        if self.scenario == 'test' and self.testdata is not None:
+            return self.testdata.label.vocabs
+        else:
+            return self.traindata.label.vocabs
 
 
 

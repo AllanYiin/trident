@@ -3,16 +3,17 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import six
-from trident.backend.common import get_session,set_session,get_plateform, get_trident_dir, epsilon, floatx, camel2snake, \
-    snake2camel, addindent, format_time, get_time_suffix, get_function, get_class, get_terminal_size, gcd, \
-    get_divisors, isprime, next_prime, prev_prime, nearest_prime,PrintException, if_else
+
+from trident.backend.common import *
+from trident.backend.tensorspec import *
 import  trident.backend.numpy_ops
-#from trident.backend.load_backend import get_backend, get_image_backend
+import trident.backend.load_backend
 from trident.backend.model import *
 
 
 
 from trident.data import *
+from trident.callbacks import *
 from trident.misc import *
 
 if get_backend()=='pytorch':
@@ -24,7 +25,7 @@ if get_backend()=='pytorch':
     from trident.layers.pytorch_pooling import *
     from trident.layers.pytorch_blocks import *
     from trident.layers.pytorch_normalizations import *
-
+    from trident.layers.pytorch_rnn import *
 
     from trident.optims.pytorch_constraints import *
     from trident.optims.pytorch_regularizers import *
@@ -53,11 +54,15 @@ elif get_backend()=='tensorflow':
 
     from trident.optims.tensorflow_trainer import *
 
-from trident.callbacks import *
+
+elif get_backend()=='onnx':
+    import_or_install()
+    pass
+
 from trident.optims.trainers import TrainingPlan
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import *
 from trident.backend.iteration_tools import *
 from trident.models import *
-
+#
 

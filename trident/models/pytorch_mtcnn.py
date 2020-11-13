@@ -24,6 +24,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine
 from trident.backend.pytorch_ops import *
@@ -128,6 +129,7 @@ def Pnet(pretrained=True,
     if pretrained==True:
         download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX',dirname,'pnet.pth')
         recovery_model=torch.load(os.path.join(dirname,'pnet.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.to(_device)
         pnet.model=recovery_model
     return pnet
@@ -145,6 +147,7 @@ def Rnet(pretrained=True,
     if pretrained==True:
         download_model_from_google_drive('1CH7z133_KrcWMx9zXAblMCV8luiQ3wph',dirname,'rnet.pth')
         recovery_model=torch.load(os.path.join(dirname,'rnet.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.to(_device)
         rnet.model=recovery_model
     return rnet
@@ -161,6 +164,7 @@ def Onet(pretrained=True,
     if pretrained==True:
         download_model_from_google_drive('1a1dAlSzJOAfIz77Ic38JMQJYWDG_b7-_',dirname,'onet.pth')
         recovery_model=torch.load(os.path.join(dirname,'onet.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.to(_device)
         onet.model=recovery_model
     return onet

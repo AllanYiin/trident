@@ -15,6 +15,7 @@ import tensorflow as tf
 
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
+from trident.backend.tensorflow_ops import *
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file_from_google_drive
 from trident.layers.tensorflow_activations import get_activation, Identity, Relu
@@ -42,7 +43,7 @@ if not os.path.exists(dirname):
 
 
 
-def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortcut=False,use_bias=True,name=None):
+def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortcut=False,use_bias=False,name=None):
     shortcut = Identity()
     if strides>1 or conv_shortcut is True:
         shortcut =Conv2d_Block((1,1),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_downsample')
@@ -51,7 +52,7 @@ def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortc
                                  Conv2d_Block((3,3),num_filters=num_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_1_conv')),
                       shortcut,activation='relu',name=name)
 
-def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=True,name=None):
+def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=False,name=None):
     #width = int(num_filters * (base_width / 64.)) * 1#groups'
     shortcut = Identity()
     shortcut_name='0'
@@ -67,7 +68,7 @@ def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bia
 
 
 
-def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=True,  include_top=True, model_name='',
+def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=False,  include_top=True, model_name='',
            **kwargs):
     """Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
 
@@ -126,7 +127,8 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=T
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names=labels
-    model.preprocess_flow=[resize((input_shape[0],input_shape[1]),keep_aspect=True), to_bgr(), normalize([103.939, 116.779, 123.68], [1, 1, 1])]
+        input_np_shape=to_numpy(input_shape)
+    model.preprocess_flow=[resize((input_np_shape[0],input_np_shape[1]),keep_aspect=True), to_bgr(), normalize([103.939, 116.779, 123.68], [1, 1, 1])]
     #model.summary()
     return model
 
@@ -144,6 +146,7 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=T
 
 def ResNet50(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -151,25 +154,37 @@ def ResNet50(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
+    input_shape=to_tensor(input_shape)
     resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
     if pretrained==True:
         download_model_from_google_drive('1vReSW_l8fldyYQ6ay5HCYFGoMaGbdW2T',dirname,'resnet50_tf.pth')
         recovery_model=load(os.path.join(dirname,'resnet50_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable = False
         recovery_model.eval()
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
-                recovery_model.fc=Dense(classes, activation=None, name='fc')
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
-
+        recovery_model.signature=None
+        if recovery_model.signature != recovery_model._signature:
+            recovery_model.signature = recovery_model._signature
         resnet50.model=recovery_model
+        if resnet50.signature!=resnet50.model.signature:
+            resnet50.signature = resnet50.model.signature
     return resnet50
 
 def ResNet101(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -177,24 +192,37 @@ def ResNet101(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
+    input_shape = to_tensor(input_shape)
     resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
     if pretrained==True:
         download_model_from_google_drive('13QYdFX3CvsNiegi-iUX1PUC0KKKgPNwr',dirname,'resnet101_tf.pth')
         recovery_model=load(os.path.join(dirname,'resnet101_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable = False
         recovery_model.eval()
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes != 1000:
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
-        resnet101.model=recovery_model
+        recovery_model.signature = None
+        if recovery_model.signature != recovery_model._signature:
+            recovery_model.signature = recovery_model._signature
+        resnet101.model = recovery_model
+        if resnet101.signature != resnet101.model.signature:
+            resnet101.signature = resnet101.model.signature
     return resnet101
 
 
 def ResNet152(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -202,20 +230,33 @@ def ResNet152(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
+    input_shape = to_tensor(input_shape)
     resnet152 =ResNet(bottleneck, [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     if pretrained==True:
         download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152.pth')
         recovery_model=load(os.path.join(dirname,'resnet152.pth'))
+        recovery_model = fix_layer(recovery_model)
+        if freeze_features:
+            recovery_model.trainable = False
         recovery_model.eval()
 
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes != 1000:
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
+        recovery_model.signature = None
+        if recovery_model.signature != recovery_model._signature:
+            recovery_model.signature = recovery_model._signature
         resnet152.model=recovery_model
+        if resnet152.signature != resnet152.model.signature:
+            resnet152.signature = resnet152.model.signature
+
     return resnet152
 
 

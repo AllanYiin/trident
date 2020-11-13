@@ -21,7 +21,7 @@ from torch._six import container_abcs
 from torch.nn import init
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu, PRelu
@@ -31,7 +31,7 @@ from trident.layers.pytorch_normalizations import get_normalization, BatchNorm2d
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 
-__all__ = ['SEResNet_IR','BottleNeck_IR_SE','BottleNeck_IR']
+__all__ = ['SEResNet_IR','SEResNet50_IR_512','BottleNeck_IR_SE','BottleNeck_IR']
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -86,7 +86,7 @@ def get_block(Bottleneck, out_channel, num_units, strides=2,keep_filter=True):
 
 
 
-def SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature_dim=128):
+def SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature_dim=128,input_shape=(3,112,112)):
     blocks=OrderedDict()
     blocks['input_layer']=Conv2d_Block((3,3),64,strides=1,auto_pad=True,use_bias=False,activation=PRelu(64),normalization='batch',name='input_layer')
     blocks['body']=Sequential(
@@ -103,9 +103,32 @@ def SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature
         BatchNorm(),
         name='output_layer'
     )
-    return Sequential(blocks).to(_device)
+    facenet=Sequential(blocks).to(_device)
+    facenet.name=camel2snake('SEResNet_IR')
+    model=ImageClassificationModel(input_shape=input_shape,output=facenet)
+    model.preprocess_flow=[resize((input_shape[1],input_shape[2]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+    #model.summary()
+    return model
 
 
+def SEResNet50_IR_512(
+             pretrained=True,
+             input_shape=(3,112,112),
+             **kwargs):
+    if input_shape is not None and len(input_shape)==3:
+        input_shape=tuple(input_shape)
+    else:
+        input_shape=(3, 112, 112)
+    seresnet = SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature_dim=512)
+    if pretrained == True:
+        download_model_from_google_drive('1aLYbFvtvsV2gQ16D_vwzrKdbCgij7IoZ', dirname, 'arcface_se_50_512.pth')
+        recovery_model = torch.load(os.path.join(dirname, 'arcface_se_50_512.pth'))
+        recovery_model = fix_layer(recovery_model)
+        recovery_model.name = 'arcface_se_50_512'
+        recovery_model.eval()
+        recovery_model.to(_device)
+        seresnet.model = recovery_model
+    return seresnet
 
 
 

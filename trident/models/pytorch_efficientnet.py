@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -69,11 +69,11 @@ def efficient_block(expand_ratio=1, filters_in=32, filters_out=16, kernel_size=3
 
         bottleneck = Sequential(
             DepthwiseConv2d_Block((kernel_size, kernel_size), depth_multiplier=1, strides=strides, auto_pad=True,
-                                  padding_mode='zero', normalization='batch', activation='swish', name=name + 'dwconv'),
+                                  padding_mode='zero', normalization='batch', activation='swish'),
             SqueezeExcite(se_filters=max(1, int(filters_in * se_ratio)), num_filters=filters_in,
                           use_bias=True) if 0 < se_ratio <= 1 else Identity(),
             Conv2d_Block((1, 1), num_filters=filters_out, strides=1, auto_pad=True, normalization='batch',
-                         activation=None, name=name + 'se'),
+                         activation=None),
             Dropout(dropout_rate=drop_rate) if is_shortcut and drop_rate > 0 else Identity())
 
         if is_shortcut:
@@ -84,13 +84,13 @@ def efficient_block(expand_ratio=1, filters_in=32, filters_out=16, kernel_size=3
     else:
         bottleneck = Sequential(
             Conv2d_Block((1, 1), num_filters=filters, strides=1, auto_pad=True, normalization='batch',
-                         activation='swish', name=name + 'expand_bn'),
+                         activation='swish'),
             DepthwiseConv2d_Block((kernel_size, kernel_size), depth_multiplier=1, strides=strides, auto_pad=True,
-                                  padding_mode='zero', normalization='batch', activation='swish', name=name + 'dwconv'),
+                                  padding_mode='zero', normalization='batch', activation='swish'),
             SqueezeExcite(se_filters=builtins.max(1, int(filters_in * se_ratio)), num_filters=filters,
                           use_bias=True) if 0 < se_ratio <= 1 else Identity(),
             Conv2d_Block((1, 1), num_filters=filters_out, strides=1, auto_pad=True, normalization='batch',
-                         activation=None, name=name + 'se'),
+                         activation=None),
             Dropout(dropout_rate=drop_rate) if is_shortcut and drop_rate > 0 else Identity())
         if is_shortcut:
             return ShortCut2d(Identity(), bottleneck)
@@ -233,19 +233,20 @@ def EfficientNetB0(include_top=True, pretrained=True, input_shape=(3, 224, 224),
                          num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1bxnoDerzoNfiZZLft4ocD3DAgx4v6aTN', dirname, 'efficientnet-b0.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b0.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b0.pth')))
         recovery_model.input_shape = input_shape
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb0.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb0.class_names = []
 
         recovery_model.to(_device)
@@ -262,21 +263,22 @@ def EfficientNetB1(include_top=True, pretrained=True, input_shape=(3, 240, 240),
     effb1 = EfficientNet(1.0, 1.1, 240, 0.2, model_name='efficientnet-b1', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1F3BtnAjmDz4G9RS9Q0hqU_K7WWXCni1G', dirname, 'efficientnet-b1.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b1.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b1.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb1.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb1.class_names = []
         effb1.model = recovery_model
     return effb1
@@ -290,20 +292,21 @@ def EfficientNetB2(include_top=True, pretrained=True, input_shape=(3, 260, 260),
     effb2 = EfficientNet(1.1, 1.2, 260, 0.3, model_name='efficientnet-b2', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1PjqhB7WJasF_hqOwYtSBNSXSGBY-cRLU', dirname, 'efficientnet-b2.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b2.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b2.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb2.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb2.class_names = []
         effb2.model = recovery_model
     return effb2
@@ -317,20 +320,21 @@ def EfficientNetB3(include_top=True, pretrained=True, input_shape=(3, 300, 300),
     effb3 = EfficientNet(1.2, 1.4, 300, 0.3, model_name='efficientnet-b3', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('11tMxdYdFfaEREwnESO4cwjtcoEB42zB_', dirname, 'efficientnet-b3.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b3.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b3.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb3.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb3.class_names = []
         effb3.model = recovery_model
     return effb3
@@ -344,21 +348,22 @@ def EfficientNetB4(include_top=True, pretrained=True, input_shape=(3, 380, 380),
     effb4 = EfficientNet(1.4, 1.8, 380, 0.4, model_name='efficientnet-b4', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1X4ZOBR_ETRHZJeffJHvCmWTTy9_aW8SP', dirname, 'efficientnet-b4.pth')
-        recovery_model = torch.load(sanitize_path(os.path.join(dirname, 'efficientnet-b4.pth')))
+        recovery_model =fix_layer( torch.load(sanitize_path(os.path.join(dirname, 'efficientnet-b4.pth'))))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb4.class_names = []
 
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb4.class_names = []
         effb4.model = recovery_model
     return effb4
@@ -372,20 +377,21 @@ def EfficientNetB5(include_top=True, pretrained=True, input_shape=(3, 456, 456),
     effb5 = EfficientNet(1.6, 2.2, 456, 0.4, model_name='efficientnet-b5', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('17iTD12G9oW3jYAui84MKtdY4gjd9vpgG', dirname, 'efficientnet-b5.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b5.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b5.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb5.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb5.class_names = []
         effb5.model = recovery_model
     return effb5
@@ -399,20 +405,21 @@ def EfficientNetB6(include_top=True, pretrained=True, input_shape=(3, 528, 528),
     effb6 = EfficientNet(1.8, 2.6, 528, 0.5, model_name='efficientnet-b6', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1XJrKmcmMObN_nnjP2Z-YH_BQ3img58qF', dirname, 'efficientnet-b6.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b6.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b6.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb6.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb6.class_names = []
         effb6.model = recovery_model
     return effb6
@@ -426,20 +433,21 @@ def EfficientNetB7(include_top=True, pretrained=True, input_shape=(3, 600, 600),
     effb7 = EfficientNet(2.0, 3.1, 600, 0.5, model_name='efficientnet-b7', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1M2DfvsNPRCWSo_CeXnUCQOR46rvOrhLl', dirname, 'efficientnet-b7.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'efficientnet-b7.pth'))
+        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b7.pth')))
         recovery_model.input_shape = input_shape
         # recovery_model.to(_device)
         if include_top == False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             effb7.class_names = []
         else:
             if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape = recovery_model.fc.input_shape
-                recovery_model.fc = new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                recovery_model.add_module('softmax', SoftMax())
                 effb7.class_names = []
         effb7.model = recovery_model
     return effb7

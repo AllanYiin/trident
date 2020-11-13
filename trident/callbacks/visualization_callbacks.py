@@ -20,12 +20,12 @@ from trident.data.bbox_common  import *
 
 if get_backend()=='pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call
-    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,argmax,softmax
+    from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,argmax,softmax,any_abnormal_number,reduce_any
 
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_backend import try_map_args_and_call
-    from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like,argmax,softmax
-
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, any_abnormal_number, \
+    not_equal,reduce_any
 
 if is_in_ipython() or is_in_colab():
     from IPython import display
@@ -91,11 +91,15 @@ class TileImageCallback(VisualizationCallbackBase):
 
         else:
             for data_key in data.key_list:
-                if data_key == data_feed[model.signature.key_list[0]]:
-                    input = data[data_feed[model.signature.key_list[0]]]
-                elif data_key=='output':
-                    output = data['output']
-                elif data_key=='target':
+                if  self.include_input  and data_key == model.signature.inputs.key_list[0]:
+                    input = data[data_key]
+                elif self.include_output and data_key== model.signature.outputs.key_list[0]:
+                    output = data[data_key]
+                elif  self.include_input  and model.signature.inputs.key_list[0] in data_feed and data_feed[model.signature.inputs.key_list[0]]==data_key:
+                    input = data[data_key]
+                elif self.include_output  and model.signature.outputs.key_list[0] in data_feed and data_feed[model.signature.outputs.key_list[0]]==data_key:
+                    output = data[data_key]
+                elif self.include_target and data_key=='target':
                     output = data['target']
                 elif 'output' in data_key or 'pred' in data_key:
                         output = data[data_key]
@@ -171,8 +175,8 @@ class SegTileImageCallback(VisualizationCallbackBase):
             is_label_mask = True
         # if len(data) >= 3:
         for data_key in data.key_list:
-            if data_key == data_feed[model.signature.key_list[0]]:
-                input = data[data_feed[model.signature.key_list[0]]]
+            if data_key == data_feed[model.signature.inputs.key_list[0]]:
+                input = data[data_feed[model.signature.inputs.key_list[0]]]
 
                 training_context['current_model'].eval()
                 output = model(input)
@@ -229,13 +233,8 @@ class SegTileImageCallback(VisualizationCallbackBase):
         if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
             self.plot_tile_image(training_context)
 
-    def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
-            self.plot_tile_image(training_context)
 
-    def on_epoch_end(self, training_context):
-        if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
-            self.plot_tile_image(training_context)
+
 
 
 
@@ -300,21 +299,17 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
         if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
             self.plot_detection_image(training_context)
 
-    def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
-            self.plot_detection_image(training_context)
 
-    def on_epoch_end(self, training_context):
-        if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
-            self.plot_detection_image(training_context)
+
 
 
 class PlotLossMetricsCallback(VisualizationCallbackBase):
     def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results', clean_ipython_output_frequency=5,
-                 name_prefix: str = 'loss_metric_curve_{0}.png', imshow=False):
+                 name_prefix: str = 'loss_metric_curve_{0}.png',is_inplace=False, imshow=False):
         super(PlotLossMetricsCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
         self.training_items = None
         self.name_prefix = name_prefix
+        self.is_inplace=is_inplace
 
         self.is_shared = True
         self.loss_history_list = []
@@ -323,31 +318,49 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
         self.clean_ipython_output_frequency = clean_ipython_output_frequency
 
     def on_training_start(self, training_context):
-        self.training_items = training_context['training_items']
+        if not self.is_inplace:
+            self.training_items = training_context['training_items']
 
     def on_overall_batch_end(self, training_context):
-        if (self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['current_batch'] + 1) % self.batch_inteval == 0) or (self.epoch_inteval > 0 and self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch']  and (self.training_items.value_list[0].training_context['current_epoch'] + 1) % self.epoch_inteval == 0):
-            if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
-                display.clear_output(wait=True)
-                self.counter = 0
-            self.loss_history_list = []
-            self.metric_history_list = []
-            for trainitem in self.training_items.value_list:
-                self.loss_history_list.append(trainitem.batch_loss_history)
-                self.metric_history_list.append(trainitem.batch_metric_history)
-            self.counter += 1
-            loss_metric_curve(self.loss_history_list, self.metric_history_list,
-                              sample_collected=self.training_items.value_list[0].sample_collect_history,
-                              legend=training_context['training_names'].value_list, calculate_base='batch',
-                              max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
-                              imshow=self.imshow)
+        if not self.is_inplace:
+            if (self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['current_batch'] + 1) % self.batch_inteval == 0) or (self.epoch_inteval > 0 and self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch']  and (self.training_items.value_list[0].training_context['current_epoch'] + 1) % self.epoch_inteval == 0):
+                if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
+                    display.clear_output(wait=True)
+                    self.counter = 0
+                self.loss_history_list = []
+                self.metric_history_list = []
+                for trainitem in self.training_items.value_list:
+                    self.loss_history_list.append(trainitem.batch_loss_history)
+                    self.metric_history_list.append(trainitem.batch_metric_history)
+                self.counter += 1
+                loss_metric_curve(self.loss_history_list, self.metric_history_list,
+                                  legend=training_context['training_names'].value_list, calculate_base='batch',
+                                  max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
+                                  imshow=self.imshow)
 
 
-            # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
+                # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
 
-
+    # def on_batch_end(self, training_context):
+    #     if self.is_inplace:
+    #         if (self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['current_batch'] + 1) % self.batch_inteval == 0) or (self.epoch_inteval > 0 and self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch']  and (self.training_items.value_list[0].training_context['current_epoch'] + 1) % self.epoch_inteval == 0):
+    #             if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
+    #                 display.clear_output(wait=True)
+    #                 self.counter = 0
+    #             self.loss_history_list = []
+    #             self.metric_history_list = []
+    #             self.loss_history_list.append(self.batch_loss_history)
+    #             self.metric_history_list.append(self.batch_metric_history)
+    #             self.counter += 1
+    #             loss_metric_curve(self.loss_history_list, self.metric_history_list,
+    #                               legend=training_context['training_names'].value_list, calculate_base='batch',
+    #                               max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
+    #                               imshow=self.imshow)
+    #
+    #
+    #             # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
 class PrintGradientsCallback(VisualizationCallbackBase):
-    def __init__(self, batch_inteval=-1):
+    def __init__(self, batch_inteval=100):
         super(PrintGradientsCallback, self).__init__(epoch_inteval=-1, batch_inteval=batch_inteval)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
@@ -398,12 +411,12 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                         training_context['grads_state']['last_layer'][-1]))
         elif get_backend() == 'tensorflow':
             if  (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
-                grad_dict = {}
                 if 'grads_state' not in training_context:
                     training_context['grads_state'] = OrderedDict()
                     training_context['grads_state']['first_layer'] = []
                     training_context['grads_state']['last_layer'] = []
-                grads_and_vars=training_context['optimizer'].grads_and_vars
+                grads_and_vars=list(training_context['optimizer'].grads_and_vars)
+                grads_and_vars=[gv for gv in grads_and_vars if gv[1].trainable and reduce_any(not_equal(gv[0],0))]
                 training_context['grads_state']['first_layer'].append( np.abs(to_numpy(grads_and_vars[0][0])).mean())
                 training_context['grads_state']['last_layer'].append(np.abs(to_numpy(grads_and_vars[-1][0])).mean())
 
@@ -412,6 +425,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                     self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
                         training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
                         training_context['grads_state']['last_layer'][-1]))
+
     def on_overall_batch_end(self, training_context):
         if len(self.lines) > 0:
             sys.stdout.writelines(self.lines)

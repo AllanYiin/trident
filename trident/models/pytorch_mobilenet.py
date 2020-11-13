@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -74,10 +74,10 @@ def inverted_residual(in_filters,num_filters=64,strides=1,expansion = 4,name='')
     mid_filters= int(round(in_filters * expansion))
     layers=[]
     if expansion!=1 :
-        layers.append(Conv2d_Block((1,1),num_filters=mid_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6',name=name + '_{0}_conv'.format(len(layers))))
+        layers.append(Conv2d_Block((1,1),num_filters=mid_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6'))
 
-    layers.append(DepthwiseConv2d_Block((3, 3), depth_multiplier=1, strides=strides, auto_pad=True,padding_mode='zero', normalization='batch', activation='relu6', name=name + '_{0}_conv'.format(len(layers))))
-    layers.append(Conv2d_Block((1, 1), num_filters=num_filters, strides=1, auto_pad=False, padding_mode='zero', normalization='batch', activation=None, name=name + '_{0}_conv'.format(len(layers))))
+    layers.append(DepthwiseConv2d_Block((3, 3), depth_multiplier=1, strides=strides, auto_pad=True,padding_mode='zero', normalization='batch', activation='relu6'))
+    layers.append(Conv2d_Block((1, 1), num_filters=num_filters, strides=1, auto_pad=False, padding_mode='zero', normalization='batch', activation=None))
     if  strides == 1 and in_filters==num_filters:
         return ShortCut2d(Sequential(*layers), Identity(), activation=None)
     else:
@@ -95,14 +95,14 @@ def MobileNet( input_shape=(3, 224, 224), classes=1000, use_bias=False, width_mu
     input_filters = _make_divisible(input_filters * width_mult, round_nearest)
     last_filters = _make_divisible(last_filters * max(1.0, width_mult), round_nearest)
     features = []
-    features.append(Conv2d_Block((3,3),num_filters=input_filters,strides=2,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6',name='first_layer'))
+    features.append(Conv2d_Block((3,3),num_filters=input_filters,strides=2,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6'))
     for t, c, n, s in inverted_residual_setting:
         output_filters = _make_divisible(c * width_mult, round_nearest)
         for i in range(n):
             strides = s if i == 0 else 1
-            features.append( inverted_residual(input_filters,num_filters=output_filters, strides=strides, expansion=t,name='irb_{0}'.format(i)))
+            features.append( inverted_residual(input_filters,num_filters=output_filters, strides=strides, expansion=t))
             input_filters = output_filters
-    features.append(Conv2d_Block((1,1), last_filters,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6',name='last_layer'))
+    features.append(Conv2d_Block((1,1), last_filters,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6'))
     mobilenet.add_module('features',Sequential(*features,name='features'))
     mobilenet.add_module('gap',GlobalAvgPool2d())
     if include_top:
@@ -136,19 +136,19 @@ def MobileNetV2(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1ULenXTjOO5PdT3fHv6N8bPXEfoJAn5yL',dirname,'mobilenet_v2.pth')
         recovery_model=torch.load(os.path.join(dirname,'mobilenet_v2.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.eval()
         recovery_model.to(_device)
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
             mob.class_names = []
         else:
             if classes!=1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                new_fc.input_shape=recovery_model.fc.input_shape
-                recovery_model.fc=new_fc
+                recovery_model.remove_at(-1)
+                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
                 mob.class_names=[]
         mob.model=recovery_model
     return mob

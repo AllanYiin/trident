@@ -8,7 +8,7 @@ if is_in_ipython():
     from IPython import display
 if not is_in_colab:
     import matplotlib
-    matplotlib.use('Qt5Agg' if not is_in_ipython() and not is_in_colab() else 'NbAgg' )
+    matplotlib.use('TkAgg' if not is_in_ipython() and not is_in_colab() else 'NbAgg' )
 else:
     import matplotlib
 import matplotlib.pyplot as plt
@@ -38,7 +38,9 @@ def read_image(im_path:str):
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
            #fix opencv cannot open image if  there is double byte character...
             img=plt.imread(im_path)
-            return img[::-1]
+            if img.max()<=1:
+                img=img*255
+            return img
         else:
             if not os.path.exists(im_path):
                 sys.stderr.write('{0} not exsit'.format(im_path))
@@ -118,6 +120,7 @@ def array2image(arr:np.ndarray):
 
     """
     # confirm back to numpy
+    arr=np.clip(arr,0,255)
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     mode = None

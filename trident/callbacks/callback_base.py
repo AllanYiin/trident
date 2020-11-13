@@ -1,12 +1,35 @@
 import uuid
+import warnings
 from abc import ABC
 from  functools import partial
 from types import MethodType
-
+import numpy as np
 from tqdm.auto import tqdm
-__all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','LambdaCallback']
+
+__all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','LambdaCallback','UnfreezeModelCallback']
 
 
+_valid_when=["on_training_start"
+ ,"on_training_end"
+ ,"on_epoch_start"
+ ,"on_epoch_end"
+ ,"on_overall_epoch_end"
+ ,"on_batch_start"
+ ,"on_batch_end"
+ ,"on_overall_batch_end"
+ ,"on_data_received"
+ ,"on_infer_start"
+ ,"on_infer_end"
+ ,"on_loss_calculation_start"
+ ,"on_loss_calculation_end"
+ ,"on_optimization_step_start"
+ ,"on_optimization_step_end"
+ ,"on_metrics_evaluation_start"
+ ,"on_metrics_evaluation_end"
+ ,"on_progress_start"
+ ,"on_progress_end"
+ ,"on_model_saving_start"
+ ,"on_model_saving_end"]
 
 class CallbackBase(ABC):
     """
@@ -20,14 +43,12 @@ class CallbackBase(ABC):
     def __eq__(self, other):
         return self.uuid==other.uuid
 
-
     def on_training_start(self, training_context):
         """
         Called at the beginning of the training process.
         :param training_context: Dict containing information regarding the training process.
         """
         pass
-
     def on_training_end(self, training_context):
         """
         Called at the end of the training process.
@@ -35,7 +56,12 @@ class CallbackBase(ABC):
         """
         pass
 
-
+    def on_training_terminated(self, training_context):
+        """
+        Called at the end of the training process.
+        :param training_context: Dict containing information regarding the training process.
+        """
+        pass
 
     def on_epoch_start(self, training_context):
 
@@ -50,7 +76,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_epoch_end(self, training_context):
         """
         Called at the end of an epoch.
@@ -62,7 +87,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_overall_epoch_end(self, training_context):
         """
         Called after a batch has been processed.
@@ -86,7 +110,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_batch_end(self, training_context):
         """
         Called after a batch has been processed.
@@ -98,7 +121,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_overall_batch_end(self, training_context):
         """
         Called after a batch has been processed.
@@ -136,7 +158,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_infer_end(self, training_context):
 
         """
@@ -160,9 +181,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
-
-
     def on_loss_calculation_end(self, training_context):
         """
 
@@ -188,8 +206,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
-
     def on_optimization_step_end(self, training_context):
 
         """
@@ -213,7 +229,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_metrics_evaluation_end(self, training_context):
         """
         Called at the end of the evaluation step.
@@ -234,7 +249,6 @@ class CallbackBase(ABC):
         """
 
         pass
-
     def on_progress_end(self, training_context):
         """
         Called at the end of the evaluation step.
@@ -282,19 +296,15 @@ class LambdaCallback(CallbackBase):
         super(LambdaCallback, self).__init__(is_shared=is_shared)
         self.is_shared=is_shared
         self.func = function
-        self.when=when
+        if when in _valid_when:
+            self.when=when
+        else:
+            raise ValueError("{0} is not valid event trigger.".format(when))
         self.epoch=epoch
         self.batch=batch
 
         def on_trigger(self, training_context):
-            """
-            Called at the beginning of the training process.
-            :param training_context: Dict containing information regarding the training process.
-
-            Args:
-                self ():
-            """
-            if (self.epoch is None or training_context['current_epoch']==self.epoch )and (self.batch is None or training_context['current_batch']==self.batch) :
+            if (self.epoch is None or ('epoch' in when and training_context['current_epoch']==self.epoch) )and (self.batch is None or ('batch' in when and training_context['current_batch']==self.batch)) :
                     self.func(training_context)
 
         setattr(self,when,MethodType(on_trigger, self))
@@ -317,56 +327,123 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
     """
     Stops the training process if the results do not get better for a number of epochs.
     """
-    def __init__(self, patience, evaluation_data_loader_key, evaluator_key, tmp_best_state_filepath):
+    def __init__(self, monitor,mode,patience, min_delta=1e-4,stopped_epoch=None):
 
         """
-        :param patience: How many epochs to forgive deteriorating results.
-        :param evaluation_data_loader_key: Key of the data-loader dict (provided as an argument to the train method of
-            System) that corresponds to the data-set that the early stopping method considers.
-        :param evaluator_key: Key of the evaluators dict (provided as an argument to the train method of System) that
-            corresponds to the evaluator that the early stopping method considers.
-        :param tmp_best_state_filepath: Path where the state of the best so far model will be saved.
+        Args:
+            monitor: quantity to be monitored.
+            patience: How many epochs to forgive deteriorating results.
+            mode: one of {auto, min, max}. In `min` mode,
+                lr will be reduced when the quantity
+                monitored has stopped decreasing; in `max`
+                mode it will be reduced when the quantity
+                monitored has stopped increasing; in `auto`
+                mode, the direction is automatically inferred
+                from the name of the monitored quantity.
+            min_delta: threshold for measuring the new optimum,
+                to only focus on significant changes.
+            stopped_epoch:
         """
         super().__init__()
-        self._patience = patience
+        self.patience = patience
+        self.monitor = monitor
+        self.min_delta = min_delta
+        self.wait = 0
+        self.best = 0
+        if monitor == 'total_losses':
+            mode = 'min'
+        self.mode = mode
+        self.monitor_op=None
+        self.training_items=None
+        self.stopped_epoch=stopped_epoch
+        self._reset()
 
-        self._evaluation_data_loader_key = evaluation_data_loader_key
-
-        self._evaluator_key = evaluator_key
-
-        self._best_epoch = 0
-
-        self._current_patience = self._patience
-
-        self._best_state_filepath = tmp_best_state_filepath
-
+    def _reset(self):
+        """Resets wait counter and cooldown counter.
+        """
+        if self.mode not in ['auto', 'min', 'max']:
+            warnings.warn('EarlyStoppingCriterionCallback Reducing mode %s is unknown, '
+                          'fallback to auto mode.' % (self.mode),
+                          RuntimeWarning)
+            self.mode = 'auto'
+        if (self.mode == 'min' or
+                (self.mode == 'auto' and 'acc' not in self.monitor)):
+            self.monitor_op = lambda a, b: np.less(a, b - self.min_delta)
+            self.best = np.Inf
+        else:
+            self.monitor_op = lambda a, b: np.greater(a, b + self.min_delta)
+            self.best = -np.Inf
+        self.wait = 0
 
 
     def on_training_start(self, training_context):
-
-        self._best_epoch = 0
-
-        self._current_patience = self._patience
+        self.wait = 0
+        self.best = 0
 
 
+    def on_overall_epoch_end(self, training_context):
+        results=[]
+        self.training_items = training_context['training_items']
+        for item in self.training_items:
 
-    def on_metrics_evaluation_end(self, training_context):
-        # current_epoch = training_context['current_epoch']
-        # best_results = training_context['metric_history'][list(training_context['metric_history'].keys())[0]][self._best_epoch]
-        # current_results = training_context['metric_history'][list(training_context['metric_history'].keys())[0]][current_epoch]
-        # if current_results.is_better_than(best_results) or current_epoch == 0:
-        #     self._best_epoch = current_epoch
-        #     self._current_patience = self._patience
-        #     training_context['system'].save_model_state(self._best_state_filepath)
-        # else:
-        #     self._current_patience -= 1
-        # if self._current_patience == -1:
-        #     training_context['stop_training'] = True
-        pass
+            history = item.training_context['batch_losses'].get(self.monitor, item.training_context['batch_metrics'].get(self.monitor,
+                                                                                                               item.training_context[
+                                                                                                                   'batch_losses'][
+                                                                                                                   'total_losses']))
+
+            if history is None:
+                warnings.warn(
+                    'EarlyStoppingCriterionCallback conditioned on metric `%s` '
+                    'which is not available. Available metrics are: %s' %
+                    (self.monitor, ','.join(item.training_context['batch_metrics'].keys_list)), RuntimeWarning
+                )
+            else:
+                current = np.array(history[-min(5, len(history)):]).mean()
+
+                if self.monitor_op(current, self.best):
+                    self.best = current
+                    self.wait = 0
+                    results.append(False)
+                else:
+                    self.wait += 1
+                    if self.wait >= self.patience  :
+                        results.append(True)
+                    else:
+                        results.append(False)
+        if  self.stopped_epoch is not None and self.training_items[0].training_context['steps']>=self.stopped_epoch:
+                    results.append(True)
+
 
 
     def on_training_end(self, training_context):
         tqdm.write("Epoch chosen: %d" % self._best_epoch)
         training_context['system'].load_model_state(self._best_state_filepath)
+
+
+class UnfreezeModelCallback(CallbackBase):
+    def __init__(self, frequency: int, unit='epoch', slice_from=0, slice_to=None):
+        super().__init__()
+        self.unit=unit
+        self.frequency=frequency
+        self.slice_from=slice_from
+        self.slice_to=slice_to
+
+    def unfreeze_model(self,training_context):
+        model=training_context["current_model"]
+        if "Sequential" in model.__class__.__name__:
+                if self.slice_from == 0 or self.slice_to is None:
+                    model.trainable = True
+                elif isinstance(self.slice_from, int) and isinstance(self.slice_to, int):
+                    model[self.slice_from:self.slice_to].trainable = True
+
+    def on_batch_end(self, training_context):
+        if self.unit == 'batch' and training_context['steps'] == self.frequency:
+            self.unfreeze_model(training_context)
+    def on_epoch_end(self, training_context):
+        if self.unit == 'epoch' and training_context['current_epoch'] == self.frequency:
+            self.unfreeze_model(training_context)
+
+
+
 
 

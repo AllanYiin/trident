@@ -12,11 +12,11 @@ from trident.misc.visualization_utils import loss_metric_curve
 
 from trident.data.image_common import image_backend_adaption
 from trident.backend.common import*
-from trident.backend.pytorch_ops import *
-from trident.backend.pytorch_backend import *
-from trident.optims.pytorch_optimizers import Optimizer,get_optimizer
-from trident.optims.pytorch_trainer import Model
-from trident.optims.pytorch_losses import *
+from trident.backend.tensorflow_ops import *
+from trident.backend.tensorflow_backend import *
+from trident.optims.tensorflow_optimizers import Optimizer,get_optimizer
+from trident.optims.tensorflow_trainer import Model
+from trident.optims.tensorflow_losses import *
 from trident.reinforcement.utils import ReplayBuffer,Transition
 import_or_install('gym')
 import gym
@@ -81,13 +81,13 @@ class Dqn(PolicyBase):
 
     def __init__(self, network: Layer, env: gym.Env, memory_length: int = 100000, gamma=0.9, max_epsilon=0.9, min_epsilon=0.01, decay=200, target_update=10, batch_size=10,
                  name='dqn') -> None:
-        super().__init__(network=network, env=env, memory_length=memory_length, name=name)
+        super(Dqn, self).__init__(network=network, env=env, memory_length=memory_length, name=name)
         self.policy_net = self._model
         self.policy_net.train()
 
         self.target_net = deepcopy(self._model)
         self.target_net.eval()
-        self.summary()
+        summary(self.policy_net, tuple(self.inputs.value_list[0]))
 
         self.gamma = gamma
         self.max_epsilon = max_epsilon
@@ -268,7 +268,7 @@ class PolicyGradient(PolicyBase):
 
         self.target_net = deepcopy(self._model)
         self.target_net.eval()
-        self.summary()
+        summary(self.policy_net, tuple(self.inputs.value_list[0]))
 
         self.gamma = gamma
         self.max_epsilon = max_epsilon

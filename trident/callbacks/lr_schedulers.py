@@ -46,7 +46,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
     """
 
     def __init__(self, monitor='total_losses', factor=0.1, patience=10,
-                 verbose=0, mode='auto', min_delta=1e-4, cooldown=0, min_lr=0,
+                 verbose=0, mode='auto', min_delta=1e-4, cooldown=0, min_lr=0,unit_base='epoch',
                  **kwargs):
         """
 
@@ -95,9 +95,11 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
         self.cooldown_counter = 0
         self.wait = 0
         self.best = 0
+        if monitor=='total_losses':
+            mode='min'
         self.mode = mode
         self.monitor_op = None
-        self.unit_base=None
+        self.unit_base=unit_base
         self._reset()
 
     def _reset(self):
@@ -121,16 +123,16 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
     def on_epoch_end(self, training_context):
         training_context['current_lr']=training_context['optimizer'].lr
         if self.unit_base == 'epoch':
-            history = training_context['losses'].get(self.monitor, training_context['metrics'].get(self.monitor,
+            history = training_context['epoch_losses'].get(self.monitor, training_context['epoch_metrics'].get(self.monitor,
                                                                                                    training_context[
-                                                                                                       'losses'][
+                                                                                                       'epoch_losses'][
                                                                                                        'total_losses']))
             current = to_numpy(history[-min(5, len(history)):]).mean()
             if current is None:
                 warnings.warn(
                     'Reduce LR on plateau conditioned on metric `%s` '
                     'which is not available. Available metrics are: %s' %
-                    (self.monitor, ','.join(training_context['metrics'].keys_list)), RuntimeWarning
+                    (self.monitor, ','.join(training_context['epoch_metrics'].keys_list)), RuntimeWarning
                 )
 
             else:
@@ -165,11 +167,12 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                 self.unit_base = 'epoch'
                 print('ReduceLROnPlateau reseted.')
 
-        num_batches = training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']
-        if self.unit_base=='batch' and training_context['current_batch']>0 and training_context['current_batch']%_session.epoch_equivalent==0:
+        num_batches = training_context['steps']
+        if self.unit_base=='batch' and training_context['steps']>0 and training_context['steps']%_session.epoch_equivalent==0:
             training_context['current_lr']=training_context['optimizer'].lr
             history=training_context['losses'].get(self.monitor,training_context['metrics'].get(self.monitor,training_context['losses']['total_losses']))
-            current =to_numpy(history[-min(5,len(history)):]).mean()
+            steps,values=zip(*history)
+            current =to_numpy(values[-min(5,len(values)):]).mean()
             if current is None:
                 warnings.warn(
                     'Reduce LR on plateau conditioned on metric `%s` '
@@ -291,7 +294,7 @@ def random_cosine_lr( min_lr=1e-8,period=100,cosine_weight=0.2,noise_weight=0.3,
 
 
 class CosineLR(AdjustLRCallbackBase):
-    def __init__(self, min_lr=1e-8,period=1000, random_start_epoch=3,**kwargs):
+    def __init__(self, min_lr=1e-8,period=1000,**kwargs):
         super(CosineLR, self).__init__()
         self.max_lr = None
         self.min_lr = min_lr

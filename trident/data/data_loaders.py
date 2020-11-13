@@ -7,11 +7,14 @@ import pickle
 import io
 import numpy as np
 import copy
+
+from trident.data.image_common import list_pictures
 from trident.data.data_provider import *
 from trident.data.dataset import *
 from trident.data.mask_common import *
 from trident.data.utils import *
-from trident.backend.common import floatx,ExpectDataType,OrderedDict
+from trident.backend.common import floatx,OrderedDict
+from trident.backend.tensorspec import *
 from trident.misc.ipython_utils import *
 
 try:
@@ -189,6 +192,37 @@ def load_cifar(dataset_name='cifar10'):
                                  'truck'] if dataset_name == 'cifar10' else [], 'en-US')
     return dataset
 
+def load_kaggle(dataset_name='dogs-vs-cats',is_onehot=False):
+    dataset_name = dataset_name.strip().lower().replace(' ', '')
+
+    if dataset_name.lower() not in ['dogs-vs-cats']:
+        raise ValueError('Only dogscats are valid  dataset_name.')
+
+    if _backend in ['tensorflow', 'cntk'] and is_onehot is None:
+        is_onehot = True
+
+    baseURL = 'https://www.microsoft.com/en-us/download/confirmation.aspx?id=54765'
+    dirname = os.path.join(_trident_dir, dataset_name.strip())
+    if not os.path.exists(dirname):
+        try:
+            os.makedirs(dirname)
+        except OSError:
+            # Except permission denied and potential race conditions
+            # in multi-threaded environments.
+            pass
+
+    """Load BirdSnap data from `path`"""
+    download_file(baseURL, dirname, baseURL.split('/')[-1].strip(), dataset_name)
+    file_path = os.path.join(dirname, baseURL.split('/')[-1].strip())
+    extract_archive(file_path, dirname, archive_format='zip')
+
+    extract_path = os.path.join(dirname, baseURL.split('/')[-1].strip().split('.')[0])
+
+    images = []
+    labels = []
+    return (images, labels)
+
+
 
 def load_birdsnap(dataset_name='birdsnap', kind='train', is_flatten=None, is_onehot=None):
     dataset_name = dataset_name.strip().lower().replace(' ', '')
@@ -242,27 +276,73 @@ def load_birdsnap(dataset_name='birdsnap', kind='train', is_flatten=None, is_one
     return (images, labels)
 
 
-def load_text(filname, unit='char',is_sparse=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False):
+def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',section_delimiter='\n\n',sequence_start_at='random',is_onehot=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False,**kwargs):
+    valid_sequence_start_at=['random','slide','follow_up','section_start']
+    valid_mode=['next_word','skip_gram', 'cbow','onehot','1to1_seq2seq']
+    if mode not in valid_mode:
+        raise  ValueError('{0} is not valid mode '.format(mode))
+
     original_corpus = None
     corpus = None
-    with io.open(filname, encoding=encoding) as f:
-        original_corpus = f.read().lower()
-        if unit == 'char':
-            corpus = list(original_corpus)
-        elif unit == 'word':
-            corpus = original_corpus.split(' \t')
-
-    corpus1=copy.deepcopy(corpus)
-    corpus2= copy.deepcopy(corpus)
-    data=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_sparse=is_sparse,symbol='input',sequence_offset=0)
-    labels =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_sparse=is_sparse,symbol='label',sequence_offset=1)
-    traindata=Iterator(data=data,label=labels)
-
-    dataset = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata)
+    output_corpus=None
+    if filname is not None:
+        with io.open(filname, encoding=encoding) as f:
+            original_corpus = f.read().lower()
+            if unit == 'char':
+                corpus = list(original_corpus)
+            elif unit == 'word':
+                corpus = original_corpus.split(' \t')
+    if data is not None:
+        if isinstance(data,str):
+            if unit == 'char':
+                corpus = list(data)
+            elif unit == 'word':
+                corpus = data.split(' \t')
+        elif hasattr(data,"__iter__"):
+            corpus= '\n\n'.join(data)
+            if unit == 'char':
+                corpus = list(corpus)
+            elif unit == 'word':
+                corpus = corpus.replace('\n\n',' \n \n ').split(' \t')
+    if label is not None:
+        if isinstance(label,str):
+            if unit == 'char':
+                output_corpus = list(label)
+            elif unit == 'word':
+                output_corpus = label.split(' \t')
+        elif hasattr(label,"__iter__"):
+            output_corpus = '\n\n'.join(label)
+            if unit == 'char':
+                output_corpus = list(output_corpus)
+            elif unit == 'word':
+                output_corpus = output_corpus.replace('\n\n',' \n \n ').split(' \t')
+    dataprovider=None
+    if mode=='next_word':
+        corpus1=copy.deepcopy(corpus)
+        corpus2= copy.deepcopy(corpus)
+        data_seq=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_onehot=is_onehot,symbol='input',sequence_offset=0,sequence_start_at=sequence_start_at)
+        labels_seq =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_onehot=is_onehot,symbol='label',sequence_offset=1,sequence_start_at=sequence_start_at)
+        traindata=Iterator(data=data_seq,label=labels_seq)
+        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata)
+    elif mode=='skip_gram':
+        corpus1 = copy.deepcopy(corpus)
+        corpus2 = copy.deepcopy(corpus)
+        data_seq = TextSequenceDataset(corpus1, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at)
+        labels_seq = TextSequenceDataset(corpus2, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=[-1,1], sequence_start_at=sequence_start_at)
+        traindata = Iterator(data=data_seq, label=labels_seq)
+        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0], traindata=traindata)
+    elif mode == '1to1_seq2seq':
+        if len(corpus)==len(output_corpus):
+            data_seq = TextSequenceDataset(corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at)
+            labels_seq = TextSequenceDataset(output_corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=0, sequence_start_at=sequence_start_at)
+            traindata = Iterator(data=data_seq, label=labels_seq)
+            dataprovider = TextSequenceDataProvider('1to1_seq2seq', traindata=traindata)
+        else:
+            raise  ValueError('data ({0}) and label({1}) should have the same length in 1to1_seq2seq mide.'.format(len(corpus),len(output_corpus)))
     if return_corpus:
-        return dataset,original_corpus
+        return dataprovider,original_corpus
     else:
-        return dataset
+        return dataprovider
 
 
 def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=True, folder_as_label=True,
@@ -475,7 +555,7 @@ def load_lfw(format='aligned_face', is_paired=False):
                 storage[class_label] = []
             storage[class_label].append(data[i])
 
-        metric=MetricDataset(storage.item_list)
+        metric=MetricIterator(storage.item_list)
         data_provider = DataProvider(dataset_name, data=metric, scenario='train')
 
 
@@ -511,7 +591,7 @@ def load_examples_data(dataset_name):
     """
     dataset_name = dataset_name.strip().lower()
     if dataset_name.lower() not in ['pokemon', 'hanzi', 'animals', 'nsfw', 'simpsons', 'horse2zebra', 'people',
-                                    'autodrive', 'superresolution', 'anpr', 'beauty','antisproofing','facelandmarks']:
+                                    'autodrive', 'superresolution', 'anpr', 'beauty','antisproofing','facelandmarks','dogs-vs-cats']:
         raise ValueError('Not a  valid  dataset_name.')
     dataset_name = 'examples_' + dataset_name
     dirname = os.path.join(_trident_dir, dataset_name)
@@ -700,7 +780,7 @@ def load_examples_data(dataset_name):
 
         f = open(os.path.join(dirname, 'All_Ratings.txt'), encoding='utf-8-sig').readlines()
         imgs = []
-        landmark = []
+        landmarks = []
         ratings = []
         for row in f:
             data = row.strip().split('\t')
@@ -709,18 +789,20 @@ def load_examples_data(dataset_name):
                 img = img.transpose([2, 0, 1])[::-1].transpose([1, 2, 0])
                 imgs.append(img)
                 landmark = images_dict['images\\' + data[0]][1].astype(np.float32) / 256.0
-                rating =np.zeros(2)
-                if 'm' in  data[0]:
-                    rating[0]=1
-                if 'w' in  data[0]:
-                    rating[1]=1
-
-                rating = np.concatenate([landmark.reshape(-1), rating], axis=0).astype(np.float32)
+                rating = np.zeros(2)
+                if 'm' in data[0]:
+                    rating[0] = 1
+                if 'w' in data[0]:
+                    rating[1] = 1
+                landmarks.append(landmark)
                 ratings.append(rating)
+
         print('{0} faces loaded...'.format(len(imgs)))
         imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb, symbol='faces')
-        labeldata = NumpyDataset(data=ratings, expect_data_type=ExpectDataType.array_data, symbol='ratings')
-        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
+        landmarkdata = LandmarkDataset(landmarks=landmarks, expect_data_type=ExpectDataType.array_data, symbol='landmarks')
+       # labeldata = NumpyDataset(data=ratings, expect_data_type=ExpectDataType.array_data, symbol='ratings')
+
+        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=landmarkdata))
         return data_provider
     elif dataset_name == 'examples_antisproofing':
         download_file_from_google_drive('1e7Zjn2MHNCvA5gXdJUECzY8NjK4KVpa7', dirname, 'antisproofing.tar')
@@ -766,8 +848,21 @@ def load_examples_data(dataset_name):
             ori_w, ori_h = [float(int(el)) for el in [width, height]]
             new_labels = [(leftUp[0] + rightDown[0]) / (2 * ori_w), (leftUp[1] + rightDown[1]) / (2 * ori_h),
                           (rightDown[0] - leftUp[0]) / ori_w, (rightDown[1] - leftUp[1]) / ori_h]
+            download_file_from_google_drive('1e7Zjn2MHNCvA5gXdJUECzY8NjK4KVpa7', dirname, 'antisproofing.tar')
+            tar_file_path = os.path.join(dirname, 'antisproofing.tar')
+            make_dir_if_need(os.path.join(dirname, 'antisproofing'))
+            extract_archive(tar_file_path, dirname, archive_format='tar')
+            data_provider = load_folder_images(dataset_name, os.path.join(dirname, 'antisproofing'))
+            return data_provider
 
 
+
+    elif dataset_name == 'examples_dogs-vs-cats':
+        download_file_from_google_drive('10czW0On7eIXkPP-MuQ-IRxMWdTizWjNC', dirname, 'dogs-vs-cats.tar')
+        tar_file_path = os.path.join(dirname, 'dogs-vs-cats.tar')
+        extract_archive(tar_file_path, dirname, archive_format='tar')
+        data_provider = load_folder_images(dataset_name, dirname)
+        return data_provider
 
 
     else:

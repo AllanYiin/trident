@@ -15,7 +15,7 @@ _epsilon = _session.epsilon
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
 
-def l1_reg(model:nn.Module,reg_weight=1e-5):
+def l1_reg(model:nn.Module,reg_weight=1e-4):
     #with torch.enable_grad():
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
@@ -24,7 +24,7 @@ def l1_reg(model:nn.Module,reg_weight=1e-5):
         return loss
 
 
-def l2_reg(model:nn.Module,reg_weight=1e-5):
+def l2_reg(model:nn.Module,reg_weight=1e-4):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:
@@ -32,7 +32,7 @@ def l2_reg(model:nn.Module,reg_weight=1e-5):
         return loss
 
 
-def orth_reg(model:nn.Module,reg_weight=1e-5):
+def orth_reg(model:nn.Module,reg_weight=1e-4):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name:
@@ -43,10 +43,13 @@ def orth_reg(model:nn.Module,reg_weight=1e-5):
     return loss
 
 def total_variation_norm_reg(output:torch.Tensor,reg_weight=1):
+    b,c,h,w=int_shape(output)
     total_variation_norm_reg.reg_weight=reg_weight
     assert len(output.size())==4
-    loss = reg_weight * (torch.sum(abs(output[:, :, :, :-1] - output[:, :, :, 1:])) + torch.sum(abs(output[:, :, :-1, :] - output[:, :, 1:, :])))/2.0
-    return loss
+    diff_i = torch.sum(torch.pow(output[:, :, :, 1:] - output[:, :, :, :-1], 2))
+    diff_j = torch.sum(torch.pow(output[:, :, 1:, :] - output[:, :, :-1, :], 2))
+    tv_loss = true_divide(0.5*(true_divide(diff_i,w) + true_divide(diff_j,h)),b)
+    return reg_weight * tv_loss
 
 
 def get_reg(reg_name):

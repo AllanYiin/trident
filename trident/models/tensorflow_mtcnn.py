@@ -18,24 +18,25 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import  image_ops
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, Combine
-from trident.backend.pytorch_ops import meshgrid
+from trident.backend.tensorflow_ops import meshgrid,stack,where,expand_dims,concate
 from trident.data.bbox_common import clip_boxes_to_image, nms
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
-from trident.layers.pytorch_activations import get_activation, Identity, PRelu
-from trident.layers.pytorch_blocks import *
-from trident.layers.pytorch_layers import *
-from trident.layers.pytorch_normalizations import get_normalization
-from trident.layers.pytorch_pooling import *
-from trident.optims.pytorch_trainer import *
-from trident.optims.pytorch_trainer import ImageDetectionModel
+from trident.layers.tensorflow_activations import get_activation, Identity, PRelu
+from trident.layers.tensorflow_blocks import *
+from trident.layers.tensorflow_layers import *
+from trident.layers.tensorflow_normalizations import get_normalization
+from trident.layers.tensorflow_pooling import *
+from trident.optims.tensorflow_trainer import *
+
 
 __all__ = ['Pnet','Rnet','Onet','Mtcnn']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device =get_device()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
 
@@ -121,7 +122,7 @@ def Pnet(pretrained=True,
     pnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX',dirname,'pnet.pth')
-        recovery_model=torch.load(os.path.join(dirname,'pnet.pth'))
+        recovery_model=load(os.path.join(dirname,'pnet.pth'))
         recovery_model.to(_device)
         pnet.model=recovery_model
     return pnet
@@ -138,7 +139,7 @@ def Rnet(pretrained=True,
     rnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1CH7z133_KrcWMx9zXAblMCV8luiQ3wph',dirname,'rnet.pth')
-        recovery_model=torch.load(os.path.join(dirname,'rnet.pth'))
+        recovery_model=load(os.path.join(dirname,'rnet.pth'))
         recovery_model.to(_device)
         rnet.model=recovery_model
     return rnet
@@ -154,7 +155,7 @@ def Onet(pretrained=True,
     onet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1a1dAlSzJOAfIz77Ic38JMQJYWDG_b7-_',dirname,'onet.pth')
-        recovery_model=torch.load(os.path.join(dirname,'onet.pth'))
+        recovery_model=load(os.path.join(dirname,'onet.pth'))
         recovery_model.to(_device)
         onet.model=recovery_model
     return onet
@@ -181,12 +182,12 @@ class DetectorHead(Layer):
         grid=meshgrid(boxprobs.size(1),boxprobs.size(2))
         grid=grid.view(2,-1)
         score = boxprobs[0]
-        y,x = torch.where(score>= self.threshould)
+        y,x = where(score>= self.threshould)
         boxregs = boxregs.permute(1,2,0)
 
         score = score[(y,x )]
         reg=boxregs[(y,x )].transpose(1,0)
-        bb = torch.stack([x,y], dim=0)
+        bb = stack([x,y], dim=0)
 
         q1 = (strides * bb + 1)
         q2 =(strides * bb +self.cellsize - 1 + 1)
@@ -200,7 +201,7 @@ class DetectorHead(Layer):
         b3 =q2[0, :] + reg[2, :] * w
         b4 =q2[1, :] + reg[3, :] * h
 
-        boxs=torch.stack([b1,b2,b3,b4,score],dim=-1)
+        boxs=stack([b1,b2,b3,b4,score],dim=-1)
         #keep =torchvision.ops.boxes.remove_small_boxes(boxs[:,:4],min_size=self.min_size)
         #boxs=boxs[keep]
         #print('total {0} boxes cutoff={1} '.format(len(x), cutoff))
@@ -240,11 +241,11 @@ def calibrate_box(bboxes, offsets):
     w = x2 - x1 + 1.0
     h = y2 - y1 + 1.0
     # w [w_len, 1]
-    w = torch.unsqueeze(w, 1)
+    w =expand_dims(w, 1)
     # h [h_len, 1]
-    h = torch.unsqueeze(h, 1)
+    h =expand_dims(h, 1)
 
-    translation = torch.cat([w, h, w, h],-1) * offsets
+    translation =concate([w, h, w, h],-1) * offsets
     bboxes[:, 0:4] = bboxes[:, 0:4] + translation
     return bboxes
 
@@ -325,13 +326,13 @@ class Mtcnn(ImageDetectionModel):
             boxes_list=[]
             for i in range(len(scales)):
                 scaled_img=imgs[i]
-                inp = to_tensor(np.expand_dims(scaled_img, 0)).to(torch.device("cuda" if self.pnet.weights[0].data.is_cuda else "cpu")).to(self.pnet.weights[0].data.dtype)
+                inp = to_tensor(np.expand_dims(scaled_img, 0)).to(get_device()).to(self.pnet.weights[0].data.dtype)
                 boxes=self.pnet(inp)
                 if boxes is not None and len(boxes)>0:
                     scale=scales[i]
                     box=boxes[:,:4]/scale
                     score=boxes[:,4:]
-                    boxes = torch.cat([box.round_(), score], dim=1)
+                    boxes =concate([box.round_(), score], axis=1)
                     if len(boxes) > 0:
                         boxes_list.append(boxes)
 
@@ -339,7 +340,7 @@ class Mtcnn(ImageDetectionModel):
             #########pnet finish
             #######################################
             if len(boxes_list) > 0:
-                boxes=to_tensor(torch.cat(boxes_list, dim=0))
+                boxes=to_tensor(concate(boxes_list, axis=0))
 
                 #print('total {0} boxes in pnet in all scale '.format(len(boxes)))
                 boxes=clip_boxes_to_image(boxes,(img.shape[0],img.shape[1]))
@@ -371,9 +372,9 @@ class Mtcnn(ImageDetectionModel):
                                 r_output1_list.append(r_out1)
                                 r_output2_list.append(r_out2)
                                 r_output3_list.append(r_out3)
-                        r_out1 = torch.cat(r_output1_list, dim=0)
-                        r_out2 = torch.cat(r_output2_list, dim=0)
-                        r_out3 = torch.cat(r_output3_list, dim=0)
+                        r_out1 = concate(r_output1_list, axis=0)
+                        r_out2 = concate(r_output2_list, axis=0)
+                        r_out3 = concate(r_output3_list, axis=0)
                     else:
                         r_out1, r_out2, r_out3 = self.rnet(new_arr)
 
@@ -421,7 +422,7 @@ class Mtcnn(ImageDetectionModel):
                     landmarks_x = boxes[:, 0:1] + o_out3[:, 0::2] * (boxes[:, 2:3] - boxes[:, 0:1]+1)
                     landmarks_y = boxes[:, 1:2] + o_out3[:, 1::2] * (boxes[:, 3:4] - boxes[:, 1:2]+1)
 
-                    boxes=torch.cat([boxes,landmarks_x,landmarks_y],dim=-1)
+                    boxes=concate([boxes,landmarks_x,landmarks_y],axis=-1)
 
 
                     #######################################

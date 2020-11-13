@@ -18,7 +18,7 @@ from skimage import transform, exposure
 from skimage.filters import *
 
 from trident.backend.common import *
-
+from trident.backend.tensorspec import *
 _session=get_session()
 _backend=_session.backend
 _image_backend=_session.image_backend

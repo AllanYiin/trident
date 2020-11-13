@@ -77,7 +77,20 @@ class _ClassificationLoss(Loss):
         self.label_smooth = label_smooth
         # initilize weight
 
+    def flatten_check(self, output, target):
+        "Check that `out` and `targ` have the same number of elements and flatten them."
+        if ndim(output) > 2:
+            output = output.permute(1, -1).contiguous()
+            output = output.view(-1, output.size(-1))
+        if ndim(target) > 2:
+            if target.dtype != str2dtype('long'):
+                target = target.permute(1, -1).contiguous()
+            target = target.view(-1, target.size(-1))
 
+        if len(output) == len(target):
+            return output, target
+        else:
+            raise ValueError('output and target have diffent elements.')
 
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
@@ -93,13 +106,14 @@ class _ClassificationLoss(Loss):
         # check num_clases
         if self.num_classes is None:
             self.num_classes = int_shape(output)[self.axis]
+        #output,target=self.flatten_check(output,target)
 
         if self.sample_weight is None:
-            self.sample_weight = ones(self.num_classes, requires_grad=False).to(output.device)
+            self.sample_weight = ones(self.num_classes, requires_grad=False)
         elif len(self.sample_weight) != self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
         elif self.sample_weight.requires_grad!=False or self.sample_weight.dtype!=output.dtype or self.sample_weight.device!=output.device:
-            self.sample_weight = to_tensor(self.sample_weight, requires_grad=False).to(output.device)
+            self.sample_weight = to_tensor(self.sample_weight, requires_grad=False)
         else:
             pass
 
@@ -137,7 +151,9 @@ class _ClassificationLoss(Loss):
 
         # need target onehot but currently not
         if  target.dtype==torch.long and self.need_target_onehot == True and self.is_target_onehot == False:
-            target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(output.device)
+            target = make_onehot(target, num_classes=self.num_classes, axis=self.axis)
+            target.require_grads=False
+            self.is_target_onehot=True
             if self.label_smooth:
                 target = target * (torch.Tensor(target.size()).uniform_(0.9, 1).to(output.device))
                 self.is_target_onehot = True
@@ -173,6 +189,7 @@ class _ClassificationLoss(Loss):
 
             """
         try:
+
             loss = self.calculate_loss(*self.preprocess(output, target,**kwargs))
             loss=self._handel_abnormal(loss)
             loss = self._get_reduction(loss)
@@ -224,7 +241,20 @@ class _PairwiseLoss(Loss):
 
         # initilize weight
 
+    def flatten_check(self, output, target):
+        "Check that `out` and `targ` have the same number of elements and flatten them."
+        if ndim(output) > 2:
+            output = output.permute(1, -1).contiguous()
+            output = output.view(-1, output.size(-1))
+        if ndim(target) > 2:
+            if target.dtype != str2dtype('long'):
+                target = target.permute(1, -1).contiguous()
+            target = target.view(-1, target.size(-1))
 
+        if len(output) == len(target):
+            return output, target
+        else:
+            raise ValueError('output and target have diffent elements.')
 
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
@@ -238,7 +268,7 @@ class _PairwiseLoss(Loss):
 
         """
         # check num_clases
-
+        #output, target = self.flatten_check(output, target)
         if output.shape == target.shape:
             return output, target
         elif target.dtype==torch.int64 and ndim(output)==ndim(target)+1:
@@ -607,12 +637,12 @@ class F1ScoreLoss(_ClassificationLoss):
         if self.from_logits == False:
             output = softmax(output, self.axis)
         if target.dtype == torch.int64 or self.is_target_onehot == False:
-            target = make_onehot(target, int_shape(output)[0], axis=1).to(_dtype)
-            target.require_grads = False
-        tp = (target * output).sum().to(_dtype)
-        tn = ((1 - target) * (1 - output)).sum().to(_dtype)
-        fp = ((1 - target) * output).sum().to(_dtype)
-        fn = (target * (1 - output)).sum().to(_dtype)
+            target = make_onehot(target, self.num_classes, axis=1).to(_dtype)
+        target.require_grads = False
+        tp = (target * output).sum()
+        tn = ((1 - target) * (1 - output)).sum()
+        fp = ((1 - target) * output).sum()
+        fn = (target * (1 - output)).sum()
         precision = tp / (tp + fp + epsilon())
         recall = tp / (tp + fn + epsilon())
         return 1 - (1 + self.beta ** 2) * precision * recall / (self.beta ** 2 * precision + recall)

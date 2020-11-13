@@ -15,7 +15,7 @@ from trident.backend.common import *
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu', 'get_activation']
+__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu','SIREN', 'get_activation']
 
 
 
@@ -455,11 +455,11 @@ class HardMish(Layer):
 
     """
     def __init__(self,name=None):
-        super(Mish, self).__init__(name=name)
+        super(HardMish, self).__init__(name=name)
         self._built = True
     def forward(self, *x):
         x = enforce_singleton(x)
-        return mish(x)
+        return hard_mish(x)
 
 
 
@@ -529,18 +529,10 @@ class SIREN(Layer):
     def __init__(self,w0=30.0, name=None):
         super(SIREN, self).__init__()
         self._built = True
-        self.w0=w0
-
-    def build(self, input_shape):
-        if self._built == False:
-            if self.num_parameters is None:
-                self.num_parameters=self.input_filters
-            self.weight=tf.Variable(ones((1))*self.w0, name='weight')
-            self._built = True
-
+        self.w0=tf.Variable(initial_value=w0)
     def forward(self, *x):
         x = enforce_singleton(x)
-        x=sin(self.weight*x)
+        x=sin(self.w0*x)
         return x
 
 
@@ -565,27 +557,44 @@ def get_activation(fn_name):
 
 
     """
-    fn_modules = ['trident.backend.tensorflow_ops','trident.layers.tensorflow_activations']
+    fn_modules = ['trident.backend.tensorflow_ops','trident.layers.tensorflow_activations','tensorflow.python.framework.ops.nn_ops']
 
     if fn_name is None:
         return None
-    elif inspect.isclass(fn_name) and inspect._is_type(fn_name):
-        return fn_name()
-    elif isinstance(fn_name, Layer):
-        return fn_name
-    elif isinstance(fn_name, str) :
-        pooling_class = get_function(fn_name, fn_modules)
-        return pooling_class
-    elif isinstance(fn_name, str) and fn_name in __all__:
-        pooling_class = get_class(fn_name, fn_modules)
-        return pooling_class()
-    elif isinstance(fn_name, str) and snake2camel(fn_name) in __all__:
-        pooling_class = get_class(snake2camel(fn_name), fn_modules)
-        return pooling_class()
-    elif inspect.isfunction(fn_name) or callable(fn_name):
-        result = inspect.getfullargspec(fn_name)
-        if 1 == len(result.args):
+    try:
+        if isinstance(fn_name, str):
+            if camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name:
+                if fn_name == 'p_relu' or fn_name == 'prelu':
+                    return PRelu()
+                activation_fn = get_function(fn_name, ['trident.backend.tensorflow_ops',
+                                                       'trident.layers.tensorflow_activations'] if fn_name in __all__ else fn_modules)
+                return activation_fn
+            else:
+                try:
+                    activation_fn = get_class(snake2camel(fn_name), fn_modules)
+                    return activation_fn()
+                except Exception:
+                    activation_fn = get_class(fn_name, ['trident.backend.tensorflow_ops',
+                                                        'trident.layers.tensorflow_activations'] if fn_name in __all__ else fn_modules)
+                    return activation_fn()
+        elif getattr(fn_name, '__module__', None) == 'trident.layers.tensorflow_activations':
+            if inspect.isfunction(fn_name):
+                return fn_name
+            elif inspect.isclass(fn_name) and inspect._is_type(fn_name):
+                return fn_name()
+            elif isinstance(fn_name, Layer):
+                return fn_name
+        elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.tensorflow_ops':
             return fn_name
-    else:
-        raise ValueError('Unknown pooling function/ class')
+
+        else:
+            if callable(fn_name):
+                result = inspect.getfullargspec(fn_name)
+                if 1 <= len(result.args) <= 2:
+                    return fn_name if inspect.isfunction(fn_name) else fn_name()
+                else:
+                    raise ValueError('Unknown activation function/ class')
+    except Exception as e:
+        print(e)
+        return None
 

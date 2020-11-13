@@ -99,7 +99,7 @@ def efficientnet_params(model_name):
         'efficientnet-b1': (1.0, 1.1, 240, 0.2),
         'efficientnet-b2': (1.1, 1.2, 260, 0.3),
         'efficientnet-b3': (1.2, 1.4, 300, 0.3),
-        'efficientnet-b4': (1.4, 1.8, 380, 0.4),
+        'efficientnet-b5': (1.4, 1.8, 380, 0.4),
         'efficientnet-b5': (1.6, 2.2, 456, 0.4),
         'efficientnet-b6': (1.8, 2.6, 528, 0.5),
         'efficientnet-b7': (2.0, 3.1, 600, 0.5),
@@ -184,9 +184,9 @@ def EfficientNet(width_coefficient,
         efficientnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
         efficientnet.add_module('softmax', SoftMax(name='softmax'))
     if isinstance(default_size,int):
-        default_size=default_size,
-    if len(default_size)==1:
-        default_size=(default_size[0],default_size[1],3)
+        default_size=(default_size,default_size,3)
+    elif len(default_size)==1:
+        default_size=(default_size[0],default_size[0],3)
     model=ImageClassificationModel(input_shape=default_size,output=efficientnet)
 
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
@@ -205,18 +205,18 @@ def EfficientNetB0(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
-    effb0 = EfficientNet(1.0, 1.0, input_shape, 0.2, model_name='efficientnet-b0',include_top=include_top, num_classes=classes)
+    effb0 = EfficientNet(1.0, 1.0, default_size=input_shape, dropout_rate= 0.2, model_name='efficientnet-b0',include_top=include_top, num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1pO4wRWY6N4e7U_7E2H-NhBPEF4MlR4ru',dirname,'efficientnet-b0_tf.pth')
         recovery_model=load(os.path.join(dirname,'efficientnet-b0_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape=input_shape
         if include_top==False:
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
-
                 new_fc = Dense(classes, activation=None, name='fc')
                 new_fc.input_shape=recovery_model.fc.input_shape
                 recovery_model.fc=new_fc
@@ -234,15 +234,16 @@ def EfficientNetB1(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(240, 240,3)
-    effb1 =EfficientNet(1.0, 1.1, 240, 0.2, model_name='efficientnet-b1',include_top=include_top,num_classes=classes)
+    effb1 =EfficientNet(1.0, 1.1, default_size=input_shape, dropout_rate= 0.2, model_name='efficientnet-b1',include_top=include_top,num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1zCWDn4lwHCn4exAnGfBSPh9YHYTGdIYt',dirname,'efficientnet-b1.pkl')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b1_tf.pth'))
+        recovery_model=load(os.path.join(dirname,'efficientnet-b1_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
         recovery_model.eval()
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 
@@ -262,13 +263,14 @@ def EfficientNetB2(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(260, 260,3)
-    effb2 =EfficientNet(1.1, 1.2, 260, 0.3, model_name='efficientnet-b2',include_top=include_top,num_classes=classes)
+    effb2 =EfficientNet(1.1, 1.2, default_size=input_shape, dropout_rate= 0.3, model_name='efficientnet-b2',include_top=include_top,num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1YQgy7PTgj8VereQfaxKJCZshIZK_uqtI',dirname,'efficientnet-b2_tf.pth')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b2_tf.pth'))
+        recovery_model=load(os.path.join(dirname,'efficientnet-b2_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 
@@ -288,13 +290,14 @@ def EfficientNetB3(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(300, 300,3)
-    effb3 =EfficientNet(1.2, 1.4, 300, 0.3, model_name='efficientnet-b3',include_top=include_top,num_classes=classes)
+    effb3 =EfficientNet(1.2, 1.4, default_size=input_shape, dropout_rate=0.3, model_name='efficientnet-b3',include_top=include_top,num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1LgG4bsYnkY-uj6sLqbebRP0va3gDEkgS',dirname,'efficientnet-b3_tf.pth')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b3_tf.pth'))
+        recovery_model=load(os.path.join(dirname,'efficientnet-b3_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 
@@ -314,14 +317,15 @@ def EfficientNetB4(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(380, 380,3)
-    effb4 =EfficientNet(1.4, 1.8, 380, 0.4, model_name='efficientnet-b4',include_top=include_top,num_classes=classes)
+    effb4 =EfficientNet(1.4, 1.8, 380, 0.4, model_name='efficientnet-b4', include_top=include_top, num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1eOUvMemIysmAa0ePdGKz01NO1EYWI2Dp',dirname,'efficientnet-b4_tf.pth')
-        recovery_model=unpickle(sanitize_path(os.path.join(dirname,'efficientnet-b4_tf.pth')))
+        recovery_model=load(sanitize_path(os.path.join(dirname,'efficientnet-b4_tf.pth')))
+        recovery_model=fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 
@@ -353,13 +357,14 @@ def EfficientNetB5(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(456,456,3)
-    effb5 =EfficientNet(1.6, 2.2, 456, 0.4, model_name='efficientnet-b5',include_top=include_top,num_classes=classes)
+    effb5 =EfficientNet(1.6, 2.2, default_size=input_shape, dropout_rate= 0.4, model_name='efficientnet-b5',include_top=include_top,num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1o_JQkIFUP1_-9AkiTs-x8q7gyDMyqiJz',dirname,'efficientnet-b5_tf.pth')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b5_tf.pth'))
+        recovery_model=load(os.path.join(dirname,'efficientnet-b5_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 
@@ -379,14 +384,15 @@ def EfficientNetB6(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(528, 528,3)
-    effb6 =EfficientNet(1.8, 2.6, 528, 0.5, model_name='efficientnet-b6',include_top=include_top,num_classes=classes)
+    effb6 =EfficientNet(1.8, 2.6, default_size=input_shape, dropout_rate= 0.5, model_name='efficientnet-b6',include_top=include_top,num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1-dUqwaLzv2V7m8w4jkvFBlHTCsZq54JY',dirname,'efficientnet-b6_tf.pth')
-        recovery_model=unpickle(os.path.join(dirname,'efficientnet-b6_tf.pth'))
+        recovery_model=load(os.path.join(dirname,'efficientnet-b6_tf.pth'))
+        recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 
@@ -406,13 +412,14 @@ def EfficientNetB7(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(600, 600,3)
-    effb7 =EfficientNet(2.0, 3.1, 600, 0.5, model_name='efficientnet-b7',include_top=include_top,num_classes=classes)
+    effb7 =EfficientNet(2.0, 3.1, default_size=input_shape, dropout_rate=0.5, model_name='efficientnet-b7',include_top=include_top,num_classes=classes)
     if pretrained==True:
         download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz',dirname,'efficientnet-b7_tf.pth')
         recovery_model=load(os.path.join(dirname,'efficientnet-b7_tf.pth'))
+        recovery_model=fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
 

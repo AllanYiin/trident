@@ -14,9 +14,9 @@ import time
 import uuid
 import json
 import numpy as np
-from trident.backend.common import to_list,get_signature, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need,Signature
-
+from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need
+from trident.backend.tensorspec import *
 _session = get_session()
 _backend = _session.backend
 if _backend == 'pytorch':
@@ -82,6 +82,7 @@ class Loss(object):
   def __call__(self, output: Tensor, target: Tensor,**kwargs):
       result = self.forward(output, target, **kwargs)
       return result
+
 
 
   def forward(self, output: Tensor, target: Tensor,**kwargs):

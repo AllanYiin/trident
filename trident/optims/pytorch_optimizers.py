@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import re
 import math
+import sys
 from collections import defaultdict
 from functools import reduce
 import torch
@@ -12,7 +13,7 @@ from trident.backend.common import get_class, snake2camel
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'PlainRAdam', 'AdamW', 'Lookahead',
-           'Ranger', 'get_optimizer']
+           'Ranger', 'RangerLars','get_optimizer']
 
 
 def _filter_grads(grads, gradient_centralization=None):
@@ -52,6 +53,7 @@ class Optimizer(optimizer.Optimizer):
         super().__init__(params, defaults)
         self._base_lr = 1e-3
         self.gradient_centralization=None
+
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -128,7 +130,7 @@ class Adam(optim.Adam):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None,**kwargs):
         super().__init__(params, lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -1101,8 +1103,8 @@ class Ranger(Optimizer):
                     buffered[1] = N_sma
                     if N_sma > self.N_sma_threshhold:
                         step_size = math.sqrt(
-                            (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                        N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                            (1.0 - beta2_t) * (N_sma - 4.0) / (N_sma_max - 4.0) * (N_sma - 2.0) / N_sma * N_sma_max / (
+                                        N_sma_max - 2.0)) / (1.0 - beta1 ** state['step'])
                     else:
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
@@ -1115,20 +1117,24 @@ class Ranger(Optimizer):
                     p_data_fp32.add_(true_divide(exp_avg, denom),alpha=-step_size * group['lr'])
                 else:
                     p_data_fp32.add_(exp_avg,alpha=-step_size * group['lr'])
-                if not any_abnormal_number(p_data_fp32):
-                    p.data.copy_(p_data_fp32)
 
-                    # integrated look ahead...
-                    # we do it at the param level instead of group level
-                    if state['step'] % group['k'] == 0:
-                        slow_p = state['slow_buffer']  # get access to slow param tensor
-                        slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
-                        if not any_abnormal_number(slow_p):
-                            p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
-                        else:
-                            return
-                else:
-                    return
+                if any_abnormal_number(p_data_fp32):
+                    sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                    p_data_fp32.copy_(where(is_nan(p_data_fp32),p.data,p_data_fp32))
+
+                p.data.copy_(p_data_fp32)
+
+                # integrated look ahead...
+                # we do it at the param level instead of group level
+                if state['step'] % group['k'] == 0:
+                    slow_p = state['slow_buffer']  # get access to slow param tensor
+                    slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                    if any_abnormal_number(slow_p):
+                        sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                        slow_p = where(is_nan(slow_p), p.data, slow_p)
+                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+
+
         return loss
 
 
@@ -1265,24 +1271,26 @@ class RangerLars(Optimizer):
                 state['trust_ratio'] = trust_ratio
 
                 if N_sma >= 5:
+                    denom = exp_avg_sq.sqrt().add_(group['eps'])
                     p_data_fp32.addcdiv_( exp_avg, denom,value=-radam_step_size * group['lr'] * trust_ratio)
                 else:
                     p_data_fp32.add_(exp_avg,alpha=-radam_step_size * group['lr'] * trust_ratio)
 
-                if not any_abnormal_number(p_data_fp32):
-                    p.data.copy_(p_data_fp32)
+                if any_abnormal_number(p_data_fp32):
+                    p_data_fp32.copy_(where(is_nan(p_data_fp32), p.data, p_data_fp32))
 
-                    # integrated look ahead...
-                    # we do it at the param level instead of group level
-                    if state['step'] % group['k'] == 0:
-                        slow_p = state['slow_buffer']  # get access to slow param tensor
-                        slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
-                        if not any_abnormal_number(slow_p):
-                            p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
-                        else:
-                            return
-                else:
-                    return
+                p.data.copy_(p_data_fp32)
+
+                # integrated look ahead...
+                # we do it at the param level instead of group level
+                if state['step'] % group['k'] == 0:
+                    slow_p = state['slow_buffer']  # get access to slow param tensor
+                    slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                    if any_abnormal_number(slow_p):
+                        slow_p = where(is_nan(slow_p), p.data, slow_p)
+                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+
+
         return loss
 
 

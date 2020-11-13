@@ -16,6 +16,7 @@ import numpy as np
 import tensorflow as tf
 
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
@@ -133,7 +134,7 @@ def MobileNetV2(include_top=True,
         recovery_model.eval()
 
         if include_top==False:
-            recovery_model.__delitem__(-1)
+            recovery_model.remove_at(-1)
         else:
             if classes!=1000:
                 new_fc = Dense(classes, activation=None, name='fc')

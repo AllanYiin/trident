@@ -16,7 +16,7 @@ if is_in_ipython():
 
 if not is_in_colab:
     import matplotlib
-    matplotlib.use('Qt5Agg' if not is_in_ipython() and not is_in_colab() else 'NbAgg' )
+    matplotlib.use('TkAgg' if not is_in_ipython() and not is_in_colab() else 'NbAgg' )
 else:
     import matplotlib
 import matplotlib.pyplot as plt

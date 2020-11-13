@@ -38,7 +38,11 @@ def orth_reg(model:tf.Module,reg_weight=1e-6):
     return loss
 
 def total_variation_norm_reg(output:tf.Tensor,reg_weight=1e-6):
-    return reg_weight * (reduce_sum(abs(output[:, :, :, :-1] - output[:, :, :, 1:])) + reduce_sum(abs(output[:, :, :-1, :] - output[:, :, 1:, :])))
+    diff_i = tf.math.reduce_sum(tf.math.pow(output[:, :, 1:,:] - output[:, :, :-1,:], 2))
+    diff_j = tf.math.reduce_sum(tf.math.pow(output[:, 1:, :,:] - output[:, :-1, :,:], 2))
+    tv_loss = (diff_i + diff_j)
+    loss = reg_weight * tv_loss
+    return loss
 
 
 def get_reg(reg_name):

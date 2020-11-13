@@ -29,7 +29,7 @@ from trident.layers.tensorflow_layers import *
 
 _tf_data_format = 'channels_last'
 
-__all__ = ['Conv2d_Block', 'TransConv2d_Block','DepthwiseConv2d_Block','SeparableConv2d_Block', 'ShortCut2d','SqueezeExcite','For']
+__all__ = ['Conv1d_Block', 'Conv2d_Block','TransConv2d_Block','DepthwiseConv2d_Block','SeparableConv2d_Block', 'ShortCut2d','ConcateBlock','SqueezeExcite','For']
 
 _session = get_session()
 
@@ -47,6 +47,97 @@ _pair = _ntuple(2)
 _triple = _ntuple(3)
 _quadruple = _ntuple(4)
 
+
+
+class Conv1d_Block(Layer):
+    def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
+                 normalization=None, use_spectral=False,use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
+                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,sequence_rank='cna',**kwargs):
+        super(Conv1d_Block, self).__init__(name=name,keep_output=keep_output)
+        if sequence_rank in ['cna','nac']:
+            self.sequence_rank=sequence_rank
+        else:
+            self.sequence_rank = 'cna'
+        self.kernel_size = kernel_size
+        self.num_filters = num_filters
+        self.strides = strides
+        self.auto_pad = auto_pad
+        self.padding = 0
+        self.padding_mode = padding_mode
+
+        # if self.auto_pad == False:
+        #     self.padding = 0
+        # else:
+        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else
+        #     self.kernel_size-2
+
+        self.use_bias = use_bias
+        self.dilation = dilation
+        self.groups = groups
+        self.depth_multiplier = depth_multiplier
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
+        self.dropout_rate = dropout_rate
+
+        norm = get_normalization(normalization)
+        conv = Conv1d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                      auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                      use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                      depth_multiplier=self.depth_multiplier)
+        self.use_spectral = use_spectral
+        # if isinstance(norm, SpectralNorm):
+        #     self.use_spectral = True
+        #     norm = None
+        #     conv= nn.utils.spectral_norm(conv)
+        if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
+            self.conv = conv
+            self.norm = norm
+            self.activation = get_activation(activation)
+        elif self.sequence_rank=='nac':
+            self.norm = norm
+            self.activation = get_activation(activation)
+            self.conv = conv
+
+
+    def build(self, input_shape):
+        if self._built == False:
+            # if self.use_spectral:
+            #     self.conv = nn.utils.spectral_norm(self.conv)
+            #     if self.norm is SpectralNorm:
+            #         self.norm=None
+            self._built = True
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        if hasattr(self,'sequence_rank'):
+            setattr(self,'sequence_rank','cna')
+        if self.add_noise == True and self.training == True:
+            noise = self.noise_intensity * random_normal_like(x, dtype=tf.float32)
+            x = x + noise
+        if self.sequence_rank == 'cna':
+            x = self.conv(x)
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+        elif self.sequence_rank == 'nac':
+            if self.norm is not None:
+                x = self.norm(x)
+            if self.activation is not None:
+                x = self.activation(x)
+            x = self.conv(x)
+        if self.dropout_rate > 0 and self.training:
+            x = tf.nn.dropout(x,rate=self.dropout_rate)
+        return x
+
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], tf.Module):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
 
 
 
@@ -98,10 +189,10 @@ class Conv2d_Block(Layer):
     def build(self, input_shape):
         if self._built == False:
             self.conv.input_shape = input_shape
-            if self.use_spectral:
-                conv=self._modules['conv']
-                self._modules['conv']=nn.utils.spectral_norm(conv)
-                self.norm=None
+            # if self.use_spectral:
+            #     conv=self._modules['conv']
+            #     self._modules['conv']=nn.utils.spectral_norm(conv)
+            #     self.norm=None
             self._built=True
 
     def forward(self, *x):
@@ -415,10 +506,10 @@ class SeparableConv2d_Block(Layer):
                           )
             #conv.input_shape = input_shape
 
-            if self.use_spectral:
-                self.conv = spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm=None
+            # if self.use_spectral:
+            #     self.conv = spectral_norm(self.conv)
+            #     if self.norm is SpectralNorm:
+            #         self.norm=None
             self._built=True
 
     def forward(self, *x):
@@ -620,6 +711,58 @@ class ShortCut2d(Layer):
 
 
 
+class ConcateBlock(Layer):
+    def __init__(self, *args, axis=1, activation='relu'):
+        """
+
+        Parameters
+        ----------
+        layer_defs : object
+        """
+        super(ConcateBlock, self).__init__()
+        self.activation = get_activation(activation)
+        self.axis = axis
+        self.has_identity = False
+        for i in range(len(args)):
+            arg = args[i]
+            if isinstance(arg, (Layer, list, dict)):
+                if isinstance(arg, list):
+                    arg = Sequential(*arg)
+                elif isinstance(arg, dict) and len(args) == 1:
+                    for k, v in arg.items():
+                        if isinstance(v, Identity):
+                            self.has_identity = True
+                            self.add_module('Identity', v)
+                        else:
+                            self.add_module(k, v)
+                elif isinstance(arg, dict) and len(args) > 1:
+                    raise ValueError('more than one dict argument is not support.')
+                elif isinstance(arg, Identity):
+                    self.has_identity = True
+                    self.add_module('Identity', arg)
+                else:
+                    self.add_module('branch{0}'.format(i + 1), arg)
+        if len(self._modules) == 1 and self.has_identity == False:
+            self.add_module('Identity', Identity())
+
+
+    def forward(self, *x):
+        x = enforce_singleton(x)
+        outs = []
+        if 'Identity' in self._modules:
+            outs.append(x)
+        for k, v in self._modules.items():
+            if k != 'Identity':
+                out = v(x)
+                if len(outs) == 0 or int_shape(out)[1:-1] == int_shape(outs[0])[1:-1]:
+                    outs.append(out)
+                else:
+                    raise ValueError(
+                        'All branches in shortcut should have the same shape {0} {1}'.format(int_shape(out), int_shape(x)))
+        outs = tf.concat(outs, axis=self.axis)
+        if self.activation is not None:
+            outs = self.activation(outs)
+        return outs
 
 
 

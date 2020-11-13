@@ -3,10 +3,12 @@ from __future__ import division
 from __future__ import print_function
 import json
 import os
+import random
 from sys import stderr,stdout
 from trident.backend.common import *
 from trident.backend.model import *
 
+__all__ = []
 
 _session=get_session()
 _trident_dir=get_trident_dir()
@@ -59,7 +61,9 @@ else:
             import tensorflow
             os.environ['TRIDENT_BACKEND'] = 'tensorflow'
         except:
-            pass
+            import_or_install('onnxruntime')
+
+            os.environ['TRIDENT_BACKEND'] = 'onnx'
 
 
 if _session.backend == 'pytorch':
@@ -69,6 +73,24 @@ if _session.backend == 'pytorch':
     _session.backend='pytorch'
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
+
+    from trident.backend.pytorch_ops import *
+    from trident.backend.pytorch_backend import *
+    from trident.optims.pytorch_optimizers import *
+    from trident.layers.pytorch_activations import *
+    from trident.layers.pytorch_layers import *
+    from trident.layers.pytorch_pooling import *
+    from trident.layers.pytorch_blocks import *
+    from trident.layers.pytorch_normalizations import *
+    from trident.layers.pytorch_rnn import *
+
+
+    from trident.optims.pytorch_constraints import *
+    from trident.optims.pytorch_regularizers import *
+    from trident.optims.pytorch_losses import *
+    from trident.optims.pytorch_metrics import *
+
+    from trident.optims.pytorch_trainer import *
 
 
 
@@ -83,8 +105,35 @@ elif _session.backend == 'tensorflow':
     _session.backend = 'tensorflow'
     _session.image_data_format = 'channels_last'
     _session.image_channel_order = 'rgb'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    import tensorflow as tf
+
+    gpus = tf.config.list_physical_devices('GPU')
+    if gpus:
+        # Restrict TensorFlow to only allocate 1GB * 2 of memory on the first GPU
+        try:
+            tf.config.experimental.set_virtual_device_configuration(
+                gpus[0],
+                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 2)])
+            logical_gpus = tf.config.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+        except RuntimeError as e:
+            # Virtual devices must be set before GPUs have been initialized
+            print(e)
+
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        tf.device('/gpu:0')
 
 
+
+elif _session.backend == 'onnx':
+    stdout.write('Using ONNX backend.\n')
+    stdout.write('Image Data Format: channels_first.\n')
+    stdout.write('Image Channel Order: rgb.\n')
+    _session.backend = 'onnx'
+    _session.image_data_format = 'channels_first'
+    _session.image_channel_order = 'rgb'
 
 if 'TRIDENT_IMG_BACKEND' in os.environ:
     _image_backend = os.environ['TRIDENT_IMG_BACKEND']

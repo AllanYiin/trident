@@ -313,8 +313,8 @@ class YoloLayer(Layer):
 
 
 class YoloDetectionModel(ImageDetectionModel):
-    def __init__(self, inputs=None, output=None, input_shape=None):
-        super(YoloDetectionModel, self).__init__(inputs, output, input_shape)
+    def __init__(self, inputs=None,  input_shape=None,output=None):
+        super(YoloDetectionModel, self).__init__(inputs, input_shape,output)
         self.preprocess_flow = [resize((input_shape[-2], input_shape[-1]), True), normalize(0, 255)]
         self.detection_threshold = 0.7
         self.iou_threshold = 0.3

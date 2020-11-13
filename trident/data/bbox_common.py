@@ -17,11 +17,8 @@ else:
     from trident.backend.pillow_backend import *
 
 if _backend=='pytorch':
-    from trident.backend.pytorch_backend import *
     from  trident.backend.pytorch_ops import *
-
-elif _backend == 'tensorflow':
-    from trident.backend.tensorflow_backend import *
+else:
     from trident.backend.tensorflow_ops import *
 
 
@@ -68,6 +65,10 @@ def xywh2xyxy(boxes,image_size=None):
             return np.array(boxlist)
         return np.array([x1, y1, x2, y2])
     elif isinstance(boxes, np.ndarray):
+        class_info = None
+        if boxes.shape[-1] >4:
+            class_info = boxes[:, 4:]
+            boxes = boxes[:, :4]
         # Multiple boxes given as a 2D ndarray
         boxes[:, 0:2] =boxes[:, 0:2]- boxes[:, 2:4] / 2
         boxes[:, 2:4] =boxes[:, 2:4] + boxes[:, 0:2]
@@ -80,11 +81,20 @@ def xywh2xyxy(boxes,image_size=None):
         boxes[:, 1] = np.clip(boxes[:, 1], a_min=0, a_max=height)
         boxes[:, 2] = np.clip(boxes[:, 2], a_min=0, a_max=width)
         boxes[:, 3] = np.clip(boxes[:, 3], a_min=0, a_max=height)
+        if class_info is not None:
+            boxes = np.concatenate([boxes, class_info], axis=-1)
         return boxes
     elif is_tensor(boxes) :
+        class_info = None
+        if boxes.shape[-1] >4:
+            class_info = boxes[:, 4:]
+            boxes = boxes[:, :4]
         x1y1= clip(round(boxes[:, 0:2] -boxes[:, 2:4] /2,0),0)
         x2y2=clip(round(x1y1+ boxes[:, 2:4],0),0)
-        boxes=concate([x1y1,x2y2],axis=-1)
+        if class_info is not None:
+            boxes = concate([x1y1,x2y2, class_info], axis=-1)
+        else:
+            boxes=concate([x1y1,x2y2],axis=-1)
         return boxes
 
     else:
@@ -103,13 +113,21 @@ def xyxy2xywh(boxes):
     elif isinstance(boxes, np.ndarray):
         if boxes.ndim==1:
             boxes=np.expand_dims(boxes,0)
-        return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
-                        boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
+        if boxes.shape[-1]>4:
+            return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+                                   boxes[:, 2:4] - boxes[:, 0:2],boxes[:, 4:]], 1)  # w, h
+        elif boxes.shape[-1]==4:
+            return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+                            boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
     elif is_tensor(boxes):
         if boxes.ndim==1:
             boxes=expand_dims(boxes,0)
-        return concate([(boxes[:, 2:4] + boxes[:, 0:2])/2,  # cx, cy
-                     boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
+        if boxes.shape[-1] > 4:
+            return concate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+                            boxes[:, 2:4] - boxes[:, 0:2],boxes[:, 4:]], 1)  # w, h
+        else:
+            return concate([(boxes[:, 2:4] + boxes[:, 0:2])/2,  # cx, cy
+                         boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
     else:
         raise TypeError('Argument xyxy must be a list, tuple, or numpy array.')
 
@@ -345,8 +363,7 @@ def bbox_giou_numpy(bboxes1, bboxes2):
     return ious
 
 def bbox_giou(bboxes1, bboxes2):
-    """
-        Calculate GIoU loss on anchor boxes
+    """Calculate GIoU loss on anchor boxes
         Reference Paper:
             "Generalized Intersection over Union: A Metric and A Loss for Bounding Box Regression"
             https://arxiv.org/abs/1902.09630
@@ -402,11 +419,10 @@ def bbox_giou(bboxes1, bboxes2):
     return ious
 
 def bbox_diou(bboxes1, bboxes2):
-    """
-    Calculate DIoU loss on anchor boxes
-    Reference Paper:
-        "Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression"
-        https://arxiv.org/abs/1911.08287
+    """Calculate DIoU loss on anchor boxes
+        Reference Paper:
+            "Distance-IoU Loss: Faster and Better Learning for Bounding Box Regression"
+            https://arxiv.org/abs/1911.08287
 
     Args:
         bboxes1: tensor, shape=(batch, feat_w, feat_h, anchor_num, 4), xywh
