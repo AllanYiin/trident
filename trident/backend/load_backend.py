@@ -40,11 +40,7 @@ if not os.path.exists(_trident_dir):
         pass
 
 
-def get_backend():
-    return _session.backend
 
-def get_image_backend():
-    return _session.image_backend
 
 
 # Set backend based on TRIDENT_BACKEND flag, if applicable.
@@ -66,7 +62,7 @@ else:
             os.environ['TRIDENT_BACKEND'] = 'onnx'
 
 
-if _session.backend == 'pytorch':
+if get_backend()== 'pytorch':
     stdout.write('Using Pytorch backend.\n')
     stdout.write('Image Data Format: channels_first.\n')
     stdout.write('Image Channel Order: rgb.\n')
