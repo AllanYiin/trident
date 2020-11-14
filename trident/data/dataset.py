@@ -32,7 +32,6 @@ from trident.data.text_common import text_backend_adaption, reverse_text_backend
 from trident.data.samplers import *
 from trident.backend.common import *
 from trident.backend.tensorspec import TensorSpec, assert_input_compatibility
-from trident.backend.load_backend import get_backend
 
 try:
     import Queue
@@ -662,6 +661,7 @@ class TextSequenceDataset(Dataset):
                  object_type=ObjectType.corpus, symbol=None, name=None, **kwargs):
         super().__init__(symbol=symbol, object_type=object_type, name=name, **kwargs)
         self.sequence_start_at = sequence_start_at
+        self.transform_funcs=[]
         if len(section_delimiter) == 2:
             self.section_delimiter = section_delimiter
         else:
@@ -806,20 +806,19 @@ class TextSequenceDataset(Dataset):
 
         return None
 
-    def text_transform(self, text_data):
-        if len(self.text_transform_funcs) == 0:
+    def data_transform(self, text_data):
+        if len(self.transform_funcs) == 0:
             return text_backend_adaption(text_data)
         if isinstance(text_data, np.ndarray):
-            for fc in self.text_transform_funcs:
+            for fc in self.transform_funcs:
                 if not fc.__qualname__.startswith(
                         'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
                         fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
                     text_data = fc(text_data)
             text_data = text_backend_adaption(text_data)
 
-            return text_data
-        else:
-            return text_data
+    def text_transform(self, text_data):
+        return self.data_transform(text_data)
 
     @property
     def reverse_text_transform_funcs(self):

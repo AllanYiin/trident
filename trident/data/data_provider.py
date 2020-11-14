@@ -364,8 +364,12 @@ class TextSequenceDataProvider(object):
     supporting integer indexing in range from 0 to len(self) exclusive.
     """
 
-    def __init__(self, dataset_name='',traindata=None,testdata=None,minibatch_size=8,**kwargs):
+    def __init__(self, dataset_name='',traindata=None,testdata=None,minibatch_size=8,mode='tuple',**kwargs):
         self.__name__=dataset_name
+        if mode in ['tuple', 'dict']:
+            self.mode = mode
+        else:
+            raise ValueError("Valid mode should be tuple or dict ")
 
         self.traindata = traindata
         self.testdata = testdata
@@ -469,13 +473,13 @@ class TextSequenceDataProvider(object):
         if self.testdata is not None and len(self.testdata.data)>0 and len(self.testdata.unpair) > 0:
             self.testdata.unpair.text_transform_funcs = self._text_transform_funcs
 
-    def text_transform(self, text_data):
+    def data_transform(self, text_data):
         if text_data.ndim==4:
-            return [self.text_transform(im) for im in text_data]
-        if len(self.text_transform_funcs) == 0:
+            return [self.data_transform(im) for im in text_data]
+        if len(self._text_transform_funcs) == 0:
             return text_backend_adaption(text_data)
         if isinstance(text_data, np.ndarray):
-            for fc in self.text_transform_funcs:
+            for fc in self._text_transform_funcs:
                 if not fc.__qualname__.startswith('random_') or  'crop' in fc.__qualname__  or  'rescale' in fc.__qualname__  or  (fc.__qualname__.startswith('random_') and random.randint(0,10)%2==0):
                     text_data = fc(text_data)
 
@@ -484,6 +488,9 @@ class TextSequenceDataProvider(object):
             return text_data
         else:
             return text_data
+
+    def text_transform(self, text_data):
+        return self.data_transform(text_data)
 
 
     @property
@@ -536,20 +543,8 @@ class TextSequenceDataProvider(object):
             self.testdata.paired_transform_funcs = self._paired_transform_funcs
 
 
-    def text_transform(self, text_data):
-        if text_data.ndim==4:
-            return [self.text_transform(im) for im in text_data]
-        if len(self.text_transform_funcs) == 0:
-            return text_backend_adaption(text_data)
-        if isinstance(text_data, np.ndarray):
-            for fc in self.text_transform_funcs:
-                if fc.__qualname__.startswith('random_') and random.randint(10)%2==0:
-                    text_data = fc(text_data)
-            text_data = text_backend_adaption(text_data)
 
-            return text_data
-        else:
-            return text_data
+
 
     def _next_index(self):
         return self.__next__()
@@ -571,10 +566,16 @@ class TextSequenceDataProvider(object):
     def next(self):
         if self.scenario == 'test' and self.testdata is not None:
             result = self.testdata.next()
-            return result
+            if self.mode=='tuple':
+                return tuple(result.value_list)
+            else:
+                return result
         else:
             result= self.traindata.next()
-            return result
+            if self.mode == 'tuple':
+                return tuple(result.value_list)
+            else:
+                return result
 
     def __next__(self):
         if self.scenario == 'test' and self.testdata is not None:
@@ -583,13 +584,23 @@ class TextSequenceDataProvider(object):
             return next(self.traindata)
 
     def next_train(self):
-        return self.traindata.next()
+        result= self.traindata.next()
+
+        if self.mode == 'tuple':
+            return tuple(result.value_list)
+        else:
+            return self.traindata
 
     def next_test(self):
         if self.testdata is not None:
-            return self.testdata.next()
+            result= self.testdata.next()
+            if self.mode == 'tuple':
+                return tuple(result.value_list)
+            else:
+                return self.traindata
         else:
             return None
+
 
     def index2text(self,idx:int):
         index2textdict=None

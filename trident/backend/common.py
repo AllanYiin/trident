@@ -184,6 +184,8 @@ def get_plateform():
     else:
         return plateform_str
 
+
+
 def _initialize_session():
     """
     1) load session config from config file
@@ -273,9 +275,14 @@ def set_session(key, value):
     return _SESSION
 
 def get_backend():
-    return _SESSION.backend
+    global  _SESSION
+    if hasattr(_SESSION,'backend'):
+        return _SESSION.backend
+    else:
+        return os.environ['TRIDENT_BACKEND']
 
 def get_image_backend():
+    global  _SESSION
     return _SESSION.image_backend
 
 

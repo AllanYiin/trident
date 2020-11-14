@@ -16,14 +16,14 @@ import json
 from typing import List
 
 import numpy as np
-from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
+from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session,get_backend, \
     snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need,Signature
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
 from trident.callbacks import LambdaCallback, UnfreezeModelCallback
 
 _session = get_session()
-_backend = _session.backend
+_backend = get_backend()
 if _backend == 'pytorch':
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
