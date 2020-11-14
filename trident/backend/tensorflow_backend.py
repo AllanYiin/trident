@@ -1,36 +1,38 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import os
+
 import copy
 import inspect
 import itertools
+import numbers
+import os
 import random
 import sys
 import threading
 import uuid
 import weakref
 from collections import defaultdict, namedtuple
+from distutils.version import Version, LooseVersion
 from itertools import islice
 from typing import List, Callable, TypeVar, Union, Tuple, overload, Mapping, Dict
+
 import numpy as np
-from distutils.version import Version, LooseVersion
 import tensorflow as tf
 from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
 from tensorflow.python.framework import func_graph, ops
+from tensorflow.python.keras.engine import base_layer_utils
+from tensorflow.python.module import module
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.training.tracking import data_structures, tracking
 from tensorflow.python.training.tracking import layer_utils as trackable_layer_utils
-
-from tensorflow.python.module import module
 from tensorflow.python.util import object_identity
-from tensorflow.python.keras.engine import base_layer_utils
+from trident.backend import tensorflow_ops as tops
 from trident.backend import tensorflow_serialization as serialization
 from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature
-from trident.backend.tensorspec import *
-from trident.backend import tensorflow_ops as tops
 from trident.backend.tensorflow_ops import *
+from trident.backend.tensorspec import *
 from trident.data.utils import pickle_it
 
 __all__ = ['set_device','Layer', 'get_device', 'get_flops', 'Sequential', 'summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
@@ -409,10 +411,11 @@ class Layer(tf.Module):
         self._default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
         self.default_name = camel2snake(prefix) + '_1'
         self.relative_name = ''
-        #reset_name(self, self._uid_prefixs)
+        reset_name(self, self._uid_prefixs)
         super(Layer, self).__init__(name=self._default_name)
 
         self._nodes = None
+        self.is_root=True
 
         with self.name_scope:
             self.batch_index = 0
@@ -444,6 +447,8 @@ class Layer(tf.Module):
             # self.dump_patches = True
 
             self._device = get_device()
+    def get_root(self):
+        return self._nodes[0]
 
     @property
     def name(self):
@@ -505,6 +510,7 @@ class Layer(tf.Module):
         if isinstance(module, Layer):
             reset_name(module, self._uid_prefixs)
             module.relative_name = name if module.relative_name == '' else name + '.' + module.relative_name
+
             for mod in module.modules():
                 if isinstance(mod, Layer) and mod.uuid != module.uuid:
                     mod.nodes = self.nodes
@@ -515,7 +521,7 @@ class Layer(tf.Module):
         for mod in self.modules():
             if isinstance(mod, Layer):
                 mod.nodes = self.nodes
-        #
+
         # elif inspect.isfunction(module) or callable(module):
         #     module.__name__ = name
         #     self._modules[name] = module
@@ -826,7 +832,7 @@ class Layer(tf.Module):
     @output_shape.setter
     def output_shape(self, value):
         if isinstance(value, tf.TensorShape):
-            value = to_tensor(value.as_list()).to('int')
+            value = to_tensor(value.as_list()[1:]).to('int')
         elif isinstance(value, (list, tuple)) and len(value) > 0:
             value = tuple([to_tensor(tensor_shape.as_list()).to('int') if isinstance(tensor_shape, tf.TensorShape) else to_tensor(tensor_shape).to('int') for tensor_shape in value])
 
@@ -1150,14 +1156,16 @@ class Layer(tf.Module):
                 input = result
         if self._built == False:
             inp = unpack_singleton(input)
-            if isinstance(inp, (tuple, list)):
-                self.build([to_tensor(int_shape(input_tensor)[self.batch_index + 1:]) for input_tensor in inp])
+            if isinstance(inp, (tuple, list)) and all([ isinstance(item,numbers.Integral) for item in inp]):
+                self.build(inp)
+            elif isinstance(inp, (tuple, list)) :
+                self.forward(*inp)
             elif is_tensor(inp):
-                self.input_shape = to_tensor(int_shape(inp)[self.batch_index + 1:])
+                self.input_shape = tensor_to_shape(inp)
             else:
                 print('input shou be tensor or tuple of tensor')
                 print(inp)
-                self.input_shape = tf.TensorShape(None)
+
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
         try:
             with tf.device(get_device()):
@@ -1167,10 +1175,11 @@ class Layer(tf.Module):
                     self._output_tensor = output
                 if isinstance(output, Tensor):  # one output
                     if self._output_shape is None or not np.array_equal(to_numpy(self._output_shape) ,to_numpy(int_shape(output))[self.batch_index + 1:]):
-                        self._output_shape = to_tensor(int_shape(output)[self.batch_index + 1:])
+                        self._output_shape =tensor_to_shape(output)
                 elif isinstance(output, (list, tuple)):
-                    self._output_shape = tuple([to_tensor(int_shape(output_tensor)[self.batch_index + 1:] )for output_tensor in output])
-
+                    output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                    # if not isinstance(item, (list,tuple)) lstm
+                    self._output_shape = unpack_singleton(output_shape)
             for hook in self._forward_hooks.values():
                 hook_result = hook(self, input, result)
                 if hook_result is not None:
@@ -1911,12 +1920,13 @@ def calculate_flops(gen: Layer):
 def summary(model, input_size, batch_size=-1):
     def register_hook(module):
         def hook(module, input, output):
-            class_name = str(module.__class__).split(".")[-1].split("'")[0]
+
             module_idx = len(summary)
 
-            m_key =module.default_name if  module._name is None else module._name
+            m_key = module.relative_name if hasattr(module, 'relative_name') else module.name
             #m_key = module.name
             summary[m_key] = OrderedDict()
+            summary[m_key]["class_name"] = module.__class__.__name__
             summary[m_key]["keep_output"] = module.keep_output
             summary[m_key]["input_shape"] =  list(int_shape(input[0]))
             summary[m_key]["input_shape"][0] = batch_size
@@ -1947,10 +1957,15 @@ def summary(model, input_size, batch_size=-1):
                     np.array(summary[m_key]["output_shape"][1:-1]).astype(np.float64))
             summary[m_key]["nb_params"] = params
 
-        if (not isinstance(module, Sequential) and not (module == model)):
+        if (
+                not isinstance(module, (Sequential))
+                and not (module == model)
+        ):
             hooks.append(module.register_forward_hook(hook))
 
     # multiple inputs to the network
+    for name, module in model.named_modules():
+        module.relative_name = name
 
     if isinstance(input_size, tuple):
         input_size = [input_size]
@@ -1980,7 +1995,7 @@ def summary(model, input_size, batch_size=-1):
 
     print(
         "--------------------------------------------------------------------------------------------------------------------------------")
-    line_new = "{0:^40s} {1:^20s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^12s}".format("Layer (type)", "Output Shape",
+    line_new = "{0:^50s} {1:^25s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^25s}".format("Layer (type)", "Output Shape",
                                                                                "Weight ", "Bias", "Param #", "FLOPS #")
     print(line_new)
     print("==============================================================================")
@@ -1992,18 +2007,30 @@ def summary(model, input_size, batch_size=-1):
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
         is_keep = '★' if summary[layer]["keep_output"] else ''
-        line_new = "{0:<40s} {1:<20s}  {2:^20s} {3:^8s}  {4:^8}  {5:^12}".format(layer,
-        is_keep + str(summary[layer]["output_shape"]),
-       str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
-       str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
-       summary[layer]["nb_params"],
-        summary[layer]["flops"][0])
+        class_name=summary[layer]["class_name"]
+       #  line_new = "{0:<50s} {1:<20s}  {2:^20s} {3:^8s}  {4:^8}  {5:^12}".format(layer+"  "+class_name,
+       #  is_keep + str(summary[layer]["output_shape"]),
+       # str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
+       # str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
+       #  summary[layer]["nb_params"],
+       #  summary[layer]["flops"][0])
+
+        line_new=(layer+"  "+class_name).ljust(50,' ')\
+                  +(is_keep + str(summary[layer]["output_shape"])).ljust(25,' ')\
+                  +str(summary[layer]["weight"] if 'weight' in summary[layer] else '').ljust(20,' ')\
+                  +str(summary[layer]["bias"] if 'bias' in summary[layer] else '').ljust(8,' ')\
+                  +'{:,}'.format(summary[layer]["nb_params"]).ljust(8,' ')\
+                  +'{:,}'.format(summary[layer]["flops"].sum()).ljust(25,' ')
+
         total_params += summary[layer]["nb_params"]
         flops += float(summary[layer]["flops"][0])
         macc += float(summary[layer]["macc"][0])
         total_output += np.prod(to_numpy(summary[layer]["output_shape"]))
         if "trainable" in summary[layer]:
-            trainable_params += int(summary[layer]["trainable"])
+            if summary[layer]["trainable"] == True:
+                trainable_params += summary[layer]["nb_params"]
+        #print(line_new)
+
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).

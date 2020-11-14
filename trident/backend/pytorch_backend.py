@@ -585,14 +585,16 @@ class Layer(nn.Module):
 
         if self._built == False:
             inp = unpack_singleton(input)
-            if isinstance(inp, (tuple, list)):
-                self.build(*[input_tensor.shape[self.batch_index+1:] for input_tensor in inp])
-            elif isinstance(inp, torch.Tensor):
-                self.input_shape = inp.shape[self.batch_index+1:]
+            if isinstance(inp, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in inp]):
+                self.build(inp)
+            elif isinstance(inp, (tuple, list)) :
+                self.forward(*inp)
+            elif is_tensor(inp):
+                self.input_shape = tensor_to_shape(inp)
             else:
                 print('input shou be tensor or tuple of tensor')
                 print(inp)
-                self.input_shape = torch.tensor(-1)
+
 
         if torch._C._get_tracing_state():
             result = self._slow_forward(*input, **kwargs)
@@ -603,11 +605,12 @@ class Layer(nn.Module):
             if hasattr(self, 'keep_output') and self.keep_output == True:
                 self._output_tensor = output
             if isinstance(output, torch.Tensor):# one output
-                if self._output_shape is None or self._output_shape!=output.shape[self.batch_index+1:]:
-                    self._output_shape = to_tensor(output.shape[self.batch_index+1:])
-            elif isinstance(output, (list,tuple)):
-                self._output_shape=tuple([to_tensor(output_tensor.shape[self.batch_index+1:]) for output_tensor in output])
-
+                if self._output_shape is None or not np.array_equal(to_numpy(self._output_shape), to_numpy(int_shape(output))[self.batch_index + 1:]):
+                    self._output_shape =tensor_to_shape(output)
+            elif isinstance(output, (list, tuple)):
+                output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                # if not isinstance(item, (list,tuple)) lstm
+                self._output_shape = unpack_singleton(output_shape)
 
         for hook in self._forward_hooks.values():
             hook_result = hook(self, input, result)
@@ -1067,6 +1070,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
 
             m_key = module.relative_name if hasattr(module, 'relative_name') else module.name
             summary[m_key] = OrderedDict()
+            summary[m_key]["class_name"] = module.__class__.__name__
             if hasattr(module, 'keep_output'):
                 summary[m_key]["keep_output"] = module.keep_output
             else:
@@ -1145,7 +1149,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         h.remove()
 
     print("--------------------------------------------------------------------------------------------------------------------------------")
-    line_new = "{0:^40s} {1:^20s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^12s}".format("Layer (type)", "Output Shape", "Weight ", "Bias", "Param #", "FLOPS #")
+    line_new = "{0:^50s} {1:^25s}  {2:^20s} {3:^8s}  {4:^8s}  {5:^25s}".format("Layer (type)", "Output Shape", "Weight ", "Bias", "Param #", "FLOPS #")
     print(line_new)
     print("==============================================================================")
     total_params = 0
@@ -1156,14 +1160,24 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
         is_keep = '★' if summary[layer]["keep_output"] else ''
-        line_new = "{0:<40s} {1:<20s}  {2:<20s} {3:<8s}  {4:<8}  {5:<12}".format(
-            layer,
-            is_keep + str(summary[layer]["output_shape"]),
-            str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
-            str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
-            summary[layer]["nb_params"],
-            summary[layer]["flops"][0]
-        )
+        class_name = summary[layer]["class_name"]
+        # line_new = "{0:<50s} {1:<20s}  {2:<20s} {3:<8s}  {4:<8}  {5:<12}".format(
+        #     layer+"  "+class_name,
+        #     is_keep + str(summary[layer]["output_shape"]),
+        #     str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
+        #     str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
+        #     summary[layer]["nb_params"],
+        #     summary[layer]["flops"][0]
+        # )
+
+
+        line_new=(layer+"  "+class_name).ljust(50,' ')\
+                  +(is_keep + str(summary[layer]["output_shape"])).ljust(25,' ')\
+                  +str(summary[layer]["weight"] if 'weight' in summary[layer] else '').ljust(20,' ')\
+                  +str(summary[layer]["bias"] if 'bias' in summary[layer] else '').ljust(8,' ')\
+                  +'{:,}'.format(summary[layer]["nb_params"]).ljust(8,' ')\
+                  +'{:,}'.format(summary[layer]["flops"].sum()).ljust(25,' ')
+
         total_params += summary[layer]["nb_params"]
         flops += float(summary[layer]["flops"])
         macc += float(summary[layer]["macc"].sum())
@@ -1172,6 +1186,8 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
             if summary[layer]["trainable"] == True:
                 trainable_params += summary[layer]["nb_params"]
         print(line_new)
+
+
 
     # assume 4 bytes/number (float on cuda).
     total_input_size = np.asarray([np.abs(np.prod(to_numpy(shp)) * batch_size * 4. / (1024 ** 2.)) for shp in input_size]).sum()
@@ -1237,31 +1253,7 @@ def normalize_padding(padding, rank):
     return padding
 
 
-def summary_str(model):
-    """ Get a string representation of model building blocks and parameter counts. """
-    indent_list, name_list, count_list = [], [], []
 
-    def module_info(m, name, indent_level):
-        count_list.append(sum([np.prod(list(p.size())) for p in m.parameters()]))
-        indent_list.append(indent_level)
-        name_list.append(name)
-        for name, child in m.named_children():
-            if name.isdigit():
-                name = child._get_name()
-            module_info(child, name, indent_level + 1)
-
-    module_info(model, model._get_name(), 0)
-    max_indent = max(indent_list) * 4
-    max_name = max(len(x) for x in name_list) + max_indent + 2
-    max_param = len(str(count_list[0])) + max_name + 2
-    out = ['Blocks{:>{w}}'.format('Params', w=max_param - 6)]
-    out += ['-' * max_param]
-    for indent, name, param in zip(indent_list, name_list, count_list):
-        s0 = '    ' * indent
-        s1 = '{:{w}}'.format(name, w=max_name - len(s0))
-        s2 = '{:>{w}}'.format(param, w=max_param - len(s1) - len(s0))
-        out += [s0 + s1 + s2]
-    return '\n'.join(out)
 
 
 import gc
@@ -1667,8 +1659,6 @@ def fix_layer(layer:Layer):
             module.input_spec = None
             if module.input_shape is not None:
                 module.input_spec=TensorSpec(shape=module.input_shape)
-
-
 
         if not hasattr(module, 'batch_index'):
             setattr(module, 'batch_index', 0)
