@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import gc
 import copy
 import inspect
 import os
@@ -23,7 +23,7 @@ from tensorflow.python.ops.losses import util as tf_losses_utils
 from trident import __version__
 from trident.backend.common import *
 from trident.backend.model import ModelBase, HistoryBase, progress_bar
-from trident.backend.tensorflow_backend import Sequential, Layer,Combine, try_map_args_and_call, summary, get_device,fix_layer
+from trident.backend.tensorflow_backend import Sequential, Layer, Combine, try_map_args_and_call, summary, get_device, fix_layer, set_device
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_serialization import save, load, load_pthtar
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase
@@ -127,11 +127,11 @@ class Model(ModelBase):
             # output.cpu()
             if  output.built and hasattr(output,'_output_shape') and  output._output_shape is not None:
                 self._model = output
-                self._model.signature=None
-                if self._model.signature is not None and hasattr(self._model.signature,"outputs"):
-                    self._outputs['output'] = self._model.signature.outputs.value_list[0]
+                self.signature=None
+                if self.signature is not None and hasattr(self.signature,"outputs"):
+                    self._outputs['output'] = self.signature.outputs.value_list[0]
                     self._targets = OrderedDict()
-                    for name,spec in self._model.signature.outputs.item_list:
+                    for name,spec in self.signature.outputs.item_list:
                         self._targets[name.replace("output","target")]=spec
 
             else:
@@ -154,6 +154,7 @@ class Model(ModelBase):
                     out =output(dummay_input)
                 output.signature = None
                 self._model = output
+
                 if isinstance(out, Tensor):
                     self._outputs['output'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index+1:]).to('int'),name='output')
                     self._targets['target'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index+1:]).to('int'),name='target')
@@ -163,9 +164,7 @@ class Model(ModelBase):
                         self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]).to('int'),name='target_{0}'.format(i))
 
 
-            self._model.signature = None
-            if self.signature is None or self.signature != self._model.signature:
-                self.signature = self._model.signature
+            self.signature = None
 
 
         elif isinstance(output, (list,tuple)) and  all([isinstance(m,(tf.Module)) for m in output]):
@@ -188,7 +187,7 @@ class Model(ModelBase):
                 self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(output_list[i])[self.batch_index + 1:]).to('int'), name='output_{0}'.format(i))
                 self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(output_list[i])[self.batch_index + 1:]).to('int'), name='target_{0}'.format(i))
 
-            self._model.signature = None
+            self.signature = None
 
 
         elif isinstance(output,(np.ndarray,Tensor)):
@@ -622,6 +621,7 @@ class Model(ModelBase):
         elif self.warmup > 0 and self.training_context['current_epoch'] == self.warmup:
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = self.base_lr
+        gc.collect()
 
     def do_on_epoch_end(self):
         pass
@@ -634,6 +634,13 @@ class Model(ModelBase):
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
         self.training_context['steps'] += 1
+        if self.training_context['steps'] % 10== 0:
+            # if 'gpu' in get_device() or 'cuda' in get_device():
+            #     #swap memory
+            #     self._model.cpu()
+            #     gc.collect()
+            #     self._model.gpu()
+            gc.collect()
         if self.training_context['steps'] % _session.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == self.training_context['steps'] // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
@@ -656,9 +663,9 @@ class Model(ModelBase):
         #         available_fields = copy.deepcopy(train_data.key_list)
         #         if train_data is not None:
         #             # check input
-        #             for arg in self._model.signature.inputs.key_list:
+        #             for arg in self.signature.inputs.key_list:
         #                 data_feed[arg] = ''
-        #             for arg in self._model.signature.inputs.key_list:
+        #             for arg in self.signature.inputs.key_list:
         #                 if len(train_data) == 1:
         #                     data_feed[arg] = train_data.key_list[0]
         #                     available_fields.remove(train_data.key_list[0])
@@ -674,7 +681,7 @@ class Model(ModelBase):
         #                 elif arg == 'x' and 'input' in available_fields:
         #                     data_feed[arg] = 'input'
         #                     available_fields.remove('input')
-        #                 elif len(self._model.signature.inputs.key_list) == 1:
+        #                 elif len(self.signature.inputs.key_list) == 1:
         #                     for item in available_fields:
         #                         data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
         #                         if 'target' not in item and 'output' != item and data_shape == inshapes[0]:
@@ -730,7 +737,7 @@ class Model(ModelBase):
         # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
+            input_list = [data_feed[arg] for arg in self.signature.inputs.key_list]
             for item in train_data.key_list:
                 if item in input_list:
                     # only model 's input argments
@@ -914,12 +921,11 @@ class Model(ModelBase):
             self._model.load_state_dict(state_dict, strict=False)
             print('Model loaded!')
 
-        self._model.signature=None
+        self.signature=None
         if 'signature' in pretrained_dict:
-            self._model.signature = pretrained_dict['signature']
+            self.signature = pretrained_dict['signature']
 
-        if self.signature is None or self.signature!=self._model.signature :
-            self.signature=self._model.signature
+
 
 
     def merge_grads(self, old_grads, new_grades):
@@ -1000,13 +1006,13 @@ class Model(ModelBase):
                         train_data[self.outputs.key_list[0]] = output
                         if self.use_output_as_loss == True:
                             this_loss = output.sum()
-                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
+                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
                             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                     else:
                         train_data[self.outputs.key_list[0]] = output
                         if self.use_output_as_loss == True:
                             this_loss = output.sum()
-                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
+                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
                             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                 except Exception as e:
                     print(e)

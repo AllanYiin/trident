@@ -1,10 +1,13 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+from itertools import islice
+import operator
 import copy
 import inspect
 import itertools
+from types import MethodType
+import collections.abc as container_abcs
 import numbers
 import os
 import random
@@ -15,7 +18,7 @@ import weakref
 from collections import defaultdict, namedtuple
 from distutils.version import Version, LooseVersion
 from itertools import islice
-from typing import List, Callable, TypeVar, Union, Tuple, overload, Mapping, Dict
+from typing import List, Callable, TypeVar, Union, Tuple, overload, Mapping, Dict, Optional, Iterable, Iterator, Any
 
 import numpy as np
 import tensorflow as tf
@@ -30,7 +33,7 @@ from tensorflow.python.training.tracking import layer_utils as trackable_layer_u
 from tensorflow.python.util import object_identity
 from trident.backend import tensorflow_ops as tops
 from trident.backend import tensorflow_serialization as serialization
-from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature
+from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature,PrintException
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorspec import *
 from trident.data.utils import pickle_it
@@ -67,7 +70,17 @@ def set_device(device='/cpu:0'):
         raise ValueError('Gpu is not available...')
     try:
         set_session('device', device)
-        tf.device(device)
+
+        if 'cpu' in device:
+           os.environ["CUDA_VISIBLE_DEVICES"] ='999'
+           if tf.test.gpu_device_name():
+               print('GPU found')
+           else:
+               print("No GPU found")
+        elif 'gpu' in device or 'cuda' in device:
+           os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+           os.environ["CUDA_VISIBLE_DEVICES"] ='0'
+
     except Exception as e:
         print(e)
 
@@ -447,8 +460,34 @@ class Layer(tf.Module):
             # self.dump_patches = True
 
             self._device = get_device()
+
+    # Trick mypy into not applying contravariance rules to inputs by defining
+    # forward as a value, rather than a function.  See also
+    # https://github.com/python/mypy/issues/8795
+    def _forward_unimplemented(self, *input: Any) -> None:
+        raise NotImplementedError
+
+    r"""Defines the computation performed at every call.
+
+    Should be overridden by all subclasses.
+
+    .. note::
+        Although the recipe for forward pass needs to be defined within
+        this function, one should call the :class:`Module` instance afterwards
+        instead of this since the former takes care of running the
+        registered hooks while the latter silently ignores them.
+    """
+    forward: Callable[..., Any] = _forward_unimplemented
+
+
     def get_root(self):
-        return self._nodes[0]
+        if self._nodes.value_list[0].is_root==True:
+            return self._nodes.value_list[0]
+        else:
+            for name,node in self._nodes.item_list:
+                if node.is_root==True:
+                    return node
+
 
     @property
     def name(self):
@@ -507,6 +546,7 @@ class Layer(tf.Module):
             raise KeyError("module name can't be empty string \"\"")
 
         self._modules[name] = module
+        module.is_root=False
         if isinstance(module, Layer):
             reset_name(module, self._uid_prefixs)
             module.relative_name = name if module.relative_name == '' else name + '.' + module.relative_name
@@ -514,6 +554,7 @@ class Layer(tf.Module):
             for mod in module.modules():
                 if isinstance(mod, Layer) and mod.uuid != module.uuid:
                     mod.nodes = self.nodes
+                    mod.is_root = False
                     reset_name(mod, self._uid_prefixs)
                     mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
@@ -730,7 +771,18 @@ class Layer(tf.Module):
         """
         if tf.test.is_gpu_available:
             self._device = '/gpu:0'
-            tf.device(self._device)
+            with tf.device(self._device):
+                for module in self.modules():
+                    try:
+                        for name, para in module._parameters.items():
+                            module._parameters[name] = tf.Variable(para.numpy(), dtype=para.dtype)
+                        for name, buff in module._buffers.items():
+                            module._buffers[name] = to_tensor(buff.numpy(), dtype=buff.dtype)
+                        module._device = self._device
+                    except Exception as e:
+                        print(e)
+                        PrintException()
+
         else:
             sys.stderr.write('GPU is not available in this machone./n')
 
@@ -740,8 +792,26 @@ class Layer(tf.Module):
         Returns:
             Module: self
         """
+
         self._device = '/cpu:0'
-        tf.device(self._device)
+
+
+        with tf.device(self._device):
+            for module in self.modules():
+                try:
+                    for name, para in module._parameters.items():
+                        module._parameters[name]=tf.Variable(para.numpy(),dtype=para.dtype)
+                    for name, buff in module._buffers.items():
+                        module._buffers[name]=to_tensor(buff.numpy(),dtype=buff.dtype)
+                    module._device=self._device
+                except Exception as e:
+                    print(e)
+                    PrintException()
+
+
+    def gpu(self, device=None):
+        return self.cuda(device)
+
 
     def _apply(self, fn):
         for module in self.children():
@@ -842,7 +912,7 @@ class Layer(tf.Module):
         self._signature = None
 
     @property
-    def signature(self):
+    def signature(self)->Signature:
         if self._signature is None or len(self._signature) == 0:
             self._signature = Signature(name=self.name)
             if self._input_shape is not None:
@@ -1099,18 +1169,18 @@ class Layer(tf.Module):
     def save_weight(self, file_path=''):
         pass
 
-    def forward(self, *input, **kwargs):
-        r"""Defines the computation performed at every call.
-
-        Should be overridden by all subclasses.
-
-        .. note::
-            Although the recipe for forward pass needs to be defined within
-            this function, one should call the :class:`Module` instance afterwards
-            instead of this since the former takes care of running the
-            registered hooks while the latter silently ignores them.
-        """
-        raise NotImplementedError
+    # def forward(self, *input, **kwargs):
+    #     r"""Defines the computation performed at every call.
+    #
+    #     Should be overridden by all subclasses.
+    #
+    #     .. note::
+    #         Although the recipe for forward pass needs to be defined within
+    #         this function, one should call the :class:`Module` instance afterwards
+    #         instead of this since the former takes care of running the
+    #         registered hooks while the latter silently ignores them.
+    #     """
+    #     raise NotImplementedError
 
     def _slow_forward(self, *input, **kwargs):
         return self.forward(*input, **kwargs)
@@ -1135,7 +1205,7 @@ class Layer(tf.Module):
         # return result
 
     @tf.Module.with_name_scope
-    def __call__(self, *input, **kwargs):
+    def _call_impl(self, *input, **kwargs):
         # Maintains info about the `Layer.call` stack.
         is_all_numpy = True
         input = list(input)
@@ -1196,6 +1266,8 @@ class Layer(tf.Module):
             print(e)
             raise e
 
+    __call__: Callable[..., Any] = _call_impl
+
     def __setstate__(self, state):
         self.__dict__.update(state)
         # Support loading old checkpoints that don't have the following attrs:
@@ -1221,17 +1293,21 @@ class Layer(tf.Module):
                 return modules[name]
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
-    def __setattr__(self, name, value):
-        def remove_from(*dicts):
-            for d in dicts:
+    def __setattr__(self, name: str, value: Union[Tensor, tf.Module]) -> None:
+        def remove_from(*dicts_or_sets):
+            for d in dicts_or_sets:
                 if name in d:
-                    del d[name]
+                    if isinstance(d, dict):
+                        del d[name]
+                    else:
+                        d.discard(name)
 
         params = self.__dict__.get('_parameters')
         if isinstance(value, tf.Variable):
             if params is None:
-                raise AttributeError("cannot assign parameters before Module.__init__() call")
-            remove_from(self.__dict__, self._buffers, self._modules)
+                raise AttributeError(
+                    "cannot assign parameters before Module.__init__() call")
+            remove_from(self.__dict__, self._buffers, self._modules, self._non_persistent_buffers_set)
             self.register_parameter(name, value)
         elif params is not None and name in params:
             if value is not None:
@@ -1240,19 +1316,30 @@ class Layer(tf.Module):
             self.register_parameter(name, value)
         else:
             modules = self.__dict__.get('_modules')
-            if isinstance(value, Layer):
+            if isinstance(value, tf.Module):
                 if modules is None:
-                    raise AttributeError("cannot assign module before Module.__init__() call")
-                remove_from(self.__dict__, self._parameters, self._buffers)
+                    raise AttributeError(
+                        "cannot assign module before Module.__init__() call")
+                remove_from(self.__dict__, self._parameters, self._buffers, self._non_persistent_buffers_set)
                 modules[name] = value
+                value.is_root = False
+                for mod in value.modules():
+                    if isinstance(mod, Layer) and mod.uuid != value.uuid:
+                        mod.is_root = False
+                reset_name(value, self._uid_prefixs)
+                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             elif modules is not None and name in modules:
                 if value is not None:
                     raise TypeError("cannot assign '{}' as child module '{}' "
                                     "(torch.nn.Module or None expected)".format(type(value).__name__, name))
+
                 modules[name] = value
+                value.is_root = False
+                for mod in value.modules():
+                    if isinstance(mod, Layer) and mod.uuid != value.uuid:
+                        mod.is_root = False
                 reset_name(value, self._uid_prefixs)
-                value.relative_name = name if not hasattr(value,
-                                                          'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             else:
                 buffers = self.__dict__.get('_buffers')
                 if buffers is not None and name in buffers:
@@ -1262,6 +1349,7 @@ class Layer(tf.Module):
                     buffers[name] = value
                 else:
                     object.__setattr__(self, name, value)
+
 
     def __delattr__(self, name):
         if name in self._parameters:
@@ -1736,9 +1824,10 @@ class Sequential(Layer):
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
             last_output = self[-1]._output_shape
             super(Sequential, self).add_module(name, module)
+
             dummay_input = random_normal((2,) + tuple(to_list(last_output))).to(self.device)
             out = module(dummay_input)
-            self._output_shape = module._output_shape
+            self._output_shape =tensor_to_shape(out)
             self._signature=None
         else:
             super(Sequential, self).add_module(name, module)
@@ -1795,6 +1884,262 @@ class Sequential(Layer):
             x = enforce_singleton(x)
             x = module(x)
         return x
+
+
+
+class ModuleList(Layer):
+    r"""Holds submodules in a list.
+
+    :class:`~trident.backend.tensorflow_backend.ModuleList` can be indexed like a regular Python list, but
+    modules it contains are properly registered, and will be visible by all
+    :class:`~trident.backend.tensorflow_backend..Layer` methods.
+
+    Arguments:
+        modules (iterable, optional): an iterable of modules to add
+
+    """
+
+    def __init__(self, modules: Optional[Iterable[Layer]] = None,name=None, keep_output=False, **kwargs) -> None:
+        super(ModuleList, self).__init__(name=None, keep_output=False, **kwargs)
+        name = self._name
+        if modules is not None:
+            for i in range(len(list(modules))):
+                module=list(modules)[i]
+                module.is_root=False
+                for mod in module.modules():
+                    if isinstance(mod, Layer) and mod.uuid != module.uuid:
+                        mod.is_root = False
+                reset_name(module, self._uid_prefixs)
+                module.relative_name = name if not hasattr(module, 'relative_name') or module.relative_name == '' else name + '.' + module.relative_name
+
+            self += modules
+
+
+    def _get_abs_string_index(self, idx):
+        """Get the absolute index for the list of modules"""
+        idx = operator.index(idx)
+        if not (-len(self) <= idx < len(self)):
+            raise IndexError('index {} is out of range'.format(idx))
+        if idx < 0:
+            idx += len(self)
+        return str(idx)
+
+    #@_copy_to_script_wrapper
+    def __getitem__(self, idx: int) -> Layer:
+        if isinstance(idx, slice):
+            return self.__class__(list(self._modules.values())[idx])
+        else:
+            return self._modules[self._get_abs_string_index(idx)]
+
+    def __setitem__(self, idx: int, module: Layer) -> None:
+        idx = self._get_abs_string_index(idx)
+        return setattr(self, str(idx), module)
+
+    def __delitem__(self, idx: Union[int, slice]) -> None:
+        if isinstance(idx, slice):
+            for k in range(len(self._modules))[idx]:
+                delattr(self, str(k))
+        else:
+            delattr(self, self._get_abs_string_index(idx))
+        # To preserve numbering, self._modules is being reconstructed with modules after deletion
+        str_indices = [str(i) for i in range(len(self._modules))]
+        self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
+
+    #@_copy_to_script_wrapper
+    def __len__(self) -> int:
+        return len(self._modules)
+
+    #@_copy_to_script_wrapper
+    def __iter__(self) -> Iterator[Layer]:
+        return iter(self._modules.values())
+
+    def __iadd__(self: T, modules: Iterable[Layer]) -> T:
+        return self.extend(modules)
+
+    #@_copy_to_script_wrapper
+    def __dir__(self):
+        keys = super(ModuleList, self).__dir__()
+        keys = [key for key in keys if not key.isdigit()]
+        return keys
+
+    def insert(self, index: int, module: Layer) -> None:
+        r"""Insert a given module before a given index in the list.
+
+        Arguments:
+            index (int): index to insert.
+            module (nn.Module): module to insert
+        """
+        for i in range(len(self._modules), index, -1):
+            self._modules[str(i)] = self._modules[str(i - 1)]
+        self._modules[str(index)] = module
+
+    def append(self: T, module: Layer) -> T:
+        r"""Appends a given module to the end of the list.
+
+        Arguments:
+            module (nn.Module): module to append
+        """
+        self.add_module(str(len(self)), module)
+        return self
+
+    def extend(self: T, modules: Iterable[Layer]) -> T:
+        r"""Appends modules from a Python iterable to the end of the list.
+
+        Arguments:
+            modules (iterable): iterable of modules to append
+        """
+        if not isinstance(modules, container_abcs.Iterable):
+            raise TypeError("ModuleList.extend should be called with an "
+                            "iterable, but got " + type(modules).__name__)
+        offset = len(self)
+        for i, module in enumerate(modules):
+            self.add_module(str(offset + i), module)
+        return self
+
+    def forward(self):
+        raise NotImplementedError()
+
+
+class ModuleDict(Layer):
+    r"""Holds submodules in a dictionary.
+
+    :class:`~torch.nn.ModuleDict` can be indexed like a regular Python dictionary,
+    but modules it contains are properly registered, and will be visible by all
+    :class:`~torch.nn.Module` methods.
+
+    :class:`~torch.nn.ModuleDict` is an **ordered** dictionary that respects
+
+    * the order of insertion, and
+
+    * in :meth:`~torch.nn.ModuleDict.update`, the order of the merged ``OrderedDict``
+      or another :class:`~torch.nn.ModuleDict` (the argument to :meth:`~torch.nn.ModuleDict.update`).
+
+    Note that :meth:`~torch.nn.ModuleDict.update` with other unordered mapping
+    types (e.g., Python's plain ``dict``) does not preserve the order of the
+    merged mapping.
+
+    Arguments:
+        modules (iterable, optional): a mapping (dictionary) of (string: module)
+            or an iterable of key-value pairs of type (string, module)
+
+    Example::
+
+        class MyModule(nn.Module):
+            def __init__(self):
+                super(MyModule, self).__init__()
+                self.choices = nn.ModuleDict({
+                        'conv': nn.Conv2d(10, 10, 3),
+                        'pool': nn.MaxPool2d(3)
+                })
+                self.activations = nn.ModuleDict([
+                        ['lrelu', nn.LeakyReLU()],
+                        ['prelu', nn.PReLU()]
+                ])
+
+            def forward(self, x, choice, act):
+                x = self.choices[choice](x)
+                x = self.activations[act](x)
+                return x
+    """
+
+    def __init__(self, modules: Optional[Mapping[str, Layer]] = None,name=None, keep_output=False, **kwargs) -> None:
+        super(ModuleDict, self).__init__(name=None, keep_output=False, **kwargs)
+        if modules is not None:
+            self.update(modules)
+
+    #@_copy_to_script_wrapper
+    def __getitem__(self, key: str) -> Layer:
+        return self._modules[key]
+
+    def __setitem__(self, key: str, module: Layer) -> None:
+        self.add_module(key, module)
+
+    def __delitem__(self, key: str) -> None:
+        del self._modules[key]
+
+    #@_copy_to_script_wrapper
+    def __len__(self) -> int:
+        return len(self._modules)
+
+    #@_copy_to_script_wrapper
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._modules)
+
+    #@_copy_to_script_wrapper
+    def __contains__(self, key: str) -> bool:
+        return key in self._modules
+
+    def clear(self) -> None:
+        """Remove all items from the ModuleDict.
+        """
+        self._modules.clear()
+
+    def pop(self, key: str) -> Layer:
+        r"""Remove key from the ModuleDict and return its module.
+
+        Arguments:
+            key (string): key to pop from the ModuleDict
+        """
+        v = self[key]
+        del self[key]
+        return v
+
+    #@_copy_to_script_wrapper
+    def keys(self) -> Iterable[str]:
+        r"""Return an iterable of the ModuleDict keys.
+        """
+        return self._modules.keys()
+
+    #@_copy_to_script_wrapper
+    def items(self) -> Iterable[Tuple[str, Layer]]:
+        r"""Return an iterable of the ModuleDict key/value pairs.
+        """
+        return self._modules.items()
+
+    #@_copy_to_script_wrapper
+    def values(self) -> Iterable[Layer]:
+        r"""Return an iterable of the ModuleDict values.
+        """
+        return self._modules.values()
+
+    def update(self, modules: Mapping[str, Layer]) -> None:
+        r"""Update the :class:`~torch.nn.ModuleDict` with the key-value pairs from a
+        mapping or an iterable, overwriting existing keys.
+
+        .. note::
+            If :attr:`modules` is an ``OrderedDict``, a :class:`~torch.nn.ModuleDict`, or
+            an iterable of key-value pairs, the order of new elements in it is preserved.
+
+        Arguments:
+            modules (iterable): a mapping (dictionary) from string to :class:`~torch.nn.Module`,
+                or an iterable of key-value pairs of type (string, :class:`~torch.nn.Module`)
+        """
+        if not isinstance(modules, container_abcs.Iterable):
+            raise TypeError("ModuleDict.update should be called with an "
+                            "iterable of key/value pairs, but got " +
+                            type(modules).__name__)
+
+        if isinstance(modules, (OrderedDict, ModuleDict)):
+            for key, module in modules.items():
+                self[key] = module
+        elif isinstance(modules, container_abcs.Mapping):
+            for key, module in sorted(modules.items()):
+                self[key] = module
+        else:
+            for j, m in enumerate(modules):
+                if not isinstance(m, container_abcs.Iterable):
+                    raise TypeError("ModuleDict update sequence element "
+                                    "#" + str(j) + " should be Iterable; is" +
+                                    type(m).__name__)
+                if not len(m) == 2:
+                    raise ValueError("ModuleDict update sequence element "
+                                     "#" + str(j) + " has length " + str(len(m)) +
+                                     "; 2 is required")
+                self[m[0]] = m[1]
+
+    def forward(self):
+        raise NotImplementedError()
+
 
 
 class Combine(Layer):
@@ -2213,19 +2558,45 @@ def fix_layer(layer: Layer):
     Returns: fixed layer
 
     """
+    def get_root(self):
+        if hasattr(self._nodes.value_list[0],'is_root') and self._nodes.value_list[0].is_root == True:
+            return self._nodes.value_list[0]
+        else:
+            for name, node in self._nodes.item_list:
+                if hasattr(node,'default_name') and node.default_name == "sequential_1":
+                    return node
+            return self
+    if not hasattr(layer,'is_root'):
+        layer.is_root=True
+    if not hasattr(layer, '_uid_prefixs'):
+            layer._uid_prefixs = {}
+    reset_name(layer, layer._uid_prefixs)
 
     if layer._input_shape is not None and isinstance(layer._input_shape, tf.TensorShape):
         layer._input_shape = to_tensor(layer._input_shape.as_list()).to('int')
     if layer._output_shape is not None and isinstance(layer._output_shape, tf.TensorShape):
         layer._output_shape = to_tensor(layer._output_shape.as_list()).to('int')
+    if not (hasattr(layer, 'get_toot') and inspect.ismethod(getattr(layer, 'get_toot'))):
+        setattr(layer, 'get_root', MethodType(get_root, layer))
 
     for module in layer.modules():
         class_name = module.__class__.__name__
+        if not hasattr(module, 'is_root'):
+            module.is_root = False
+        else:
+            module.is_root = False
+
+        if not hasattr(module, '_default_name') or (module._default_name is None or len(module._default_name) == 0):
+            module_prefix = module.__class__.__name__
+            module._default_name = camel2snake(module_prefix) + '_' + str(get_global_uid(camel2snake(module_prefix)))
+        if not (hasattr(module, 'get_toot') and inspect.ismethod(getattr(module, 'get_toot'))):
+            setattr(module, 'get_root', MethodType(get_root, module))
+
         if not hasattr(module, '_uid_prefixs'):
-            module._uid_prefixs = {}
+            module._uid_prefixs = layer.get_root()._uid_prefixs
         if not hasattr(module, '_name'):
             module._name = None
-            reset_name(module, module._uid_prefixs)
+        reset_name(module, layer.get_root()._uid_prefixs)
 
         if not hasattr(module, 'name'):
             module.name = module._name if module._name is not None and len(module._name) > 0 else module.relative_name
