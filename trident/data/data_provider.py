@@ -201,8 +201,10 @@ class ImageDataProvider(object):
         self._label_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.label, 'label_transform_funcs'):
             self.traindata.label.label_transform_funcs=self._label_transform_funcs
+            self.traindata.update_data_template()
         if self.testdata is not None and hasattr(self.testdata.label, 'label_transform_funcs'):
             self.testdata.label.label_transform_funcs=self._label_transform_funcs
+            self.testdata.update_data_template()
 
     @property
     def paired_transform_funcs(self):
@@ -214,9 +216,11 @@ class ImageDataProvider(object):
 
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
             self.traindata.paired_transform_funcs = self._paired_transform_funcs
+            self.traindata.update_data_template()
 
         if self.testdata is not None  and hasattr(self.testdata, 'paired_transform_funcs'):
             self.testdata.paired_transform_funcs = self._paired_transform_funcs
+            self.testdata.update_data_template()
 
 
 

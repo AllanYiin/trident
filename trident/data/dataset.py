@@ -33,6 +33,7 @@ from trident.data.samplers import *
 from trident.backend.common import *
 from trident.backend.tensorspec import TensorSpec, assert_input_compatibility
 
+
 try:
     import Queue
 except ImportError:
@@ -385,7 +386,6 @@ class MaskDataset(Dataset):
             raise ValueError('Only mask is valid expect image type. ')
 
         self.__add__(masks)
-        self._element_spec = TensorSpec(shape=to_tensor(int_shape(self.list[0])).to('int'), name=self.symbol, object_type=self.object_type, is_spatial=True)
         self.get_image_mode = get_image_mode
         self.palette = OrderedDict()
         self.transform_funcs = []
@@ -396,6 +396,7 @@ class MaskDataset(Dataset):
         self._idx2lab = {}
         if class_names is not None:
             self.class_names = class_names
+        self._element_spec = TensorSpec(shape=to_tensor(int_shape(self[0])).to('int'), name=self.symbol, object_type=self.object_type, is_spatial=True)
 
     def __getitem__(self, index: int):
         img = self.list[index]  # self.pop(index)
@@ -1044,20 +1045,22 @@ class Iterator(object):
                 return ds
 
     def update_data_template(self):
-        self.data_template = OrderedDict()
+        data_template = OrderedDict()
         self.signature = Signature(name='data_provider')
+        dataitems = self[0]
         for k in range(len(self.datasets_dict)):
             ds = self.datasets_dict.value_list[k]
             if len(ds) > 0:
-                dataitem = ds[0]
+                dataitem =dataitems[k]
                 shp = None
                 if isinstance(dataitem, numbers.Number):
                     shp = to_tensor([0]).to('int')
                 else:
                     shp = to_tensor(int_shape(dataitem)).to('int')
                 ds.element_spec = TensorSpec(shape=shp, name=ds.symbol, object_type=ds.object_type)
-                self.data_template[ds.element_spec] = None
+                data_template[ds.element_spec] = None
                 self.signature.outputs[ds.symbol] = ds.element_spec
+        self.data_template=data_template
 
 
 
