@@ -84,7 +84,7 @@ class PreprocessPolicyItem(object):
         bool_if=None
         if isinstance(self.condition_if,bool):
             bool_if=self.condition_if
-        elif inspect.isfunction(condition_if) or callable(condition_if) :
+        elif inspect.isfunction(self.condition_if) or callable(self.condition_if) :
             bool_if =self.condition_if(img)
 
         if bool_if==True:
