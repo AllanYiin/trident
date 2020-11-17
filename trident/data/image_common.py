@@ -3,11 +3,13 @@ from __future__ import division
 from __future__ import print_function
 import functools
 import math
+import sys
 import os
 import random
 import re
 import builtins
 import time
+from collections import Counter
 from itertools import repeat
 from functools import partial
 import inspect
@@ -35,21 +37,18 @@ __all__ = ['transform_func','read_image', 'read_mask', 'save_image', 'save_mask'
            'erosion_then_dilation', 'dilation_then_erosion', 'image_erosion', 'image_dilation', 'adaptive_binarization',
            'random_transform', 'horizontal_flip', 'random_mirror', 'to_low_resolution','random_erasing']
 
-_session = get_session()
-_backend = _session.backend
-_image_backend = _session.image_backend
 
 
-if _backend == 'pytorch':
+if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
-elif _backend == 'tensorflow':
+elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 
 
-if _image_backend == 'opencv':
-    from ..backend.opencv_backend import *
+if get_image_backend() == 'opencv':
+    from trident.backend.opencv_backend import *
 else:
-    from ..backend.pillow_backend import *
+    from trident.backend.pillow_backend import *
 
 read_image = read_image
 read_mask = read_mask
@@ -60,16 +59,47 @@ array2image = array2image
 mask2array = mask2array
 array2mask = array2mask
 
-def onjecttype_inference(data):
+def distict_color_count(img):
+    """Count for distinct colors in input image
+
+    Returns:
+        object:
+
+    Examples:
+        >>> img=read_image('../../trident_logo.png')[:,:,:3]
+        >>> len(distict_color_count(img))
+        1502
+        >>> img=read_image('../../trident_logo.png')[:,:,:1]
+        >>> len(distict_color_count(img))
+        125
+
+    """
+    return Counter([tuple(colors) for i in img for colors in i])
+
+
+
+def object_type_inference(data):
     if isinstance(data,np.ndarray):
         if data.ndim == 2 and data.shape[-1] == 2:
             return ObjectType.landmarks
-        elif data.ndim == 2 and data.shape[-1] in (4, 5):
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max()<=255 and 0<=data.min()<=255:
+            return ObjectType.absolute_bbox
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max()<=1 and 0<=data.min()<=1:
             return ObjectType.relative_bbox
+        elif data.ndim == 2 and len(distict_color_count(np.expand_dims(data,-1)))==2:
+            return ObjectType.binary_mask
+        elif data.ndim == 2 and (data.max()-data.min()+1)== len(distict_color_count(np.expand_dims(data,-1))):
+            return ObjectType.label_mask
         elif data.ndim == 2 and 0<=data.max()<=255 and 0<=data.min()<=255:
             return ObjectType.gray
+        elif data.ndim == 3 and data.shape[-1] == 1 and len(distict_color_count(data))==2:
+            return ObjectType.binary_mask
+        elif data.ndim == 3 and data.shape[-1] == 1 and (data.max()-data.min()+1)== len(distict_color_count(data)):
+            return ObjectType.label_mask
         elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max()<=255 and 0<=data.min()<=255:
             return ObjectType.gray
+        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max()<=255 and 0<=data.min()<=255 and len(distict_color_count(data))<100:
+            return ObjectType.color_mask
         elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max()<=255 and 0<=data.min()<=255:
             return ObjectType.rgb
         elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max()<=255 and 0<=data.min()<=255:
@@ -83,6 +113,7 @@ def onjecttype_inference(data):
         elif data.ndim == 2 and data.dtype==np.int64:
             return ObjectType.color_mask
         else:
+            sys.stderr.write('Object type cannot be inferred.')
             return ObjectType.array_data
 
 
@@ -216,7 +247,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
         if isinstance(image,np.ndarray):
             imspec=kwargs.get("spec")
             if imspec is None:
-                imspec=TensorSpec(shape=to_tensor(image.shape),object_type=onjecttype_inference(image))
+                imspec=TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec]=image
         elif isinstance(image,dict):
@@ -256,7 +287,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                 if spec.is_spatial==True:
                     if im is None:
                         pass
-                    elif spec.object_type in [ObjectType.absolute_bbox,ObjectType.relative_bbox] or(im.ndim == 2 and im.shape[-1] in (4, 5)):  # bbox [:,4]   [:,5]
+                    elif spec.object_type in [ObjectType.absolute_bbox] :  # bbox [:,4]   [:,5]
                         class_info = None
                         if im.shape[-1] >4:
                             class_info = im[:, 4:]
@@ -273,7 +304,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                         im[:, 0::2] += img_op.pad_left
                         im[:, 1::2] += img_op.pad_top
                         results[spec] = im
-                    elif im.ndim == 2 and im.dtype == np.int64:  # bbox
+                    elif spec.object_type in [ObjectType.color_mask]:  # landmark [:,2]
                         new_im = np.zeros((size[0], size[1]))
                         im = transform.rescale(im,  img_op.scale, clip=False, anti_aliasing=False, multichannel=False,
                                                preserve_range=True, order=0).astype(np.int64)
@@ -283,33 +314,43 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                             new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
                         results[spec]= np.pad(im, img_op.all_pad, 'constant').astype(np.int64)
 
-                    else:
-                        im = im.astype(np.float32)
-                        new_im=None
-                        if spec.object_type==ObjectType.gray:
-                            new_im= np.zeros((size[0],size[1]))
-                        elif spec.object_type==ObjectType.rgb:
-                            new_im = np.zeros((size[0], size[1],im.shape[-1]))
 
-                        im = transform.rescale(im, img_op.scale, clip=False, anti_aliasing=True,
-                                               multichannel=True if len(im.shape) == 3 else False,
-                                               order=0 if im.ndim == 2 else order)
-                        if im.shape[0]>size[0] or im.shape[1]>size[1]:
-                            print('')
+                    elif spec.object_type in [ObjectType.label_mask, ObjectType.color_mask, ObjectType.label_mask]:  # label_mask
+                        im= transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False if im.ndim == 2 else True, preserve_range=True,order=0).astype(np.int64)
+                        new_im = np.zeros((size[0], size[1]))
                         if align_corner:
-                            if spec.object_type==ObjectType.gray:
-                                new_im[:im.shape[0],:im.shape[1]]=im
-                            elif spec.object_type == ObjectType.rgb:
-                                new_im[:im.shape[0],:im.shape[1],:]=im
-                            results[spec] = new_im
+                            if im.ndim==2:
+                                new_im[:im.shape[0], :im.shape[1]] = im
+                            elif im.ndim==3:
+                                new_im[:im.shape[0], :im.shape[1], :] = im
                         else:
-                            if spec.object_type==ObjectType.gray:
-                                new_im[pad_top:im.shape[0]+pad_top,pad_left:im.shape[1]+pad_left]=im
-                            elif spec.object_type == ObjectType.rgb:
-                                new_im[pad_top:im.shape[0]+pad_top,pad_left:im.shape[1]+pad_left,:]=im
+                            if im.ndim==2:
+                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
+                            elif im.ndim==3:
+                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left, :] = im
 
-                            results[spec]= new_im
+                        results[spec] = new_im
+                    elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray]:  # image
 
+                        im = im.astype(np.float32)
+                        im= transform.rescale(im, (scale, scale), clip=True, anti_aliasing=True,multichannel=False if im.ndim == 2 else True,order=1)
+                        new_im=None
+                        if align_corner:
+                            if im.ndim==2:
+                                new_im = np.zeros((size[0], size[1]))
+                                new_im[:im.shape[0], :im.shape[1]] = im
+                            elif im.ndim==3:
+                                new_im = np.zeros((size[0], size[1],im.shape[-1]))
+                                new_im[:im.shape[0], :im.shape[1], :] = im
+                        else:
+                            if im.ndim==2:
+                                new_im = np.zeros((size[0], size[1]))
+                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
+                            elif im.ndim==3:
+                                new_im = np.zeros((size[0], size[1], im.shape[-1]))
+                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left, :] = im
+
+                        results[spec] = new_im
             if isinstance(image, np.ndarray):
                 return results.value_list[0]
             elif isinstance(image, OrderedDict):
@@ -324,7 +365,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                 if spec.is_spatial == True:
                     if im is None:
                         pass
-                    elif spec.object_type in [ObjectType.absolute_bbox,ObjectType.relative_bbox]:  # bbox
+                    elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox
                         im[:, 0::2] /= img_op.w
                         im[:, 1::2] /= img_op.h
                         results[spec]=im
@@ -336,124 +377,81 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
 
 
 def rescale(scale, order=1):
-    def img_op(*image: np.ndarray):
-        results = to_list(image)
-        h, w = image[0].shape[:2]
-        img_op.h = h
-        img_op.w = w
-        img_op.scale = (scale, scale)
-        for i in range(len(results)):
-            im = results[i]
-            if im is None or len(im) == 0:
-                pass
-            elif len(im.shape) == 2 and im.shape[-1] in (4, 5, 14, 15):  # bbox
-                class_info = None
-                if im.shape[-1] >4:
-                    class_info = im[:, 4:]
-                    im = im[:, :4]
-                im[:, 0:4]=im[:, 0:4]* img_op.scale
-                if class_info is not None:
-                    im = np.concatenate([im, class_info], axis=-1)
-                results[i] = im
-            elif len(im.shape) == 2 and im.shape[-1] ==2:  # landmark
-                im[:, :2]=im[:, :2]* img_op.scale
-                results[i] = im
-            elif im.ndim == 2 and im.dtype == np.int64:  # bbox
-                results[i] = transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False,
-                                               preserve_range=True, order=0).astype(np.int64)
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        results = None
+        if isinstance(image, np.ndarray):
+            imspec = kwargs.get("spec")
+            if imspec is None:
+                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+            results = OrderedDict()
+            results[imspec] = image
+        elif isinstance(image, dict):
+            results = image
 
-            else:
-                im = im.astype(np.float32)
-                results[i] = transform.rescale(im, (scale, scale), clip=False, anti_aliasing=True,
-                                               multichannel=True if len(im.shape) == 3 else False,
-                                               order=0 if im.ndim == 2 else order)
-        return unpack_singleton(tuple(results))
+        height = None
+        width = None
+        if isinstance(image, np.ndarray):
+            height, width = image.shape[:2]
+        elif isinstance(image, OrderedDict):
+            height, width = image.value_list[0].shape[:2]
 
-
+        img_op.height = height
+        img_op.width = width
+        img_op.scale = scale
+        for spec, im in results.items():
+            if spec.is_spatial == True:
+                if im is None:
+                    pass
+                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
+                    class_info = None
+                    if im.shape[-1] > 4:
+                        class_info = im[:, 4:]
+                        im = im[:, :4]
+                    im[:, :4] = im[:, :4] * img_op.scale
+                    if class_info is not None:
+                        im = np.concatenate([im, class_info], axis=-1)
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
+                    im[:, :2] = im[:, :2] * img_op.scale
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.label_mask,ObjectType.color_mask,ObjectType.label_mask]:  # label_mask
+                    results[spec] = transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False if im.ndim==2 else True,preserve_range=True, order=0).astype(np.int64)
+                elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray]:  # image
+                    im = im.astype(np.float32)
+                    results[spec] = transform.rescale(im, (scale, scale), clip=True, anti_aliasing=True,
+                                                   multichannel=False if im.ndim==2 else True,
+                                                   order=0 if im.ndim == 2 else order)
+                else:
+                    pass
+        if isinstance(image, np.ndarray):
+            return results.value_list[0]
+        elif isinstance(image, OrderedDict):
+            return results
     return img_op
 
 def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
-    scalemin, scalemax = scale
-
-    def img_op(*image: np.ndarray):
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
         # start = time.time()
-        results = to_list(image)
-        scale = np.random.choice(np.random.uniform(scalemin, scalemax, 100))
-        height, width = image[0].shape[:2]
-        height, width = int(height * scale), int(width * scale)
-        offset_x = 0
-        offset_y = 0
+        scalemin, scalemax = scale
+        current_scale = np.random.choice(np.random.uniform(scalemin, scalemax, 100))
+        rescale_fn=rescale(current_scale)
+        random_crop_fn=random_crop(h,w)
 
-        if width > w:
-            offset_x = random.choice(range(width - w))
-        if height > h:
-            offset_y = random.choice(range(height - h))
-        offset_x1 = random.choice(range(w - width)) if w > width else 0
-        offset_y1 = random.choice(range(h - height)) if h > height else 0
-        # stop = time.time()
-        # print('prepare random crop:{0}'.format(stop - start))
-        # start = stop
-        for i in range(len(results)):
-            im = results[i]
-            if im is None:
-                pass
-            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                class_info = None
-                if im.shape[-1] >4:
-                    class_info = im[:, 4:]
-                    im = im[:, :4]
-                im=im.astype(np.float32)
-                im[:, 0] = im[:, 0] *scale
-                im[:, 1] =im[:, 1]* scale
-                im[:, 2] = im[:, 2] *scale
-                im[:, 3] =im[:, 3]* scale
+        results = None
+        if isinstance(image, np.ndarray):
+            imspec = kwargs.get("spec")
+            if imspec is None:
+                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+            results = OrderedDict()
+            results[imspec] = image
+        elif isinstance(image, dict):
+            results = image
+        results = random_crop_fn(rescale_fn(results, **kwargs))
 
-                im[:, 0] = np.clip(im[:, 0] - offset_x, 0, w)
-                im[:, 1] = np.clip(im[:, 1] - offset_y, 0, h)
-                im[:, 2] = np.clip(im[:, 2] - offset_x, 0, w)
-                im[:, 3] = np.clip(im[:, 3] - offset_y, 0, h)
-                area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                im = im[area > 0]
-                if len(im) > 0:
-                    im[:, 0] += offset_x1
-                    im[:, 1] += offset_y1
-                    im[:, 2] += offset_x1
-                    im[:, 3] += offset_y1
-                    if class_info is not None:
-                        class_info= class_info[area > 0]
-                        im=np.concatenate([im,class_info],axis=-1)
-                    results[i] = im
-                else:
-                    results[i] = None
-            elif im.ndim == 2 and im.shape[-1] ==2:  # landmark
-                im[:, 0] *= scale
-                im[:, 1] *= scale
-
-
-                im[:, 0] =im[:, 0] - offset_x+offset_x1
-                im[:, 1] = im[:, 1] - offset_y+offset_y1
-                results[i] = im
-            elif im.ndim == 2:
-
-                im = np.round(transform.rescale(im, (scale, scale), clip=False, anti_aliasing=False, multichannel=False,
-                                                preserve_range=True, order=0)).astype(im.dtype)
-                returnData = np.zeros((h, w), dtype=im.dtype)
-                crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w]
-                returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
-                results[i] = returnData
-            elif im.ndim == 3:
-                # im = transform.rescale(im, (scale, scale), clip=False, anti_aliasing=True,
-                #                        multichannel=True if len(im.shape) == 3 else False,
-                #                        order=0 if im.ndim == 2 else order)
-                im = rescale(scale)(im)
-                # stop = time.time()
-                # print('resize:{0}'.format(stop - start))
-                # start = stop
-                returnData = np.zeros((h, w, 3), dtype=np.float32)
-                crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w, :]
-                returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
-                results[i] = returnData  # stop = time.time()  # print('crop:{0}'.format(stop - start))  # start = stop
-        return unpack_singleton(tuple(results))
+        if isinstance(image, np.ndarray):
+            return results.value_list[0]
+        elif isinstance(image, OrderedDict):
+            return results
 
     return img_op
 
@@ -461,9 +459,25 @@ def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
 def random_center_crop(h,w, scale=(0.8, 1.2)):
     scalemin, scalemax = scale
 
-    def img_op(*image: np.ndarray):
-        results = to_list(image)
-        height, width = image[0].shape[:2]
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        results = None
+        # generare strong typed dict
+        if isinstance(image, np.ndarray):
+            imspec = kwargs.get("spec")
+            if imspec is None:
+                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+            results = OrderedDict()
+            results[imspec] = image
+        elif isinstance(image, dict):
+            results = image
+
+        height = None
+        width = None
+        if isinstance(image, np.ndarray):
+            height, width = image.shape[:2]
+        elif isinstance(image, OrderedDict):
+            height, width = image.value_list[0].shape[:2]
+
         max_value = max(height, width)
         i = int(round((max_value - height) / 2.))
         j = int(round((max_value - width) / 2.))
@@ -477,56 +491,327 @@ def random_center_crop(h,w, scale=(0.8, 1.2)):
 
         i2 = int(round((max(resized_h, h) - h) / 2.))
         j2 = int(round((max(resized_w, w) - w) / 2.))
-        for k in range(len(results)):
-            im = results[k]
-            if im is None:
-                pass
-            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                class_info = None
-                if im.shape[-1] >4:
-                    class_info = im[:, 4:]
-                    im = im[:, :4]
-                im[:, 0] = np.clip((im[:, 0] + j) * scale + j1 - j2, 0, w)
-                im[:, 1] = np.clip((im[:, 1] + i) * scale + i1 - i2, 0, h)
-                im[:, 2] = np.clip((im[:, 2] + j) * scale + j1 - j2, 0, w)
-                im[:, 3] = np.clip((im[:, 3] + i) * scale + i1 - i2, 0, h)
-                area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                im = im[area > 0]
-                if len(im) > 0:
-                    if class_info is not None:
-                        class_info= class_info[area > 0]
-                        im=np.concatenate([im,class_info],axis=-1)
-                    results[k] = im
-                else:
-                    results[k] = None
-            elif im.ndim == 2 and im.shape[-1] ==2:  # landmark
-                im[:, 0] = (im[:, 0] + j) * scale + j1 - j2
-                im[:, 1] = (im[:, 1] + i) * scale + i1 - i2
-                results[k] = im
+        for spec, im in results.items():
+            if spec.is_spatial == True:
+                if im is None:
+                    pass
+                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
+                    class_info = None
+                    if im.shape[-1] >4:
+                        class_info = im[:, 4:]
+                        im = im[:, :4]
+                    im[:, 0] = np.clip((im[:, 0] + j) * scale + j1 - j2, 0, w)
+                    im[:, 1] = np.clip((im[:, 1] + i) * scale + i1 - i2, 0, h)
+                    im[:, 2] = np.clip((im[:, 2] + j) * scale + j1 - j2, 0, w)
+                    im[:, 3] = np.clip((im[:, 3] + i) * scale + i1 - i2, 0, h)
+                    area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
+                    im = im[area > 0]
+                    if len(im) > 0:
+                        if class_info is not None:
+                            class_info= class_info[area > 0]
+                            im=np.concatenate([im,class_info],axis=-1)
+                    results[spec] = im
 
-            elif im.ndim == 3:
-                blank = np.zeros((max_value, max_value, im.shape[-1]))
-                blank[i:i + height, j:j + width, :] = im
+                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
+                    im[:, 0] = (im[:, 0] + j) * scale + j1 - j2
+                    im[:, 1] = (im[:, 1] + i) * scale + i1 - i2
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray, ObjectType.binary_mask, ObjectType.color_mask, ObjectType.label_mask]:
 
-                resized_im = transform.resize(blank, (resized_h, resized_w, blank.shape[-1]), anti_aliasing=True,
-                                              clip=False, order=0 if blank.ndim == 2 else 1)
-                returnData = np.zeros((max(resized_h, h), max(resized_w, w), resized_im.shape[-1]))
+                    if im.ndim == 3:
+                        blank = np.zeros((max_value, max_value, im.shape[-1]))
+                        blank[i:i + height, j:j + width, :] = im
 
-                returnData[i1:i1 + resized_im.shape[0], j1:j1 + resized_im.shape[1], :] = resized_im
-                results[k] = returnData[i2:i2 + h, j2:j2 + w, :]
-            elif im.ndim == 2:
-                blank = np.zeros((max_value, max_value)).astype(im.dtype)
-                blank[i:i + height, j:j + width] = im
+                        resized_im = transform.rescale(blank, scale=scale, anti_aliasing=False if 'mask' in spec.object_type.value else True,clip=True, multichannel=False if im.ndim==2 else True,preserve_range=True,order=0 if 'mask' in spec.object_type.value else 1)
+                        returnData = np.zeros((max(resized_h, h), max(resized_w, w), resized_im.shape[-1]))
 
-                resized_im = np.round(transform.resize(blank, (resized_h, resized_w), anti_aliasing=False, clip=False,
-                                                       preserve_range=True, order=0)).astype(im.dtype)
-                returnData = np.zeros((max(resized_h, h), max(resized_w, w))).astype(im.dtype)
+                        returnData[i1:i1 + resized_im.shape[0], j1:j1 + resized_im.shape[1], :] = resized_im
+                        results[spec] = returnData[i2:i2 + h, j2:j2 + w, :]
+                    elif im.ndim == 2:
+                        blank = np.zeros((max_value, max_value)).astype(im.dtype)
+                        blank[i:i + height, j:j + width] = im
 
-                returnData[i1:i1 + resized_im.shape[0], j1:j1 + resized_im.shape[1]] = resized_im
-                results[k] = returnData[i2:i2 + h, j2:j2 + w]
-        return unpack_singleton(tuple(results))
+                        resized_im = np.round(transform.rescale(blank,scale=scale, anti_aliasing=False if 'mask' in spec.object_type.value else True, clip=True, multichannel=False if im.ndim==2 else True,preserve_range=True, order=0 if 'mask' in spec.object_type.value else 1)).astype(im.dtype)
+                        returnData = np.zeros((max(resized_h, h), max(resized_w, w))).astype(im.dtype)
+
+                        returnData[i1:i1 + resized_im.shape[0], j1:j1 + resized_im.shape[1]] = resized_im
+                        results[spec] = returnData[i2:i2 + h, j2:j2 + w]
+        if isinstance(image, np.ndarray):
+            return results.value_list[0]
+        elif isinstance(image, OrderedDict):
+            return results
 
     return img_op
+
+
+def random_crop(h, w):
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        results = None
+        #generare strong typed dict
+        if isinstance(image, np.ndarray):
+            imspec = kwargs.get("spec")
+            if imspec is None:
+                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+            results = OrderedDict()
+            results[imspec] = image
+        elif isinstance(image, dict):
+            results = image
+
+        height = None
+        width = None
+        if isinstance(image, np.ndarray):
+            height, width = image.shape[:2]
+        elif isinstance(image, OrderedDict):
+            height, width = image.value_list[0].shape[:2]
+
+        img_op.h = h
+        img_op.w = w
+        offset_x = 0
+        offset_y = 0
+
+        if width > w:
+            offset_x = random.choice(range(width - w))
+        if height > h:
+            offset_y = random.choice(range(height - h))
+        offset_x1 = random.choice(range(w - width)) if w > width else 0
+        offset_y1 = random.choice(range(h - height)) if h > height else 0
+        for spec, im in results.items():
+            if spec.is_spatial == True:
+                if im is None:
+                    pass
+                elif spec.object_type in [ObjectType.absolute_bbox] :  # bbox
+                    class_info=None
+                    if im.shape[-1] ==5:
+                        class_info=im[:,4:5]
+                        im=im[:,:4]
+                    im[:, 0::2] = np.clip(im[:, 0::2] - offset_x, 0, w)
+                    im[:, 1::2] = np.clip(im[:, 1::2] - offset_y, 0, h)
+
+                    area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
+                    im = im[area > 0]
+
+                    if len(im) > 0:
+                        im[:, 0::2] += offset_x1
+                        im[:, 1::2] += offset_y1
+                        if class_info is not None:
+                            class_info= class_info[area > 0]
+                            im=np.concatenate([im,class_info],axis=-1)
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
+                    im[:, 0] = im[:, 0] - offset_x+offset_x1
+                    im[:, 1] = im[:, 1] - offset_y+offset_y1
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.rgb,ObjectType.rgba, ObjectType.gray,ObjectType.binary_mask,ObjectType.color_mask,ObjectType.label_mask]:
+                    if im.ndim == 2:
+                        returnData = np.zeros((h, w), dtype=np.float32)
+                        crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w]
+                        returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
+                        results[spec] = returnData
+                    elif im.ndim == 3:
+                        returnData = np.zeros((h, w, im.shape[-1]), dtype=np.float32)
+                        crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w, :]
+                        returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
+                        results[spec] = returnData
+        if isinstance(image, np.ndarray):
+            return results.value_list[0]
+        elif isinstance(image, OrderedDict):
+            return results
+    return img_op
+
+
+
+def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,shear_range = 0.2,
+                     random_flip= 0.15):
+    # 把現有的圖片隨機擾亂
+    coverage = 110
+    rotation = np.random.uniform(-rotation_range, rotation_range) if rotation_range!=0 else 0
+    scale = np.random.uniform(1 - zoom_range, 1 + zoom_range)if zoom_range!=0 else 1
+    shear= np.random.uniform( - shear_range,  shear_range)if shear_range!=0 else 0
+    shift_x = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
+    shift_y = np.random.uniform(-shift_range, shift_range)  if shift_range != 0 else 0
+    rr = np.random.random()
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        results = None
+        if isinstance(image, np.ndarray):
+            imspec = kwargs.get("spec")
+            if imspec is None:
+                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+            results = OrderedDict()
+            results[imspec] = image
+        elif isinstance(image, dict):
+            results = image
+
+        height = None
+        width = None
+        if isinstance(image, np.ndarray):
+            height, width = image.shape[:2]
+        elif isinstance(image, OrderedDict):
+            height, width = image.value_list[0].shape[:2]
+
+        img_op.tx = int(shift_x* width)
+        img_op.ty = int(shift_y* height )
+        mat = cv2.getRotationMatrix2D((width // 2+img_op.tx, height // 2+img_op.ty), rotation,1)
+        #mat[:, 2] += (tx, ty)
+
+        cos = np.abs(mat[0, 0])
+        sin = np.abs(mat[0, 1])
+        new_W = int((height * sin) + (width * cos))
+        new_H = int((height * cos) + (width * sin))
+        mat[0, 2] += (new_W / 2) - width // 2
+        mat[1, 2] += (new_H / 2) - height // 2
+        mat_img = mat.copy()
+        mat_box = mat.copy()
+
+        for spec, im in results.items():
+            if spec.is_spatial == True:
+                if im is None:
+                    pass
+                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
+                    class_info = None
+                    if im.shape[-1] >4:
+                        class_info = im[:, 4:]
+                        im = im[:, :4]
+                    # compute the new bounding dimensions of the image
+                    box_w = (im[:, 2] - im[:, 0]).reshape(-1, 1)
+                    box_h = (im[:, 3] - im[:, 1]).reshape(-1, 1)
+
+                    x1 = im[:, 0].reshape(-1, 1)
+                    y1 = im[:, 1].reshape(-1, 1)
+
+                    x2 = x1 + box_w
+                    y2 = y1
+
+                    x3 = x1
+                    y3 = y1 + box_h
+
+                    x4 = im[:, 2].reshape(-1, 1)
+                    y4 = im[:, 3].reshape(-1, 1)
+
+                    corners = np.hstack((x1, y1, x2, y2, x3, y3, x4, y4))
+                    corners = corners.reshape(-1, 2)
+
+                    corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
+                    new_box = np.dot(mat_box, corners.T).T
+                    new_box=new_box.reshape(-1, 8)
+
+                    x_ = new_box[:, [0, 2, 4, 6]]
+                    y_ = new_box[:, [1, 3, 5, 7]]
+
+                    xmin = np.min(x_, 1).reshape(-1, 1)
+                    ymin = np.min(y_, 1).reshape(-1, 1)
+                    xmax = np.max(x_, 1).reshape(-1, 1)
+                    ymax = np.max(y_, 1).reshape(-1, 1)
+
+                    im = np.hstack((xmin, ymin, xmax, ymax, new_box[:, 8:]))
+
+                    if im.ndim==1:
+                        im=np.expand_dims(im,0)
+
+                    if rr< random_flip:
+                        im[:, 0::2] =img_op.flip_width - im[:, 2::-2]
+                    im[:, 0] = np.clip(im[:,0],0,width)
+                    im[:, 1] = np.clip(im[:, 1], 0, height)
+                    im[:, 2] = np.clip(im[:,2], 0, width)
+                    im[:, 3] = np.clip(im[:,3], 0, height)
+
+                    area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
+                    im = im[area > 0]
+                    if len(im) > 0:
+                        if class_info is not None:
+                            class_info = class_info[area > 0]
+                            im=np.concatenate([im,class_info],axis=-1)
+                        results[spec] = im
+                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
+                    new_n=[]
+                    for i in range(len(im)):
+                        pts = []
+                        pts.append(np.squeeze(np.array(mat_img[0]))[0] * im[i][0] + np.squeeze(np.array(mat_img[0]))[1] * im[i][1] + np.squeeze(np.array(mat_img[0]))[2])
+                        pts.append(np.squeeze(np.array(mat_img[1]))[0] * im[i][0] + np.squeeze(np.array(mat_img[1]))[1] * im[i][1] + np.squeeze(np.array(mat_img[1]))[2])
+                        new_n.append(pts)
+                    results[spec] = np.array(new_n)
+                elif im.ndim == 3:
+                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
+                    if rr< random_flip:
+                        img_op.flip_width=new_image.shape[1]
+                        new_image = new_image[:, ::-1]
+                    results[spec] =  new_image
+                elif im.ndim ==2:
+                    image=np.concatenate([np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1)],axis=-1)
+                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
+                    if np.random.random() < random_flip:
+                        new_image = new_image[:, ::-1]
+                    new_image=cv2.cvtColor(new_image,cv2.COLOR_RGB2GRAY)
+
+                    results[spec] = new_image
+        if isinstance(image, np.ndarray):
+            return results.value_list[0]
+        elif isinstance(image, OrderedDict):
+            return results
+    return img_op
+
+
+
+def horizontal_flip():
+    # horizontal flip doesn't need skimage, it's easy as flipping the image array of pixels !
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        results = None
+        if isinstance(image, np.ndarray):
+            imspec = kwargs.get("spec")
+            if imspec is None:
+                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+            results = OrderedDict()
+            results[imspec] = image
+        elif isinstance(image, dict):
+            results = image
+
+        height = None
+        width = None
+        if isinstance(image, np.ndarray):
+            height, width = image.shape[:2]
+        elif isinstance(image, OrderedDict):
+            height, width = image.value_list[0].shape[:2]
+
+        for spec, im in results.items():
+            if spec.is_spatial == True:
+                if im is None:
+                    pass
+                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
+                    class_info = None
+                    if im.shape[-1] >4:
+                        class_info = im[:, 4:]
+                        im = im[:, :4]
+                    im[:, 0::2] = width - im[:, 2::-2]
+                    if len(im) > 0:
+                        if class_info is not None:
+                            im=np.concatenate([im,class_info],axis=-1)
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
+                    im[:, 0::2] = width - im[:, 2::-2]
+                    results[spec] = im
+                elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray]:  # image
+                    if im.ndim == 3:
+                        results[spec] = im[:, ::-1]
+                    elif im.ndim == 2:
+                        results[spec] = im[::-1]
+        if isinstance(image, np.ndarray):
+            return results.value_list[0]
+        elif isinstance(image, OrderedDict):
+            return results
+
+    return img_op
+
+
+def random_mirror():
+    fn=horizontal_flip()
+    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        img_op.rnd = random.randint(0, 10)
+        if img_op.rnd % 2 == 0:
+            return fn(image,**kwargs)
+        else:
+            return image
+
+    return img_op
+
 
 
 def downsample_then_upsample(scale=4, order=1, repeat=1):
@@ -790,131 +1075,9 @@ def auto_level():
     return img_op
 
 
-def random_crop(h, w):
-    def img_op(*image: np.ndarray):
-        results = to_list(image)
-        height, width = image[0].shape[:2]
-        img_op.h = height
-        img_op.w = width
-        offset_x = 0
-        offset_y = 0
-
-        if width > w:
-            offset_x = random.choice(range(width - w))
-        if height > h:
-            offset_y = random.choice(range(height - h))
-        offset_x1 = random.choice(range(w - width)) if w > width else 0
-        offset_y1 = random.choice(range(h - height)) if h > height else 0
-        for i in range(len(results)):
-            im = results[i]
-            if im is None:
-                pass
-            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                class_info=None
-                if im.shape[-1] ==5:
-                    class_info=im[:,4:5]
-                    im=im[:,:4]
-                im[:, 0::2] = np.clip(im[:, 0::2] - offset_x, 0, w)
-                im[:, 1::2] = np.clip(im[:, 1::2] - offset_y, 0, h)
-
-                area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                im = im[area > 0]
-
-                if len(im) > 0:
-                    im[:, 0::2] += offset_x1
-                    im[:, 1::2] += offset_y1
-                    if class_info is not None:
-                        class_info= class_info[area > 0]
-                        im=np.concatenate([im,class_info],axis=-1)
-                    results[i] = im
-                else:
-                    results[i] = im
-            elif im.ndim == 2 and im.shape[-1]==2:  # landmark
-                im[:, 0] = im[:, 0] - offset_x+offset_x1
-                im[:, 1] = im[:, 1] - offset_y+offset_y1
-                results[i] = im
-
-
-            elif im.ndim == 2:
-                returnData = np.zeros((h, w), dtype=np.float32)
-                crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w]
-                returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
-                results[i] = returnData
-            elif im.ndim == 3:
-                returnData = np.zeros((h, w, 3), dtype=np.float32)
-                crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w, :]
-                returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
-                results[i] = returnData
-        return unpack_singleton(tuple(results))
-
-    return img_op
-
-
-
-
-def horizontal_flip():
-    # horizontal flip doesn't need skimage, it's easy as flipping the image array of pixels !
-    def img_op(*image: np.ndarray):
-        results = to_list(image)
-        height, width = image[0].shape[:2]
-        for k in range(len(results)):
-            im = results[k]
-            if im is None:
-                pass
-            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                class_info = None
-                if im.shape[-1] >4:
-                    class_info = im[:, 4:]
-                    im = im[:, :4]
-                im[:, 0::2] = width - im[:, 2::-2]
-                if len(im) > 0:
-                    if class_info is not None:
-                        im=np.concatenate([im,class_info],axis=-1)
-                    results[k] = im
-                else:
-                    results[k] = None
-            elif im.ndim == 3:
-                results[k] = im[:, ::-1]
-            elif im.ndim == 2:
-                results[k] = im[::-1]
-        return unpack_singleton(tuple(results))
-
-    return img_op
-
-
-def random_mirror():
-    def img_op(*image: np.ndarray):
-        results = to_list(image)
-        height, width = image[0].shape[:2]
-        img_op.rnd = random.randint(0, 10)
-        for k in range(len(results)):
-            im = results[k]
-            if im is None:
-                pass
-            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                class_info = None
-                if im.shape[-1] >4:
-                    class_info = im[:, 4:]
-                    im = im[:, :4]
-                if img_op.rnd % 2 == 0:
-                    im[:, 0::2] = width - im[:, 2::-2]
-
-                if class_info is not None:
-                    im=np.concatenate([im,class_info],axis=-1)
-                results[k] = im
-            elif im.ndim == 3:
-                if img_op.rnd % 2 == 0:
-                    results[k] = im[:, ::-1]
-            elif im.ndim == 2:
-                if img_op.rnd % 2 == 0:
-                    results[k] = im[:, ::-1]
-        return unpack_singleton(tuple(results))
-
-    return img_op
-
 
 def image_backend_adaption(image):
-    if  _session.backend == 'tensorflow':
+    if  get_backend() == 'tensorflow':
         if image.ndim==2: #gray-scale image
             image=np.expand_dims(image,-1).astype(np.float32)
         elif image.ndim in (3,4):
@@ -930,9 +1093,9 @@ def image_backend_adaption(image):
 
 
 def reverse_image_backend_adaption(image):
-    if _session.backend in ['pytorch', 'cntk'] and image.ndim == 3 and image.shape[0] in [3, 4]:
+    if get_backend() in ['pytorch', 'cntk'] and image.ndim == 3 and image.shape[0] in [3, 4]:
         image = np.transpose(image, [1, 2, 0]).astype(np.float32)
-    elif _session.backend in ['pytorch', 'cntk'] and image.ndim == 4 and image.shape[1] in [3, 4]:
+    elif get_backend() in ['pytorch', 'cntk'] and image.ndim == 4 and image.shape[1] in [3, 4]:
         image = np.transpose(image, [0, 2, 3, 1]).astype(np.float32)
     return image
 
@@ -996,7 +1159,7 @@ def random_erasing(size_range=(0.02,0.3),transparency_range=(0.4,0.8),transparan
 
 
 def random_cutout(img, mask):
-    h, w = img.shape[:2] if _backend == 'tensorflow' or len(img.shape) == 2 else img.shape[1:3]
+    h, w = img.shape[:2] if get_backend() == 'tensorflow' or len(img.shape) == 2 else img.shape[1:3]
     cutx = random.choice(range(0, w // 4))
     cuty = random.choice(range(0, h // 4))
     offsetx = random.choice(range(0, w))
@@ -1007,7 +1170,7 @@ def random_cutout(img, mask):
             (min(offsety + cuty, h) - offsety, min(offsetx + cutx, w) - offsetx)) * 127.5 + 127.5, 0, 255)
     elif random.randint(0, 10) % 4 == 2:
         block = np.random.uniform(0, 255, (min(offsety + cuty, h) - offsety, min(offsetx + cutx, w) - offsetx))
-    if _backend == 'tensorflow':
+    if get_backend() == 'tensorflow':
         block = np.expand_dims(block, -1)
         block = np.concatenate([block, block, block], axis=-1)
         img[offsety:min(offsety + cuty, img.shape[0]), offsetx:min(offsetx + cutx, img.shape[1]), :] = block
@@ -1203,121 +1366,6 @@ def build_affine_matrix(s, c, rad, t=(0, 0)):
     M = np.dot(C_prime, np.dot(T, np.dot(R, np.dot(S, C))))
     return M
 
-
-
-def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,shear_range = 0.2,
-                     random_flip= 0.15):
-    # 把現有的圖片隨機擾亂
-    coverage = 110
-    rotation = np.random.uniform(-rotation_range, rotation_range) if rotation_range!=0 else 0
-    scale = np.random.uniform(1 - zoom_range, 1 + zoom_range)if zoom_range!=0 else 1
-    shear= np.random.uniform( - shear_range,  shear_range)if shear_range!=0 else 0
-    shift_x = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
-    shift_y = np.random.uniform(-shift_range, shift_range)  if shift_range != 0 else 0
-    rr = np.random.random()
-    def img_op(*image: np.ndarray):
-        results = to_list(image)
-
-        h, w = results[0].shape[0:2]
-        img_op.tx = int(shift_x* w)
-        img_op.ty = int(shift_y* h )
-        mat = cv2.getRotationMatrix2D((w // 2+img_op.tx, h // 2+img_op.ty), rotation,1)
-        #mat[:, 2] += (tx, ty)
-
-        cos = np.abs(mat[0, 0])
-        sin = np.abs(mat[0, 1])
-        new_W = int((h * sin) + (w * cos))
-        new_H = int((h * cos) + (w * sin))
-        mat[0, 2] += (new_W / 2) - w // 2
-        mat[1, 2] += (new_H / 2) - h // 2
-        mat_img = mat.copy()
-        mat_box = mat.copy()
-
-        for k in range(len(results)):
-            im = results[k]
-            if im is None or len(im)==0:
-                pass
-            elif im.ndim == 2 and im.shape[-1] in (4, 5):  # bbox
-                class_info = None
-                if im.shape[-1] >4:
-                    class_info = im[:, 4:]
-                    im = im[:, :4]
-                # compute the new bounding dimensions of the image
-                box_w = (im[:, 2] - im[:, 0]).reshape(-1, 1)
-                box_h = (im[:, 3] - im[:, 1]).reshape(-1, 1)
-
-                x1 = im[:, 0].reshape(-1, 1)
-                y1 = im[:, 1].reshape(-1, 1)
-
-                x2 = x1 + box_w
-                y2 = y1
-
-                x3 = x1
-                y3 = y1 + box_h
-
-                x4 = im[:, 2].reshape(-1, 1)
-                y4 = im[:, 3].reshape(-1, 1)
-
-                corners = np.hstack((x1, y1, x2, y2, x3, y3, x4, y4))
-                corners = corners.reshape(-1, 2)
-
-                corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
-                new_box = np.dot(mat_box, corners.T).T
-                new_box=new_box.reshape(-1, 8)
-
-                x_ = new_box[:, [0, 2, 4, 6]]
-                y_ = new_box[:, [1, 3, 5, 7]]
-
-                xmin = np.min(x_, 1).reshape(-1, 1)
-                ymin = np.min(y_, 1).reshape(-1, 1)
-                xmax = np.max(x_, 1).reshape(-1, 1)
-                ymax = np.max(y_, 1).reshape(-1, 1)
-
-                im = np.hstack((xmin, ymin, xmax, ymax, new_box[:, 8:]))
-
-                if im.ndim==1:
-                    im=np.expand_dims(im,0)
-
-                if rr< random_flip:
-                    im[:, 0::2] =img_op.flip_width - im[:, 2::-2]
-                im[:, 0] = np.clip(im[:,0],0,w)
-                im[:, 1] = np.clip(im[:, 1], 0, h)
-                im[:, 2] = np.clip(im[:,2], 0, w)
-                im[:, 3] = np.clip(im[:,3], 0, h)
-
-                area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                im = im[area > 0]
-                if len(im) > 0:
-                    if class_info is not None:
-                        class_info = class_info[area > 0]
-                        im=np.concatenate([im,class_info],axis=-1)
-                    results[k] = im
-                else:
-                    results[k] = None
-            elif im.ndim == 2 and im.shape[-1] ==2:  # landmark  64,2
-                new_n=[]
-                for i in range(len(im)):
-                    pts = []
-                    pts.append(np.squeeze(np.array(mat_img[0]))[0] * im[i][0] + np.squeeze(np.array(mat_img[0]))[1] * im[i][1] + np.squeeze(np.array(mat_img[0]))[2])
-                    pts.append(np.squeeze(np.array(mat_img[1]))[0] * im[i][0] + np.squeeze(np.array(mat_img[1]))[1] * im[i][1] + np.squeeze(np.array(mat_img[1]))[2])
-                    new_n.append(pts)
-                results[k] = np.array(new_n)
-            elif im.ndim == 3:
-                new_image = cv2.warpAffine(im.copy(), mat_img, (w, h), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
-                if rr< random_flip:
-                    img_op.flip_width=new_image.shape[1]
-                    new_image = new_image[:, ::-1]
-                results[k] = new_image
-            elif im.ndim ==2:
-                image=np.concatenate([np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1)],axis=-1)
-                new_image = cv2.warpAffine(im.copy(), mat_img, (w, h), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
-                if np.random.random() < random_flip:
-                    new_image = new_image[:, ::-1]
-                new_image=cv2.cvtColor(new_image,cv2.COLOR_RGB2GRAY)
-
-                results[k] = new_image
-        return unpack_singleton(tuple(results))
-    return img_op
 
 
 
