@@ -123,16 +123,22 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
     def on_epoch_end(self, training_context):
         training_context['current_lr']=training_context['optimizer'].lr
         if self.unit_base == 'epoch':
-            history = training_context['epoch_losses'].get(self.monitor, training_context['epoch_metrics'].get(self.monitor,
-                                                                                                   training_context[
-                                                                                                       'epoch_losses'][
-                                                                                                       'total_losses']))
+            steps=None
+            history=None
+            if self.monitor in training_context['losses']:
+                steps, history = training_context['losses'].get_series(self.monitor)
+            elif self.monitor in training_context['metrics']:
+                steps, history = training_context['metrics'].get_series(self.monitor)
+            else:
+                steps, history = training_context['losses'].get_series('total_losses')
+
+
             current = to_numpy(history[-min(5, len(history)):]).mean()
             if current is None:
                 warnings.warn(
                     'Reduce LR on plateau conditioned on metric `%s` '
                     'which is not available. Available metrics are: %s' %
-                    (self.monitor, ','.join(training_context['epoch_metrics'].keys_list)), RuntimeWarning
+                    (self.monitor, ','.join(training_context['metrics'].keys_list)), RuntimeWarning
                 )
 
             else:
