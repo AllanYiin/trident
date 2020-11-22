@@ -2,14 +2,11 @@ import inspect
 import numbers
 from enum import Enum
 from inspect import signature
-from trident.backend.common import to_list, OrderedDict,Signature,split_path,unpack_singleton,get_session
+from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session
 from typing import Optional, Union, overload
 import numpy as np
 
-
-
-__all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility','assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType']
-
+__all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType']
 
 _session = get_session()
 _backend = _session.backend
@@ -17,8 +14,6 @@ if _backend == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif _backend == 'tensorflow':
     from trident.backend.tensorflow_ops import *
-
-
 
 
 class ObjectType(Enum):
@@ -78,26 +73,33 @@ class TensorSpec(object):
                  min_ndim=None,
                  axes=None,
                  dtype=None,
-                 object_type:Optional[ObjectType]=None,
+                 object_type: Optional[ObjectType] = None,
                  is_spatial=False,
                  name=None):
-        self._dtype = dtype if dtype is not None else None
+        self._dtype = dtype if dtype is not None else str2dtype('float32')
         self._shape_tuple = None
         self.object_type = object_type
-        self.is_spatial=is_spatial
+        if object_type is not None:
+            if 'mask' in object_type.value or 'bbox' in object_type.value or 'rgb' in object_type.value or object_type == ObjectType.gray or object_type == ObjectType.landmarks:
+                self.is_spatial = True
+            else:
+                self.is_spatial = is_spatial
         self._name = name
         if shape is not None:
-            if type(shape) == int or type(shape) == float:
-                self.ndim =0
-                self.shape =to_tensor(-1)
-                self._shape_tuple=(-1,)
+            t = to_tensor([-1]).int().to('cpu')
+            if isinstance(shape, (list, tuple)) and all([isinstance(item, numbers.Number) for item in shape]):
+                self.ndim = len(shape)
+                self._shape_tuple = (-1,)+tuple(shape)
+                self.shape = to_tensor(self._shape_tuple).int().to('cpu')
+            elif type(shape) == int or type(shape) == float:
+                self.ndim = 0
+                self.shape = to_tensor(-1).to('cpu')
+                self._shape_tuple = (-1,)
             else:
                 self.ndim = len(shape)
-                self.shape =concate([to_tensor([-1]),shape],axis=0)
-                try:
-                    self._shape_tuple =tuple([int(item) for item in to_list(self.shape)])
-                except ValueError:
-                    self._shape_tuple = None
+                shape=to_list(to_numpy(shape))
+                self._shape_tuple = (-1,) + tuple(shape)
+                self.shape = to_tensor(self._shape_tuple).int().to('cpu')
         else:
             self.ndim = ndim
             self.shape = None
@@ -192,8 +194,8 @@ class TensorSpec(object):
                             value = value.value
                         if value is not None and shape[int(axis)] not in {value, None}:
                             raise ValueError(
-                                'Input ' + str(input_index) +  ' is'
-                                                                ' incompatible with the layer: expected axis ' + str(axis) +
+                                'Input ' + str(input_index) + ' is'
+                                                              ' incompatible with the layer: expected axis ' + str(axis) +
                                 ' of input shape to have value ' + str(value) +
                                 ' but received input with shape ' + str(shape))
             # Check shape.
@@ -231,7 +233,7 @@ class TensorSpec(object):
         return 'TensorSpec(%s)' % ', '.join(x for x in spec if x)
 
 
-def assert_input_compatibility(input_spec:TensorSpec, inputs):
+def assert_input_compatibility(input_spec: TensorSpec, inputs):
     """Checks compatibility between the layer and provided inputs.
     This checks that the tensor(s) `inputs` verify the input assumptions
     of a layer (if any). If not, a clear and actional exception gets raised.
@@ -247,8 +249,10 @@ def assert_input_compatibility(input_spec:TensorSpec, inputs):
     """
     if not input_spec:
         return
+    input_spec.shape.to('cpu')
+    inputs.to('cpu')
     if len(inputs) != len(input_spec):
-        raise ValueError('Tensor '+ ' expects ' +
+        raise ValueError('Tensor ' + ' expects ' +
                          str(len(input_spec)) + ' inputs, '
                                                 'but it received ' + str(len(inputs)) +
                          ' input tensors. Inputs received: ' + str(inputs))
@@ -260,29 +264,29 @@ def assert_input_compatibility(input_spec:TensorSpec, inputs):
                 spec.min_ndim is not None or
                 spec.max_ndim is not None):
             if x.shape.ndims is None:
-                raise ValueError('Input ' + str(input_index) + ' of tensor '  + ' is incompatible with the layer: '
-                                              'its rank is undefined, but the layer requires a '
-                                              'defined rank.')
+                raise ValueError('Input ' + str(input_index) + ' of tensor ' + ' is incompatible with the layer: '
+                                                                               'its rank is undefined, but the layer requires a '
+                                                                               'defined rank.')
 
         # Check ndim.
         if spec.ndim is not None:
             ndim = x.shape.ndims
             if ndim != spec.ndim:
                 raise ValueError('Input ' + str(input_index) + ' of tensor ' + ' is incompatible with the layer: '
-                                              'expected ndim=' + str(spec.ndim) + ', found ndim=' +
+                                                                               'expected ndim=' + str(spec.ndim) + ', found ndim=' +
                                  str(ndim) + '. Full shape received: ' +
                                  str(x.shape.as_list()))
         if spec.max_ndim is not None:
             ndim = x.shape.ndims
             if ndim is not None and ndim > spec.max_ndim:
                 raise ValueError('Input ' + str(input_index) + ' of tensor ' + ' is incompatible with the layer: '
-                                              'expected max_ndim=' + str(spec.max_ndim) +
+                                                                               'expected max_ndim=' + str(spec.max_ndim) +
                                  ', found ndim=' + str(ndim))
         if spec.min_ndim is not None:
             ndim = x.shape.ndims
             if ndim is not None and ndim < spec.min_ndim:
-                raise ValueError('Input ' + str(input_index) + ' of tensor '  + ' is incompatible with the layer: '
-                                              ': expected min_ndim=' + str(spec.min_ndim) +
+                raise ValueError('Input ' + str(input_index) + ' of tensor ' + ' is incompatible with the layer: '
+                                                                               ': expected min_ndim=' + str(spec.min_ndim) +
                                  ', found ndim=' + str(ndim) +
                                  '. Full shape received: ' +
                                  str(x.shape.as_list()))
@@ -290,7 +294,7 @@ def assert_input_compatibility(input_spec:TensorSpec, inputs):
         if spec.dtype is not None:
             if x.dtype != spec.dtype:
                 raise ValueError('Input ' + str(input_index) + ' of tensor ' + ' is incompatible with the layer: '
-                                              'expected dtype=' + str(spec.dtype) +
+                                                                               'expected dtype=' + str(spec.dtype) +
                                  ', found dtype=' + str(x.dtype))
         # Check specific shape axes.
         if spec.axes:
@@ -302,7 +306,7 @@ def assert_input_compatibility(input_spec:TensorSpec, inputs):
                     if value is not None and shape[int(axis)] not in {value, None}:
                         raise ValueError(
                             'Input ' + str(input_index) + ' of tensor ' + ' is'
-                                                                                      ' incompatible with the layer: expected axis ' + str(axis) +
+                                                                          ' incompatible with the layer: expected axis ' + str(axis) +
                             ' of input shape to have value ' + str(value) +
                             ' but received input with shape ' + str(shape))
         # Check shape.
@@ -318,7 +322,7 @@ def assert_input_compatibility(input_spec:TensorSpec, inputs):
                                              ', found shape=' + str(shape))
 
 
-def assert_spec_compatibility(input_spec:TensorSpec, other_spec:TensorSpec):
+def assert_spec_compatibility(input_spec: TensorSpec, other_spec: TensorSpec):
     """Checks compatibility between the layer and provided inputs.
     This checks that the tensor(s) `inputs` verify the input assumptions
     of a layer (if any). If not, a clear and actional exception gets raised.
@@ -333,19 +337,21 @@ def assert_spec_compatibility(input_spec:TensorSpec, other_spec:TensorSpec):
     """
     if not input_spec:
         return False
-    if isinstance(input_spec,(tuple,list)) and all([isinstance(item,numbers.Integral) for item in  input_spec]):
-        input_spec=TensorSpec(shape=to_tensor(input_spec))
+    input_spec.shape.to('cpu')
+    other_spec.shape.to('cpu')
+    if isinstance(input_spec, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in input_spec]):
+        input_spec = TensorSpec(shape=to_tensor(input_spec))
 
-    if isinstance(other_spec,(tuple,list)) and all([isinstance(item,numbers.Integral) for item in  other_spec]):
-        other_spec=TensorSpec(shape=to_tensor(other_spec))
+    if isinstance(other_spec, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in other_spec]):
+        other_spec = TensorSpec(shape=to_tensor(other_spec))
 
     if (input_spec.ndim is not None or
             input_spec.min_ndim is not None or
             input_spec.max_ndim is not None):
         if other_spec.ndim is None:
             print('Other_spec ' + ' is incompatible with input_spec: '
-                                          'its rank is undefined, but input_spec requires a '
-                                          'defined rank.')
+                                  'its rank is undefined, but input_spec requires a '
+                                  'defined rank.')
             return False
 
     # Check ndim.
@@ -353,38 +359,37 @@ def assert_spec_compatibility(input_spec:TensorSpec, other_spec:TensorSpec):
         ndim = other_spec.ndim
         if ndim != input_spec.ndim:
             print('Other_spec is incompatible with the input_spec: expected ndim=' + str(input_spec.ndim) + ', found ndim=' +
-                             str(ndim) + '. Full shape received: ' +
-                             str(other_spec._shape_tuple))
+                  str(ndim) + '. Full shape received: ' +
+                  str(other_spec._shape_tuple))
             return False
     if input_spec.max_ndim is not None:
         ndim = other_spec.ndim
         if ndim is not None and ndim > input_spec.max_ndim:
             print('Other_spec is incompatible with the input_spec: expected max_ndim=' + str(input_spec.max_ndim) +
-                             ', found ndim=' + str(ndim))
+                  ', found ndim=' + str(ndim))
             return False
     if input_spec.min_ndim is not None:
         ndim = other_spec.ndim
         if ndim is not None and ndim < input_spec.min_ndim:
             print('Other_spec is incompatible with the input_spec: expected min_ndim=' + str(input_spec.min_ndim) +
-                             ', found ndim=' + str(ndim) +
-                             '. Full shape received: ' +
-                             str(other_spec._shape_tuple))
+                  ', found ndim=' + str(ndim) +
+                  '. Full shape received: ' +
+                  str(other_spec._shape_tuple))
             return False
     # Check dtype.
     if input_spec.dtype is not None:
         if other_spec.dtype != input_spec.dtype:
             print('Other_spec is incompatible with the input_spec: expected dtype=' + str(input_spec.dtype) +
-                             ', found dtype=' + str(other_spec.dtype))
+                  ', found dtype=' + str(other_spec.dtype))
             return False
     # Check specific shape axes.
     if input_spec.axes:
-        shape =other_spec._shape_tuple
+        shape = other_spec._shape_tuple
         if shape is not None:
             for axis, value in input_spec.axes.items():
                 if hasattr(value, 'value'):
                     value = value.value
                 if value is not None and shape[int(axis)] not in {value, None}:
-
                     print(
                         'Other_spec is  incompatible with input_spec: expected axis ' + str(axis) +
                         ' of input shape to have value ' + str(value) +
@@ -398,7 +403,7 @@ def assert_spec_compatibility(input_spec:TensorSpec, other_spec:TensorSpec):
                 if spec_dim is not None and dim is not None:
                     if spec_dim != dim:
                         print('Other_spec is incompatible with input_spec: expected shape=' + str(input_spec._shape_tuple) +
-                                         ', found shape=' + str(shape))
+                              ', found shape=' + str(shape))
                         return False
     return True
 
@@ -418,9 +423,6 @@ def get_python_function_arguments(f):
     if defaults:
         arg_names = arg_names[:-len(defaults)]
     return (arg_names, annotations)
-
-
-
 
 
 def get_signature(fn, name=None):
