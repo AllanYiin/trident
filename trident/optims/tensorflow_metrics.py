@@ -11,7 +11,7 @@ from tensorflow.python.ops import nn_ops
 from trident.backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['accuracy','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
+__all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 
 def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
@@ -60,6 +60,46 @@ def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
         correct = equal(pred,target_tensor).sum()
         return correct/batch_size
 
+
+def pixel_accuracy(output, target):
+    input_tensor = output.copy().detach()
+    target_tensor = target.copy().detach()
+    if input_tensor.dtype!=tf.int64 :
+        input_tensor=argmax(input_tensor,axis=-1).squeeze()
+    return equal(input_tensor,target_tensor).mean()
+
+def alpha_pixel_accuracy(output, alpha):
+    output_tensor = to_numpy(output)
+    alpha_tensor =  to_numpy(alpha)
+
+    trimap=alpha_tensor.copy()
+    trimap[(0<trimap)*(trimap<1)==True]=0.5
+    if len(output_tensor.shape)==len(alpha_tensor.shape)+1 and output_tensor.shape[1]==2:
+        # trimap_out=mask2trimap()(np.argmax(output_tensor,1))
+        # trimap_out1=trimap_out.copy()
+        # trimap_out1[trimap_out1==0.5]=0
+        # trimap_out2=trimap_out.copy()
+        # trimap_out2[trimap_out2 ==1] = 0
+        output_tensor=output_tensor[:,1,:,:]*np.argmax(output_tensor,1)#trimap_out*trimap_out1+output_tensor[:,1,:,:]*trimap_out2
+        output_tensor[output_tensor>0.95]=1
+    pixel_labeled = (output_tensor > 0).sum()
+    pixel_correct = ((output_tensor == alpha_tensor)*(trimap == 1)).sum()+ (np.less(np.abs(output_tensor - alpha_tensor),0.1).astype(np.float32)*(trimap == 0.5)).sum()
+    return pixel_correct/max(pixel_labeled,1)
+
+
+
+def iou(output, target):
+    input_tensor = output.copy().detach()
+    target_tensor = target.copy().detach()
+    if input_tensor.dtype != tf.int64:
+        input_tensor = argmax(input_tensor, axis=-1).squeeze()
+    if target_tensor.dtype != tf.int64:
+        target_tensor = argmax(target_tensor, axis=-1).squeeze()
+
+    intersection =( greater(input_tensor ,0) * equal(input_tensor ,target_tensor)).sum()
+    union=greater(( greater(input_tensor ,0) + greater(target_tensor ,0) ),0).sum()
+
+    return intersection/maximum(union,1)
 
 def psnr(output, target):
     if target.get_shape()!=output.get_shape() :

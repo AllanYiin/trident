@@ -30,7 +30,7 @@ from trident.optims.losses import Loss
 
 
 __all__ = ['get_loss','_ClassificationLoss', 'CrossEntropyLoss', 'MSELoss', 'EdgeLoss', 'NLLLoss', 'F1ScoreLoss', '_ClassificationLoss',
-           'FocalLoss','L1Loss','L2Loss','WingLoss','AdaptiveWingLoss']
+           'FocalLoss','DiceLoss','L1Loss','L2Loss','WingLoss','AdaptiveWingLoss']
 
 
 
@@ -123,13 +123,15 @@ class _ClassificationLoss(Loss):
 
     def flatten_check(self, output, target):
         "Check that `out` and `targ` have the same number of elements and flatten them."
-        if ndim(output) > 2:
-            output = output.view(-1, output.size(-1))
-        if ndim(target) > 2:
-
-            target = target.view(-1, target.size(-1))
-
-        if len(output) == len(target):
+        if ndim(output) > 2 and len(output) == len(target)+1:
+            shp = int_shape(output)
+            output = output.reshape((shp[0], -1, shp[-1]))
+            target = target.reshape((shp[0], -1))
+            return output, target
+        elif ndim(output) > 2 and len(output) == len(target):
+            shp = int_shape(output)
+            output = output.reshape((shp[0], -1, shp[-1]))
+            target = target.reshape((shp[0], -1))
             return output, target
         else:
             raise ValueError('output and target have diffent elements.')
@@ -444,9 +446,9 @@ class CrossEntropyLoss(_ClassificationLoss):
         else:
             reshape_shape = [1] * ndim(output)
             reshape_shape[self.axis] = self.num_classes
-            sample_weight = self.sample_weight.view(*reshape_shape)
+            sample_weight = self.sample_weight.reshape(reshape_shape)
             if self.is_logsoftmax == True:
-                sample_weight = self.sample_weight.view(*reshape_shape) * self.ignore_index_weight.view(*reshape_shape)
+                sample_weight = self.sample_weight.reshape(reshape_shape) * self.ignore_index_weight.reshape(reshape_shape)
         # -sum([p[i] * log2(q[i]) for i in range(len(p))])
         if self.is_logsoftmax == False:
             loss = -(target * log_softmax(output, axis=self.axis) * sample_weight)
@@ -611,7 +613,92 @@ class FocalLoss(_ClassificationLoss):
 
         return loss
 
+class DiceLoss(_ClassificationLoss):
+    r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
 
+    It is useful when training a classification problem with `C` classes.
+    If provided, the optional argument :attr:`weight` should be a 1D `Tensor`
+    assigning weight to each of the classes.
+    This is particularly useful when you have an unbalanced training set.
+
+    Args:
+        axis (int): the position where the classes is.
+        sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
+
+    Examples:
+    >>> output=zeros((1,3,128,128))
+    >>> output[0,1,32:64,48:92]=1
+    >>> output[0,2,12:32,56:64]=1
+    >>> target=zeros((1,128,128)).long()
+    >>> target[0,33:63,50:9]=1
+    >>> target[0,13:35,52:65]=2
+    >>> DiceLoss(reduction='mean')(output,target).cpu()
+    tensor(0.8271)
+    >>> DiceLoss(ignore_index=0,reduction='mean')(output,target).cpu()
+    tensor(0.9829)
+
+
+
+    Reference:
+        https://arxiv.org/abs/1707.03237
+
+
+    """
+
+    def __init__(self, smooth=1., axis=-1, sample_weight=None, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', name='DiceLoss'):
+        """
+        Args:
+            axis (int): the axis where the class label is.
+            sample_weight ():
+            from_logits ():
+            ignore_index ():
+            cutoff ():
+            label_smooth ():
+            reduction (string):
+            name (stringf):
+        """
+
+        super().__init__(axis, sample_weight, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
+        self.smooth = smooth
+        self.is_logsoftmax = False
+        self.need_target_onehot = True
+        self.is_multiselection = False
+        self._built = True
+
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+        if self.is_logsoftmax:
+            output=exp(output)
+        reduce_axes=list(range(target.ndim))
+        axis=self.axis if self.axis>=0 else target.ndim+self.axis
+        reduce_axes.remove(0)
+        reduce_axes.remove(axis)
+        loss_weights=self.sample_weight.copy()
+        # for k in range(target.ndim-self.loss_weights.ndim):
+        #     loss_weights=loss_weights.expand_dims(0)
+        intersection = reduce_sum(target * output, axis=reduce_axes)*loss_weights
+        den1 = reduce_sum(output, axis=reduce_axes)*loss_weights
+        den2 = reduce_sum(target, axis=reduce_axes)*loss_weights
+        dice = 1.0 - ((2.0 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+        return dice
 
 
 
