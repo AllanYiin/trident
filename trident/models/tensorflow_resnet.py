@@ -162,6 +162,7 @@ def ResNet50(include_top=True,
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         recovery_model.eval()
 
         if include_top==False:
@@ -193,13 +194,14 @@ def ResNet101(include_top=True,
     else:
         input_shape=(224, 224,3)
     input_shape = to_tensor(input_shape)
-    resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
+    resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, use_bias=True,model_name='resnet101')
     if pretrained==True:
         download_model_from_google_drive('13QYdFX3CvsNiegi-iUX1PUC0KKKgPNwr',dirname,'resnet101_tf.pth')
         recovery_model=load(os.path.join(dirname,'resnet101_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         recovery_model.eval()
         if include_top == False:
             recovery_model.remove_at(-1)
@@ -238,6 +240,7 @@ def ResNet152(include_top=True,
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         recovery_model.eval()
 
         if include_top == False:

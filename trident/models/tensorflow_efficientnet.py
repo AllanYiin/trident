@@ -198,6 +198,7 @@ def EfficientNet(width_coefficient,
 
 def EfficientNetB0(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(224,224,3),
              classes=1000,
              **kwargs):
@@ -211,6 +212,9 @@ def EfficientNetB0(include_top=True,
         recovery_model=load(os.path.join(dirname,'efficientnet-b0_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape=input_shape
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -227,6 +231,7 @@ def EfficientNetB0(include_top=True,
 
 def EfficientNetB1(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(240,240,3),
              classes=1000,
              **kwargs):
@@ -236,12 +241,14 @@ def EfficientNetB1(include_top=True,
         input_shape=(240, 240,3)
     effb1 =EfficientNet(1.0, 1.1, default_size=input_shape, dropout_rate= 0.2, model_name='efficientnet-b1',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1zCWDn4lwHCn4exAnGfBSPh9YHYTGdIYt',dirname,'efficientnet-b1.pkl')
+        download_model_from_google_drive('1zCWDn4lwHCn4exAnGfBSPh9YHYTGdIYt',dirname,'efficientnet-b1_tf.pth')
         recovery_model=load(os.path.join(dirname,'efficientnet-b1_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
         recovery_model.eval()
-
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
         else:
@@ -256,6 +263,7 @@ def EfficientNetB1(include_top=True,
 
 def EfficientNetB2(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(260,260,3),
              classes=1000,
              **kwargs):
@@ -269,6 +277,9 @@ def EfficientNetB2(include_top=True,
         recovery_model=load(os.path.join(dirname,'efficientnet-b2_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
         else:
@@ -283,6 +294,7 @@ def EfficientNetB2(include_top=True,
 
 def EfficientNetB3(include_top=True,
              pretrained=True,
+             freeze_features=False,
              input_shape=(300,300,3),
              classes=1000,
              **kwargs):
@@ -296,6 +308,9 @@ def EfficientNetB3(include_top=True,
         recovery_model=load(os.path.join(dirname,'efficientnet-b3_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
         else:
@@ -310,6 +325,7 @@ def EfficientNetB3(include_top=True,
 
 def EfficientNetB4(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(380,380,3),
              classes=1000,
              **kwargs):
@@ -323,7 +339,9 @@ def EfficientNetB4(include_top=True,
         recovery_model=load(sanitize_path(os.path.join(dirname,'efficientnet-b4_tf.pth')))
         recovery_model=fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
-
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
         else:
@@ -338,12 +356,14 @@ def EfficientNetB4(include_top=True,
 
 def EfficientNetB5(include_top=True,
              pretrained=True,
+             freeze_features=False,
              input_shape=(456,456,3),
              classes=1000,
              **kwargs):
     """
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained ():
         input_shape ():
@@ -363,6 +383,9 @@ def EfficientNetB5(include_top=True,
         recovery_model=load(os.path.join(dirname,'efficientnet-b5_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
         else:
@@ -377,6 +400,7 @@ def EfficientNetB5(include_top=True,
 
 def EfficientNetB6(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(528,528,3),
              classes=1000,
              **kwargs):
@@ -390,7 +414,9 @@ def EfficientNetB6(include_top=True,
         recovery_model=load(os.path.join(dirname,'efficientnet-b6_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
-
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
         else:
@@ -405,6 +431,7 @@ def EfficientNetB6(include_top=True,
 
 def EfficientNetB7(include_top=True,
              pretrained=True,
+             freeze_features=False,
              input_shape=(600,600,3),
              classes=1000,
              **kwargs):
@@ -418,6 +445,10 @@ def EfficientNetB7(include_top=True,
         recovery_model=load(os.path.join(dirname,'efficientnet-b7_tf.pth'))
         recovery_model=fix_layer(recovery_model)
         recovery_model.input_shape = input_shape
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
+
         if include_top==False:
             recovery_model.remove_at(-1)
         else:

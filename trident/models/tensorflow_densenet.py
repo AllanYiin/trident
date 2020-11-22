@@ -232,7 +232,11 @@ def DenseNetFcn(blocks=(4, 5, 7, 10, 12),
              num_classes=num_classes,
              name=name,
              **kwargs))
-    model.signature = get_signature(model.model.forward)
+    model.signature = Signature(name='DenseNetFcn')
+    if is_tensor(model._input_shape):
+        model.signature.inputs['input']=TensorSpec(shape=model._input_shape,name='input')
+    if is_tensor(model._output_shape):
+        model.signature.outputs['output']=TensorSpec(shape=model._output_shape,name='output')
 
     model.preprocess_flow = [resize((input_shape[2], input_shape[1]), keep_aspect=True), normalize(0, 255),
                              normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
@@ -321,8 +325,8 @@ def DenseNet121(include_top=True,
 
     densenet121 =DenseNet([6, 12, 24, 16],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet121')
     if pretrained==True:
-        download_model_from_google_drive('16N2BECErDMRTV5JqESEBWyylXbQmKAIk',dirname,'densenet121.pth')
-        recovery_model=load(os.path.join(dirname,'densenet121.pth'))
+        download_model_from_google_drive('1XZvwockMwLJAZjUKbDt687-pssz58GP9',dirname,'densenet121_tf.pth')
+        recovery_model=load(os.path.join(dirname,'densenet121_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
         recovery_model.eval()
@@ -338,9 +342,13 @@ def DenseNet121(include_top=True,
                 recovery_model.add_module('softmax', SoftMax(name='softmax'))
                 densenet121.class_names = []
 
-        densenet121.model=recovery_model
 
-        densenet121.signature = get_signature(densenet121.model.forward)
+        recovery_model.signature = Signature(name='DenseNetFcn')
+        if is_tensor(recovery_model._input_shape):
+            recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
+        if is_tensor(recovery_model._output_shape):
+            recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
+        densenet121.model = recovery_model
     return densenet121
 
 
@@ -376,22 +384,28 @@ def DenseNet161(include_top=True,
 
     densenet161 =DenseNet([6, 12, 36, 24],48,96, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet161')
     if pretrained==True:
-        download_model_from_google_drive('1n3HRkdPbxKrLVua9gOCY6iJnzM8JnBau',dirname,'densenet161.pth')
-        recovery_model=load(os.path.join(dirname,'densenet161.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.name = 'densenet161'
-        recovery_model.eval()
+        print('There is no DenseNet161 pretrained model avaiable ')
+        # download_model_from_google_drive('1n3HRkdPbxKrLVua9gOCY6iJnzM8JnBau',dirname,'densenet161_tf.pth')
+        # recovery_model=load(os.path.join(dirname,'densenet161_tf.pth'))
+        # recovery_model = fix_layer(recovery_model)
+        # recovery_model.name = 'densenet161'
+        # recovery_model.eval()
+        #
+        # if include_top==False:
+        #     recovery_model.remove_at(-1)
+        # else:
+        #     if classes!=1000:
+        #         recovery_model.remove_at(-1)
+        #         recovery_model.remove_at(-1)
+        #         recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+        #         recovery_model.add_module('softmax', SoftMax(name='softmax'))
+        # recovery_model.signature = Signature(name='DenseNetFcn')
+        # if is_tensor(recovery_model._input_shape):
+        #     recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
+        # if is_tensor(recovery_model._output_shape):
+        #     recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
+        # densenet161.model=recovery_model
 
-        if include_top==False:
-            recovery_model.remove_at(-1)
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
-        densenet161.model=recovery_model
-        densenet161.signature = get_signature(densenet161.model.forward)
     return densenet161
 
 
@@ -428,8 +442,8 @@ def DenseNet169(include_top=True,
 
     densenet169 =DenseNet([6, 12, 32, 32],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet169')
     if pretrained==True:
-        download_model_from_google_drive('1QV73Th0Wo4SCq9AFPVEKqnzs7BUvIG5B',dirname,'densenet169.pth')
-        recovery_model=load(os.path.join(dirname,'densenet169.pth'))
+        download_model_from_google_drive('1tfLRxX4EipkIc23MF5xZR23rYdxk3AZ9',dirname,'densenet169_tf.pth')
+        recovery_model=load(os.path.join(dirname,'densenet169_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
         recovery_model.eval()
@@ -441,8 +455,14 @@ def DenseNet169(include_top=True,
                 recovery_model.remove_at(-1)
                 recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
                 recovery_model.add_module('softmax', SoftMax(name='softmax'))
+        recovery_model.signature = Signature(name='DenseNetFcn')
+        if is_tensor(recovery_model._input_shape):
+            recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
+        if is_tensor(recovery_model._output_shape):
+            recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
+
         densenet169.model=recovery_model
-        densenet169.signature = get_signature(densenet169.model.forward)
+
     return densenet169
 
 
@@ -478,8 +498,8 @@ def DenseNet201(include_top=True,
 
     densenet201 =DenseNet([6, 12, 48, 32],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet201')
     if pretrained==True:
-        download_model_from_google_drive('1V2JazzdnrU64lDfE-O4bVIgFNQJ38q3J',dirname,'densenet201.pth')
-        recovery_model=load(os.path.join(dirname,'densenet201.pth'))
+        download_model_from_google_drive('1dJfgus11jXVoCLWfZqTgZ6jKKtrB70om',dirname,'densenet201_tf.pth')
+        recovery_model=load(os.path.join(dirname,'densenet201_tf.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model._name = 'densenet201'
         recovery_model.eval()
@@ -492,6 +512,11 @@ def DenseNet201(include_top=True,
                 recovery_model.remove_at(-1)
                 recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
                 recovery_model.add_module('softmax', SoftMax(name='softmax'))
+        recovery_model.signature = Signature(name='DenseNetFcn')
+        if is_tensor(recovery_model._input_shape):
+            recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
+        if is_tensor(recovery_model._output_shape):
+            recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
+
         densenet201.model=recovery_model
-        densenet201.signature = get_signature(densenet201.model.forward)
     return densenet201
