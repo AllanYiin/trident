@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -161,6 +161,7 @@ def SE_ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bi
 
 def SE_ResNet50(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -171,11 +172,14 @@ def SE_ResNet50(include_top=True,
     resnet50 =SE_ResNet(se_bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='se_resnet50')
     if pretrained==True:
         download_model_from_google_drive(model_urls['se_resnet50'],dirname,'se_resnet50.pth')
-        recovery_model=torch.load(os.path.join(dirname,'se_resnet50.pth'))
+        recovery_model=load(os.path.join(dirname,'se_resnet50.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet50'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -192,6 +196,7 @@ def SE_ResNet50(include_top=True,
 
 def SE_ResNet101(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -202,11 +207,14 @@ def SE_ResNet101(include_top=True,
     resnet101 =SE_ResNet(se_bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
     if pretrained==True:
         download_model_from_google_drive(model_urls['se_resnet101'],dirname,'se_resnet101.pth')
-        recovery_model=torch.load(os.path.join(dirname,'se_resnet101.pth'))
+        recovery_model=load(os.path.join(dirname,'se_resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet101'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -224,6 +232,7 @@ def SE_ResNet101(include_top=True,
 
 def SE_ResNet152(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -233,12 +242,15 @@ def SE_ResNet152(include_top=True,
         input_shape=(3, 224, 224)
     resnet152 =SE_ResNet(se_bottleneck [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     if pretrained==True:
-        download_model_from_google_drive(model_urls['se_resnet50'],dirname,'se_resnet152.pth')
-        recovery_model=torch.load(os.path.join(dirname,'se_resnet152.pth'))
+        download_model_from_google_drive(model_urls['se_resnet152'],dirname,'se_resnet152.pth')
+        recovery_model=load(os.path.join(dirname,'se_resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet152'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)

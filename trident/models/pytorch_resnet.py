@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device,load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -34,7 +34,7 @@ from trident.optims.pytorch_trainer import *
 __all__ = ['basic_block','bottleneck', 'ResNet','ResNet50','ResNet101','ResNet152']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device =get_device()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
 
@@ -165,10 +165,11 @@ def ResNet18(include_top=True,
 
     if pretrained == True:
         download_model_from_google_drive(model_urls['resnet18'], dirname, 'resnet18.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'resnet18.pth'))
+        recovery_model = load(os.path.join(dirname, 'resnet18.pth'))
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         recovery_model.name = 'resnet18'
         recovery_model.eval()
         recovery_model.to(_device)
@@ -200,10 +201,11 @@ def ResNet50(include_top=True,
     resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
     if pretrained==True:
         download_model_from_google_drive(model_urls['resnet50'],dirname,'resnet50.pth')
-        recovery_model=torch.load(os.path.join(dirname,'resnet50.pth'))
+        recovery_model=load(os.path.join(dirname,'resnet50.pth'))
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         recovery_model.name = 'resnet50'
         recovery_model.eval()
         recovery_model.to(_device)
@@ -236,10 +238,11 @@ def ResNet101(include_top=True,
     resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
     if pretrained==True:
         download_model_from_google_drive(model_urls['resnet101'],dirname,'resnet101.pth')
-        recovery_model=torch.load(os.path.join(dirname,'resnet101.pth'))
+        recovery_model=load(os.path.join(dirname,'resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable=False
+            recovery_model.fc.trainable=True
         recovery_model.name = 'resnet101'
         recovery_model.eval()
         recovery_model.to(_device)
@@ -272,10 +275,11 @@ def ResNet152(include_top=True,
     resnet152 =ResNet(bottleneck, [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     if pretrained==True:
         download_model_from_google_drive(model_urls['resnet152'],dirname,'resnet152.pth')
-        recovery_model=torch.load(os.path.join(dirname,'resnet152.pth'))
+        recovery_model=load(os.path.join(dirname,'resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
         if freeze_features:
             recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         recovery_model.name = 'resnet152'
         recovery_model.eval()
         recovery_model.to(_device)

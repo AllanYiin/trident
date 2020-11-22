@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device, load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -35,7 +35,8 @@ __all__ = ['efficient_block', 'EfficientNet', 'EfficientNetB0', 'EfficientNetB1'
            'EfficientNetB4', 'EfficientNetB5', 'EfficientNetB6', 'EfficientNetB7']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device =get_device()
+
 _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
 
@@ -224,7 +225,7 @@ def EfficientNet(width_coefficient, depth_coefficient, default_size, dropout_rat
     return model
 
 
-def EfficientNetB0(include_top=True, pretrained=True, input_shape=(3, 224, 224), classes=1000, **kwargs):
+def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 224, 224), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -233,8 +234,12 @@ def EfficientNetB0(include_top=True, pretrained=True, input_shape=(3, 224, 224),
                          num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1bxnoDerzoNfiZZLft4ocD3DAgx4v6aTN', dirname, 'efficientnet-b0.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b0.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b0.pth')))
         recovery_model.input_shape = input_shape
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
+
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -255,7 +260,7 @@ def EfficientNetB0(include_top=True, pretrained=True, input_shape=(3, 224, 224),
     return effb0
 
 
-def EfficientNetB1(include_top=True, pretrained=True, input_shape=(3, 240, 240), classes=1000, **kwargs):
+def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 240, 240), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -263,10 +268,13 @@ def EfficientNetB1(include_top=True, pretrained=True, input_shape=(3, 240, 240),
     effb1 = EfficientNet(1.0, 1.1, 240, 0.2, model_name='efficientnet-b1', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1F3BtnAjmDz4G9RS9Q0hqU_K7WWXCni1G', dirname, 'efficientnet-b1.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b1.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b1.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -284,7 +292,7 @@ def EfficientNetB1(include_top=True, pretrained=True, input_shape=(3, 240, 240),
     return effb1
 
 
-def EfficientNetB2(include_top=True, pretrained=True, input_shape=(3, 260, 260), classes=1000, **kwargs):
+def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 260, 260), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -292,9 +300,12 @@ def EfficientNetB2(include_top=True, pretrained=True, input_shape=(3, 260, 260),
     effb2 = EfficientNet(1.1, 1.2, 260, 0.3, model_name='efficientnet-b2', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1PjqhB7WJasF_hqOwYtSBNSXSGBY-cRLU', dirname, 'efficientnet-b2.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b2.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b2.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -312,7 +323,7 @@ def EfficientNetB2(include_top=True, pretrained=True, input_shape=(3, 260, 260),
     return effb2
 
 
-def EfficientNetB3(include_top=True, pretrained=True, input_shape=(3, 300, 300), classes=1000, **kwargs):
+def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 300, 300), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -320,9 +331,12 @@ def EfficientNetB3(include_top=True, pretrained=True, input_shape=(3, 300, 300),
     effb3 = EfficientNet(1.2, 1.4, 300, 0.3, model_name='efficientnet-b3', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('11tMxdYdFfaEREwnESO4cwjtcoEB42zB_', dirname, 'efficientnet-b3.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b3.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b3.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -340,7 +354,7 @@ def EfficientNetB3(include_top=True, pretrained=True, input_shape=(3, 300, 300),
     return effb3
 
 
-def EfficientNetB4(include_top=True, pretrained=True, input_shape=(3, 380, 380), classes=1000, **kwargs):
+def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 380, 380), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -348,9 +362,12 @@ def EfficientNetB4(include_top=True, pretrained=True, input_shape=(3, 380, 380),
     effb4 = EfficientNet(1.4, 1.8, 380, 0.4, model_name='efficientnet-b4', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1X4ZOBR_ETRHZJeffJHvCmWTTy9_aW8SP', dirname, 'efficientnet-b4.pth')
-        recovery_model =fix_layer( torch.load(sanitize_path(os.path.join(dirname, 'efficientnet-b4.pth'))))
+        recovery_model =fix_layer( load(sanitize_path(os.path.join(dirname, 'efficientnet-b4.pth'))))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -369,7 +386,7 @@ def EfficientNetB4(include_top=True, pretrained=True, input_shape=(3, 380, 380),
     return effb4
 
 
-def EfficientNetB5(include_top=True, pretrained=True, input_shape=(3, 456, 456), classes=1000, **kwargs):
+def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 456, 456), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -377,9 +394,12 @@ def EfficientNetB5(include_top=True, pretrained=True, input_shape=(3, 456, 456),
     effb5 = EfficientNet(1.6, 2.2, 456, 0.4, model_name='efficientnet-b5', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('17iTD12G9oW3jYAui84MKtdY4gjd9vpgG', dirname, 'efficientnet-b5.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b5.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b5.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -397,7 +417,7 @@ def EfficientNetB5(include_top=True, pretrained=True, input_shape=(3, 456, 456),
     return effb5
 
 
-def EfficientNetB6(include_top=True, pretrained=True, input_shape=(3, 528, 528), classes=1000, **kwargs):
+def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 528, 528), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -405,9 +425,13 @@ def EfficientNetB6(include_top=True, pretrained=True, input_shape=(3, 528, 528),
     effb6 = EfficientNet(1.8, 2.6, 528, 0.5, model_name='efficientnet-b6', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1XJrKmcmMObN_nnjP2Z-YH_BQ3img58qF', dirname, 'efficientnet-b6.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b6.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b6.pth')))
         recovery_model.input_shape = input_shape
         recovery_model.to(_device)
+
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -425,7 +449,7 @@ def EfficientNetB6(include_top=True, pretrained=True, input_shape=(3, 528, 528),
     return effb6
 
 
-def EfficientNetB7(include_top=True, pretrained=True, input_shape=(3, 600, 600), classes=1000, **kwargs):
+def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 600, 600), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -433,9 +457,12 @@ def EfficientNetB7(include_top=True, pretrained=True, input_shape=(3, 600, 600),
     effb7 = EfficientNet(2.0, 3.1, 600, 0.5, model_name='efficientnet-b7', include_top=include_top, num_classes=classes)
     if pretrained == True:
         download_model_from_google_drive('1M2DfvsNPRCWSo_CeXnUCQOR46rvOrhLl', dirname, 'efficientnet-b7.pth')
-        recovery_model = fix_layer(torch.load(os.path.join(dirname, 'efficientnet-b7.pth')))
+        recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b7.pth')))
         recovery_model.input_shape = input_shape
-        # recovery_model.to(_device)
+        recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable=False
+            recovery_model.fc.trainable = True
         if include_top == False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)

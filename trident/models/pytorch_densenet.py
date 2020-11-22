@@ -22,7 +22,7 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer,load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -297,6 +297,7 @@ class _DenseNetFcn2(Layer):
 
 def DenseNet121(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -304,6 +305,7 @@ def DenseNet121(include_top=True,
     Constructor the image classicication model with DenseNet121 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -328,11 +330,15 @@ def DenseNet121(include_top=True,
     densenet121 =DenseNet([6, 12, 24, 16],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet121')
     if pretrained==True:
         download_model_from_google_drive('16N2BECErDMRTV5JqESEBWyylXbQmKAIk',dirname,'densenet121.pth')
-        recovery_model=torch.load(os.path.join(dirname,'densenet121.pth'))
+        recovery_model=load(os.path.join(dirname,'densenet121.pth'))
         recovery_model=fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.classifier.trainable = True
+
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -352,6 +358,7 @@ def DenseNet121(include_top=True,
 
 def DenseNet161(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -359,6 +366,7 @@ def DenseNet161(include_top=True,
     Constructor the image classicication model with DenseNet161 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -383,11 +391,15 @@ def DenseNet161(include_top=True,
     densenet161 =DenseNet([6, 12, 36, 24],48,96, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet161')
     if pretrained==True:
         download_model_from_google_drive('1n3HRkdPbxKrLVua9gOCY6iJnzM8JnBau',dirname,'densenet161.pth')
-        recovery_model=torch.load(os.path.join(dirname,'densenet161.pth'))
+        recovery_model=load(os.path.join(dirname,'densenet161.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet161'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.classifier.trainable = True
+
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -407,6 +419,7 @@ def DenseNet161(include_top=True,
 
 def DenseNet169(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -414,6 +427,7 @@ def DenseNet169(include_top=True,
     Constructor the image classicication model with DenseNet169 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -437,11 +451,14 @@ def DenseNet169(include_top=True,
     densenet169 =DenseNet([6, 12, 32, 32],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet169')
     if pretrained==True:
         download_model_from_google_drive('1QV73Th0Wo4SCq9AFPVEKqnzs7BUvIG5B',dirname,'densenet169.pth')
-        recovery_model=torch.load(os.path.join(dirname,'densenet169.pth'))
+        recovery_model=load(os.path.join(dirname,'densenet169.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.classifier.trainable = True
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)
@@ -460,6 +477,7 @@ def DenseNet169(include_top=True,
 
 def DenseNet201(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -467,6 +485,7 @@ def DenseNet201(include_top=True,
     Constructor the image classicication model with DenseNet201 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -490,11 +509,15 @@ def DenseNet201(include_top=True,
     densenet201 =DenseNet([6, 12, 48, 32],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet201')
     if pretrained==True:
         download_model_from_google_drive('1V2JazzdnrU64lDfE-O4bVIgFNQJ38q3J',dirname,'densenet201.pth')
-        recovery_model=torch.load(os.path.join(dirname,'densenet201.pth'))
+        recovery_model=load(os.path.join(dirname,'densenet201.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet201'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.classifier.trainable = True
+
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)

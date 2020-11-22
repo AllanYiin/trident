@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -125,6 +125,7 @@ def MobileNet( input_shape=(3, 224, 224), classes=1000, use_bias=False, width_mu
 
 def MobileNetV2(include_top=True,
              pretrained=True,
+             freeze_features=False,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -135,10 +136,14 @@ def MobileNetV2(include_top=True,
     mob =MobileNet(input_shape=(3, 224, 224), classes=classes, use_bias=False, width_mult=1.0,round_nearest=8, include_top=include_top, model_name='mobilenet')
     if pretrained==True:
         download_model_from_google_drive('1ULenXTjOO5PdT3fHv6N8bPXEfoJAn5yL',dirname,'mobilenet_v2.pth')
-        recovery_model=torch.load(os.path.join(dirname,'mobilenet_v2.pth'))
+        recovery_model=load(os.path.join(dirname,'mobilenet_v2.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc.trainable = True
+
         if include_top==False:
             recovery_model.remove_at(-1)
             recovery_model.remove_at(-1)

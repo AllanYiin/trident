@@ -22,7 +22,7 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 from trident.backend.model import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer,load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -106,6 +106,7 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
 #vgg11 =make_vgg_layers(cfgs['A'], 1000)
 def VGG11(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -117,11 +118,16 @@ def VGG11(include_top=True,
     vgg11.input_shape =input_shape
     if pretrained==True:
         download_model_from_google_drive('1PV9-AwgD1v-JxDRzduOjjGduIR7MDhPW',dirname,'vgg11.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg11.pth'))
+        recovery_model=load(os.path.join(dirname,'vgg11.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name='vgg11'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc1.trainable = True
+            recovery_model.fc2.trainable = True
+            recovery_model.fc3.trainable = True
         if include_top==False:
             [recovery_model.remove_at(-1) for i in range(7)]
             vgg11.class_names = []
@@ -140,6 +146,7 @@ def VGG11(include_top=True,
 #vgg13 =make_vgg_layers(cfgs['B'],  1000)
 def VGG13(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -151,11 +158,17 @@ def VGG13(include_top=True,
 
     if pretrained==True:
         download_model_from_google_drive('1wx67gmQ8eHWXs2mhJmNl-t-cFNw7dJ7O',dirname,'vgg13.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg13.pth'))
+        recovery_model=load(os.path.join(dirname,'vgg13.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg13'
         recovery_model.eval()
         recovery_model.to(_device)
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc1.trainable = True
+            recovery_model.fc2.trainable = True
+            recovery_model.fc3.trainable = True
+
         if include_top==False:
             [recovery_model.remove_at(-1) for i in range(7)]
             vgg13.class_names = []
@@ -171,6 +184,7 @@ def VGG13(include_top=True,
 #vgg16 =make_vgg_layers(cfgs['D'],  1000)
 def VGG16(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -182,11 +196,15 @@ def VGG16(include_top=True,
     vgg16.input_shape =input_shape
     if pretrained==True:
         download_model_from_google_drive('1uXiH5MSy1rvxrHjW4uB9E2BHMM8b0Fwr',dirname,'vgg16.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg16.pth'))
+        recovery_model=load(os.path.join(dirname,'vgg16.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg16'
         recovery_model.eval()
-
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc1.trainable = True
+            recovery_model.fc2.trainable = True
+            recovery_model.fc3.trainable = True
         if include_top==False:
             [recovery_model.remove_at(-1) for i in range(7)]
             vgg16.class_names = []
@@ -202,6 +220,7 @@ def VGG16(include_top=True,
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)
 def VGG19(include_top=True,
              pretrained=True,
+            freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -213,10 +232,15 @@ def VGG19(include_top=True,
     vgg19.input_shape =input_shape
     if pretrained==True:
         download_model_from_google_drive('1nqQJLYMzeiUX9hji39-rrBUG42YyjhYg',dirname,'vgg19.pth')
-        recovery_model=torch.load(os.path.join(dirname,'vgg19.pth'))
+        recovery_model=load(os.path.join(dirname,'vgg19.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg19'
         recovery_model.eval()
+        if freeze_features:
+            recovery_model.trainable = False
+            recovery_model.fc1.trainable = True
+            recovery_model.fc2.trainable = True
+            recovery_model.fc3.trainable = True
 
         if include_top==False:
             [recovery_model.remove_at(-1) for i in range(7)]
