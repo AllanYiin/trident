@@ -20,7 +20,7 @@ from tensorflow.python.ops import math_ops
 from trident.backend.common import to_list, unpack_singleton, epsilon,OrderedDict,get_function,get_session
 
 
-__all__ = ['Tensor','is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -222,11 +222,12 @@ def to_numpy(x) -> np.ndarray:
         except:
             raise ValueError("Unsupported type")
 
-def to_tensor(x, dtype=None, requires_grad=None) -> Tensor:
+def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     """Convert the input `x` to a tensor of type `dtype`.
 
     Args:
 
+        device ():
         x: An object to be converted (ex.numpy array, list, tensors).
         dtype (str or tf.Dtype): The destination type or type string.
         requires_grad (None or bool): whether need grade
@@ -252,8 +253,12 @@ def to_tensor(x, dtype=None, requires_grad=None) -> Tensor:
         dtype=float32)>
 
     """
+    if device is None:
+        device=_get_device()
     if isinstance(dtype, str):
         dtype = str2dtype(dtype)
+    elif isinstance(x, np.ndarray) and (x.dtype==np.int64 or x.dtype==np.int32):
+        dtype = tf.int64
     elif isinstance(x, (tuple, list)) and all([isinstance(item, numbers.Integral)  for item in x]):
         dtype = str2dtype('int')
         x=to_numpy(x)
@@ -264,7 +269,12 @@ def to_tensor(x, dtype=None, requires_grad=None) -> Tensor:
             dtype = x.dtype
         else:
             dtype = tf.float32
-    return tf.convert_to_tensor(x, dtype=dtype)
+    with tf.device(device):
+        return tf.convert_to_tensor(x, dtype=dtype)
+
+
+
+
     # if isinstance(x, int):
     #     x= tf.constant(value=x, dtype=tf.int32)
     # elif is_tensor(x):
@@ -337,6 +347,10 @@ def int_shape(x):
     """
     return x.get_shape().as_list()
 
+
+def tensor_to_shape(x:Tensor):
+    with tf.device( '/cpu:0'):
+        return cast(to_tensor(x.shape.as_list()[1:]),tf.int32)
 
 
 def is_sparse(x):
@@ -821,14 +835,14 @@ def topk(x: Tensor,  k=1, name='topk') -> Tensor:
 def maximum(x: Tensor, other: (Tensor, int, float)) -> Tensor:
     if isinstance(other, Tensor):
         return tf.maximum(x, other)
-    elif isinstance(other, (int, float)):
+    elif isinstance(other, numbers.Number):
         return clip(x, min=other)
 
 @numpy_compatible
 def minimum(x: Tensor, other: (Tensor, int, float)) -> Tensor:
     if isinstance(other, Tensor):
         return tf.minimum(x, other)
-    elif isinstance(other, (int, float)):
+    elif isinstance(other, numbers.Number):
         return clip(x, max=other)
 
 
@@ -2059,7 +2073,9 @@ def max(*args, **kwargs):
         axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
         return  tf.math.reduce_max(allargs[0], axis=axis, keepdims=keepdims, name='reduce_max')
-    elif len(args) > 1 and is_tensor(args[0]) and all([is_tensor(arg) or isinstance(arg,(np.ndarray,float,int))for arg in args]):
+    elif len(args) ==2 and is_tensor(args[0]) and isinstance(args[1],numbers.Number):
+        return tf.clip_by_value(args[0], args[1],np.inf)
+    elif len(args) > 1 and is_tensor(args[0]) and all([is_tensor(arg) or isinstance(arg,(np.ndarray,numbers.Number))for arg in args]):
         new_args = [to_tensor(a).float() for a in args]
         return tf.math.maximum(*new_args, name='maximum')
     else:
@@ -2086,7 +2102,7 @@ def min(*args, **kwargs):
         axis = kwargs.get('axis', kwargs.get('dim', None))
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
         return tf.math.reduce_min(allargs[0], axis=axis, keepdims=keepdims, name='reduce_min')
-    elif len(args) > 1 and is_tensor(args[0]) and all([is_tensor(arg) or isinstance(arg, (np.ndarray, float, int)) for arg in args]):
+    elif len(args) > 1 and is_tensor(args[0]) and all([is_tensor(arg) or isinstance(arg, (np.ndarray,numbers.Number)) for arg in args]):
         new_args = [to_tensor(a).float() for a in args]
         return tf.math.minimum(*new_args, name='minimum')
     else:

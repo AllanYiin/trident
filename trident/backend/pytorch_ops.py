@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import numbers
 import builtins
 import math
 import random
@@ -17,7 +17,7 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 
-__all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -249,27 +249,26 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
 
         return x
     else:
-
         if isinstance(x, int):
             if dtype is None:
                 dtype = torch.int64
             t= torch.tensor([x]).int().to(_get_device()) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(_get_device())
             if dtype is not None:
                 t=cast(t,dtype)
-            return t
+            return t.to(device)
         elif isinstance(x, float):
             if dtype is None:
                 dtype = torch.float32
-            return torch.tensor([x],dtype=dtype).to(_get_device()) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to( _get_device())
+            return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
         elif isinstance(x, (list, tuple)):
-            if isinstance(x[0], int):
+            if all([isinstance(item,numbers.Integral) for item in x]):
                 if dtype is None:
                     dtype = torch.int64
-                x = torch.tensor(x).int() if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int()
+                x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
             else:
                 if dtype is None:
                     dtype = torch.float32
-                x = torch.tensor(x,dtype=dtype) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad)
+                x = torch.tensor(x,dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad).to(device)
             x = x.to(_get_device())
             return x
         elif isinstance(x, np.ndarray):
@@ -281,14 +280,14 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
                 if dtype is None:
                     dtype = torch.float32
                 x = x.type(dtype)
-            x = x.to(_get_device())
+            x = x.to(device)
             if requires_grad == False:
                 x.requires_grad = False
             elif requires_grad == True:
                 x.requires_grad = True
-            return x
+            return x.to(device)
         else:
-            return x
+            return x.to(device)
 
 def copy(x: Tensor):
     return x.clone()
@@ -333,7 +332,8 @@ def int_shape(x: Tensor):
     """
     return tuple([item for item in  x.shape])
 
-
+def tensor_to_shape(x:Tensor):
+    return to_tensor(to_numpy(x.shape)[1:]).int()
 
 def is_sparse(x):
     """ Check whether the tensor is sparse
