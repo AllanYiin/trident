@@ -131,7 +131,9 @@ class _ClassificationLoss(Loss):
         elif ndim(output) > 2 and len(output) == len(target):
             shp = int_shape(output)
             output = output.reshape((shp[0], -1, shp[-1]))
-            target = target.reshape((shp[0], -1))
+            target = target.reshape((shp[0], -1, shp[-1]))
+            return output, target
+        elif ndim(output) == 2 and len(output) == len(target):
             return output, target
         else:
             raise ValueError('output and target have diffent elements.')
