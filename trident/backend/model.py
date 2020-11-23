@@ -52,7 +52,7 @@ begin_time = last_time
 class ModelBase(object):
     def __init__(self, inputs=None,  input_shape=None,output=None, name='', **kwargs):
         if isinstance(inputs,tuple) and isinstance(inputs[0],int):
-            input_shape.inputs=inputs,input_shape
+            input_shape,inputs=inputs,input_shape
         self.batch_index = 0
         self.filter_index = 1
         self.inputs = OrderedDict()
@@ -149,7 +149,11 @@ class ModelBase(object):
 
     @property
     def outputs(self):
-        return self._outputs
+        if self._model is not None and isinstance(self._model ,Layer):
+            if len(self._outputs)==1 and is_tensor(self._model.output_shape)  and not assert_input_compatibility(self._outputs.value_list[0],self._model.output_shape):
+                self._outputs[self._outputs.key_list[0]]=TensorSpec(shape=self._model.output_shape,name=self._outputs.key_list[0])
+
+            return self._outputs
 
     @outputs.setter
     def outputs(self, value):
@@ -219,9 +223,9 @@ class ModelBase(object):
 
 
     def update_signature(self, arg_names):
-        if self.model is not None and hasattr(self.model, 'signature'):
-            self._signature = self.model.signature
-        if self._signature is None or len(self._signature.inputs.key_list)+len(self._signature.outputs.key_list) == len(arg_names):
+        if self.model is not None and hasattr(self.model, 'signature') and self.signature != self.model.signature:
+            self.signature = self.model.signature
+        if self.signature is None or len(self.signature.inputs.key_list)+len(self.signature.outputs.key_list) == len(arg_names):
 
             new_inputs =  OrderedDict()
             for i in range(len(arg_names[:len(self.inputs)])):
@@ -243,16 +247,15 @@ class ModelBase(object):
                 new_target[target_arg] = targets.value_list[0]
             self._outputs = new_outputs
             self._targets = new_target
-            if self.model is not None:
-                self._signature = get_signature(self._model.forward, 'model')
-                self._signature.inputs = copy.deepcopy(self.inputs)
-                self._signature.outputs = copy.deepcopy(self._outputs)
-                self.model.signature=self._signature
+            # if self.model is not None:
+            #     self.signature = get_signature(self._model.forward, 'model')
+            #     self.signature.inputs = copy.deepcopy(self.inputs)
+            #     self.signature.outputs = copy.deepcopy(self._outputs)
 
-            print(self._model.signature)
+            print(self.signature)
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
-        elif len(self._signature) != len(arg_names):
+        elif len(self.signature) != len(arg_names):
             raise ValueError('data deed and arg_names should be the same length')
 
 
@@ -293,7 +296,7 @@ class ModelBase(object):
             img_data = reverse_image_backend_adaption(img_data)
         return img_data
 
-    def _initial_graph(self, inputs=None, output=None, input_shape=None):
+    def _initial_graph(self, inputs=None, input_shape=None, output=None):
         pass
 
     def complie(self,optimizer="Adam",
@@ -329,6 +332,10 @@ class ModelBase(object):
 
 
     def __getattr__(self, name):
+        if name == 'signature' or name == '_signature':
+            _model = self.__dict__['_model']
+            if _model is not None and isinstance(_model, Layer):
+                return _model.signature
         if 'training_context' in self.__dict__:
             if name in  self.__dict__['training_context']:
                 return  self.__dict__['training_context'][name]
@@ -352,6 +359,10 @@ class ModelBase(object):
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __setattr__(self, name, value):
+        if name=='signature' or name=='_signature':
+            _model = self.__dict__['_model']
+            if _model is not None and isinstance(_model ,Layer):
+                object.__setattr__(_model, "_" + 'signature', value)
         if 'training_context' in self.__dict__ and name in self.__dict__['training_context']:
             self.__dict__['training_context'][name]=value
         elif '_model' in self.__dict__ and self.__dict__['_model']  :
@@ -656,7 +667,7 @@ class ModelBase(object):
 
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
-                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False):
+                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,is_out_sample_evaluation=False,**kwargs):
         try:
             self.training_context['current_epoch'] = current_epoch
             self.training_context['current_batch'] = current_batch
@@ -837,7 +848,7 @@ class ModelBase(object):
 
 
 
-                if test_data is not None and len(test_data) > 0 and  self.training_context['stop_update']<1 :
+                if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and  self.training_context['stop_update']<1 :
                     tmp_output = try_map_args_and_call(self._model, test_data, self.training_context['data_feed'])
                     if isinstance(tmp_output, (list, tuple)):
                         for i in range(len(tmp_output)):
@@ -866,7 +877,7 @@ class ModelBase(object):
                     self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_metric)))
 
 
-                    if test_data is not None and len(test_data) > 0 and collect_history!=False :
+                    if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and collect_history!=False :
                         this_out_metric = try_map_args_and_call(v, test_data , self.training_context['data_feed'])
                         self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_out_metric)))
 
@@ -905,11 +916,20 @@ class ModelBase(object):
                 else:
                     self.training_context['print_batch_progress_frequency'] += 1
 
-                if test_data is not None and len(test_data) > 0:
-                    print(self.training_context['model_name']+': out-of-sample evaluation: ',','.join(['{0}: {1:<8.3%}'.format(k, v[-1][-1]) for k, v in self.training_context['out_sample_metrics'].items()]))
+                if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0:
+                    verbose=[]
+                    for k in self.training_context['out_sample_metrics'].get_keys():
+                        test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
+                        metric_value= test_values[-1]
+                        history_metric_value=np.array(test_values).mean()
 
-
-
+                        format_string = '.3%'
+                        if history_metric_value > 3:
+                            format_string = '.3f'
+                        elif history_metric_value < 1e-3:
+                            format_string = '.3e'
+                        verbose.append('{0}: {1:<8{2}}'.format(k, metric_value, format_string))
+                    print(self.training_context['model_name'] + ': out-of-sample evaluation: ',','.join(verbose))
 
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
                 self.do_on_epoch_end()
@@ -987,10 +1007,18 @@ class ModelBase(object):
         return self
 
     def cpu(self):
-       return NotImplemented
+       if self._model is not None and isinstance(self._model,Layer):
+           set_device('cpu')
+       elif self._model is not None and isinstance(self._model,Tensor):
+           self._model.cpu()
 
     def cuda(self):
-        return NotImplemented
+        if self._model is not None and isinstance(self._model, Layer):
+            set_device('cuda')
+        elif self._model is not None and isinstance(self._model, Tensor):
+            self._model.cuda()
+    def gpu(self):
+        self.cuda()
 
     #
     # def fit(self, x = None, y = None, batch_size = 8, epochs = 10,
@@ -1052,6 +1080,8 @@ class HistoryBase(OrderedDict):
     def reset(self):
         for i in range(len(self)):
             self.value_list[i]=[]
+    def get_keys(self):
+        return self.key_list
 
     def get_series(self,data_name):
         if data_name in self:

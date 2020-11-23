@@ -129,9 +129,10 @@ class Model(ModelBase):
                 self._model = output
                 self.signature=None
                 if self.signature is not None and hasattr(self.signature,"outputs"):
-                    self._outputs['output'] = self.signature.outputs.value_list[0]
+                    self._outputs= OrderedDict()
                     self._targets = OrderedDict()
                     for name,spec in self.signature.outputs.item_list:
+                        self._outputs[name]=spec
                         self._targets[name.replace("output","target")]=spec
 
             else:
@@ -655,86 +656,96 @@ class Model(ModelBase):
             print(temp)
 
     def do_on_data_received(self, train_data, test_data):
-        # if 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0:
-        #     try:
-        #         data_feed = OrderedDict()
-        #         inshapes = self.inputs.value_list
-        #         outshapes = self.targets.value_list
-        #         available_fields = copy.deepcopy(train_data.key_list)
-        #         if train_data is not None:
-        #             # check input
-        #             for arg in self.signature.inputs.key_list:
-        #                 data_feed[arg] = ''
-        #             for arg in self.signature.inputs.key_list:
-        #                 if len(train_data) == 1:
-        #                     data_feed[arg] = train_data.key_list[0]
-        #                     available_fields.remove(train_data.key_list[0])
-        #                 elif arg in available_fields:
-        #                     data_feed[arg] = arg
-        #                     available_fields.remove(arg)
-        #                 elif arg in ['x', 'input'] and 'data' in available_fields:
-        #                     data_feed[arg] = 'data'
-        #                     available_fields.remove('data')
-        #                 elif arg in ['x', 'input'] and 'image' in available_fields:
-        #                     data_feed[arg] = 'image'
-        #                     available_fields.remove('image')
-        #                 elif arg == 'x' and 'input' in available_fields:
-        #                     data_feed[arg] = 'input'
-        #                     available_fields.remove('input')
-        #                 elif len(self.signature.inputs.key_list) == 1:
-        #                     for item in available_fields:
-        #                         data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
-        #                         if 'target' not in item and 'output' != item and data_shape == inshapes[0]:
-        #                             data_feed[arg] = item
-        #                             available_fields.remove(item)
-        #                             break
-        #                 else:
-        #                     Warning(
-        #                         'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-        #                             arg))
-        #             #
-        #             # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
-        #             #     self.training_context['data_feed'] = data_feed
-        #
-        #             # check for target
-        #             if len(available_fields) > 0:
-        #                 for i in range(len(self.targets)):
-        #                     arg = self.targets.key_list[i]
-        #                     data_feed[arg] = ''
-        #                     if len(train_data) == 1:
-        #                         data_feed[self.targets.key_list[0]] = train_data.key_list[0]
-        #                     elif arg in available_fields:
-        #                         data_feed[arg] = arg
-        #                         available_fields.remove(arg)
-        #                     elif arg == 'target' and 'label' in available_fields:
-        #                         data_feed[arg] = 'label'
-        #                         available_fields.remove('label')
-        #                     elif arg == 'target' and len(available_fields) == 1:
-        #                         data_feed[arg] = available_fields[0]
-        #                         available_fields.remove(available_fields[0])
-        #                     elif len(available_fields) > 0:
-        #                         target_shape = outshapes[i]
-        #                         for item in available_fields:
-        #                             data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
-        #                             if target_shape == data_shape:
-        #                                 data_feed[arg] = item
-        #                                 available_fields.remove(item)
-        #                             elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-        #                                     train_data[item].dtype)) and target_shape[:-1] == data_shape:
-        #                                 data_feed[arg] = item
-        #                                 available_fields.remove(item)
-        #                             else:
-        #                                 Warning(
-        #                                     'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-        #                                         arg))
-        #                 if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
-        #                     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
-        #
-        #             self.training_context['data_feed'] = data_feed
-        #             print('data_feed', data_feed)
-        #     except:
-        #         PrintException()
-        # convert to tensor
+        if train_data is None and test_data is None:
+            return self.training_context['train_data'], self.training_context['test_data']
+        if 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or self.training_context['current_batch'] + self.training_context[
+            'current_epoch'] == 0:
+            try:
+
+                data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
+                inshapes = self.inputs.value_list
+                outshapes = self.targets.value_list
+                available_fields = copy.deepcopy(train_data.key_list)
+                if train_data is not None:
+                    # check input
+                    for arg in self._model.signature.inputs.key_list:
+                        if arg in data_feed and data_feed[arg] in available_fields:
+                            available_fields.remove(data_feed[arg])
+                        else:
+                            data_feed[arg] = ''
+                            if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
+                                data_feed[arg] = train_data.key_list[0]
+                                available_fields.remove(train_data.key_list[0])
+                            elif arg in available_fields:
+                                data_feed[arg] = arg
+                                available_fields.remove(arg)
+                            elif arg in ['x', 'input'] and 'data' in available_fields:
+                                data_feed[arg] = 'data'
+                                available_fields.remove('data')
+                            elif arg in ['x', 'input'] and 'image' in available_fields:
+                                data_feed[arg] = 'image'
+                                available_fields.remove('image')
+                            elif arg == 'x' and 'input' in available_fields:
+                                data_feed[arg] = 'input'
+                                available_fields.remove('input')
+                            elif len(self._model.signature.inputs.key_list) == 1:
+                                for item in available_fields:
+                                    data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
+                                    if 'target' not in item and 'output' != item and data_shape == inshapes[0]:
+                                        data_feed[arg] = item
+                                        available_fields.remove(item)
+                                        break
+                            else:
+                                Warning(
+                                    'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                        arg))
+
+                    # check for target
+                    if len(available_fields) > 0:
+                        if len(available_fields) == 1:
+                            data_feed['target'] = available_fields[0]
+                        else:
+                            for i in range(len(self.targets)):
+                                arg = self.targets.key_list[i]
+                                data_feed[arg] = ''
+                                if len(train_data) == 1:
+                                    data_feed[self.targets.key_list[0]] = train_data.key_list[0]
+                                elif arg in available_fields:
+                                    data_feed[arg] = arg
+                                    available_fields.remove(arg)
+                                elif arg == 'target' and 'label' in available_fields:
+                                    data_feed[arg] = 'label'
+                                    available_fields.remove('label')
+                                elif arg == 'target' and len(available_fields) == 1:
+                                    data_feed[arg] = available_fields[0]
+                                    available_fields.remove(available_fields[0])
+                                elif len(available_fields) > 0:
+                                    target_shape = outshapes[i]
+                                    for item in available_fields:
+                                        data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
+                                        if target_shape == data_shape:
+                                            data_feed[arg] = item
+                                            available_fields.remove(item)
+                                        elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
+                                                train_data[item].dtype)) and target_shape[:-1] == data_shape:
+                                            data_feed[arg] = item
+                                            available_fields.remove(item)
+                                        else:
+                                            Warning(
+                                                'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                                    arg))
+                            # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
+                            #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
+
+                    # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
+                    #     self.training_context['data_feed'] = data_feed
+                    # elif '' not in data_feed.value_list:
+                    self.training_context['data_feed'] = data_feed
+
+                    print('data_feed', data_feed)
+            except:
+                PrintException()
+
         try:
             data_feed = self.training_context['data_feed']
             input_list = [data_feed[arg] for arg in self.signature.inputs.key_list]
@@ -941,7 +952,7 @@ class Model(ModelBase):
 
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
-                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False):
+                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,is_out_sample_evaluation=False,**kwargs):
         try:
             self.training_context['current_epoch'] = current_epoch
             self.training_context['current_batch'] = current_batch
@@ -1118,7 +1129,7 @@ class Model(ModelBase):
                 elif is_tensor(self._model):
                     self.log_weight(weghts=self._model)
 
-            if test_data is not None and len(test_data) > 0 and self.training_context['stop_update'] < 1:
+            if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and self.training_context['stop_update'] < 1:
                 tmp_output = try_map_args_and_call(self._model, test_data, self.training_context['data_feed'])
                 if isinstance(tmp_output, (list, tuple)):
                     for i in range(len(tmp_output)):
@@ -1142,7 +1153,7 @@ class Model(ModelBase):
                 this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
                 self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_metric)))
 
-                if test_data is not None and len(test_data) > 0 and collect_history != False:
+                if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and collect_history != False:
                     this_out_metric = try_map_args_and_call(v, test_data, self.training_context['data_feed'])
                     self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_out_metric)))
 
@@ -1180,9 +1191,21 @@ class Model(ModelBase):
             else:
                 self.training_context['print_batch_progress_frequency'] += 1
 
-            if test_data is not None and len(test_data) > 0:
-                print(self.training_context['model_name'] + ': out-of-sample evaluation: ',
-                      ','.join(['{0}: {1:<8.3%}'.format(k, v[-1]) for k, v in self.training_context['out_sample_metrics'].items()]))
+            if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0:
+                verbose=[]
+                for k in self.training_context['out_sample_metrics'].get_keys():
+                    test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
+                    metric_value = test_values[-1]
+                    history_metric_value = np.array(test_values).mean()
+
+                    format_string = '.3%'
+                    if history_metric_value > 3:
+                        format_string = '.3f'
+                    elif history_metric_value < 1e-3:
+                        format_string = '.3e'
+                    verbose.append('{0}: {1:<8{2}}'.format(k, metric_value, format_string))
+                print(self.training_context['model_name'] + ': out-of-sample evaluation: ', ','.join(verbose))
+
 
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
                 self.do_on_epoch_end()
