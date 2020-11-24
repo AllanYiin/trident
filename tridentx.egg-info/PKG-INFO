@@ -1,20 +1,69 @@
 Metadata-Version: 2.1
 Name: tridentx
-Version: 0.5.4
-Summary: Multiverse for Deep Learning Developers without Pitfall
+Version: 0.6.3
+Summary: Make pytorch and tensorflow two become one.
 Home-page: UNKNOWN
 Author: Allan Yiin
-Author-email: allan@datadecision.ai
+Author-email: allanyiin.ai@gamil.com
 License: MIT
 Download-URL: https://test.pypi.org/project/tridentx
 Description: ![trident](trident_logo.png)
-        Multiverses for Deep Learning Developers without Pitfall
-        
+        **Make PyTorch and TensorFlow two become one.**
+          
         
         | version| pytorch| tensorflow |
         |-------------|-------------|---------------|
-        | [![version](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | [![pytorch](https://img.shields.io/static/v1?label=&message=>1.2&color=377EF0&style=for-the-badge)](https://cntk.ai/nightly-windows.html) | [![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0rc0&color=377EF0&style=for-the-badge)](https://cntk.ai/nightly-linux.html) |
+        | [![version](https://img.shields.io/static/v1?label=&message=0.6.3&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | [![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge)](https://cntk.ai/nightly-windows.html) | [![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge)](https://cntk.ai/nightly-linux.html) |
         
+        **Trident** is a deep learning dynamic graph api based on both PyTorch and TensorFlow (pure eager mode, no Keras dependency).     
+        
+        **Trident** 是基於PyTorch以及TensorFlow (純Eager模式，無Keras依賴)之深度學習動態計算圖api。. 
+        
+        ## Key Features  
+        - [Policy Gradient (PG)](https://papers.nips.cc/paper/1713-policy-gradient-methods-for-reinforcemen
+        
+        ## How To Use
+        
+        #### Step 0: Install
+        
+        Simple installation from PyPI
+        ```bash
+        pip install tridentx  --upgrade
+        ```
+        
+        #### Step 0: Add these imports
+        
+        ```python
+        import os
+        os.environ['TRIDENT_BACKEND'] = 'pytorch'
+        import trident as T
+        from trident import *
+        from trident.models.pytorch_densenet import DenseNetFcn
+        ```
+        
+        ## Key Features
+        
+        * Scale your models to run on any hardware (CPU, GPUs, TPUs) without changing your model
+        
+        ---
+        
+        ## Licence
+        
+        Please observe the Apache 2.0 license that is listed in this repository. In addition
+        the Lightning framework is Patent Pending.
+        
+        ## BibTeX
+        If you want to cite the framework feel free to use this:
+        
+        ```bibtex
+        @article{AllanYiin2020Trident,
+          title={Trident},
+          author={AllanYiin, Taiwan},
+          journal={GitHub. Note: https://github.com/AllanYiin/trident},
+          volume={1},
+          year={2020}
+        }
+        ```
 Platform: UNKNOWN
 Classifier: Development Status :: 4 - Beta
 Classifier: Intended Audience :: Developers

@@ -638,7 +638,7 @@ class ModelBase(object):
         self.training_context['time_batch_progress'] = progress_end
         progress_bar(step_time,self.training_context['current_batch'], self.training_context['total_batch'],
                  'Loss: {0:<8.5f}| {1} | learning rate: {2:<10.3e}| epoch: {3}'.format(loss_value, ','.join(metric_strings), self.training_context['current_lr'],
-                     self.training_context['current_epoch']), name=self.name)
+                     self.training_context['current_epoch']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
     def print_epoch_progress(self, print_epoch_progress_frequency):
 
@@ -663,7 +663,7 @@ class ModelBase(object):
         step_time = progress_end-progress_start
         self.training_context['time_epoch_progress']=progress_end
         progress_bar(step_time,self.training_context['current_epoch'], self.training_context['total_epoch'],
-                     'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.3e}'.format(loss_value, ','.join(metric_strings), self.training_context['current_lr']), name=self.name)
+                     'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.3e}'.format(loss_value, ','.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
