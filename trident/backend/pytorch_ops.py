@@ -99,10 +99,10 @@ def numpy_compatible(func):
             return y
 
     return wrapper
-
-
-def _get_device():
-    return get_session().device
+#
+#
+# def get_session_value('device'):
+#     return get_session().device
 
 
 ############################
@@ -235,9 +235,9 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         if isinstance(x, Tensor):
             device ='cuda' if x.is_cuda else 'cpu'
         else:
-            device = _get_device()
+            device = get_session_value('device')
     else:
-        device = _get_device()
+        device = get_session_value('device')
     if isinstance(x, Tensor):
         x = x.to(device)
         if dtype is None:
@@ -252,24 +252,24 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         if isinstance(x, int):
             if dtype is None:
                 dtype = torch.int64
-            t= torch.tensor([x]).int().to(_get_device()) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(_get_device())
+            t= torch.tensor([x]).int().to(get_session_value('device')) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(get_session_value('device'))
             if dtype is not None:
                 t=cast(t,dtype)
-            return t.to(device)
+            return t.to(get_session_value('device'))
         elif isinstance(x, float):
             if dtype is None:
                 dtype = torch.float32
-            return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
+            return torch.tensor([x],dtype=dtype).to(get_session_value('device')) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
         elif isinstance(x, (list, tuple)):
             if all([isinstance(item,numbers.Integral) for item in x]):
                 if dtype is None:
                     dtype = torch.int64
-                x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
+                x = torch.tensor(x).int().to(get_session_value('device')) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
             else:
                 if dtype is None:
                     dtype = torch.float32
                 x = torch.tensor(x,dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad).to(device)
-            x = x.to(_get_device())
+            x = x.to(get_session_value('device'))
             return x
         elif isinstance(x, np.ndarray):
             npdtype = x.dtype
@@ -332,8 +332,11 @@ def int_shape(x: Tensor):
     """
     return tuple([item for item in  x.shape])
 
-def tensor_to_shape(x:Tensor):
-    return to_tensor(to_numpy(x.shape)[1:]).int()
+def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
+    if need_exclude_batch_axis:
+        return to_tensor(to_numpy(x.shape)[1:]).int()
+    else:
+        return to_tensor(to_numpy(x.shape)).int()
 
 def is_sparse(x):
     """ Check whether the tensor is sparse
@@ -587,8 +590,11 @@ def less(left: Tensor, right: (Tensor, np.ndarray, float, int)):
        tensor([1., 0., 0.])
 
     """
-
-    return left.lt(right).to(left.dtype)
+    if isinstance(right,numbers.Integral):
+        right=to_tensor(builtins.float(right))
+    if isinstance(right, np.ndarray):
+        right = to_tensor(right)
+    return cast(left.lt(right),left.dtype)
 
 
 @numpy_compatible
@@ -606,9 +612,16 @@ def equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([0., 1., 0.])
         >>> equal(to_tensor([-1,0,1]), 1)
         tensor([0., 0., 1.])
+        >>> equal(to_tensor([1,2,3]), 3)
+        tensor([0., 0., 1.])
 
     """
-    return left.eq(right).to(left.dtype)
+    if isinstance(right,numbers.Integral):
+        right=to_tensor(builtins.float(right))
+    if isinstance(right, np.ndarray):
+        right = to_tensor(right)
+    return cast(left.eq(right),left.dtype)
+
 
 
 @numpy_compatible
@@ -628,7 +641,11 @@ def greater(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([0., 0., 1.])
 
     """
-    return left.gt(right).to(left.dtype)
+    if isinstance(right,numbers.Integral):
+        right=to_tensor(builtins.float(right))
+    if isinstance(right, np.ndarray):
+        right = to_tensor(right)
+    return cast(left.gt(right),left.dtype)
 
 
 @numpy_compatible
@@ -649,7 +666,11 @@ def greater_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([0., 1., 1.])
 
     """
-    return left.ge(right).to(left.dtype)
+    if isinstance(right,numbers.Integral):
+        right=to_tensor(builtins.float(right))
+    if isinstance(right, np.ndarray):
+        right = to_tensor(right)
+    return cast(left.ge(right),left.dtype)
 
 
 @numpy_compatible
@@ -670,7 +691,11 @@ def not_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([1., 0., 1.])
 
     """
-    return 1 - (left.eq(right).to(left.dtype))
+    if isinstance(right,numbers.Integral):
+        right=to_tensor(builtins.float(right))
+    if isinstance(right, np.ndarray):
+        right = to_tensor(right)
+    return 1 - (cast(left.eq(right),left.dtype))
 
 
 @numpy_compatible
@@ -691,7 +716,11 @@ def less_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([1., 1., 0.])
 
     """
-    return left.le(right).to(left.dtype)
+    if isinstance(right,numbers.Integral):
+        right=to_tensor(builtins.float(right))
+    if isinstance(right, np.ndarray):
+        right = to_tensor(right)
+    return cast(left.le(right),left.dtype)
 
 
 @numpy_compatible
@@ -1679,8 +1708,7 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
 
     Args:
         x (Tensor): input tensor.
-        axis: The dimensions to reduce. If `None` (the default), reduces all dimensions. Must be in the range `[-rank(input_tensor),
-        rank(input_tensor)`.
+        axis: The dimensions to reduce. If `None` (the default), reduces all dimensions. Must be in the range `[-rank(input_tensor),rank(input_tensor)]`.
         keepdims: If true, retains reduced dimensions with length 1.
 
     Returns:
@@ -2789,7 +2817,7 @@ def ones(shape, dtype=torch.float32, requires_grad=False):
 
     {{np_implementation}}
     """
-    return torch.ones(shape, dtype=dtype, requires_grad=requires_grad).to(_get_device())
+    return torch.ones(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 @numpy_compatible
 def ones_like(a, dtype=torch.float32, requires_grad=False):
@@ -2811,7 +2839,7 @@ def ones_like(a, dtype=torch.float32, requires_grad=False):
 
     {{np_implementation}}
     """
-    return torch.ones(a.shape, dtype=dtype, requires_grad=requires_grad).to(_get_device())
+    return torch.ones(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
 def zeros(shape, dtype=torch.float32, requires_grad=False):
@@ -2833,7 +2861,7 @@ def zeros(shape, dtype=torch.float32, requires_grad=False):
 
     {{np_implementation}}
     """
-    return torch.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(_get_device())
+    return torch.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 @numpy_compatible
 def zeros_like(a, dtype=torch.float32, requires_grad=False):
@@ -2855,7 +2883,7 @@ def zeros_like(a, dtype=torch.float32, requires_grad=False):
 
     {{np_implementation}}
     """
-    return torch.zeros(a.shape, dtype=dtype, requires_grad=requires_grad).to(_get_device())
+    return torch.zeros(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
 def eye(shape, dtype=torch.float32, requires_grad=None):
@@ -2877,7 +2905,7 @@ def eye(shape, dtype=torch.float32, requires_grad=None):
 
     """
     if len(shape) == 2:
-        return torch.eye(shape[0], shape[1], dtype=dtype, requires_grad=requires_grad).to(_get_device())
+        return torch.eye(shape[0], shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     else:
         raise ValueError('input tensor must have exactly two axe.')
 
@@ -2903,7 +2931,7 @@ def eye_like(a, dtype=torch.float32, requires_grad=False):
 
     """
     if a.ndim == 2:
-        return torch.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad).to(_get_device())
+        return torch.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     else:
         raise ValueError('input tensor must have exactly two axe.')
 
@@ -2951,11 +2979,11 @@ def arange(*args, dtype=torch.int32, requires_grad=False):
 
     """
     if len(args) == 1:
-        return torch.arange(end=args[0], dtype=dtype, requires_grad=requires_grad).to(_get_device())
+        return torch.arange(end=args[0], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     elif len(args) == 2:
-        return torch.arange(start=args[0], end=args[1], dtype=dtype, requires_grad=requires_grad).to(_get_device())
+        return torch.arange(start=args[0], end=args[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     elif len(args) == 3:
-        return torch.arange(start=args[0], end=args[1], step=args[2], dtype=dtype, requires_grad=requires_grad).to(_get_device())
+        return torch.arange(start=args[0], end=args[1], step=args[2], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     else:
         raise ValueError('only maximum  3 args in arange function ')
 
@@ -3004,14 +3032,14 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     >>> grid1.shape
     torch.Size([3, 2, 2])
     """
-    xs = torch.linspace(0, int(x - 1), int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
-    ys = torch.linspace(0, int(y - 1), int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
+    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
+    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(0, 1, int(x), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
-        ys = torch.linspace(0, 1, int(y), device=_get_device(), dtype=torch.float, requires_grad=requires_grad)
+        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
+        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
     grid_x, grid_y = torch.meshgrid([xs, ys])
 
-    grid = torch.stack([grid_y, grid_x], -1).to(_get_device())
+    grid = torch.stack([grid_y, grid_x], -1).to(get_session_value('device'))
     return grid
 
 

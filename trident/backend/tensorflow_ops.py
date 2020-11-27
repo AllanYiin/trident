@@ -348,9 +348,11 @@ def int_shape(x):
     return x.get_shape().as_list()
 
 
-def tensor_to_shape(x:Tensor):
-    with tf.device( '/cpu:0'):
+def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
+    if need_exclude_batch_axis:
         return cast(to_tensor(x.shape.as_list()[1:]),tf.int32)
+    else:
+        return cast(to_tensor(x.shape.as_list()), tf.int32)
 
 
 def is_sparse(x):
@@ -476,7 +478,7 @@ def cuda(x, device=None):
     else:
         return x
 
-def to(x, args):
+def to(x, *args):
     if 'cpu' in args:
         return cpu(x)
     elif 'gpu' in args or 'cuda' in args:
