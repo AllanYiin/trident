@@ -159,6 +159,11 @@ class Model(ModelBase):
                 if isinstance(out, Tensor):
                     self._outputs['output'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index+1:]).to('int'),name='output')
                     self._targets['target'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index+1:]).to('int'),name='target')
+                elif isinstance(out, OrderedDict):
+                    for k,v in out.items():
+                        self._outputs[k] = TensorSpec(shape=tensor_to_shape(v),name=k)
+                        self._targets[k.replace('output','target').replace('student','teatcher')] = TensorSpec(shape=tensor_to_shape(v), name=k.replace('output','target').replace('student','teatcher'))
+
                 else:
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]).to('int'),name='output_{0}'.format(i))
@@ -1012,7 +1017,9 @@ class Model(ModelBase):
                     if isinstance(output, (list, tuple)):
                         for i in range(len(output)):
                             train_data[self.outputs.key_list[i]] = output[i]
-
+                    elif isinstance(output, (OrderedDict)):
+                        for k,v in output.items():
+                            train_data[k] = v
                     elif 'tensor' in output.__class__.__name__.lower():
                         train_data[self.outputs.key_list[0]] = output
                         if self.use_output_as_loss == True:

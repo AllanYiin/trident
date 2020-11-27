@@ -38,7 +38,7 @@ from trident.backend.tensorflow_ops import *
 from trident.backend.tensorspec import *
 from trident.data.utils import pickle_it
 
-__all__ = ['set_device', 'Layer', 'get_device', 'get_flops', 'Sequential', 'summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
+__all__ = ['set_device', 'Layer', 'get_device', 'get_flops', 'Sequential','ModuleList','ModuleDict','summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
 
 _FUN_NAMES = [
     ('float', tops.float),
@@ -660,7 +660,7 @@ class Layer(tf.Module):
         :func:`forward` is called.
 
         Returns:
-            :class:`torch.utils.hooks.RemovableHandle`:
+            :class:`tensorflow.utils.hooks.RemovableHandle`:
                 a handle that can be used to remove the added hook by calling
                 ``handle.remove()``
         """
@@ -705,7 +705,7 @@ class Layer(tf.Module):
             raise KeyError("attribute '{}' already exists".format(name))
         elif tensor is not None and not isinstance(tensor, tf.Tensor) and not is_tensor(tensor):
             raise TypeError("cannot assign '{}' object to buffer '{}' "
-                            "(torch Tensor or None required)".format(type(tensor).__name__, name))
+                            "(tensorflow Tensor or None required)".format(type(tensor).__name__, name))
         else:
             with self.name_scope:
                 self._buffers[name] = tensor
@@ -761,7 +761,7 @@ class Layer(tf.Module):
 
         if device is None:
             device = get_device()
-        if dtype is None:
+        if dtype is None and len( self.weights)>0:
             dtype = self.weights[0].dtype
         if 'cpu' in device:
             self.cpu()
@@ -847,16 +847,16 @@ class Layer(tf.Module):
             module._apply(fn)
         #
         # def compute_should_use_set_data(tensor, tensor_applied):
-        #     if torch._has_compatible_shallow_copy_type(tensor, tensor_applied):
+        #     if tensorflow._has_compatible_shallow_copy_type(tensor, tensor_applied):
         #         # If the new tensor has compatible tensor type as the existing tensor,
         #         # the current behavior is to change the tensor in-place using `.data =`,
         #         # and the future behavior is to overwrite the existing tensor. However,
         #         # changing the current behavior is a BC-breaking change, and we want it
         #         # to happen in future releases. So for now we introduce the
-        #         # `torch.__future__.get_overwrite_module_params_on_conversion()`
+        #         # `tensorflow.__future__.get_overwrite_module_params_on_conversion()`
         #         # global flag to let the user control whether they want the future
         #         # behavior of overwriting the existing tensor or not.
-        #         return not torch.__future__.get_overwrite_module_params_on_conversion()
+        #         return not tensorflow.__future__.get_overwrite_module_params_on_conversion()
         #     else:
         #         return False
 
@@ -895,7 +895,7 @@ class Layer(tf.Module):
 
         Example::
 
-            >>> @torch.no_grad()
+            >>> @tensorflow.no_grad()
             >>> def init_weights(m):
             >>>     print(m)
             >>>     if type(m) == nn.Linear:
@@ -1178,7 +1178,7 @@ class Layer(tf.Module):
                               missing_keys, unexpected_keys, error_msgs):
         r"""Copies parameters and buffers from :attr:`state_dict` into only
         this module, but not its descendants. This is called on every submodule
-        in :meth:`~torch.nn.Module.load_state_dict`. Metadata saved for this
+        in :meth:`~tensorflow.nn.Module.load_state_dict`. Metadata saved for this
         module in input :attr:`state_dict` is provided as :attr:`local_metadata`.
         For state dicts without metadata, :attr:`local_metadata` is empty.
         Subclasses can achieve class-specific backward compatible loading using
@@ -1186,7 +1186,7 @@ class Layer(tf.Module):
 
         .. note::
             :attr:`state_dict` is not the same object as the input
-            :attr:`state_dict` to :meth:`~torch.nn.Module.load_state_dict`. So
+            :attr:`state_dict` to :meth:`~tensorflow.nn.Module.load_state_dict`. So
             it can be modified.
 
         Arguments:
@@ -1205,7 +1205,7 @@ class Layer(tf.Module):
                 keys to this list
             error_msgs (list of str): error messages should be added to this
                 list, and will be reported together in
-                :meth:`~torch.nn.Module.load_state_dict`
+                :meth:`~tensorflow.nn.Module.load_state_dict`
         """
         for hook in self._load_state_dict_pre_hooks.values():
             hook(state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs)
@@ -1254,13 +1254,13 @@ class Layer(tf.Module):
         r"""Copies parameters and buffers from :attr:`state_dict` into
         this module and its descendants. If :attr:`strict` is ``True``, then
         the keys of :attr:`state_dict` must exactly match the keys returned
-        by this module's :meth:`~torch.nn.Module.state_dict` function.
+        by this module's :meth:`~tensorflow.nn.Module.state_dict` function.
         Args:
             state_dict (dict): a dict containing parameters and
                 persistent buffers.
             strict (bool, optional): whether to strictly enforce that the keys
                 in :attr:`state_dict` match the keys returned by this module's
-                :meth:`~torch.nn.Module.state_dict` function. Default: ``True``
+                :meth:`~tensorflow.nn.Module.state_dict` function. Default: ``True``
         Returns:
             ``NamedTuple`` with ``missing_keys`` and ``unexpected_keys`` fields:
                 * **missing_keys** is a list of str containing the missing keys
@@ -1324,26 +1324,8 @@ class Layer(tf.Module):
     #     raise NotImplementedError
 
     def _slow_forward(self, *input, **kwargs):
-        return self.forward(*input, **kwargs)
-        # tracing_state = torch._C._get_tracing_state()  # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):  #     return self.forward(*input, **kwargs)  # recording_scopes = torch.jit._trace_module_map is not None  # if recording_scopes:  #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None  #     if name:  #         cur_scope_name = tracing_state.current_scope()  #         tracing_state.push_scope(name)  #     else:  #         recording_scopes = False  # try:  #     result = self.forward(*input, **kwargs)  # finally:  #     if recording_scopes:  #         tracing_state.pop_scope()  # return result
+        return self._call_impl(*input, **kwargs)
 
-        # tracing_state = torch._C._get_tracing_state()
-        # if not tracing_state or isinstance(self.forward, torch._C.ScriptMethod):
-        #     return self.forward(*input, **kwargs)
-        # recording_scopes = torch.jit._trace_module_map is not None
-        # if recording_scopes:
-        #     name = torch.jit._trace_module_map[self] if self in torch.jit._trace_module_map else None
-        #     if name:
-        #         cur_scope_name = tracing_state.current_scope()
-        #         tracing_state.push_scope(name)
-        #     else:
-        #         recording_scopes = False
-        # try:
-        #     result = self.forward(*input, **kwargs)
-        # finally:
-        #     if recording_scopes:
-        #         tracing_state.pop_scope()
-        # return result
 
     @tf.Module.with_name_scope
     def _call_impl(self, *input, **kwargs):
@@ -1963,11 +1945,13 @@ class Sequential(Layer):
 
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
             last_output = self[-1]._output_shape
-            super(Sequential, self).add_module(name, module)
-
             dummay_input = random_normal((2,) + tuple(to_list(last_output))).to(self.device)
             out = module(dummay_input)
-            self._output_shape = tensor_to_shape(out)
+            self._modules[name] = module
+            if is_tensor(out):
+                self._output_shape = tensor_to_shape(out)
+            elif isinstance(out,tuple):
+                self._output_shape = [tensor_to_shape(item) for item in out ]
             self._signature = None
         else:
             super(Sequential, self).add_module(name, module)
@@ -2138,6 +2122,7 @@ class ModuleList(Layer):
         raise NotImplementedError()
 
 
+
 class ModuleDict(Layer):
     r"""Holds submodules in a dictionary.
 
@@ -2180,10 +2165,12 @@ class ModuleDict(Layer):
                 return x
     """
 
-    def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False, **kwargs) -> None:
+    def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False, is_multicasting=False, **kwargs) -> None:
         super(ModuleDict, self).__init__(name=None, keep_output=False, **kwargs)
+        self.is_multicasting = is_multicasting
         if modules is not None:
-            self.update(modules)
+            if len(modules)>0:
+                self.update(modules)
 
     # @_copy_to_script_wrapper
     def __getitem__(self, key: str) -> Layer:
@@ -2191,6 +2178,8 @@ class ModuleDict(Layer):
 
     def __setitem__(self, key: str, module: Layer) -> None:
         self.add_module(key, module)
+        if self._input_shape is not None:
+            module.input_shape=self.input_shape
 
     def __delitem__(self, key: str) -> None:
         del self._modules[key]
@@ -2275,8 +2264,36 @@ class ModuleDict(Layer):
                                      "; 2 is required")
                 self[m[0]] = m[1]
 
-    def forward(self):
-        raise NotImplementedError()
+    def build(self, input_shape):
+        """
+
+        Args:
+            input_shape (torch.Size, tensor, list(int), tuple(int)): The input_shape information, not including batch axis.
+
+        Returns:
+
+        """
+        if self._built == False and len(self._modules) > 0:
+            self._input_shape=input_shape
+            input_shape = tuple(to_numpy(input_shape))
+            dummay_input = random_normal((2,) + input_shape).to(self.device)
+
+            for name, module in self.items():
+                out = module(dummay_input)
+                module.input_shape = input_shape
+                module.output_shape=tensor_to_shape(out)
+            self._built = True
+
+    def forward(self, *x):
+        if self.is_multicasting == True:
+            results = OrderedDict()
+            x = enforce_singleton(x)
+            for name, module in self.items():
+                out = module(x)
+                results[name] = out
+            return results
+        else:
+            raise NotImplementedError()
 
 
 class Combine(Layer):
@@ -2440,7 +2457,7 @@ def summary(model, input_size, batch_size=-1):
             summary[m_key]["nb_params"] = params
 
         if (
-                not isinstance(module, (Sequential))
+                not isinstance(module, (Sequential,ModuleList,ModuleDict))
                 and not (module == model)
         ):
             hooks.append(module.register_forward_hook(hook))
@@ -2766,6 +2783,11 @@ def fix_layer(layer: Layer):
                 elif isinstance(module.input_shape,TensorSpec) :
                     module.input_spec =module.input_shape
                     module.input_shape=module.input_spec .shape
+        # fix for shape definition
+        if isinstance(module._input_shape, tf.TensorShape):
+            module._input_shape = to_tensor(to_numpy(module._input_shape)).int()
+        if isinstance(module._output_shape, tf.TensorShape):
+            module._output_shape = to_tensor(to_numpy(module._output_shape)).int()
 
         if not hasattr(module, 'batch_index'):
             setattr(module, 'batch_index', 0)

@@ -728,7 +728,9 @@ class ModelBase(object):
                     if isinstance(output, (list, tuple)):
                         for i in range(len(output)):
                             train_data[self.outputs.key_list[i]] = output[i]
-
+                    elif isinstance(output, (OrderedDict)):
+                        for k,v in output.items():
+                            train_data[k] = v
                     elif 'tensor' in output.__class__.__name__.lower():
                         train_data[self.outputs.key_list[0]] = output
                         if self.use_output_as_loss==True:

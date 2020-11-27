@@ -95,7 +95,7 @@ class Model(ModelBase):
             raise ValueError('There is at least one output')
 
         if isinstance(output,(np.ndarray,Tensor)) and input_shape is None:
-            input_shape=squeeze(output.shape)
+            input_shape=tensor_to_shape(output)
 
         if inputs is None:
             if input_shape is None:
@@ -151,7 +151,7 @@ class Model(ModelBase):
 
             # output.cpu()
             if  output.built and hasattr(output,'_output_shape') and  output._output_shape is not None:
-                self._model = fix_layer(output)
+                self._model =output
                 self._model.signature = None
                 if self._model.signature is not None and hasattr(self._model.signature,"outputs"):
                     self._outputs['output'] = self._model.signature.outputs
@@ -164,11 +164,11 @@ class Model(ModelBase):
                 if inputs is not None:
                     args=None
                     if isinstance(inputs,dict):
-                        out = fix_layer(output)(*list(inputs.values()))
+                        out =output(*list(inputs.values()))
                     elif isinstance(inputs,(list,tuple)):
-                        out = fix_layer(output)(*inputs)
+                        out = output(*inputs)
                     else:
-                        out = fix_layer(output)(inputs)
+                        out =output(inputs)
 
                 else:
 
@@ -177,17 +177,21 @@ class Model(ModelBase):
                     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                     output.to(get_device())
                     output.eval()
-                    out = fix_layer(output)(dummay_input)
-                output.signature = None
+                    out =output(dummay_input)
+
                 self._model = output
                 if isinstance(out, torch.Tensor):
                     self._outputs['output'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index+1:]),name='output')
                     self._targets['target'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index+1:]),name='target')
+                elif isinstance(out, OrderedDict):
+                    for k, v in out.items():
+                        self._outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
+                        self._targets[k.replace('output', 'target').replace('student', 'teatcher')] = TensorSpec(shape=tensor_to_shape(v), name=k.replace('output', 'target').replace('student', 'teatcher'))
                 else:
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]),name='output_{0}'.format(i))
                         self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]),name='target_{0}'.format(i))
-            self._signature=self._model.signature
+            self._model.signature = None
         elif isinstance(output, (list,tuple)) and  all([isinstance(m,(nn.Module)) for m in output]):
             output_list = []
             model_list = []
@@ -771,7 +775,7 @@ class Model(ModelBase):
         # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed[arg] for arg in self._model._signature.inputs.key_list]
+            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
 
                 if item in input_list:
@@ -973,7 +977,9 @@ class Model(ModelBase):
 
             import_or_install('torch.onnx')
             self._model.eval()
-            dummy_input = torch.randn(1, *to_list(self.inputs.value_list[0]), device=get_device(),requires_grad=True)
+            new_shape=list(self.inputs.value_list[0]._shape_tuple)
+            new_shape[0]=1
+            dummy_input = torch.randn(*new_shape, device=get_device(),requires_grad=True)
             folder,filename,ext=split_path(save_path)
             if filename=='':
                 filenam=self.name
@@ -1048,12 +1054,12 @@ class Model(ModelBase):
         if self.signature is None or self.signature !=self._model.signature:
             self.signature=self._model.signature
 
-        self._model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+        self._model.to(get_device())
 
     def summary(self):
         # self.rebinding_input_output(self._model.input_shape)
 
-        summary(self._model, [item._shape_tuple[1:] for item in self.inputs.value_list])
+        summary(self._model, [list(item._shape_tuple[1:]) for item in self.inputs.value_list])
         return self
 
 
