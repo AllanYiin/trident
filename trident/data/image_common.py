@@ -82,38 +82,38 @@ def object_type_inference(data):
     if isinstance(data,np.ndarray):
         if data.ndim == 2 and data.shape[-1] == 2:
             return ObjectType.landmarks
-        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max()<=255 and 0<=data.min()<=255:
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.absolute_bbox
-        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max()<=1 and 0<=data.min()<=1:
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
             return ObjectType.relative_bbox
         elif data.ndim == 2 and len(distict_color_count(np.expand_dims(data,-1)))==2:
             return ObjectType.binary_mask
         elif data.ndim == 2 and (data.max()-data.min()+1)== len(distict_color_count(np.expand_dims(data,-1))):
             return ObjectType.label_mask
-        elif data.ndim == 2 and 0<=data.max()<=255 and 0<=data.min()<=255:
+        elif data.ndim == 2 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.gray
         elif data.ndim == 3 and data.shape[-1] == 1 and len(distict_color_count(data))==2:
             return ObjectType.binary_mask
         elif data.ndim == 3 and data.shape[-1] == 1 and (data.max()-data.min()+1)== len(distict_color_count(data)):
             return ObjectType.label_mask
-        elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max()<=255 and 0<=data.min()<=255:
+        elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.gray
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max()<=255 and 0<=data.min()<=255 and len(distict_color_count(data))<100:
+        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 and len(distict_color_count(data))<100:
             return ObjectType.color_mask
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max()<=255 and 0<=data.min()<=255:
+        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.rgb
-        elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max()<=255 and 0<=data.min()<=255:
+        elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.rgba
-        elif data.ndim == 3 and data.dtype==np.int64 and 0<=data.max()<=1 and 0<=data.min()<=1:
+        elif data.ndim == 3 and data.dtype==np.int64 and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
             return ObjectType.binary_mask
-        elif data.ndim == 3 and data.dtype==np.float32 and 0<=data.max()<=1 and 0<=data.min()<=1:
+        elif data.ndim == 3 and data.dtype in [np.float32,np.float16] and 0<=data.max()<=1 and 0<=data.min().round(0)<=1:
             return ObjectType.alpha_mask
         elif data.ndim <= 1 and data.dtype==np.int64 :
             return ObjectType.classification_label
         elif data.ndim == 2 and data.dtype==np.int64:
             return ObjectType.color_mask
         else:
-            sys.stderr.write('Object type cannot be inferred.')
+            sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape,data.dtype,data.min(),data.max())+'\n')
             return ObjectType.array_data
 
 
@@ -304,27 +304,28 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                         im[:, 0::2] += img_op.pad_left
                         im[:, 1::2] += img_op.pad_top
                         results[spec] = im
-                    elif spec.object_type in [ObjectType.color_mask]:  # landmark [:,2]
-                        new_im = np.zeros((size[0], size[1]))
-                        im = transform.rescale(im,  img_op.scale, clip=False, anti_aliasing=False, multichannel=False,
-                                               preserve_range=True, order=0).astype(np.int64)
-                        if align_corner:
-                            new_im[:im.shape[0], :im.shape[1]] = im
-                        else:
-                            new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
-                        results[spec]= np.pad(im, img_op.all_pad, 'constant').astype(np.int64)
-
+                    # elif spec.object_type in [ObjectType.color_mask]:  # landmark [:,2]
+                    #     new_im = np.zeros((size[0], size[1],3),dtype=np.int64)
+                    #     im = transform.rescale(im,  img_op.scale, clip=False, anti_aliasing=False, multichannel=True,preserve_range=True, order=0).astype(np.int64)
+                    #     if align_corner:
+                    #         new_im[:im.shape[0], :im.shape[1],:] = im
+                    #     else:
+                    #         new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left,:] = im
+                    #     results[spec]= np.pad(im, img_op.all_pad, 'constant').astype(np.int64)
+                    #
 
                     elif spec.object_type in [ObjectType.label_mask, ObjectType.color_mask, ObjectType.label_mask]:  # label_mask
                         im= transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False if im.ndim == 2 else True, preserve_range=True,order=0).astype(np.int64)
-                        new_im = np.zeros((size[0], size[1]))
+                        new_im = np.zeros((size[0], size[1], 3))
                         if align_corner:
                             if im.ndim==2:
+                                new_im = np.zeros((size[0], size[1]))
                                 new_im[:im.shape[0], :im.shape[1]] = im
                             elif im.ndim==3:
                                 new_im[:im.shape[0], :im.shape[1], :] = im
                         else:
                             if im.ndim==2:
+                                new_im = np.zeros((size[0], size[1]))
                                 new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
                             elif im.ndim==3:
                                 new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left, :] = im
