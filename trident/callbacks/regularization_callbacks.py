@@ -148,17 +148,12 @@ class CutMixCallback(RegularizationCallbacksBase):
         train_data = training_context['train_data']
         x = None
         y = None
-        if get_backend() == 'pytorch':
-            x = train_data.value_list[0].clone()  # input
-            y = train_data.value_list[1].clone()  # label
-        elif get_backend() == 'tensorflow':
-            x = copy.deepcopy(train_data.value_list[0])  # input
-            y = copy.deepcopy(train_data.value_list[1]) # label
+        x = train_data.value_list[0].copy()  # input
+        y = train_data.value_list[1].copy()  # label
+
         model = training_context['current_model']
-        if self.alpha > 0:
-            lam = np.random.beta(self.alpha, self.alpha)
-        else:
-            lam = 1
+
+        lam = np.random.beta(0.1, 0.4)
 
         batch_size = int_shape(x)[0]
         index = cast(arange(batch_size),'int64')
