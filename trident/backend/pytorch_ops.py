@@ -3221,9 +3221,9 @@ def random_choice(x: Tensor,n:int=1):
     np.random.shuffle(idxes)
     if is_tensor(x):
         idx = to_tensor(idxes)[:n].long()
-        return x[idx]
+        return  unpack_singleton(x[idx])
     elif isinstance(x,(list,tuple)):
-        return [x[idx] for idx in idxes[:n]]
+        return unpack_singleton([x[idx] for idx in idxes[:n]])
 
 
 

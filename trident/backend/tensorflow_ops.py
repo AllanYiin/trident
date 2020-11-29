@@ -3300,7 +3300,7 @@ def shuffle(x: Tensor,seed=None):
     return tf.random.shuffle(x)
 
 @numpy_compatible
-def random_choice(x: Tensor,seed=None,n:int=1):
+def random_choice(x: Tensor,n:int=1):
     """Generates a random sample from a given 1-D array
 
     Args:
@@ -3314,7 +3314,7 @@ def random_choice(x: Tensor,seed=None,n:int=1):
     idxes = np.arange(len(x))
     np.random.shuffle(idxes)
     idx = idxes[:n]
-    return x[idx]
+    return unpack_singleton(x[idx])
 
 
 
