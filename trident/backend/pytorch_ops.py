@@ -188,16 +188,16 @@ def to_numpy(*x) -> np.ndarray:
     x = unpack_singleton(x)
     if isinstance(x, np.ndarray):
         return x
+    elif x is None:
+        return None
     elif isinstance(x, Tensor):
         return x.clone().cpu().detach().numpy()
     elif isinstance(x, list):
         return np.array(x)
     elif isinstance(x, tuple):
         return np.array(list(x))
-    elif 'int' in str(type(x)) or 'float' in str(type(x)):
+    elif isinstance(x,numbers.Number):
         return np.array([x])
-    elif x is None:
-        return None
     else:
         raise ValueError("Unsupported type")
 
@@ -3198,8 +3198,9 @@ def shuffle(x: Tensor):
     Returns:
 
     """
-    order = np.random.shuffle(np.array(range(x.size(0))))
-    x[np.array(range(x.size(0)))] = x[order]
+    idxes =np.arange(len(x))
+    np.random.shuffle(idxes)
+    x[np.array(range(len(x)))] = x[idxes]
     return x
 
 
