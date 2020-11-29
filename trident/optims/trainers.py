@@ -11,6 +11,7 @@ import sys
 import time
 import uuid
 from functools import partial
+import builtins
 
 import numpy as np
 from trident.backend import iteration_tools
@@ -165,17 +166,17 @@ class TrainingPlan(object):
 
     def add_training_item(self, training_item, name=None, start_epoch=0):
         n = len(self.training_items)
-        if name is not None and  len(name) > 0:
-            self.training_names[n] =name
+        if name is not None and len(name) > 0:
+            self.training_names[n] = name
             training_item.name = name
-        elif training_item.name is not None and  len(training_item.name) > 0:
+        elif training_item.name is not None and len(training_item.name) > 0:
             self.training_names[n] = training_item.name
         else:
             training_item.name = 'model {0}'.format(n)
             self.training_names[n] = 'model {0}'.format(n)
         self.training_items[n] = training_item
         self.training_items[n].start_epoch = start_epoch
-        #backward compatibility
+        # backward compatibility
         for k, v in training_item.inputs.items():
             if isinstance(v, tuple) and all([isinstance(item, numbers.Integral) for item in v]):
                 training_item.inputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
@@ -189,7 +190,7 @@ class TrainingPlan(object):
                 training_item.signature.outputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
             elif isinstance(v, TensorSpec):
                 training_item.signature.outputs[k] = v
-        if isinstance(training_item.model, Layer) and training_item.signature!=training_item.model.signature:
+        if isinstance(training_item.model, Layer) and training_item.signature != training_item.model.signature:
             training_item.model.signature = None
             training_item.signature = training_item.model.signature
         return self
@@ -325,30 +326,35 @@ class TrainingPlan(object):
             if "" in unpair_symbols:
                 unpair_symbols.remove("")
 
-            if len(trainingitem.signature.inputs)==len(data_symbols)==1:
+            if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
                 if assert_spec_compatibility(trainingitem.signature.inputs.value_list[0], data_loader.traindata.data.element_spec):
                     data_feed[trainingitem.signature.inputs.key_list[0]] = data_loader.traindata.data.symbol
-                    available_items.remove( data_loader.traindata.data.symbol)
-            if len(trainingitem.signature.outputs)==len(label_symbols)==1:
-                data_feed[trainingitem.signature.outputs.key_list[0].replace("output","target")] = data_loader.traindata.label.symbol
-                available_items.remove( data_loader.traindata.label.symbol)
-            if len(trainingitem.signature.outputs) == 1 and len(data_symbols)==1 and len(label_symbols) == 0:
+                    available_items.remove(data_loader.traindata.data.symbol)
+            if len(trainingitem.signature.outputs) == len(label_symbols) == 1:
+                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_loader.traindata.label.symbol
+                available_items.remove(data_loader.traindata.label.symbol)
+            elif len(trainingitem.signature.outputs) == 1 and len(data_symbols) == 1 and len(label_symbols) == 0:
                 # autoencoder
-                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target")] = data_loader.traindata.data.symbol
+                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_loader.traindata.data.symbol
 
             for out in trainingitem.signature.outputs.key_list:  # fill the data_feed by key
+
                 if out in available_items:  # output=putput
                     data_feed[out] = out
                     available_items.remove(out)
+            for key in data_feed.keys():
+                if data_feed[key] == None and key in available_items:
+                    data_feed[key] = key
+                    available_items.remove(key)
+                elif data_feed[key] == None:
+                    data_feed[key] = key
 
-
-
-
-
+                # elif out.replace("output","target").replace("student","teacher") in available_items:
+                #     data_feed[out] =out.replace("output","target").replace("student","teacher")
+                #     available_items.remove(out.replace("output","target").replace("student","teacher"))
 
             trainingitem.training_context['data_feed'] = data_feed
             print('data_feed for {0} :{1}'.format(trainingitem.name, data_feed))
-
 
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
@@ -358,8 +364,10 @@ class TrainingPlan(object):
             abnormal_num_count = 0
             # update callback
             if not is_resume or only_steps == True:
+                max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
                 for item in self.training_items.values():
                     item.training_context['execution_id'] = self.execution_id
+                    item.training_context['max_name_length'] = max_name_length
                     for callback in self.callbacks:
                         if callback not in item.callbacks:
                             # private callback
@@ -399,13 +407,12 @@ class TrainingPlan(object):
                         else:
                             num_batches = len(data_loader.batch_sampler) * epoch + mbs
                             iter_data = OrderedDict()
-                            if isinstance(return_data,OrderedDict):
+                            if isinstance(return_data, OrderedDict):
                                 for spec, data in return_data.item_list:
                                     iter_data[spec.name] = data
                             elif isinstance(return_data, tuple):
                                 for i in range(len(return_data)):
                                     iter_data[data_loader.traindata.data_template.key_list[i].name] = return_data[i]
-
 
                             # check weather need out-of-sample evaluation
                             need_out_sample_evaluation = False
@@ -442,7 +449,7 @@ class TrainingPlan(object):
 
                             # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
-                            for trainitem_name, trainitem in zip(self.training_names.value_list,self.training_items.value_list):
+                            for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
 
@@ -459,7 +466,10 @@ class TrainingPlan(object):
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and (
                                                               epoch + 1) % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
-                                                      accumulate_grads=False)
+                                                      accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
+                            if self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0 and \
+                                    self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0:
+                                print('\n', flush=True)
 
                             for k, trainitem in self.training_items.items():
                                 for callback in trainitem.training_context['callbacks']:

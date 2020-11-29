@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+#import pysnooper
 import copy
 import inspect
 import os
@@ -532,10 +533,10 @@ class ModelBase(object):
 
     def do_post_gradient_update(self):
 
-        self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],to_numpy(self.training_context['current_loss']).mean())
+        self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],self.training_context['current_loss'])
         if self.training_context['is_collect_data'] == True:
             steps,values=self.training_context['tmp_losses'].get_series('total_losses')
-            self.training_context['losses'].collect('total_losses',self.training_context['steps'],float(to_numpy(values).mean()))
+            self.training_context['losses'].collect('total_losses',self.training_context['steps'],float(np.asarray(values).mean()))
             self.training_context['tmp_losses'].reset()
 
     def do_on_metrics_evaluation_start(self):
@@ -611,6 +612,8 @@ class ModelBase(object):
         raise NotImplementedError
 
     def print_batch_progress(self, print_batch_progress_frequency):
+        if 'max_name_length' not in self.training_context:
+            self.training_context['max_name_length']=len(self.name)+1
         metric_strings=[]
         for k, v in self._metrics.items():
             collect_history = self._metrics[k].collect_history
@@ -641,7 +644,8 @@ class ModelBase(object):
                      self.training_context['current_epoch']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
     def print_epoch_progress(self, print_epoch_progress_frequency):
-
+        if 'max_name_length' not in self.training_context:
+            self.training_context['max_name_length']=len(self.name)+1
         metric_strings=[]
         loss_steps, loss_values = self.epoch_loss_history.get_series('total_losses')
         if print_epoch_progress_frequency>len(loss_values):
@@ -665,6 +669,7 @@ class ModelBase(object):
         progress_bar(step_time,self.training_context['current_epoch'], self.training_context['total_epoch'],
                      'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.3e}'.format(loss_value, ','.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
+    #@pysnooper.snoop()
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
                     is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,is_out_sample_evaluation=False,**kwargs):
@@ -783,7 +788,7 @@ class ModelBase(object):
                             self.training_context['current_loss'] =self.training_context['current_loss']+ overall_loss
 
                             if is_collect_data:
-                                self.training_context['losses'].collect(k,self.training_context['steps'],float(to_numpy(overall_loss)))
+                                self.training_context['losses'].collect(k,self.training_context['steps'],overall_loss)
 
                         else:
                             if any_abnormal_number(this_loss):
@@ -792,7 +797,7 @@ class ModelBase(object):
                                 #a leaf Variable that requires grad connotused in an in-place operation.
                                 self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss
                             if is_collect_data:
-                                self.training_context['losses'].collect(k, self.training_context['steps'], float(to_numpy(this_loss)))
+                                self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
                     except Exception as e:
                         print(e)
                         PrintException()
@@ -815,7 +820,7 @@ class ModelBase(object):
                         self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
                     # 'current_loss'] + this_loss
                     if is_collect_data:
-                        self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], float(to_numpy(this_loss)))
+                        self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
 
 
@@ -876,12 +881,12 @@ class ModelBase(object):
                         self.training_context['tmp_metrics'].regist(k)
 
                     this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
-                    self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_metric)))
+                    self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
 
 
                     if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and collect_history!=False :
                         this_out_metric = try_map_args_and_call(v, test_data , self.training_context['data_feed'])
-                        self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_out_metric)))
+                        self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
 
                 # ON_EVALUATION_END
                 self.do_on_metrics_evaluation_end()
@@ -895,7 +900,7 @@ class ModelBase(object):
                     #aggregate tmp data and move to metrics history
                     for k, v in self.training_context['tmp_metrics'].items():
                         steps,values=self.training_context['tmp_metrics'].get_series(k)
-                        self.training_context['metrics'].collect(k, self.training_context['steps'], float(to_numpy(values).mean()))
+                        self.training_context['metrics'].collect(k, self.training_context['steps'], np.asarray(values).mean())
                     self.training_context['tmp_metrics'].reset()
 
                 # ON_BATCH_END
@@ -937,10 +942,10 @@ class ModelBase(object):
                 self.do_on_epoch_end()
                 batch_steps,batch_values=self.training_context['losses'].get_series('total_losses')
                 if not hasattr(self.training_context['losses'],'last_aggregate_idx'):
-                    self.epoch_loss_history.collect('total_losses',self.training_context['current_epoch'],np.array(batch_values).mean())
+                    self.epoch_loss_history.collect('total_losses',self.training_context['current_epoch'],np.asarray(batch_values).mean())
                     self.training_context['losses'].last_aggregate_idx=len(batch_values)
                 else:
-                    self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'], np.array(batch_values[self.training_context['losses'].last_aggregate_idx:]).mean())
+                    self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'], np.asarray(batch_values[self.training_context['losses'].last_aggregate_idx:]).mean())
                     self.training_context['losses'].last_aggregate_idx = len(batch_values)
 
 
@@ -948,10 +953,10 @@ class ModelBase(object):
                 for k, v in self.training_context['metrics'].items():
                     metric_steps, metric_values = self.training_context['metrics'].get_series(k)
                     if not hasattr(self.training_context['metrics'], 'last_aggregate_idx'):
-                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values).mean())
+                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values).mean())
                         self.training_context['metrics'].last_aggregate_idx = len(metric_values)
                     else:
-                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
+                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
                         self.training_context['metrics'].last_aggregate_idx = len(metric_values)
 
 
@@ -1074,7 +1079,13 @@ class HistoryBase(OrderedDict):
         if data_name not in self:
             self.regist(data_name)
         if is_tensor(value):
-            self[data_name].append((step, to_numpy(value)))
+            if ndim(value)==0:
+                value=value.item()
+            elif ndim(value)==1 and len(value)==1:
+                value = value[0].item()
+            else:
+                value=value.mean().item()
+            self[data_name].append((step, value))
         else:
             self[data_name].append((step, value))
 
@@ -1088,7 +1099,7 @@ class HistoryBase(OrderedDict):
     def get_series(self,data_name):
         if data_name in self:
             steps,values=zip(*self[data_name].copy())
-            return steps,values
+            return list(steps),list(values)
         else:
             raise ValueError('{0} is not in this History.'.format(data_name))
 
