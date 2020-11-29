@@ -22,7 +22,7 @@ from trident.backend.common import to_list, unpack_singleton, epsilon,OrderedDic
 
 __all__ = ['Tensor','is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
-           'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
+           'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',

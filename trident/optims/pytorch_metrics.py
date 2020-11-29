@@ -39,28 +39,25 @@ def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
-    input_tensor=output.clone().detach()
-    target_tensor=target.clone().detach()
-    
-    input_tensor_exp=exp(input_tensor)
+    input_tensor=output.copy().detach()
+    target_tensor=target.copy().detach()
+
     is_logsoftmax = None
     from_logits = None
     output_exp = exp(input_tensor)
-    if (ndim(output) >= 1 and 'float' in str(output.dtype) and output.min() >= 0 and output.max() <= 1):
+    if (ndim(input_tensor) >= 1 and 'float' in str(input_tensor.dtype) and input_tensor.min() >= 0 and input_tensor.max() <= 1):
         is_logsoftmax = False
         from_logits = True
-        output = clip(output, min=1e-8, max=1 - 1e-8)
+        input_tensor = clip(input_tensor, min=1e-8, max=1 - 1e-8)
 
-    elif (ndim(output) >= 1 and 'float' in str(output.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+    elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
         is_logsoftmax = True
         from_logits = True
-        output = clip(output, max=- 1e-8)
+        input_tensor =  clip(output_exp, min=1e-8, max=1 - 1e-8)
     else:
         is_logsoftmax = False
         from_logits = False
 
-    if is_logsoftmax:
-        input_tensor= exp(input_tensor)
     if input_tensor.dtype!=torch.int64 and topk==1:
         if len(input_tensor.size())==1: #binary
             input_tensor=input_tensor.gt(0.5).float()
@@ -75,10 +72,10 @@ def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
     if topk==1:
         return input_tensor.eq(target_tensor).float().mean()
     else:
-        _, pred = input_tensor.topk(topk, -1, True, True)
+        _, pred = input_tensor.topk(topk)
         pred = pred.t()
-        correct = pred.eq(target_tensor.view(1, -1).expand_as(pred))
-        correct_k = correct[:topk].view(-1).float().sum(0, keepdim=True)
+        correct = pred.eq(target_tensor.reshape((1, -1)).expand_as(pred))
+        correct_k = reduce_sum(correct[:topk].reshape(-1).float(),axis=0,keepdims=True)
         return correct_k.mul_(1 / batch_size)
 
 
@@ -126,7 +123,7 @@ def root_mean_squared_error(output, target):
 
     if input_tensor.shape!=target_tensor.shape :
         raise  ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,target_tensor.shape))
-    return torch.sqrt(F.mse_loss(input_tensor, target_tensor))
+    return torch.sqrt(F.mse_loss(input_tensor, target_tensor,reduction='mean'))
 rmse=root_mean_squared_error
 
 

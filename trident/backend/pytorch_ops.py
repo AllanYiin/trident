@@ -19,7 +19,7 @@ from trident.backend.common import *
 
 __all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
-           'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'maximum', 'minimum', 'floor',
+           'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
@@ -334,9 +334,9 @@ def int_shape(x: Tensor):
 
 def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
     if need_exclude_batch_axis:
-        return to_tensor(to_numpy(x.shape)[1:]).int()
+        return to_tensor(to_numpy(x.shape)[1:],requires_grad=False).int()
     else:
-        return to_tensor(to_numpy(x.shape)).int()
+        return to_tensor(to_numpy(x.shape),requires_grad=False).int()
 
 def is_sparse(x):
     """ Check whether the tensor is sparse
@@ -754,7 +754,7 @@ def argsort(x: Tensor, axis=1, descending=True) -> Tensor:
 
 @numpy_compatible
 def topk(x: Tensor, k=1) -> Tensor:
-    return torch.topk(x, k=k,dim=None, largest=True,sorted=True)
+    return torch.topk(x, k=k,dim=1, largest=True,sorted=True)
 
 
 
