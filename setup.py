@@ -9,7 +9,7 @@ import glob
 import shutil
 import os
 
-with open("README.md", "r") as fh:
+with open("README.md", "r",encoding='utf-8-sig') as fh:
     long_description = fh.read()
 
 
@@ -21,17 +21,17 @@ PACKAGES = find_packages(exclude=EXCLUDE_FROM_PACKAGES)
 
 
 setup(name=NAME,
-      version='0.5.4',
-      description='Multiverse for Deep Learning Developers without Pitfall',
+      version='0.6.3',
+      description='Make pytorch and tensorflow two become one.',
       long_description=long_description,
       long_description_content_type="text/markdown",
       author= 'Allan Yiin',
-      author_email= 'allan@datadecision.ai',
+      author_email= 'allanyiin.ai@gamil.com',
       download_url= 'https://test.pypi.org/project/tridentx',
       license='MIT',
       install_requires=['numpy>=1.13.3',
                         'scikit-image >= 0.14',
-                        'pillow >= 4.1.1'
+                        'pillow >= 4.1.1',
                         'scipy>=1.2',
                         'six>=1.9.0',
                         'tqdm',
