@@ -14,11 +14,9 @@ from tensorflow.python.keras.optimizer_v2 import adam
 from trident.backend.common import get_session, get_class, snake2camel
 from trident.backend.tensorflow_ops import *
 
-_session = get_session()
-_epsilon = _session.epsilon
-_backend = _session.backend
 
-__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger', 'get_optimizer']
+
+__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger','AdaBelief', 'get_optimizer']
 
 from collections import defaultdict
 
@@ -1653,34 +1651,6 @@ class Lookahead(Optimizer):
         param_group["counter"] = 0
         self.optimizer.add_param_group(param_group)
 
-#
-# class Ranger(Lookahead):
-#     """Variant of the Adam optimizer whose adaptive learning rate is rectified
-#
-#     so as to have a consistent variance.
-#     It implements the Rectified Adam (a.k.a. RAdam) proposed by
-#     Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
-#     And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
-#
-#     Examples:
-#         >>> opt =RAdam(lr=1e-3)
-#
-#
-#     Note: `amsgrad` is not described in the original paper. Use it with
-#           caution.
-#
-#     RAdam is not a placement of the heuristic warmup, the settings should be
-#     kept if warmup has already been employed and tuned in the baseline method.
-#
-#     """
-#
-#     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
-#                  weight_decay=0, gradient_centralization=None):
-#
-#         optimizer=RAdam(params, lr=lr,  N_sma_threshhold=N_sma_threshhold, betas=betas, eps=eps,
-#                  weight_decay=weight_decay, gradient_centralization=gradient_centralization)
-#         super().__init__(optimizer, k=k, alpha=alpha)
-
 
 class Ranger(Optimizer):
     """Variant of the Adam optimizer whose adaptive learning rate is rectified
@@ -1812,7 +1782,8 @@ class Ranger(Optimizer):
 
             m, v = state['m'], state['v']
             beta1, beta2 = group['betas']
-
+            if self.gradient_centralization!='gc':
+                grad = gc_grads(grad, self.gradient_centralization)
             # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
             # Decay the first and second moment running average coefficient
             # m_t = beta1 * m + (1 - beta1) * g_t
@@ -1824,7 +1795,7 @@ class Ranger(Optimizer):
             state['m'] = m_t
             state['v'] = v_t
 
-            grad = gc_grads(grad, self.gradient_centralization)
+
             state['step'] += 1
 
             buffered = self.radam_buffer[int(state['step'] % 10)]
@@ -2031,6 +2002,130 @@ class LARS(Optimizer):
                 if re.search(r, param_name) is not None:
                     return False
         return True
+
+
+
+class AdaBelief(Optimizer):
+    """Implements Adam algorithm.
+
+    It has been proposed in `Adam: A Method for Stochastic Optimization`_.
+
+    Args:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float, optional): learning rate (default: 1e-3)
+        betas (Tuple[float, float], optional): coefficients used for computing
+            running averages of gradient and its square (default: (0.9, 0.999))
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-8)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
+            algorithm from the paper `On the Convergence of Adam and Beyond`_
+            (default: False)
+
+    References
+        .. _Adam\: A Method for Stochastic Optimization:
+            https://arxiv.org/abs/1412.6980
+        .. _On the Convergence of Adam and Beyond:
+            https://openreview.net/forum?id=ryQu7f-RZ
+
+    """
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
+                 gradient_centralization=None):
+        if not 0.0 <= lr:
+            raise ValueError("Invalid learning rate: {}".format(lr))
+        if not 0.0 <= eps:
+            raise ValueError("Invalid epsilon value: {}".format(eps))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
+        if not 0.0 <= weight_decay:
+            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+        self.amsgrad = amsgrad
+        self.eps = eps
+        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
+        super(AdaBelief, self).__init__(params, defaults)
+
+    def __setstate__(self, state):
+        super(AdaBelief, self).__setstate__(state)
+        for group in self.param_groups:
+            group.setdefault('amsgrad', False)
+
+    def step(self, grads_and_vars=None, **kwargs):
+        """Performs a single optimization step.
+
+        Args:
+            grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+
+        """
+        # grads_and_vars=zip(new_grads, new_vars)
+
+        group = self.param_groups[0]
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
+                continue
+
+            if is_sparse(grad):
+                raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+            amsgrad = group['amsgrad']
+
+            state = self.state[p.ref()]
+
+            # State initialization
+            if len(state) == 0:
+                state['step'] = 0.0
+                # Exponential moving average of gradient values
+                state['m'] = zeros_like(p)
+                # Exponential moving average of squared gradient values
+                state['v'] = zeros_like(p)
+                if amsgrad:
+                    # Maintains max of all exp. moving avg. of sq. grad. values
+                    state['vhat'] = zeros_like(p)
+
+            m, v = state['m'], state['v']
+
+            beta1, beta2 = group['betas']
+
+            state['step'] += 1
+            beta_1_power = 1 - beta1 ** state['step']
+            beta_2_power = 1 - beta2 ** state['step']
+
+            if group['weight_decay'] != 0:
+                grad = grad + p.value() * group['weight_decay']
+
+            # Decay the first and second moment running average coefficient
+            # m_t = beta1 * m + (1 - beta1) * g_t
+            m_t = beta1 * m + (1 - beta1) * grad
+            grad_residual=grad-m_t
+            # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+            # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+            v_t = beta2 * v + (1 - beta2) * (grad_residual * grad_residual)
+
+            # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+            if amsgrad:
+                vhat = state['vhat']
+                # Maintains the maximum of all 2nd moment running avg. till now
+                vhat_t = maximum(vhat, v_t)
+                state['vhat'] = vhat_t
+                denom = (sqrt(vhat_t) / math.sqrt(beta_2_power)) + group['eps']
+
+
+            else:
+                denom = (sqrt(v_t) / math.sqrt(beta_2_power)) + group['eps']
+
+            step_size = group['lr'] / beta_1_power
+            p.assign(p.value() - step_size * m_t / denom)
+
+            # if reduce_mean(abs(p))>0:
+            #     print(reduce_mean(abs(-(self.lr / beta_1_power) *exp_avg/ (denom + self.eps)))/reduce_mean(abs(p)))
+            state['m'] = m_t
+            state['v'] = v_t
+
+        return True
+
 
 
 def get_optimizer(optimizer_name):
