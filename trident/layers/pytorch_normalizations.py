@@ -141,22 +141,21 @@ class BatchNorm(Layer):
     def build(self, input_shape):
         if self._built == False:
             if self.affine:
-                self.weight = Parameter(torch.Tensor(self.input_filters))
-                self.bias = Parameter(torch.Tensor(self.input_filters))
-                init.ones_(self.weight)
-                init.zeros_(self.bias)
+                self.weight = Parameter(ones(self.input_filters))
+                self.bias = Parameter(zeros(self.input_filters))
+
             else:
                 self.register_parameter('weight', None)
                 self.register_parameter('bias', None)
 
             if self.track_running_stats:
-                self.register_buffer('running_mean', torch.zeros(self.input_filters))
-                self.register_buffer('running_var', torch.ones(self.input_filters))
-                self.register_buffer('num_batches_tracked', torch.tensor(0, dtype=torch.long))
+                self.register_buffer('running_mean', zeros(self.input_filters))
+                self.register_buffer('running_var', ones(self.input_filters))
+                self.register_buffer('num_batches_tracked',to_tensor(0, dtype=torch.long))
             else:
-                self.register_parameter('running_mean', None)
-                self.register_parameter('running_var', None)
-                self.register_parameter('num_batches_tracked', None)
+                self.register_buffer('running_mean', None)
+                self.register_buffer('running_var', None)
+                self.register_buffer('num_batches_tracked', None)
 
             self.reset_parameters()
             self.to(get_device())

@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import functools
 import math
+import numbers
 import sys
 import os
 import random
@@ -169,7 +170,7 @@ def random_augmentation(func):
 
 
 def add_noise(intensity=0.1):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         rr = random.randint(0, 10)
         orig_min = image.min()
         orig_max = image.max()
@@ -183,14 +184,14 @@ def add_noise(intensity=0.1):
 
 
 def normalize(mean, std):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         norm_mean = mean
         norm_std = std
-        if isinstance(norm_mean, (float, int)) and image.ndim == 3:
+        if isinstance(norm_mean, numbers.Number) and image.ndim == 3:
             norm_mean = np.array([norm_mean, norm_mean, norm_mean])
             norm_mean = np.expand_dims(norm_mean, 0)
             norm_mean = np.expand_dims(norm_mean, 0)
-        if isinstance(norm_std, (float, int)) and image.ndim == 3:
+        if isinstance(norm_std, numbers.Number) and image.ndim == 3:
             norm_std = np.array([norm_std, norm_std, norm_std])
             norm_std = np.expand_dims(norm_std, 0)
             norm_std = np.expand_dims(norm_std, 0)
@@ -199,7 +200,7 @@ def normalize(mean, std):
                 print('')
             return (image - norm_mean) / norm_std
         elif image.ndim == 2:
-            if isinstance(norm_mean, (float, int)) and isinstance(norm_std, (float, int)):
+            if isinstance(norm_mean, numbers.Number) and isinstance(norm_std,numbers.Number):
                 return (image - norm_mean) / norm_std
         return image
 
@@ -209,7 +210,7 @@ def normalize(mean, std):
 
 
 def unnormalize(mean, std):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         image = reverse_image_backend_adaption(image)
         norm_mean = mean
         norm_std = std
@@ -384,6 +385,7 @@ def rescale(scale, order=1):
             imspec = kwargs.get("spec")
             if imspec is None:
                 imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+
             results = OrderedDict()
             results[imspec] = image
         elif isinstance(image, dict):
@@ -816,7 +818,7 @@ def random_mirror():
 
 
 def downsample_then_upsample(scale=4, order=1, repeat=1):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         for i in range(repeat):
             image = rescale(scale=1.0 / scale)(image)
             image = rescale(scale=scale)(image)
@@ -826,7 +828,7 @@ def downsample_then_upsample(scale=4, order=1, repeat=1):
 
 
 def invert_color():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if np.min(image) >= 0 and np.max(image) <= 1:
             return 1 - image
         elif np.min(image) >= -1 and np.min(image) < 0 and np.max(image) <= 1:
@@ -838,7 +840,7 @@ def invert_color():
 
 
 def random_invert_color():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if random.random() < 0.7:
             if np.min(image) >= 0 and np.max(image) <= 1:
                 return 1 - image
@@ -853,7 +855,7 @@ def random_invert_color():
 
 
 def gray_scale():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if image.shape[-1] == 3:
             image = color.rgb2gray(image.astype(np.float32))
             if image.ndim==2 or (image.ndim==3 and  image.shape[-1] == 1):
@@ -866,7 +868,7 @@ def gray_scale():
 
 
 def to_rgb():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
 
         if len(image.shape) == 2:
             image = np.expand_dims(image, -1)
@@ -888,7 +890,7 @@ def to_rgb():
 
 
 def to_bgr():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if len(image.shape) == 2 :
             image = np.expand_dims(image, -1)
             image = np.concatenate([image, image, image], -1)
@@ -953,7 +955,7 @@ def adjust_brightness_contrast(brightness=255, contrast=127):
 
     brightness = map(brightness, 0, 510.0, -255.0, 255.0)
     contrast = map(contrast, 0.0, 254.0, -127.0, 127.0)
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if brightness != 0:
             if brightness > 0:
                 shadow = brightness
@@ -979,25 +981,25 @@ def adjust_brightness_contrast(brightness=255, contrast=127):
 
 
 def adjust_gamma(gamma=1):
-    def img_op(image: np.ndarray):
-        return exposure.adjust_gamma(image, gamma)
+    def img_op(image: np.ndarray,**kwargs):
+        return exposure.adjust_gamma(image/255.0, gamma)*255.0
 
     return img_op
 
 
 def random_adjust_gamma(gamma=(0.6, 1.4)):
     gamma_range=gamma
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         image=np.clip(image,0.0,255.0)
         gammamin, gammamax = gamma_range
         avg_pix=image.mean()
         if avg_pix>220:
             gammamax=builtins.max(gammamin,1)
         elif avg_pix<30:
-            gammamin = builtins.min(gammamax, 1)
+            gammamin = builtins.min(1, gammamax)
 
         gamma = np.random.choice(np.arange(gammamin, gammamax, 0.01))
-        return exposure.adjust_gamma(image, gamma)
+        return exposure.adjust_gamma(image/255.0, gamma)*255.0
 
     return img_op
 
@@ -1005,9 +1007,9 @@ def random_adjust_gamma(gamma=(0.6, 1.4)):
 def adjust_contrast(alpha=1):
     beta = 0
 
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         image = image.astype(np.float32) * alpha + beta
-        if image.max() > 225.0:
+        if image.max() > 255.0:
             image=image * 255 / (image.max())
         return image.astype(np.float32)
 
@@ -1018,11 +1020,11 @@ def random_adjust_contrast(scale=(0.5, 1.5)):
     beta = 0
     scalemin, scalemax = scale
 
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         image=np.clip(image,0.0,255.0)
         alpha = random.uniform(scalemin, scalemax)
         image = image.astype(np.float32) * alpha + beta
-        if image.max()>225.0:
+        if image.max()>255.0:
             image=image*255.0/(image.max())
         return image.astype(np.float32)
 
@@ -1030,7 +1032,7 @@ def random_adjust_contrast(scale=(0.5, 1.5)):
 
 
 def random_adjust_hue(hue_range=(-20, 20), saturation_range=(0.5, 1.5), lightness_range=(-50, 50)):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         # hue is mapped to [0, 1] from [0, 360]
         # if hue_offset not in range(-180, 180):
         #     raise ValueError('Hue should be within (-180, 180)')
@@ -1063,7 +1065,7 @@ def random_adjust_hue(hue_range=(-20, 20), saturation_range=(0.5, 1.5), lightnes
 
 
 def auto_level():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         minv = np.percentile(image, 5)
         maxv = np.percentile(image, 95)
         if maxv - minv < 40:
@@ -1104,7 +1106,7 @@ def reverse_image_backend_adaption(image):
 def random_channel_shift(intensity=0.15):
     channel_axis = -1
     inten = intensity
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         image = np.rollaxis(image, channel_axis, channel_axis)
         min_x, max_x = np.min(image), np.max(image)
         intensity = max_x / 255 * inten
@@ -1187,7 +1189,7 @@ def random_cutout(img, mask):
 
 ## denoise, smooth,
 def clahe(clip_limit=0.1, nbins=16):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         image = image.astype(np.float32) / 255.0
         if image.max() - image.min() > 0.2:
             image = exposure.equalize_adapthist(image, clip_limit=clip_limit, nbins=nbins)
@@ -1208,13 +1210,13 @@ def image_erosion(filter_size=3, repeat=1):
         output image array
 
     """
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         structure_shape = [1] * image.ndim
         structure_shape[0]=filter_size
         structure_shape[1] = filter_size
         for i in range(repeat):
             image =ndimage.morphology.grey_erosion(image,size=(filter_size,filter_size),structure=np.ones(tuple(structure_shape)))
-        return image
+        return clip(image,0,255)
 
     return img_op
 
@@ -1231,32 +1233,35 @@ def image_dilation(filter_size=3, repeat=1):
         output image array
 
     """
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         structure_shape = [1] * image.ndim
         structure_shape[0]=filter_size
         structure_shape[1] = filter_size
         for i in range(repeat):
             image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size),structure=np.ones(tuple(structure_shape)))
-        return image
+
+        return clip(image,0,255)
 
     return img_op
 
 
 def erosion_then_dilation(filter_size=3, repeat=1):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         structure_shape=[1]*image.ndim
         structure_shape[0]=filter_size
         structure_shape[1] = filter_size
         for i in range(repeat):
             image = ndimage.morphology.grey_erosion(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image=clip(image, 0, 255)
             image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size), structure=np.ones(tuple(structure_shape)))
+            image = clip(image, 0, 255)
         return image
 
     return img_op
 
 
 def dilation_then_erosion(filter_size=3, repeat=1):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         structure_shape = [1] * image.ndim
         structure_shape[0]=filter_size
         structure_shape[1] = filter_size
@@ -1269,7 +1274,7 @@ def dilation_then_erosion(filter_size=3, repeat=1):
 
 
 def adaptive_binarization(threshold_type='otsu'):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
 
         image = image.astype(np.float32)
         original_shape=image.shape
@@ -1322,7 +1327,7 @@ def adaptive_binarization(threshold_type='otsu'):
 
 
 def blur(sigma=0.3):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if len(image.shape) > 2 and image.shape[-1] in (3, 4):
             image = gaussian(image.astype(np.float32), sigma=sigma, multichannel=True, preserve_range=True)
         else:
@@ -1333,7 +1338,7 @@ def blur(sigma=0.3):
 
 
 def random_blur(sigma=(0.1, 0.6)):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         n = random.randint(0, 3)
         if n == 0:
             return image
@@ -1346,7 +1351,7 @@ def random_blur(sigma=(0.1, 0.6)):
 
 
 def channel_reverse():
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         if image.ndim == 4:
             image = image[..., ::-1]
         elif image.ndim == 3:
@@ -1371,7 +1376,7 @@ def build_affine_matrix(s, c, rad, t=(0, 0)):
 
 
 def to_low_resolution(scale=2):
-    def img_op(image: np.ndarray):
+    def img_op(image: np.ndarray,**kwargs):
         rnd = random.randint(0, 10)
         if rnd == 0:
             image = rescale(1 / scale)(image)
@@ -1394,7 +1399,7 @@ def to_low_resolution(scale=2):
 
 
 # def image_smoothening():
-#     def img_op(image: np.ndarray):
+#     def img_op(image: np.ndarray,**kwargs):
 #         ret1, th1 = cv2.threshold(img, BINARY_THREHOLD, 255, cv2.THRESH_BINARY)
 #         ret2, th2 = cv2.threshold(th1, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 #         blur = cv2.GaussianBlur(th2, (1, 1), 0)

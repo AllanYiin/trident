@@ -186,7 +186,7 @@ class Model(ModelBase):
                 elif isinstance(out, OrderedDict):
                     for k, v in out.items():
                         self._outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
-                        self._targets[k.replace('output', 'target').replace('student', 'teatcher')] = TensorSpec(shape=tensor_to_shape(v), name=k.replace('output', 'target').replace('student', 'teatcher'))
+                        self._targets[k.replace('output', 'target').replace('student', 'teacher')] = TensorSpec(shape=tensor_to_shape(v), name=k.replace('output', 'target').replace('student', 'teacher'))
                 else:
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]),name='output_{0}'.format(i))
@@ -814,7 +814,7 @@ class Model(ModelBase):
                 self._model.train()
 
             if self.training_context['stop_update'] <1:
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True :
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda' :
                     if self.gradscaler is None:
                         self.gradscaler=torch.cuda.amp.GradScaler()
                     self.gradscaler.scale(self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
@@ -827,7 +827,7 @@ class Model(ModelBase):
 
                 if isinstance(self._model,nn.Module) and self.grad_clipping_by_norm:
 
-                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda':
                         self.gradscaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
@@ -859,7 +859,7 @@ class Model(ModelBase):
 
             if self.training_context['stop_update'] == 0:
                 #amp support
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda':
                     self.gradscaler.step(self.optimizer)
                     self.gradscaler.update()
                 else:
@@ -867,7 +867,7 @@ class Model(ModelBase):
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
                     # amp support
-                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True:
+                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda':
                         self.gradscaler.step(self.optimizer)
                         self.gradscaler.update()
                     else:
@@ -1035,10 +1035,14 @@ class Model(ModelBase):
 
         if check_keys(self._model, pretrained_dict):
             has_abnormal=False
-            for value in pretrained_dict.values():
+            for key in pretrained_dict.keys():
+                value=pretrained_dict[key]
                 if is_tensor(value) and any_abnormal_number(value):
                     has_abnormal=True
-                    value=where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                    pretrained_dict[key]=where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                if  is_tensor(value) and ndim(value)==0:
+                    pretrained_dict[key]=to_tensor(value.item())
+
             if has_abnormal:
                 sys.stderr.write(self._model._name+ '  has_abnormal detected and  fixed!!\n')
             self._model.load_state_dict(pretrained_dict, strict=False)

@@ -39,7 +39,7 @@ __all__ = [ 'yolo4_body', 'YoloDetectionModel', 'DarknetConv2D', 'DarknetConv2D_
            'DarknetConv2D_BN_Leaky', 'YoloLayer']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device =get_device()
 _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
 
@@ -63,8 +63,6 @@ def DarknetConv2D_BN_Leaky(*args, **kwargs):
     darknet_conv_kwargs['auto_pad'] = False if kwargs.get('strides') == (2, 2) else True
     darknet_conv_kwargs.update(kwargs)
     return Conv2d_Block(*args, **darknet_conv_kwargs)
-
-
 
 def DarknetConv2D_BN_Mish(*args, **kwargs):
     """Darknet Convolution2D followed by BatchNormalization and LeakyReLU."""
@@ -309,7 +307,6 @@ class YoloLayer(Layer):
         #         cls_acc).item(),  #         "recall50": to_cpu(recall50).item(),  #         "recall75": to_cpu(
         #         recall75).item(),  #         "precision": to_cpu(precision).item(),  #         "conf_obj": to_cpu(
         #         conf_obj).item(),  #         "conf_noobj": to_cpu(conf_noobj).item(),  #         "grid_size": grid_size,  #     }  #  #     return output, total_loss
-
 
 
 class YoloDetectionModel(ImageDetectionModel):

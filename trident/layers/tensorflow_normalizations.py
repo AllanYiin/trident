@@ -124,6 +124,9 @@ class BatchNorm(Layer):
         self.track_running_stats = track_running_stats
         self.weight=None
         self.bias=None
+        self.weight=None # gamma//scale
+        self.bias=None # beta/ offset
+
         self.renorm=renorm
 
 
@@ -133,18 +136,19 @@ class BatchNorm(Layer):
             self.running_var.assign(tf.ones(shape=[self.input_filters]))
             self.num_batches_tracked.assign(0)
         if self.affine :
-            self.weight.assign(tf.ones(shape=[self.input_filters]))
-            self.bias.assign(tf.zeros(shape=[self.input_filters]))
+            self.weight = tf.Variable(tf.ones(shape=[self.input_filters]), trainable=True, name='weight')  # gamma//scale
+            self.bias = tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=True, name='bias')  # beta/ offset
+
 
     def assign_moving_average(self, variable, value, momentum, inputs_size):
-        with tf.name_scope('AssignMovingAvg') as scope:
-            decay = to_tensor(1.0 - momentum)
-            if decay.dtype != variable.dtype.base_dtype:
-                decay = tf.cast(decay, variable.dtype.base_dtype)
-            update_delta = (variable - tf.cast(value, variable.dtype)) * decay
-            if inputs_size is not None:
-                update_delta = tf.where(inputs_size > 0, update_delta, tf.zeros_like(update_delta))
-            return variable.assign_sub(update_delta, name=scope)
+            with tf.name_scope('AssignMovingAvg') as scope:
+                decay = to_tensor(1.0 - momentum)
+                if decay.dtype != variable.dtype.base_dtype:
+                    decay = tf.cast(decay, variable.dtype.base_dtype)
+                update_delta = (variable - tf.cast(value, variable.dtype)) * decay
+                if inputs_size is not None:
+                    update_delta = tf.where(inputs_size > 0, update_delta, tf.zeros_like(update_delta))
+                return variable.assign_sub(update_delta, name=scope)
 
 
     def build(self, input_shape):
@@ -155,11 +159,9 @@ class BatchNorm(Layer):
 
             # Convert axis to list and resolve negatives
 
-
-
             if self.affine:
-                self.weight = tf.Variable(tf.ones(shape=[self.input_filters]),trainable=True, name='weight') #gamma//scale
-                self.bias = tf.Variable(tf.zeros(shape=[self.input_filters]),trainable=True, name='bias') #beta/ offset
+                self.weight=tf.Variable(tf.ones(shape=[self.input_filters]),trainable=True, name='weight') #gamma//scale
+                self.bias=tf.Variable(tf.zeros(shape=[self.input_filters]),trainable=True, name='bias') #beta/ offset
 
             if self.track_running_stats:
                 self.register_buffer('running_mean',tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=False,name='running_mean',synchronization=tf.VariableSynchronization.AUTO,aggregation=tf_variables.VariableAggregation.MEAN))

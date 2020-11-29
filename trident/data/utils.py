@@ -165,6 +165,7 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None,ne
     """Download a Google Drive file from  and place it in root.
 
     Args:
+        need_up_to_date (bool): If True, trident will re-download this file every-times.
         file_id (str): id of file to be downloaded
         dirname (str): Directory to place downloaded file in
         filename (str, optional): Name to save the file under. If None, use the id of the file.
@@ -176,9 +177,10 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None,ne
 
     if not filename:
         filename = file_id
+    _h = _read_h(dirname)
 
     dest_path = os.path.join(dirname, filename)
-    if os.path.exists(dest_path) and os.path.isfile(dest_path) :
+    if os.path.exists(dest_path) and os.path.isfile(dest_path) and _h != {} and _h.get('is_downloaded', False) == True and need_up_to_date==False:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
@@ -326,7 +328,8 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
             if os.path.exists(os.path.join(dirname, 'models_md5.json')):
                 with open(os.path.join(dirname, 'models_md5.json')) as f:
                     models_md5 = json.load(f)
-    except Exception:
+    except Exception as e:
+        print(e)
         PrintException()
         check_internet=False
 
@@ -370,6 +373,7 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
                 else:
                     print('model file is downloaded but not match md5.')
         except Exception as e:
+            print(e)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print('***Please check your internet or download  files from following url in another computer, \n and then '
                 'put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)

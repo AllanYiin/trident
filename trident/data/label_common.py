@@ -16,14 +16,13 @@ from trident.backend.load_backend import *
 
 __all__ = ['label_backend_adaptive','get_onehot','check_is_onehot']
 
-_session = get_session()
-_backend = _session.backend
 
-if _backend== 'pytorch':
+
+if get_backend()== 'pytorch':
     from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
     from trident.backend.pytorch_ops import int_shape
     import torch
-elif _backend== 'tensorflow':
+elif get_backend()== 'tensorflow':
     from trident.backend.tensorflow_backend import to_numpy, to_tensor,ObjectType
     from trident.backend.tensorflow_ops import int_shape
 
@@ -46,7 +45,7 @@ def check_is_onehot(label):
         return False
 
 def label_backend_adaptive(label,label_mapping=None,object_type=None,**kwargs):
-    if _backend== 'pytorch':
+    if get_backend()== 'pytorch':
         if isinstance(label,np.ndarray):
             # binary mask
             if object_type == ObjectType.binary_mask:
@@ -71,7 +70,7 @@ def label_backend_adaptive(label,label_mapping=None,object_type=None,**kwargs):
         elif isinstance(label, int):
             return label
         return label
-    elif _backend== 'tensorflow':
+    elif get_backend()== 'tensorflow':
         if isinstance(label, numbers.Integral):
             if isinstance(label_mapping, dict) and len(label_mapping) > 0:
                 label_mapping = list(label_mapping.values())[0]

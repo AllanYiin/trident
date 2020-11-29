@@ -55,9 +55,9 @@ def DeepLabHead(classes=20, atrous_rates=(6, 12, 18,24),num_filters=256):
 
 
 def ASPPPooling(num_filters,size):
-    return Sequential(GlobalAvgPool2d(),
+    return Sequential(GlobalAvgPool2d(keepdims=True),
                       Conv2d((1,1),num_filters,strides=1,use_bias=False,activation=None),
-                      Upsampling2d(size=(size[-3], size[-2]),mode='bilinear', align_corners=False))
+                      Upsampling2d(size=size,mode='bilinear', align_corners=False))
 
 
 
@@ -75,7 +75,7 @@ class ASPP(Layer):
 
     def build(self, input_shape):
         if self._built == False :
-            self.convs.add_module('aspp_pooling',ASPPPooling(self.num_filters, to_list(input_shape[-2:])))
+            self.add_module('aspp_pooling',ASPPPooling(self.num_filters, to_list(input_shape[:-1])))
             self.to(self.device)
             self._built = True
 
@@ -109,10 +109,10 @@ class _DeeplabV3_plus(Layer):
         low_level_idx=-1
         high_level_idx=-1
         for i in range(len(moduals)):
-            if low_level_idx<0 and moduals[i].output_shape[-1]==backbond.input_shape[-1]//8:
+            if low_level_idx<0 and moduals[i].output_shape[-2]==backbond.input_shape[-2]//8:
                 low_level_idx=i
 
-            if high_level_idx<0 and moduals[i].output_shape[-1]==backbond.input_shape[-1]//32:
+            if high_level_idx<0 and moduals[i].output_shape[-2]==backbond.input_shape[-2]//32:
                 high_level_idx=i
                 break
         self.num_filters=num_filters
@@ -134,14 +134,14 @@ class _DeeplabV3_plus(Layer):
         low_level_feature=self.backbond1(x)
         high_level_feature = self.backbond2(low_level_feature)
         x=self.aspp(high_level_feature)
-        new_shape = x.shape.as_list()[1:-1]
-        x=image_ops.resize_images_v2(x, (new_shape[0],new_shape[1]*4,new_shape[2]*4,new_shape[3]), method=image_ops.ResizeMethod.BILINEAR)
+        new_shape =list(int_shape(x)[1:])
+        x=image_ops.resize_images_v2(x, [new_shape[1]*4,new_shape[0]*4], method=image_ops.ResizeMethod.BILINEAR)
         low_level_feature=self.low_level_conv(low_level_feature)
-        x=concate([x,low_level_feature],axis=1)
+        x=concate([x,low_level_feature],axis=-1)
         x=self.decoder(x)
 
-        new_shape = x.shape.as_list()[1:-1]
-        x=image_ops.resize_images_v2(x, (new_shape[0],new_shape[1]*4,new_shape[2]*4,new_shape[3]), method=image_ops.ResizeMethod.BILINEAR)
+        new_shape =list(int_shape(x)[1:])
+        x=image_ops.resize_images_v2(x, [new_shape[1]*4,new_shape[0]*4], method=image_ops.ResizeMethod.BILINEAR)
         return x
 
 

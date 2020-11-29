@@ -206,7 +206,7 @@ def SE_ResNet101(include_top=True,
         input_shape=(3, 224, 224)
     resnet101 =SE_ResNet(se_bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet101')
     if pretrained==True:
-        download_model_from_google_drive(model_urls['se_resnet101'],dirname,'se_resnet101.pth')
+        download_model_from_google_drive('1BO92ONsWnLQPWs9JVS-4SdpoPo5M4ABR',dirname,'se_resnet101.pth')
         recovery_model=load(os.path.join(dirname,'se_resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet101'

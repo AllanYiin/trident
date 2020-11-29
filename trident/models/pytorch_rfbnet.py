@@ -24,7 +24,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList, fix_layer, load
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import xywh2xyxy, xyxy2xywh
 from trident.data.image_common import *
@@ -480,7 +480,7 @@ def RfbNet(include_top=True,
     ]
     if pretrained == True:
         download_model_from_google_drive('1T_0VYOHaxoyuG1fAxY-6g0C7pfXiujns', dirname, 'version-RFB-640.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'version-RFB-640.pth'))
+        recovery_model = load(os.path.join(dirname, 'version-RFB-640.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'rfb640'
         recovery_model.eval()

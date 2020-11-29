@@ -68,19 +68,6 @@ for device in device_lib.list_local_devices():
 _epsilon = _session.epsilon
 
 
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, collections.Iterable):
-            return x
-        return tuple(repeat(x, n))
-
-    return parse
-
-
-_single = _ntuple(1)
-_pair = _ntuple(2)
-_triple = _ntuple(3)
-_quadruple = _ntuple(4)
 
 
 def get_layer_repr(layer):
@@ -221,7 +208,7 @@ class Flatten(Layer):
         super(Flatten, self).__init__()
         self._name = name
         self.keep_output = keep_output
-        self.keep_output = keep_output
+
 
     def build(self, input_shape):
         if self._built == False:
@@ -637,10 +624,10 @@ class _ConvNd(Layer):
         if self.groups != 1:
             s += ', groups={groups}'
         if hasattr(self,'_input_shape') and self._input_shape is not None:
-            s += ', input_shape={0}, input_filters={1}'.format(self._input_shape, self.input_filters)
+            s += ', input_shape={0}, input_filters={1}'.format(to_list(self._input_shape), self.input_filters)
         if hasattr(self,'_output_shape') and self._output_shape is not None:
             s += ', output_shape={0}'.format(
-                self._output_shape if isinstance(self._output_shape, (list, tuple)) else self._output_shape.as_list())
+                self._output_shape if isinstance(self._output_shape, (list, tuple)) else to_list(self._output_shape))
         #     if self.bias is None:
         #         s += ', use_bias=False'
         return s.format(**self.__dict__)
@@ -1326,32 +1313,35 @@ class Upsampling2d(Layer):
                              'or `"bilinear"`.')
         self.rank = 2
         self.size = size
-        if isinstance(scale_factor, tuple):
-            self.scale_factor = scale_factor
+        if scale_factor is not None:
+            if isinstance(scale_factor, tuple):
+                self.scale_factor = scale_factor
+            else:
+                self.scale_factor = (scale_factor, scale_factor)
         else:
-            self.scale_factor = (float(scale_factor), float(scale_factor))
+            self.scale_factor=1
         self.mode = mode
         self.align_corners = align_corners
         self.keep_output = keep_output
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        new_shape = x.shape.as_list()[1:-1]
+        new_shape =list(int_shape(x)[1:])
 
         if self.scale_factor is not None and isinstance(self.scale_factor, tuple):
             new_shape[0] = int(new_shape[0] * self.scale_factor[0])
             new_shape[1] = int(new_shape[1] * self.scale_factor[1])
-        new_shape = to_tensor(new_shape, dtype=tf.int32)
+
         if self.mode == 'pixel_shuffle':
             return tf.nn.depth_to_space(x, int(self.scale_factor[0]))
         elif self.mode == 'nearest':
-            return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
+            return image_ops.resize_images_v2(x, [new_shape[1],new_shape[0] ], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
         elif self.mode == 'bilinear':
-            return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.BILINEAR)
+            return image_ops.resize_images_v2(x, [new_shape[1],new_shape[0] ], method=image_ops.ResizeMethod.BILINEAR)
         elif self.mode == 'area':
-            return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.AREA)
+            return image_ops.resize_images_v2(x, [new_shape[1],new_shape[0] ], method=image_ops.ResizeMethod.AREA)
         else:
-            return image_ops.resize_images_v2(x, new_shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
+            return image_ops.resize_images_v2(x, [new_shape[1],new_shape[0] ], method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
 
     def extra_repr(self):
         if self.scale_factor is not None:

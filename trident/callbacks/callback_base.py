@@ -292,7 +292,7 @@ class LambdaCallback(CallbackBase):
     Objects of derived classes inject functionality in several points of the training process.
     """
 
-    def __init__(self,when='on_batch_end',epoch=None,batch=None,function=None,is_shared=False):
+    def __init__(self,when='on_batch_end',epoch=None,batch=None,epoch_frequency=None,batch_frequency=None,function=None,is_shared=False):
         super(LambdaCallback, self).__init__(is_shared=is_shared)
         self.is_shared=is_shared
         self.func = function
@@ -302,9 +302,11 @@ class LambdaCallback(CallbackBase):
             raise ValueError("{0} is not valid event trigger.".format(when))
         self.epoch=epoch
         self.batch=batch
+        self.epoch_frequency=epoch_frequency
+        self.batch_frequency=batch_frequency
 
         def on_trigger(self, training_context):
-            if (self.epoch is None or ('epoch' in when and training_context['current_epoch']==self.epoch) )and (self.batch is None or ('batch' in when and training_context['current_batch']==self.batch)) :
+            if ('epoch' in when  and  (self.epoch is None or training_context['current_epoch']==self.epoch) )or (self.batch is None or ('batch' in when and training_context['current_batch']==self.batch)) :
                     self.func(training_context)
 
         setattr(self,when,MethodType(on_trigger, self))

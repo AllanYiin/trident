@@ -328,7 +328,7 @@ class TransConv2d_Block(Layer):
         return x
 
     def extra_repr(self):
-        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        s = 'kernel_size={kernel_size}, num_filters={num_filters}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
             if inspect.isfunction(self.__dict__['activation']):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
@@ -509,7 +509,7 @@ class SeparableConv2d_Block(Layer):
         return x
 
     def extra_repr(self):
-        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
             if inspect.isfunction(self.__dict__['activation']):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
@@ -858,8 +858,11 @@ class ShortCut2d(Layer):
         return x
     def extra_repr(self):
         s = ('mode={mode}, keep_output={keep_output},axis={axis}')
-        if self.activation is not None:
-            s +=(', activation = {activation.__name}')
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], nn.Module):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         if hasattr(self, 'branch_from') and self.branch_from is not None:
             s += (', branch_from={branch_from}, branch_from_uuid={branch_from_uuid}')
         return s.format(**self.__dict__)

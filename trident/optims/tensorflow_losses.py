@@ -441,10 +441,10 @@ class CrossEntropyLoss(_ClassificationLoss):
         # else:
         #     loss= -cast(target,output.dtype)*output*self.sample_weight
         # return loss
-        if self.sample_weight is not None and ndim(self.sample_weight)==1:
-            self.sample_weight=expand_dims(self.sample_weight,0)
-        if self.ignore_index_weight is not None and ndim(self.ignore_index_weight)==1:
-            self.ignore_index_weight=expand_dims(self.ignore_index_weight,0)
+        # if self.sample_weight is not None and ndim(self.sample_weight)==1:
+        #     self.sample_weight=expand_dims(self.sample_weight,0)
+        # if self.ignore_index_weight is not None and ndim(self.ignore_index_weight)==1:
+        #     self.ignore_index_weight=expand_dims(self.ignore_index_weight,0)
 
         sample_weight = cast(self.sample_weight,output.dtype)*cast( self.ignore_index_weight,output.dtype)
         if ndim(output) == 2:

@@ -19,11 +19,9 @@ from skimage.filters import *
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-_session=get_session()
-_backend=_session.backend
-_image_backend=_session.image_backend
 
-if _image_backend=='opencv':
+
+if get_image_backend()=='opencv':
     from trident.backend.opencv_backend import *
 else:
     from trident.backend.pillow_backend import *
@@ -152,13 +150,13 @@ def label2color(label_mask,palette):
     return color_label
 
 
-def mask_backend_adaptive(mask, label_mapping=None, expect_data_type=None):
-    if _backend == 'pytorch':
+def mask_backend_adaptive(mask, label_mapping=None, object_type=None):
+    if get_backend() == 'pytorch':
         if mask is None:
             return None
         elif isinstance(mask, np.ndarray):
             # binary mask
-            if expect_data_type == ExpectDataType.binary_mask:
+            if object_type == ObjectType.binary_mask:
                 if mask.ndim==2 :
                     mask[mask > 0] = 1
                     return mask.astype(np.int64)
@@ -169,7 +167,7 @@ def mask_backend_adaptive(mask, label_mapping=None, expect_data_type=None):
                         mask = mask[:, :, 0]
                     mask[mask > 0] = 1
                     return mask.astype(np.int64)
-            elif expect_data_type == ExpectDataType.label_mask or expect_data_type == ExpectDataType.color_mask:
+            elif object_type == ObjectType.label_mask or object_type == ObjectType.color_mask:
                 if mask.ndim==2 :
                     return mask.astype(np.int64)
                 if mask.ndim == 3 and mask.shape[-1] >2:
@@ -177,7 +175,40 @@ def mask_backend_adaptive(mask, label_mapping=None, expect_data_type=None):
                         mask=np.argmax(mask, -1).astype(np.int64)
                         return mask
                 return mask.astype(np.int64)
-            elif expect_data_type == ExpectDataType.alpha_mask:
+            elif object_type == ObjectType.alpha_mask:
+                if mask.ndim==2 :
+                    mask=mask/255.0
+                    return mask.astype(np.float32)
+                if mask.ndim == 3:
+                    mask=color.rgb2gray(mask.astype(np.float32))
+                if mask.max()>1:
+                    mask = mask /mask.max()
+                return mask.astype(np.float32)
+        else:
+            return mask
+    elif get_backend() == 'tensorflow':
+        if mask is None:
+            return None
+        elif isinstance(mask, np.ndarray):
+            # binary mask
+            if object_type == ObjectType.binary_mask:
+                if mask.ndim==2 :
+                    mask[mask > 0] = 1
+                    return mask.astype(np.int64)
+                elif mask.ndim==3 and mask.shape[-1] in [1, 2]:
+                    if mask.shape[-1] ==2:
+                        mask= mask[:, :, 1]
+                    elif mask.shape[-1] ==1:
+                        mask = mask[:, :, 0]
+                    mask[mask > 0] = 1
+                    return mask.astype(np.int64)
+            elif object_type == ObjectType.label_mask or object_type == ObjectType.color_mask:
+                if mask.ndim==2 and label_mapping is not None and len(label_mapping)>0:
+                    return to_onehot(mask,len(label_mapping))
+                if mask.ndim == 3 and mask.shape[-1] >2:
+                    return mask
+                return mask
+            elif object_type == ObjectType.alpha_mask:
                 if mask.ndim==2 :
                     mask=mask/255.0
                     return mask.astype(np.float32)

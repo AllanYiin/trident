@@ -62,10 +62,8 @@ class MixupCallback(RegularizationCallbacksBase):
         y = train_data.value_list[1].copy().detach()  # label
         model=training_context['current_model']
 
-        if self.alpha > 0:
-            lam =to_tensor(np.random.beta(self.alpha, self.alpha))
-        else:
-            lam = 1
+        lam=builtins.min(builtins.max(np.random.beta(self.alpha,self.alpha),0.3), 0.7)
+
         batch_size = int_shape(x)[0]
         index = arange(batch_size)
         index=cast(shuffle(index),'long')
@@ -92,15 +90,13 @@ class MixupCallback(RegularizationCallbacksBase):
         if training_context['current_batch']==0:
             for item in mixed_x:
                 if self.save_path is None and not is_in_colab():
-                    for item in x:
-                        item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                        item = unnormalize(0, 255)(item)
-                        array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
+                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = unnormalize(0, 255)(item)
+                    array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
                 elif self.save_path is not None:
-                    for item in x:
-                        item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                        item = unnormalize(0, 255)(item)
-                        array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = unnormalize(0, 255)(item)
+                    array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
 
 
 class CutMixCallback(RegularizationCallbacksBase):

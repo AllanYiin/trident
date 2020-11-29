@@ -24,7 +24,7 @@ except ImportError:
 
 _session = get_session()
 _trident_dir = os.path.join(_session.trident_dir, 'datasets')
-_backend = _session.backend
+_backend = get_backend()
 
 if 'TRIDENT_BACKEND' in os.environ:
     _backend = os.environ['TRIDENT_BACKEND']
@@ -111,7 +111,7 @@ def load_mnist(dataset_name='mnist', **kwargs):
                 images = np.frombuffer(imgpath.read(), dtype=np.uint8, offset=16)
                 images = np.reshape(images, (len(labels), 784)).astype(dtype=_session.floatx)
                 images = np.reshape(images, (-1, 28, 28))
-                imagedata = ImageDataset(images, expect_data_type=ExpectDataType.gray)
+                imagedata = ImageDataset(images, object_type=ObjectType.gray)
             if kind == 'train':
                 trainData = Iterator(data=imagedata, label=labeldata)
             else:
@@ -320,8 +320,8 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
     if mode=='next_word':
         corpus1=copy.deepcopy(corpus)
         corpus2= copy.deepcopy(corpus)
-        data_seq=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_onehot=is_onehot,symbol='input',sequence_offset=0,sequence_start_at=sequence_start_at)
-        labels_seq =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_onehot=is_onehot,symbol='label',sequence_offset=1,sequence_start_at=sequence_start_at)
+        data_seq=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_onehot=is_onehot,symbol='input',sequence_offset=0,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
+        labels_seq =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_onehot=is_onehot,symbol='label',sequence_offset=1,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         traindata=Iterator(data=data_seq,label=labels_seq)
         dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata)
     elif mode=='skip_gram':
@@ -333,8 +333,8 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
         dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0], traindata=traindata)
     elif mode == '1to1_seq2seq':
         if len(corpus)==len(output_corpus):
-            data_seq = TextSequenceDataset(corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at)
-            labels_seq = TextSequenceDataset(output_corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=0, sequence_start_at=sequence_start_at)
+            data_seq = TextSequenceDataset(corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
+            labels_seq = TextSequenceDataset(output_corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.sequence_label)
             traindata = Iterator(data=data_seq, label=labels_seq)
             dataprovider = TextSequenceDataProvider('1to1_seq2seq', traindata=traindata)
         else:
@@ -346,7 +346,7 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
 
 
 def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=True, folder_as_label=True,
-                       expect_data_type=ExpectDataType.rgb):
+                       object_type=ObjectType.rgb):
     base_folder = sanitize_path(base_folder)
     if base_folder is not None and os.path.exists(base_folder):
         print(base_folder)
@@ -374,7 +374,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                 labels.extend([i] * len(class_imgs))
                 imgs.extend(class_imgs)
 
-            imagedata = ImageDataset(imgs, expect_data_type=expect_data_type, get_image_mode=GetImageMode.processed)
+            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
             print('extract {0} images...'.format(len(imagedata)))
             labelsdata = LabelDataset(labels)
             labelsdata.binding_class_names(class_names)
@@ -385,7 +385,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
 
         else:
             imgs = glob.glob(base_folder + '/*.*g')
-            imagedata = ImageDataset(imgs, expect_data_type=expect_data_type, get_image_mode=GetImageMode.processed)
+            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
             traindata = Iterator(data=imagedata)
             dataset = DataProvider(dataset_name, traindata=traindata)
         return dataset
@@ -619,10 +619,10 @@ def load_examples_data(dataset_name):
         extract_path = os.path.join(dirname, 'hanzi')
         extract_archive(tar_file_path, dirname, archive_format='tar')
         dataset = load_folder_images(dataset_name, os.path.join(dirname, 'train'), folder_as_label=True,
-                                     expect_data_type=ExpectDataType.gray)
+                                     object_type=ObjectType.gray)
 
         dataset_test = load_folder_images(dataset_name, os.path.join(dirname, 'test'), folder_as_label=True,
-                                          expect_data_type=ExpectDataType.gray)
+                                          object_type=ObjectType.gray)
 
         dataset.testdata = dataset_test.traindata
         dataset.class_names['zh-cn'] = dataset.class_names['en-us']
@@ -643,12 +643,12 @@ def load_examples_data(dataset_name):
         testData = np.load(os.path.join(dirname, 'test_porn_detector64_small.npy'), allow_pickle=True)
 
         trainarray = ImageDataset(np.array(trainData[0].tolist()).transpose([0, 2, 3, 1]),
-                                  expect_data_type=ExpectDataType.rgb, get_image_mode=GetImageMode.processed)
+                                  object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
         trainlabel = LabelDataset(trainData[1].tolist())
         train_iter = Iterator(data=trainarray, label=trainlabel)
 
         testarray = ImageDataset(np.array(testData[0].tolist()).transpose([0, 2, 3, 1]),
-                                 expect_data_type=ExpectDataType.rgb, get_image_mode=GetImageMode.processed)
+                                 object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
         testlabel = LabelDataset(testData[1].tolist())
         test_iter = Iterator(data=testarray, label=testlabel)
         print('training images: {0}  test images:{1}'.format(len(trainarray), len(testarray)))
@@ -673,13 +673,13 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'horse2zebra.tar')
         extract_path = os.path.join(dirname, 'horse2zebra')
         extract_archive(tar_file_path, dirname, archive_format='tar')
-        trainA = ImageDataset(list_pictures(os.path.join(dirname, 'trainA')), expect_data_type=ExpectDataType.rgb,
+        trainA = ImageDataset(list_pictures(os.path.join(dirname, 'trainA')), object_type=ObjectType.rgb,
                               get_image_mode=GetImageMode.processed)
-        trainB = ImageDataset(list_pictures(os.path.join(dirname, 'trainB')), expect_data_type=ExpectDataType.rgb,
+        trainB = ImageDataset(list_pictures(os.path.join(dirname, 'trainB')), object_type=ObjectType.rgb,
                               get_image_mode=GetImageMode.processed)
-        testA = ImageDataset(list_pictures(os.path.join(dirname, 'testA')), expect_data_type=ExpectDataType.rgb,
+        testA = ImageDataset(list_pictures(os.path.join(dirname, 'testA')), object_type=ObjectType.rgb,
                              get_image_mode=GetImageMode.processed)
-        testB = ImageDataset(list_pictures(os.path.join(dirname, 'testB')), expect_data_type=ExpectDataType.rgb,
+        testB = ImageDataset(list_pictures(os.path.join(dirname, 'testB')), object_type=ObjectType.rgb,
                              get_image_mode=GetImageMode.processed)
         train_iter = Iterator(data=trainA, unpair=trainB)
         test_iter = Iterator(data=testA, unpair=testB)
@@ -699,8 +699,8 @@ def load_examples_data(dataset_name):
         #     save_mask(trimap,masks[i].replace('masks','trimap'))
         # print('trimap',len(masks))
 
-        imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb)
-        mskdata = MaskDataset(masks=masks, expect_data_type=ExpectDataType.binary_mask)
+        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb)
+        mskdata = MaskDataset(masks=masks, object_type=ObjectType.binary_mask)
         dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=mskdata))
         print('get people images :{0}'.format(len(dataset)))
         return dataset
@@ -712,8 +712,8 @@ def load_examples_data(dataset_name):
         imgs = glob.glob(os.path.join(dirname, 'images', '*.*g'))
         masks = glob.glob(os.path.join(dirname, 'masks', '*.png'))
 
-        imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb)
-        mskdata = MaskDataset(masks=masks, expect_data_type=ExpectDataType.color_mask)
+        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb)
+        mskdata = MaskDataset(masks=masks, object_type=ObjectType.color_mask)
 
         def parse_code(l):
             if len(l.strip().split("\t")) == 2:
@@ -736,8 +736,8 @@ def load_examples_data(dataset_name):
         imgs.extend(glob.glob(os.path.join(dirname, '*.bmp')))
         print('get super resolution images :{0}'.format(len(imgs)))
 
-        imgdata = ImageDataset(images=imgs * 2, expect_data_type=ExpectDataType.rgb, symbol='lr')
-        labeldata = ImageDataset(images=imgs * 2, expect_data_type=ExpectDataType.rgb, symbol='hr')
+        imgdata = ImageDataset(images=imgs * 2, object_type=ObjectType.rgb, symbol='lr')
+        labeldata = ImageDataset(images=imgs * 2, object_type=ObjectType.rgb, symbol='hr')
         dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
         return dataset
     elif dataset_name == 'examples_beauty':
@@ -751,7 +751,7 @@ def load_examples_data(dataset_name):
 
         f = open(os.path.join(dirname, 'All_Ratings.txt'), encoding='utf-8-sig').readlines()
         imgs = []
-        landmark = []
+        landmarks = []
         ratings = []
         for row in f:
             data = row.strip().split('\t')
@@ -759,14 +759,15 @@ def load_examples_data(dataset_name):
                 img = images_dict['images\\' + data[0]][0]
                 img = img.transpose([2, 0, 1])[::-1].transpose([1, 2, 0])
                 imgs.append(img)
-                landmark = images_dict['images\\' + data[0]][1].astype(np.float32) / 256.0
-                rating = np.array([(float(data[1])) / 5.00])
-                rating = np.concatenate([landmark.reshape(-1), rating], axis=0).astype(np.float32)
+                landmark = images_dict['images\\' + data[0]][1].astype(np.float32)
+                landmarks.append(landmark)
+                rating = (float(data[1])) / 5.00
                 ratings.append(rating)
         print('{0} faces loaded...'.format(len(imgs)))
-        imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb, symbol='faces')
-        labeldata = NumpyDataset(data=ratings, expect_data_type=ExpectDataType.array_data, symbol='ratings')
-        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=labeldata))
+        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb, symbol='faces')
+        landmarkdata = LandmarkDataset(landmarks=landmarks, object_type=ObjectType.landmarks, symbol='target_landmarks')
+        labeldata = LabelDataset(data=ratings, object_type=ObjectType.array_data, symbol='target_beauty')
+        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=Dataset.zip(landmarkdata,labeldata)))
         return data_provider
 
     elif dataset_name == 'examples_facelandmarks':
@@ -798,9 +799,9 @@ def load_examples_data(dataset_name):
                 ratings.append(rating)
 
         print('{0} faces loaded...'.format(len(imgs)))
-        imgdata = ImageDataset(images=imgs, expect_data_type=ExpectDataType.rgb, symbol='faces')
-        landmarkdata = LandmarkDataset(landmarks=landmarks, expect_data_type=ExpectDataType.array_data, symbol='landmarks')
-       # labeldata = NumpyDataset(data=ratings, expect_data_type=ExpectDataType.array_data, symbol='ratings')
+        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb, symbol='faces')
+        landmarkdata = LandmarkDataset(landmarks=landmarks, object_type=ObjectType.array_data, symbol='landmarks')
+       # labeldata = NumpyDataset(data=ratings, object_type=ObjectType.array_data, symbol='ratings')
 
         data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=landmarkdata))
         return data_provider

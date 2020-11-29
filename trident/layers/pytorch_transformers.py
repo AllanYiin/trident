@@ -113,7 +113,7 @@ class PositionEmbeddingLearned(Layer):
         ], dim=-1).permute(2, 0, 1).unsqueeze(0).repeat(x.shape[0], 1, 1, 1)
         return pos
 
-class BERT(nn.Module):
+class BERT(Layer):
     """
     BERT model : Bidirectional Encoder Representations from Transformers.
     """

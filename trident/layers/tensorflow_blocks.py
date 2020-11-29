@@ -22,14 +22,14 @@ from trident.backend.common import *
 from trident.layers.tensorflow_activations import get_activation, Identity
 from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization
-from trident.layers.tensorflow_pooling import  GlobalAvgPool2d
+from trident.layers.tensorflow_pooling import GlobalAvgPool2d
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_layers import *
 
 _tf_data_format = 'channels_last'
 
-__all__ = ['Conv1d_Block', 'Conv2d_Block','TransConv2d_Block','DepthwiseConv2d_Block','SeparableConv2d_Block', 'ShortCut2d','ConcateBlock','SqueezeExcite','For']
+__all__ = ['Conv1d_Block', 'Conv2d_Block', 'TransConv2d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite', 'For']
 
 _session = get_session()
 
@@ -42,20 +42,20 @@ def _ntuple(n):
 
     return parse
 
+
 _single = _ntuple(1)
 _pair = _ntuple(2)
 _triple = _ntuple(3)
 _quadruple = _ntuple(4)
 
 
-
 class Conv1d_Block(Layer):
     def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 normalization=None, use_spectral=False,use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
-                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,sequence_rank='cna',**kwargs):
-        super(Conv1d_Block, self).__init__(name=name,keep_output=keep_output)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+                 normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
+                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, sequence_rank='cna', **kwargs):
+        super(Conv1d_Block, self).__init__(name=name, keep_output=keep_output)
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         else:
             self.sequence_rank = 'cna'
         self.kernel_size = kernel_size
@@ -89,15 +89,14 @@ class Conv1d_Block(Layer):
         #     self.use_spectral = True
         #     norm = None
         #     conv= nn.utils.spectral_norm(conv)
-        if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.conv = conv
             self.norm = norm
             self.activation = get_activation(activation)
-        elif self.sequence_rank=='nac':
+        elif self.sequence_rank == 'nac':
             self.norm = norm
             self.activation = get_activation(activation)
             self.conv = conv
-
 
     def build(self, input_shape):
         if self._built == False:
@@ -109,8 +108,8 @@ class Conv1d_Block(Layer):
 
     def forward(self, *x):
         x = enforce_singleton(x)
-        if hasattr(self,'sequence_rank'):
-            setattr(self,'sequence_rank','cna')
+        if hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * random_normal_like(x, dtype=tf.float32)
             x = x + noise
@@ -127,7 +126,7 @@ class Conv1d_Block(Layer):
                 x = self.activation(x)
             x = self.conv(x)
         if self.dropout_rate > 0 and self.training:
-            x = tf.nn.dropout(x,rate=self.dropout_rate)
+            x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
 
     def extra_repr(self):
@@ -140,14 +139,13 @@ class Conv1d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-
 class Conv2d_Block(Layer):
-    def __init__(self,kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, sequence_rank='cna', **kwargs):
         super(Conv2d_Block, self).__init__(name=name)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -176,15 +174,13 @@ class Conv2d_Block(Layer):
         self.depth_multiplier = depth_multiplier
         self.use_spectral = use_spectral
         if not self.use_spectral:
-            self.conv= Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                              auto_pad=self.auto_pad, activation=None,
-                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                              depth_multiplier=self.depth_multiplier,padding=self.padding, **kwargs)
+            self.conv = Conv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                               auto_pad=self.auto_pad, activation=None,
+                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                               depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs)
             self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
-
-
 
     def build(self, input_shape):
         if self._built == False:
@@ -193,19 +189,19 @@ class Conv2d_Block(Layer):
             #     conv=self._modules['conv']
             #     self._modules['conv']=nn.utils.spectral_norm(conv)
             #     self.norm=None
-            self._built=True
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
-            x +=noise
+            x += noise
         x = self.conv(x)
         if self.norm is not None:
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
-        if self.training and self.dropout_rate > 0 :
+        if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
 
@@ -219,16 +215,13 @@ class Conv2d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-
-
-
 class TransConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,sequence_rank='cna', **kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None, sequence_rank='cna', **kwargs):
         super(TransConv2d_Block, self).__init__(name=name)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -244,42 +237,40 @@ class TransConv2d_Block(Layer):
         self.depth_multiplier = depth_multiplier
         self.use_spectral = use_spectral
         if not self.use_spectral:
-            self.conv= TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                              auto_pad=self.auto_pad, activation=None,
-                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                              depth_multiplier=self.depth_multiplier)
+            self.conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                    auto_pad=self.auto_pad, activation=None,
+                                    use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                                    depth_multiplier=self.depth_multiplier)
             self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
 
-
-
     def build(self, input_shape):
         if self._built == False:
             conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                          auto_pad=self.auto_pad, activation=None,
-                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
-                          depth_multiplier=self.depth_multiplier)
-            #conv.input_shape = input_shape
+                               auto_pad=self.auto_pad, activation=None,
+                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name,
+                               depth_multiplier=self.depth_multiplier)
+            # conv.input_shape = input_shape
 
             if self.use_spectral:
-                #self.conv = nn.utils.spectral_norm(conv)
-                self.norm=None
+                # self.conv = nn.utils.spectral_norm(conv)
+                self.norm = None
             else:
                 self.conv = conv
-            self._built=True
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
-            x +=noise
+            x += noise
         x = self.conv(x)
         if self.norm is not None:
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
-        if self.training and self.dropout_rate > 0 :
+        if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
 
@@ -296,10 +287,10 @@ class TransConv2d_Block(Layer):
 class TransConv3d_Block(Layer):
     def __init__(self, kernel_size=(3, 3, 3), num_filters=32, strides=1, input_shape=None, auto_pad=True,
                  activation='leaky_relu', normalization=None, use_bias=False, dilation=1, groups=1, add_noise=False,
-                 noise_intensity=0.001, dropout_rate=0, name=None,sequence_rank='cna', **kwargs):
+                 noise_intensity=0.001, dropout_rate=0, name=None, sequence_rank='cna', **kwargs):
         super(TransConv3d_Block, self).__init__(name=name)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         if add_noise:
             noise = tf.keras.layers.GaussianNoise(noise_intensity)
             self.add(noise)
@@ -327,14 +318,23 @@ class TransConv3d_Block(Layer):
     def conv(self, value):
         self._conv = value
 
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, num_filters={num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], Layer):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
+
 
 class DepthwiseConv2d_Block1(Layer):
-    def __init__(self,kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
-                 activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None,  sequence_rank='cna', **kwargs):
+    def __init__(self, kernel_size=(3, 3), depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero', activation=None, normalization=None, use_spectral=False,
+                 use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, sequence_rank='cna', **kwargs):
         super(DepthwiseConv2d_Block, self).__init__()
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        super().__init__(name, **kwargs)
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.strides = strides
         self.auto_pad = auto_pad
@@ -349,46 +349,44 @@ class DepthwiseConv2d_Block1(Layer):
         self.depth_multiplier = depth_multiplier
         self.use_spectral = use_spectral
         if not self.use_spectral:
-            self.conv= DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
-                              auto_pad=self.auto_pad, activation=None,
-                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
+            self.conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
+                                        auto_pad=self.auto_pad, activation=None,
+                                        use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
             self.norm = get_normalization(normalization)
-            self.conv=None
+            self.conv = None
         self.activation = get_activation(activation)
         self.droupout = None
 
-
-
     def build(self, input_shape):
         if self._built == False:
-            conv = DepthwiseConv2d(kernel_size=self.kernel_size,depth_multiplier=self.depth_multiplier, strides=self.strides,
-                          auto_pad=self.auto_pad, activation=None,
-                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
-            #conv.input_shape = input_shape
+            conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
+                                   auto_pad=self.auto_pad, activation=None,
+                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
+            # conv.input_shape = input_shape
 
             if self.use_spectral:
-                #self.conv = nn.utils.spectral_norm(conv)
-                self.norm=None
+                # self.conv = nn.utils.spectral_norm(conv)
+                self.norm = None
             else:
                 self.conv = conv
-            self._built=True
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
-            x +=noise
+            x += noise
         x = self.conv(x)
         if self.norm is not None:
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
-        if self.training and self.dropout_rate > 0 :
+        if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
 
     def extra_repr(self):
-        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
             if inspect.isfunction(self.__dict__['activation']):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
@@ -396,13 +394,14 @@ class DepthwiseConv2d_Block1(Layer):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         return s.format(**self.__dict__)
 
+
 class DepthwiseConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding=None,padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
-                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, sequence_rank='cna',**kwargs):
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, sequence_rank='cna', **kwargs):
         super(DepthwiseConv2d_Block, self).__init__(name=name)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
 
@@ -429,10 +428,11 @@ class DepthwiseConv2d_Block(Layer):
         self.droupout = None
         self.keep_output = keep_output
         self._name = name
+
     def build(self, input_shape):
         if self._built == False or self.conv is None:
             conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                   strides=self.strides, auto_pad=self.auto_pad, padding=self.padding,padding_mode=self.padding_mode,
+                                   strides=self.strides, auto_pad=self.auto_pad, padding=self.padding, padding_mode=self.padding_mode,
                                    activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name)
             conv.input_shape = input_shape
             if self.use_spectral:
@@ -441,8 +441,6 @@ class DepthwiseConv2d_Block(Layer):
                 self.conv = conv
 
             self._built = True
-
-
 
     def forward(self, *x):
         x = enforce_singleton(x)
@@ -459,7 +457,7 @@ class DepthwiseConv2d_Block(Layer):
         return x
 
     def extra_repr(self):
-        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
             if inspect.isfunction(self.__dict__['activation']):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
@@ -469,12 +467,12 @@ class DepthwiseConv2d_Block(Layer):
 
 
 class SeparableConv2d_Block(Layer):
-    def __init__(self, kernel_size=(3,3),depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, sequence_rank='cna', **kwargs):
         super(SeparableConv2d_Block, self).__init__()
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.strides = strides
         self.auto_pad = auto_pad
@@ -489,53 +487,49 @@ class SeparableConv2d_Block(Layer):
         self.depth_multiplier = depth_multiplier
         self.use_spectral = use_spectral
         if not self.use_spectral:
-            self.conv= SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
-                              auto_pad=self.auto_pad, activation=None,
-                              use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
+            self.conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
+                                        auto_pad=self.auto_pad, activation=None,
+                                        use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
             self.norm = get_normalization(normalization)
         self.activation = get_activation(activation)
         self.droupout = None
 
-
-
     def build(self, input_shape):
         if self._built == False:
             conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
-                          auto_pad=self.auto_pad, activation=None,
-                          use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name
-                          )
-            #conv.input_shape = input_shape
+                                   auto_pad=self.auto_pad, activation=None,
+                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name
+                                   )
+            # conv.input_shape = input_shape
 
             # if self.use_spectral:
             #     self.conv = spectral_norm(self.conv)
             #     if self.norm is SpectralNorm:
             #         self.norm=None
-            self._built=True
+            self._built = True
 
     def forward(self, *x):
         x = enforce_singleton(x)
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
-            x +=noise
+            x += noise
         x = self.conv(x)
         if self.norm is not None:
             x = self.norm(x)
         if self.activation is not None:
             x = self.activation(x)
-        if self.training and self.dropout_rate > 0 :
+        if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
 
     def extra_repr(self):
-        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
             if inspect.isfunction(self.__dict__['activation']):
                 s += ', activation={0}'.format(self.__dict__['activation'].__name__)
             elif isinstance(self.__dict__['activation'], Layer):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         return s.format(**self.__dict__)
-
-
 
 
 def For(what_range, constructor):
@@ -574,11 +568,10 @@ def For(what_range, constructor):
         if takes_arg:
             return constructor(i)  # takes an arg: pass it
         else:
-            return constructor()   # takes no arg: call without, that's fine too
+            return constructor()  # takes no arg: call without, that's fine too
 
     layers = [call(i) for i in what_range]
     return Sequential(layers)
-
 
 
 class Classifer1d(tf.keras.Sequential):
@@ -599,9 +592,8 @@ class Classifer1d(tf.keras.Sequential):
                 self.add(SoftMax)
 
 
-
 class ShortCut2d(Layer):
-    def __init__(self, *args, axis=-1,branch_from=None,activation=None, mode='add', name=None, keep_output=False,**kwargs):
+    def __init__(self, *args, axis=-1, branch_from=None, activation=None, mode='add', name=None, keep_output=False, **kwargs):
         """
         Args
         layer_defs : object
@@ -610,14 +602,14 @@ class ShortCut2d(Layer):
         self.activation = get_activation(activation)
         self.has_identity = False
         self.mode = mode if isinstance(mode, str) else mode
-        self.axis=axis
-        self.branch_from=branch_from
-        self.branch_from_uuid=None
-        self.keep_output=keep_output
+        self.axis = axis
+        self.branch_from = branch_from
+        self.branch_from_uuid = None
+        self.keep_output = keep_output
 
         for i in range(len(args)):
             arg = args[i]
-            if isinstance(arg, (Layer,tf.Tensor, list, dict)):
+            if isinstance(arg, (Layer, tf.Tensor, list, dict)):
                 if isinstance(arg, list):
                     arg = Sequential(*arg)
                 elif isinstance(arg, OrderedDict) and len(args) == 1:
@@ -636,13 +628,13 @@ class ShortCut2d(Layer):
                             self.add_module('Identity', v)
                         else:
                             self.add_module(str(k), v)
-                elif isinstance(arg,  (dict,OrderedDict)) and len(args) > 1:
+                elif isinstance(arg, (dict, OrderedDict)) and len(args) > 1:
                     raise ValueError('more than one dict argument is not support.')
                 elif isinstance(arg, Identity):
                     self.has_identity = True
                     self.add_module('Identity', arg)
                 elif isinstance(arg, Layer):
-                    if len(arg.name)>0 and arg.name!=arg._name:
+                    if len(arg.name) > 0 and arg.name != arg._name:
                         self.add_module(arg.name, arg)
                     else:
                         self.add_module('branch{0}'.format(i + 1), arg)
@@ -664,6 +656,7 @@ class ShortCut2d(Layer):
                 if self.branch_from_uuid is None:
                     raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
             self._built = True
+
     def forward(self, *x):
         x = enforce_singleton(x)
         current = None
@@ -700,15 +693,18 @@ class ShortCut2d(Layer):
         if self.activation is not None:
             x = self.activation(x)
         return x
+
     def extra_repr(self):
-        s = ('mode={mode}, keep_output={keep_output}, activation={activation.__name__},axis={axis}')
+        s = ('mode={mode}, keep_output={keep_output},axis={axis}')
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], Layer):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+
         if hasattr(self, 'branch_from') and self.branch_from is not None:
             s += ', branch_from={0}, branch_from_uuid={1}'.format(self.branch_from, self.branch_from_uuid)
         return s.format(**self.__dict__)
-
-
-
-
 
 
 class ConcateBlock(Layer):
@@ -745,7 +741,6 @@ class ConcateBlock(Layer):
         if len(self._modules) == 1 and self.has_identity == False:
             self.add_module('Identity', Identity())
 
-
     def forward(self, *x):
         x = enforce_singleton(x)
         outs = []
@@ -765,9 +760,6 @@ class ConcateBlock(Layer):
         return outs
 
 
-
-
-
 class SqueezeExcite(Layer):
     def __init__(self, se_filters, num_filters, is_gather_excite=False, use_bias=False, name=''):
         super(SqueezeExcite, self).__init__(name=name)
@@ -782,8 +774,8 @@ class SqueezeExcite(Layer):
         self.use_bias = use_bias
 
     def build(self, input_shape):
-        if self._built == False :
-            self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None,use_bias=self.use_bias, name=self.name + '_squeeze')
+        if self._built == False:
+            self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
             self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
             self._built = True
 
@@ -793,7 +785,7 @@ class SqueezeExcite(Layer):
         s = tf.sigmoid(self.excite(s))
 
         if self.is_gather_excite:
-            s=image_ops.resize_images_v2(s, x.shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
+            s = image_ops.resize_images_v2(s, x.shape, method=image_ops.ResizeMethod.NEAREST_NEIGHBOR)
         x = s * x
         return x
 

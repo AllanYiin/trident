@@ -32,7 +32,7 @@ cfg = {'min_sizes': [[10, 16, 24], [32, 48], [64, 96], [128, 192, 256]], 'steps'
        'variance': [0.1, 0.2], 'clip': False, }
 
 __all__ = ['Ssd', 'encode', 'decode', 'SsdBboxDataset', 'SsdBboxDatasetV2', 'SsdDetectionModel', 'MultiBoxLoss',
-           'MultiBoxLossV2','IouLoss']
+           'MultiBoxLossV2', 'IoULoss']
 
 
 def intersect(box_a, box_b):
@@ -470,7 +470,7 @@ class IouLoss(nn.Module):
         Basically, Multibox loss combines classification loss
          and Smooth L1 regression loss.
         """
-        super(IouLoss, self).__init__()
+        super(IoULoss, self).__init__()
         self.center_variance = center_variance
         self.size_variance = size_variance
         self.priors = to_tensor(priors)

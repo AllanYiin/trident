@@ -56,7 +56,7 @@ def get_device():
     Returns: device string ('cpu', 'cuda)
 
     """
-    if get_session().device is None:
+    if get_session().device is None or get_session().device =='cuda':
         set_device('/gpu:0' if len(tf.config.list_physical_devices('GPU')) > 0 else "/cpu:0")
     return get_session().device
 
@@ -1332,17 +1332,15 @@ class Layer(tf.Module):
         # Maintains info about the `Layer.call` stack.
         is_all_numpy = True
         input = list(input)
-        new_input = []
-        for inp in input:
-            if isinstance(inp, np.ndarray):
-                inp = to_tensor(inp)
-                new_input.append(inp)
+        for i in range(len(input)):
+            if isinstance(input[i], np.ndarray):
+                input[i] = to_tensor(input[i])
             else:
-                new_input.append(inp)
                 is_all_numpy = False
-        input = new_input
-        for hook in self._forward_pre_hooks.values():
-            result = hook(self, *input)
+        for hook in itertools.chain(
+                _global_forward_pre_hooks.values(),
+                self._forward_pre_hooks.values()):
+            result = hook(self, input)
             if result is not None:
                 if not isinstance(result, tuple):
                     result = (result,)
@@ -1377,12 +1375,12 @@ class Layer(tf.Module):
                 hook_result = hook(self, input, result)
                 if hook_result is not None:
                     result = hook_result
-            if is_all_numpy == True and self.training == False:
+            if is_all_numpy == True and self.training == False and self.is_root==True:
                 if is_tensor(result):
                     return to_numpy(result)
                 elif isinstance(result, (list, tuple)):
                     result = list(result)
-                return tuple([to_numpy(res) if is_tensor(res) else res for res in result])
+                    return tuple([to_numpy(res) if is_tensor(res) else res for res in result])
             return result
         except Exception as e:
             print('{0} ({1} call failed.)'.format(self.name, self.default_name))

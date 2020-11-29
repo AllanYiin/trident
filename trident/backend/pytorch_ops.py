@@ -44,11 +44,13 @@ def numpy_compatible(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if func.__name__ in ('max','min','maximum','minimum','abs','round'):
+        if func.__name__ in ('max','min','maximum','minimum','abs','round') and isinstance(args[0],tuple):
             args=unpack_singleton(args)
-        x = args[0]
+
+        x = args[0] if hasattr(args,'__len__') else args
         new_args = []
         new_kwargs = OrderedDict()
+
 
         if all([isinstance(arg, numbers.Number) for arg in args]) and all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()]) and  func.__name__ in ('max','min','maximum','minimum','abs','round'):
             builtins_funcs = get_function(func.__name__, ['builtins'])
@@ -618,8 +620,9 @@ def equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([0., 0., 1.])
 
     """
-    if isinstance(right,numbers.Integral):
+    if isinstance(right,numbers.Number):
         right=to_tensor(builtins.float(right))
+
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
     return cast(left.eq(right),left.dtype)
@@ -643,7 +646,7 @@ def greater(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([0., 0., 1.])
 
     """
-    if isinstance(right,numbers.Integral):
+    if isinstance(right,numbers.Number):
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
@@ -668,7 +671,7 @@ def greater_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([0., 1., 1.])
 
     """
-    if isinstance(right,numbers.Integral):
+    if isinstance(right,numbers.Number):
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
@@ -693,7 +696,7 @@ def not_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([1., 0., 1.])
 
     """
-    if isinstance(right,numbers.Integral):
+    if isinstance(right,numbers.Number):
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
@@ -718,7 +721,7 @@ def less_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
         tensor([1., 1., 0.])
 
     """
-    if isinstance(right,numbers.Integral):
+    if isinstance(right,numbers.Number):
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
@@ -3855,7 +3858,6 @@ _FUN_NAMES = [
     ('any_inf', any_inf),
     ('any_abnormal_number', any_abnormal_number),
     ('less', less),
-    ('equal', equal),
     ('greater', greater),
     ('greater_equal', greater_equal),
     ('not_equal', not_equal),

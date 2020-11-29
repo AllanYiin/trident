@@ -21,6 +21,7 @@ import types
 from enum import Enum
 from inspect import signature
 from pydoc import locate
+from typing import Union, Tuple, Any, overload
 
 import numpy as np
 
@@ -29,7 +30,7 @@ __all__ = ['get_session','set_session','get_session_value','get_backend','get_im
            'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
            'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature',
-           'DataRole','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
+           'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
           'get_args_spec', 'get_gpu_memory_map']
@@ -285,6 +286,13 @@ def get_image_backend():
     global  _SESSION
     return _SESSION.image_backend
 
+def get_device():
+    global  _SESSION
+    if hasattr(_SESSION,'device'):
+        return _SESSION.device
+    else:
+
+        _SESSION.device
 
 def _is_c_contiguous(data):
     while isinstance(data, list):
@@ -1064,7 +1072,18 @@ def map_function_arguments(params, params_dict, *args, **kwargs):
     return arg_map
 
 
+class device:
+    type: str  # THPDevice_type
+    index: int  # THPDevice_index
 
+    # THPDevice_pynew
+    @overload
+    def __init__(self, device: Union[int, str]) -> None: ...
+
+    @overload
+    def __init__(self, type: str, index: int) -> None: ...
+
+    def __reduce__(self) -> Tuple[Any, ...]: ...  # THPDevice_reduce
 
 
 class ClassfierType(Enum):
@@ -1093,10 +1112,10 @@ class ShortcutMode(Enum):
     concate = 'concate'
 
 
-class DataRole(Enum):
-    input = 'input'
-    target = 'target'
-    mask = 'mask'
+class Interpolation(Enum):
+    Nearest = 'Nearest'
+    Bilinear = 'Bilinear'
+    Bicubic = 'Bicubic'
 
 
 

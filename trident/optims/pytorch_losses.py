@@ -110,11 +110,11 @@ class _ClassificationLoss(Loss):
         #output,target=self.flatten_check(output,target)
 
         if self.sample_weight is None:
-            self.sample_weight = ones(self.num_classes, requires_grad=False)
+            self.sample_weight = ones(self.num_classes, requires_grad=False).to(get_device())
         elif len(self.sample_weight) != self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
         elif self.sample_weight.requires_grad!=False or self.sample_weight.dtype!=output.dtype or self.sample_weight.device!=output.device:
-            self.sample_weight = to_tensor(self.sample_weight, requires_grad=False)
+            self.sample_weight = to_tensor(self.sample_weight, requires_grad=False).to(get_device())
         else:
             pass
 
@@ -133,7 +133,7 @@ class _ClassificationLoss(Loss):
             self.is_logsoftmax = False
             self.from_logits = False
 
-        self.ignore_index_weight=ones_like(self.sample_weight,requires_grad=False,dtype=output.dtype).to(output.device)
+        self.ignore_index_weight=ones_like(self.sample_weight,requires_grad=False,dtype=output.dtype).to(get_device())
         # ignore_index
         with torch.no_grad():
             if isinstance(self.ignore_index, int) and 0 <= self.ignore_index < self.num_classes:
@@ -152,7 +152,7 @@ class _ClassificationLoss(Loss):
 
         # need target onehot but currently not
         if  target.dtype==torch.long and self.need_target_onehot == True and self.is_target_onehot == False:
-            target = make_onehot(target, num_classes=self.num_classes, axis=self.axis)
+            target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(get_device())
             target.require_grads=False
             self.is_target_onehot=True
             if self.label_smooth:
@@ -855,7 +855,7 @@ class DiceLoss(_ClassificationLoss):
         axis=self.axis if self.axis>=0 else target.ndim+self.axis
         reduce_axes.remove(0)
         reduce_axes.remove(axis)
-        loss_weights=self.sample_weight.clone()
+        loss_weights=self.sample_weight.clone().to(get_device())
         # for k in range(target.ndim-self.loss_weights.ndim):
         #     loss_weights=loss_weights.expand_dims(0)
         intersection = reduce_sum(target * output, axis=reduce_axes)*loss_weights

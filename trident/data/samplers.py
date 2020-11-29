@@ -8,7 +8,7 @@ import locale
 import os
 import random
 import warnings
-
+import numbers
 import numpy as np
 
 from trident.data.image_common import check_same_size
@@ -110,7 +110,7 @@ class BatchSampler(Sampler):
         [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
     """
 
-    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=False, sample_filter=None):
+    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=False, sample_filter=None,mode='tuple'):
         super().__init__(data_source)
         if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size <= 0:
             raise ValueError("batch_size should be a positive integeral value, "
@@ -122,6 +122,7 @@ class BatchSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.is_shuffle = is_shuffle
+        self.mode=mode
 
         idxes = np.arange(len(self.data_source))
         if len(self.data_source) % self.batch_size > 0:
@@ -151,11 +152,21 @@ class BatchSampler(Sampler):
 
             if len(batch_data) == self.batch_size:
                 returnData = copy.deepcopy(self.data_source.data_template)
-                batch_data = list(zip(*batch_data))
-                for i in range(len(batch_data)):
-                    returnData[returnData.key_list[i]] = np.asarray(list(batch_data[i]))
-
-                yield returnData
+                unzip_batch_data = list(zip(*batch_data))
+                if self.mode=='tuple':
+                    for i in range(len(unzip_batch_data)):
+                        if all([isinstance(item, numbers.Integral) for item in unzip_batch_data[i]]):
+                            unzip_batch_data[i]= np.array(list(unzip_batch_data[i])).astype(np.int64)
+                        else:
+                            unzip_batch_data[i] = np.array(list(unzip_batch_data[i]))
+                    yield tuple(unzip_batch_data)
+                elif self.mode=='dict':
+                    for i in range(len(unzip_batch_data)):
+                        if all([isinstance(item,numbers.Integral) for item in unzip_batch_data[i]]):
+                            returnData[returnData.key_list[i]] =np.array(list(unzip_batch_data[i])).astype(np.int64)
+                        else:
+                            returnData[returnData.key_list[i]] = np.array(list(unzip_batch_data[i]))
+                    yield returnData
                 batch_data = []
 
 

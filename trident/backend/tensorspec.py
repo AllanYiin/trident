@@ -32,6 +32,7 @@ class ObjectType(Enum):
     random_noise = 'random_noise'
     classification_label = 'classification_label'
     corpus = 'corpus'
+    sequence_label='sequence_label'
 
 
 ExpectDataType = ObjectType
@@ -218,6 +219,7 @@ class TensorSpec(object):
         return (type(self) is type(other) and
                 self._shape_tuple == other._shape_tuple
                 and self._dtype == other._dtype
+                and self.name == other.name
                 and self.object_type == other.object_type)
 
     def __repr__(self):

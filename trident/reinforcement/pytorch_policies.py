@@ -63,8 +63,7 @@ class PolicyBase(Model):
             return image_backend_adaption(data)
         if isinstance(data, np.ndarray):
             for fc in self.transform_funcs:
-                if not fc.__qualname__.startswith('random_') or  (fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
-                    data = fc(data)
+                data = fc(data)
             data = image_backend_adaption(data)
             return data
 

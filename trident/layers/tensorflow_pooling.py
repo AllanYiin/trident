@@ -572,11 +572,10 @@ class GlobalAvgPool2d(Layer):
     def build(self, input_shape):
         if self._built == False:
             if self.keepdims == True:
-                self.output_shape = tf.TensorShape([1, 1, self.input_filters])
+                self._output_shape = to_tensor([1, 1, self.input_filters]).int()
             else:
-                self.output_shape = input_shape[-1]
+                self._output_shape = to_tensor([self.input_filters]).int()
             self._built = True
-
     def forward(self, *x):
         x = enforce_singleton(x)
         x = tf.reduce_mean(x, [1, 2], keepdims=self.keepdims)

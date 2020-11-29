@@ -21,7 +21,7 @@ from torch._six import container_abcs
 from torch.nn import init
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer, load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu, PRelu
@@ -31,13 +31,13 @@ from trident.layers.pytorch_normalizations import get_normalization, BatchNorm2d
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 
-__all__ = ['SEResNet_IR','SEResNet50_IR_512','BottleNeck_IR_SE','BottleNeck_IR']
+__all__ = ['SEResNet_IR','load','BottleNeck_IR_SE','BottleNeck_IR','SEResNet_IR_50_512']
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
-_backend = _session.backend
+_backend = get_backend()
 
 dirname = os.path.join(_trident_dir, 'models')
 if not os.path.exists(dirname):
@@ -111,18 +111,19 @@ def SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature
     return model
 
 
-def SEResNet50_IR_512(
+def SEResNet_IR_50_512(
              pretrained=True,
+             freeze_features=False,
              input_shape=(3,112,112),
              **kwargs):
     if input_shape is not None and len(input_shape)==3:
         input_shape=tuple(input_shape)
     else:
         input_shape=(3, 112, 112)
-    seresnet = SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature_dim=512)
+    seresnet = SEResNet_IR(num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature_dim=512,input_shape=input_shape)
     if pretrained == True:
         download_model_from_google_drive('1aLYbFvtvsV2gQ16D_vwzrKdbCgij7IoZ', dirname, 'arcface_se_50_512.pth')
-        recovery_model = torch.load(os.path.join(dirname, 'arcface_se_50_512.pth'))
+        recovery_model = load(os.path.join(dirname, 'arcface_se_50_512.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'arcface_se_50_512'
         recovery_model.eval()

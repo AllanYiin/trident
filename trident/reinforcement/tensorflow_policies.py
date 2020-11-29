@@ -57,14 +57,13 @@ class PolicyBase(Model):
         return train_data
 
     def process_flow(self,data):
-        if not hasattr(self,'transform_funcs') or self.transform_funcs is None:
-            self.transform_funcs=[]
+        if not hasattr(self, 'transform_funcs') or self.transform_funcs is None:
+            self.transform_funcs = []
         if len(self.transform_funcs) == 0:
             return image_backend_adaption(data)
         if isinstance(data, np.ndarray):
             for fc in self.transform_funcs:
-                if not fc.__qualname__.startswith('random_') or  (fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
-                    data = fc(data)
+                data = fc(data)
             data = image_backend_adaption(data)
             return data
 
@@ -87,7 +86,7 @@ class Dqn(PolicyBase):
 
         self.target_net = deepcopy(self._model)
         self.target_net.eval()
-        summary(self.policy_net, tuple(self.inputs.value_list[0]))
+        self.summary()
 
         self.gamma = gamma
         self.max_epsilon = max_epsilon
