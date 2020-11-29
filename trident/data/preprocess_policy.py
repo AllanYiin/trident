@@ -8,7 +8,7 @@ import random
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 
-from trident.data.image_common import image_backend_adaption
+from trident.data.image_common import image_backend_adaption,object_type_inference
 
 __all__ = ['PreprocessPolicy', 'PreprocessPolicyItem']
 
@@ -37,11 +37,18 @@ class PreprocessPolicy(object):
             if isinstance(item,PreprocessPolicyItem):
                 print('policy {0}   hit-rate={1:.3%}'.format(item.name, item.hit_rate))
 
-    def __call__(self, img):
+    def __call__(self, img,**kwargs):
+        spec = None
+        if isinstance(img, np.ndarray):
+            spec = kwargs.get("spec")
+            if spec is None:
+                spec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+
+
         for i in range(len(self.policies)):
             try:
                 item = self.policies[i]
-                img = item(img)
+                img = item(img,spec=spec)
             except Exception as e:
                 print(e)
         img=image_backend_adaption(img)
@@ -80,7 +87,7 @@ class PreprocessPolicyItem(object):
         self.count_true = 0
         self.count_false = 0
 
-    def __call__(self, img):
+    def __call__(self, img,**kwargs):
         bool_if=None
         if isinstance(self.condition_if,bool):
             bool_if=self.condition_if
