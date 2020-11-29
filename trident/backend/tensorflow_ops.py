@@ -47,6 +47,7 @@ def numpy_compatible(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
+        args = unpack_singleton(args)
         x = args[0]
         new_args = []
         new_kwargs = OrderedDict()
@@ -255,6 +256,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     """
     if device is None:
         device=_get_device()
+
     if isinstance(dtype, str):
         dtype = str2dtype(dtype)
     elif isinstance(x, np.ndarray) and (x.dtype==np.int64 or x.dtype==np.int32):
@@ -350,9 +352,11 @@ def int_shape(x):
 
 def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
     if need_exclude_batch_axis:
-        return cast(to_tensor(x.shape.as_list()[1:]),tf.int32)
+
+        return cast(to_tensor(to_numpy(x.shape)[1:]),tf.int32)
     else:
-        return cast(to_tensor(x.shape.as_list()), tf.int32)
+        return cast(to_tensor(to_numpy(x.shape)), tf.int32)
+
 
 
 def is_sparse(x):

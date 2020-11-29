@@ -44,15 +44,16 @@ def numpy_compatible(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
+        args=unpack_singleton(args)
         x = args[0]
         new_args = []
         new_kwargs = OrderedDict()
 
-        if all([isinstance(arg, (int,float)) for arg in args]) and all([isinstance(kv[1], (int,float)) for kv in kwargs.items()]) and  func.__name__ in ('max','min','maximum','minimum','abs','round'):
+        if all([isinstance(arg, numbers.Number) for arg in args]) and all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()]) and  func.__name__ in ('max','min','maximum','minimum','abs','round'):
             builtins_funcs = get_function(func.__name__, ['builtins'])
             y = builtins_funcs(*args, **kwargs)
             return y
-        elif all([isinstance(arg, (int, float)) for arg in args]) and all([isinstance(kv[1], (int, float)) for kv in kwargs.items()]) and  get_function(func.__name__, ['math']) is not None:
+        elif all([isinstance(arg,numbers.Number) for arg in args]) and all([isinstance(kv[1],numbers.Number) for kv in kwargs.items()]) and  get_function(func.__name__, ['math']) is not None:
             mathfuncs=get_function(func.__name__, ['math'])
             y = mathfuncs(*args, **kwargs)
             return y
