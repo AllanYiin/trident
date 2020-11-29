@@ -7,12 +7,12 @@ import math
 import warnings
 import builtins
 import numpy as np
-
+import os
 from trident.backend.common import *
 from trident.backend.load_backend import get_backend
 from trident.callbacks.callback_base import CallbackBase
 from trident.data.image_common import *
-
+from trident.misc.ipython_utils import is_in_colab
 if get_backend()=='pytorch':
     import torch.nn as nn
     from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape
@@ -45,22 +45,21 @@ class MixupCallback(RegularizationCallbacksBase):
         https://arxiv.org/pdf/1710.09412.pdf
 
     """
-    def __init__(self, alpha=1,loss_criterion=CrossEntropyLoss,loss_weight=1,  **kwargs):
+    def __init__(self, alpha=1,loss_criterion=CrossEntropyLoss,loss_weight=1,save_path=None,  **kwargs):
         super(MixupCallback, self).__init__()
         self.alpha=alpha
         self.loss_criterion=loss_criterion()
         self.loss_weight=loss_weight
+        self.save_path=save_path
+        if save_path is not None:
+            make_dir_if_need(save_path)
     def on_loss_calculation_end(self, training_context):
         """Returns mixed inputs, pairs of targets, and lambda"""
         train_data = training_context['train_data']
         x=None
         y=None
-        if get_backend() == 'pytorch':
-            x = train_data.value_list[0].clone() #input
-            y = train_data.value_list[1].clone()#label
-        elif get_backend() == 'tensorflow':
-            x = copy.deepcopy(train_data.value_list[0])  # input
-            y = copy.deepcopy(train_data.value_list[1]) # label
+        x = train_data.value_list[0].copy().detach()  # input
+        y = train_data.value_list[1].copy().detach()  # label
         model=training_context['current_model']
 
         if self.alpha > 0:
@@ -92,9 +91,17 @@ class MixupCallback(RegularizationCallbacksBase):
 
         if training_context['current_batch']==0:
             for item in mixed_x:
-                item=unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                item=unnormalize(0, 255)(item)
-                array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
+                if self.save_path is None and not is_in_colab():
+                    for item in x:
+                        item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                        item = unnormalize(0, 255)(item)
+                        array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
+                elif self.save_path is not None:
+                    for item in x:
+                        item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                        item = unnormalize(0, 255)(item)
+                        array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+
 
 class CutMixCallback(RegularizationCallbacksBase):
     """Implementation. of the cutmix regularization
@@ -109,11 +116,12 @@ class CutMixCallback(RegularizationCallbacksBase):
 
 
     """
-    def __init__(self, alpha=1,loss_criterion=CrossEntropyLoss,loss_weight=1,  **kwargs):
+    def __init__(self, alpha=1,loss_criterion=CrossEntropyLoss,loss_weight=1,save_path=None,  **kwargs):
         super(CutMixCallback, self).__init__()
         self.alpha=alpha
         self.loss_criterion=loss_criterion()
         self.loss_weight=loss_weight
+        self.save_path=save_path
 
     def rand_bbox(self, width, height, lam):
         """
@@ -148,12 +156,12 @@ class CutMixCallback(RegularizationCallbacksBase):
         train_data = training_context['train_data']
         x = None
         y = None
-        x = train_data.value_list[0].copy()  # input
-        y = train_data.value_list[1].copy()  # label
+        x = train_data.value_list[0].copy().detach()   # input
+        y = train_data.value_list[1].copy().detach()   # label
 
         model = training_context['current_model']
 
-        lam = np.random.beta(0.1, 0.4)
+        lam=builtins.min(builtins.max(np.random.beta(self.alpha,self.alpha),0.1), 0.4)
 
         batch_size = int_shape(x)[0]
         index = cast(arange(batch_size),'int64')
@@ -168,6 +176,7 @@ class CutMixCallback(RegularizationCallbacksBase):
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
             pred = model(to_tensor(x, requires_grad=True))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+
         elif get_backend() == 'tensorflow':
 
             y1 = tf.gather(y,index,axis=0)
@@ -188,10 +197,16 @@ class CutMixCallback(RegularizationCallbacksBase):
 
 
         if training_context['current_batch'] == 0:
-            for item in x:
-                item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                item = unnormalize(0, 255)(item)
-                array2image(item).save('Results/cutmix_{0}.jpg'.format(get_time_suffix()))
+            if self.save_path is None and not is_in_colab():
+                for item in x:
+                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = unnormalize(0, 255)(item)
+                    array2image(item).save('Results/cutmix_{0}.jpg'.format(get_time_suffix()))
+            elif self.save_path is not None:
+                for item in x:
+                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = unnormalize(0, 255)(item)
+                    array2image(item).save(os.path.join(self.save_path,'cutmix_{0}.jpg'.format(get_time_suffix())))
 
 
 
