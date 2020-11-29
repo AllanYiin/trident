@@ -22,7 +22,7 @@ _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 __all__ = ['_ClassificationLoss', 'MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
            'ExponentialLoss', 'ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss', 'WingLoss', 'AdaptiveWingLoss',
-           'IouLoss', 'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss', 'TripletMarginLoss',
+           'IoULoss', 'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss', 'TripletMarginLoss',
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
 
@@ -75,6 +75,7 @@ class _ClassificationLoss(Loss):
         self.cutoff = cutoff
         self.num_classes = None
         self.label_smooth = label_smooth
+        self.reduction=reduction
         # initilize weight
 
     def flatten_check(self, output, target):
@@ -372,13 +373,13 @@ class CrossEntropyLoss(_ClassificationLoss):
     >>> print(target.shape)
     torch.Size([4])
     >>> CrossEntropyLoss(reduction='mean')(output,target).cpu()
-    tensor(1.1034)
+    tensor(1.1305)
     >>> CrossEntropyLoss(reduction='sum')(output,target).cpu()
-    tensor(4.4136)
+    tensor(4.5221)
     >>> CrossEntropyLoss(label_smooth=True,reduction='mean')(output,target).cpu()
-    tensor(0.3453)
-    >>> CrossEntropyLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
-    tensor(0.8259)
+    tensor(1.0786)
+    >>> CrossEntropyLoss(sample_weight=to_tensor([1.0,1.0,0.5]).float(),reduction='mean')(output,target).cpu()
+    tensor(0.9889)
     >>> CrossEntropyLoss(ignore_index=2,reduction='mean')(output,target).cpu()
     tensor(0.8259)
 
@@ -434,9 +435,9 @@ class CrossEntropyLoss(_ClassificationLoss):
                     sample_weight=self.sample_weight.view( *reshape_shape)*self.ignore_index_weight.view( *reshape_shape)
             #-sum([p[i] * log2(q[i]) for i in range(len(p))])
             if self.is_logsoftmax == False:
-                loss = -(target * F.log_softmax(output,dim=self.axis)*sample_weight)
+                loss = -reduce_sum(target * F.log_softmax(output,dim=self.axis)*sample_weight,axis=1)
             else:
-                loss = -(target * output * sample_weight)
+                loss = -reduce_sum(target * output * sample_weight,axis=1)
         return loss
 
 
@@ -535,7 +536,7 @@ class NLLLoss(_ClassificationLoss):
     tensor(-1.3500)
     >>> NLLLoss(label_smooth=True,reduction='mean')(output,target).cpu()
     tensor(1.1034)
-    >>> NLLLoss(loss_weights=to_tensor([1.0,1.0,0]).float(),reduction='mean')(output,target).cpu()
+    >>> NLLLoss(loss_weights=to_tensor([1.0,1.0,0.5]).float(),reduction='mean')(output,target).cpu()
     tensor(-0.2625)
     >>> NLLLoss(ignore_index=2,reduction='mean')(output,target).cpu()
     tensor(-0.2625)
@@ -565,7 +566,7 @@ class NLLLoss(_ClassificationLoss):
         if self.is_target_onehot and ndim(target) == ndim(output):
             if not self.is_logsoftmax:
                 output=log_softmax(output,axis=self.axis)
-            loss=-target * output * loss_weights
+            loss=-reduce_sum(target * output * loss_weights,axis=1)
         else:
             loss = F.nll_loss(output, target, weight=self.sample_weight, ignore_index=self.ignore_index, reduction='none')
         return loss
@@ -1225,9 +1226,9 @@ class MS_SSIMLoss(_Loss):
         return 1 - msssim(output, target, window_size=self.window_size, normalize=True)
 
 
-class IouLoss(_Loss):
+class IoULoss(_Loss):
     def __init__(self, ignore_index=-1000, reduction='mean'):
-        super(IouLoss, self).__init__(reduction=reduction)
+        super(IoULoss, self).__init__(reduction=reduction)
         self.ignore_index = ignore_index
 
     def forward(self, output, target) -> 'loss':

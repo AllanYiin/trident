@@ -109,7 +109,7 @@ class Loss(object):
           return loss.mean(1).mean()
       elif self.reduction in ('mean', 'batch_mean'):
           return loss.mean()
-      elif self.reduction ==  ('sum', 'batch_sum'):
+      elif self.reduction in  ('sum', 'batch_sum'):
           return loss.sum()
       else:
           return loss.mean()

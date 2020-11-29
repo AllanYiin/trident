@@ -104,7 +104,7 @@ class _ClassificationLoss(Loss):
     def _get_reduction(self, loss):
         with self._name_scope:
             num_present=math_ops.cast(array_ops.size(loss, name='num_elements'), dtype=loss.dtype)
-            if ndim(loss) <= 1 or self.reduction == 'none':
+            if ndim(loss) ==0 or self.reduction == 'none':
                 return loss
             if ndim(loss) >= 2 and self.reduction == 'batch_sum':
                 loss = reshape(loss, (int_shape(loss)[0], -1))
@@ -401,13 +401,13 @@ class CrossEntropyLoss(_ClassificationLoss):
     >>> print(target.shape)
     (4, 3)
     >>> CrossEntropyLoss(reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305245>
+    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305244>
     >>> CrossEntropyLoss(reduction='sum')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=4.522098>
+    <tf.Tensor: shape=(), dtype=float32, numpy=4.5220976>
     >>> CrossEntropyLoss(label_smooth=True,reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305245>
-    >>> CrossEntropyLoss(loss_weights=to_tensor([1.0,1.0,0]),reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=0.84725726>
+    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305244>
+    >>> CrossEntropyLoss(sample_weight=to_tensor([1.0,1.0,0.5]),reduction='mean')(output,target)
+    <tf.Tensor: shape=(), dtype=float32, numpy=0.9888908>
     >>> CrossEntropyLoss(ignore_index=2,reduction='mean')(output,target)
     <tf.Tensor: shape=(), dtype=float32, numpy=0.84725726>
 
@@ -421,6 +421,7 @@ class CrossEntropyLoss(_ClassificationLoss):
         super().__init__(axis, sample_weight, from_logits, ignore_index, cutoff, label_smooth, reduction, name)
         self._built = True
         self.need_target_onehot=True
+
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -440,9 +441,12 @@ class CrossEntropyLoss(_ClassificationLoss):
         # else:
         #     loss= -cast(target,output.dtype)*output*self.sample_weight
         # return loss
+        if self.sample_weight is not None and ndim(self.sample_weight)==1:
+            self.sample_weight=expand_dims(self.sample_weight,0)
+        if self.ignore_index_weight is not None and ndim(self.ignore_index_weight)==1:
+            self.ignore_index_weight=expand_dims(self.ignore_index_weight,0)
 
-
-        sample_weight = self.sample_weight * self.ignore_index_weight
+        sample_weight = cast(self.sample_weight,output.dtype)*cast( self.ignore_index_weight,output.dtype)
         if ndim(output) == 2:
             pass
         else:
@@ -453,9 +457,9 @@ class CrossEntropyLoss(_ClassificationLoss):
                 sample_weight = self.sample_weight.reshape(reshape_shape) * self.ignore_index_weight.reshape(reshape_shape)
         # -sum([p[i] * log2(q[i]) for i in range(len(p))])
         if self.is_logsoftmax == False:
-            loss = -(target * log_softmax(output, axis=self.axis) * sample_weight)
+            loss = -reduce_sum(target * log_softmax(output, axis=self.axis) * sample_weight,axis=-1)
         else:
-            loss = -(target * output * sample_weight)
+            loss = -reduce_sum(target * output * sample_weight,axis=-1)
         return loss
 
 
