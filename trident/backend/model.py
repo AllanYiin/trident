@@ -1004,8 +1004,8 @@ class ModelBase(object):
     def test(self, input,target):
         raise NotImplementedError
 
-    def trigger_when(self, when='on_batch_end',epoch=None,batch=None,action=None):
-        new_callbacks=LambdaCallback(when,epoch,batch,action)
+    def trigger_when(self, when='on_batch_end',epoch=None,batch=None,epoch_frequency=None,batch_frequency=None,action=None):
+        new_callbacks=LambdaCallback(when,epoch=epoch,batch=batch,epoch_frequency=epoch_frequency,batch_frequency=batch_frequency,function=action)
         self.with_callbacks(new_callbacks)
         return self
 
@@ -1079,6 +1079,7 @@ class HistoryBase(OrderedDict):
         if data_name not in self:
             self.regist(data_name)
         if is_tensor(value):
+            value=value.clone().cpu().detach()
             if ndim(value)==0:
                 value=value.item()
             elif ndim(value)==1 and len(value)==1:
