@@ -47,7 +47,8 @@ def numpy_compatible(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        args = unpack_singleton(args)
+        if func.__name__ in ('max', 'min', 'maximum', 'minimum', 'abs', 'round'):
+            args = unpack_singleton(args)
         x = args[0]
         new_args = []
         new_kwargs = OrderedDict()
