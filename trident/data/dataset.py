@@ -333,8 +333,9 @@ class ImageDataset(Dataset):
             return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.transform_funcs:
-                img_data = fc(img_data)
+                img_data = fc(img_data,spec=self.element_spec)
             img_data = image_backend_adaption(img_data)
+
             return img_data
         else:
             return img_data
@@ -449,10 +450,7 @@ class MaskDataset(Dataset):
         else:
             if isinstance(mask_data, np.ndarray):
                 for fc in self.transform_funcs:
-                    if not fc.__qualname__.startswith(
-                            'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
-                            fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
-                        mask_data = fc(mask_data)
+                        mask_data = fc(mask_data,spec=self.element_spec)
                 mask_data = mask_backend_adaptive(mask_data, label_mapping=self.class_names,object_type=self.object_type)
                 return mask_data
             else:
@@ -532,7 +530,7 @@ class LabelDataset(Dataset):
         if isinstance(label_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.transform_funcs:
-                label_data = fc(label_data)
+                label_data = fc(label_data,spec=self.element_spec)
             return label_data
         else:
             return label_data
@@ -588,7 +586,7 @@ class BboxDataset(Dataset):
         if isinstance(bbox, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.transform_funcs:
-                bbox = fc(bbox)
+                bbox = fc(bbox,spec=self.element_spec)
             return bbox
         else:
             return bbox
@@ -626,7 +624,7 @@ class LandmarkDataset(Dataset):
         if isinstance(landmarks, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.transform_funcs:
-                landmarks = fc(landmarks)
+                landmarks = fc(landmarks,spec=self.element_spec)
             return landmarks
         else:
             return landmarks
@@ -809,10 +807,7 @@ class TextSequenceDataset(Dataset):
             return text_backend_adaption(text_data)
         if isinstance(text_data, np.ndarray):
             for fc in self.transform_funcs:
-                if not fc.__qualname__.startswith(
-                        'random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
-                        fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
-                    text_data = fc(text_data)
+                text_data =fc(text_data,spec=self.element_spec)
             text_data = text_backend_adaption(text_data)
 
     def text_transform(self, text_data):
@@ -1074,12 +1069,14 @@ class Iterator(object):
     def __getitem__(self, index: int):
         # start = time.time()
 
+        t1 = time.time()
         try:
             bbox = None
             mask = None
-            returnData = copy.deepcopy(self.data_template)
-            data = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
 
+            returnData = copy.deepcopy(self.data_template)
+
+            data = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
             label = self.label.__getitem__(index % len(self.label)) if self.label is not None and len(self.label) > 0 else None
 
             unpair = self.unpair.__getitem__(index % len(self.unpair)) if self.unpair is not None and len(self.unpair) > 0 else None
@@ -1133,8 +1130,8 @@ class Iterator(object):
 
         out_data = self.out_queue.get(False)
 
-        if self.out_queue.qsize() <= self.buffer_size // 2:
-            for i in range(2):
+        if self.out_queue.qsize() <= self.buffer_size* 2:
+            for i in range(self.buffer_size//2):
                 in_data = self._sample_iter.__next__()
                 self.out_queue.put(in_data, False)
 

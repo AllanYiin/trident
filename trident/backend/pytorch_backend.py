@@ -98,6 +98,7 @@ if torch.cuda.is_available() and get_device() == 'cuda':
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.deterministic = False
+    os.environ["CUDA_VISIBLE_DEVICES"]='0'
 
 
 def load(f):
@@ -1946,9 +1947,9 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                         out = fn(*arg_map.value_list)
                 else:
                     out = fn(*arg_map.value_list)
-                    for item in data.value_list:
-                        if hasattr(item, 'cpu'):
-                            item.cpu()
+                    # for item in data.value_list:
+                    #     if hasattr(item, 'cpu'):
+                    #         item.cpu()
                 return out
             elif hasattr(fn, 'signature') and callable(fn):
                 for arg in fn.signature.inputs.key_list:
@@ -1966,9 +1967,9 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                         out = fn(*arg_map.value_list)
                 else:
                     out = fn(*arg_map.value_list)
-                    for item in data.value_list:
-                        if hasattr(item, 'cpu'):
-                            item.cpu()
+                    # for item in data.value_list:
+                    #     if hasattr(item, 'cpu'):
+                    #         item.cpu()
 
                 return out
             elif callable(fn):
@@ -1986,9 +1987,9 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                         out = fn(*arg_map.value_list)
                 else:
                     out = fn(*arg_map.value_list)
-                    for item in data.value_list:
-                        if is_tensor(item):
-                            item.cpu()
+                    # for item in data.value_list:
+                    #     if is_tensor(item):
+                    #         item.cpu()
                 return out
             else:
                 print('uncomplete arg_map', arg_map.key_list)

@@ -80,6 +80,8 @@ def distict_color_count(img):
 
 
 def object_type_inference(data):
+
+
     if isinstance(data,np.ndarray):
         if data.ndim == 2 and data.shape[-1] == 2:
             return ObjectType.landmarks
@@ -116,6 +118,7 @@ def object_type_inference(data):
         else:
             sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape,data.dtype,data.min(),data.max())+'\n')
             return ObjectType.array_data
+
 
 
 def transform_func(func):
@@ -248,6 +251,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
         if isinstance(image,np.ndarray):
             imspec=kwargs.get("spec")
             if imspec is None:
+
                 imspec=TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec]=image

@@ -69,6 +69,12 @@ if get_backend()== 'pytorch':
     _session.backend='pytorch'
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
+    import torch
+    if torch.cuda.is_available():
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        set_session('device','cuda')
+
 
     from trident.backend.pytorch_ops import *
     from trident.backend.pytorch_backend import *
@@ -116,7 +122,7 @@ elif _session.backend == 'tensorflow':
         except RuntimeError as e:
             # Virtual devices must be set before GPUs have been initialized
             print(e)
-
+        set_session('device', '/gpu:0')
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         tf.device('/gpu:0')
