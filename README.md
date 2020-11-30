@@ -36,7 +36,7 @@ Simple installation from PyPI
 pip install tridentx  --upgrade
 ```
 
-#### Step 0: Add these imports
+#### Step 1: Add these imports
 
 ```python
 import os
@@ -46,7 +46,7 @@ from trident import *
 from trident.models.pytorch_densenet import DenseNetFcn
 ```
 
-#### Step 1  A simple case both in PyTorch and Tensorflow
+#### Step 2: A simple case both in PyTorch and Tensorflow
 
 ```
 data_provider=load_examples_data('dogs-vs-cats')
@@ -74,7 +74,10 @@ plan=TrainingPlan()\
     .print_gradients_scheduling(200,'batch')\
     .start_now()
 ```
-
+#### Step 3: Examples
+- mnist classsification [pytorch](https://github.com/AllanYiin/DeepBelief_Course5_Examples/blob/master/epoch001_%E5%8F%A6%E4%B8%80%E7%A8%AE%E8%A7%92%E5%BA%A6%E7%9C%8Bmnist/HelloWorld_mnist_pytorch.ipynb)  [tensorflow](https://github.com/AllanYiin/DeepBelief_Course5_Examples/blob/master/epoch001_%E5%8F%A6%E4%B8%80%E7%A8%AE%E8%A7%92%E5%BA%A6%E7%9C%8Bmnist/HelloWorld_mnist_tf.ipynb)
+- activation function [pytorch](https://github.com/AllanYiin/DeepBelief_Course5_Examples/blob/master/epoch002_%E6%B4%BB%E5%8C%96%E5%87%BD%E6%95%B8%E5%A4%A7%E6%B8%85%E9%BB%9E/%20Activation_Function_AllStar_Pytorch.ipynb)  [tensorflow](https://github.com/AllanYiin/DeepBelief_Course5_Examples/blob/master/epoch002_%E6%B4%BB%E5%8C%96%E5%87%BD%E6%95%B8%E5%A4%A7%E6%B8%85%E9%BB%9E/Activation_Function_AllStar_tf.ipynb)
+- auto-encoder [pytorch](https://github.com/AllanYiin/DeepBelief_Course5_Examples/blob/master/epoch003_%E8%87%AA%E5%8B%95%E5%AF%B6%E5%8F%AF%E5%A4%A2%E7%B7%A8%E7%A2%BC%E5%99%A8/Pokemon_Autoencoder_pytorch.ipynb)  [tensorflow](https://github.com/AllanYiin/DeepBelief_Course5_Examples/blob/master/epoch003_%E8%87%AA%E5%8B%95%E5%AF%B6%E5%8F%AF%E5%A4%A2%E7%B7%A8%E7%A2%BC%E5%99%A8/Pokemon_Autoencoder_tf.ipynb)
 
 ## BibTeX
 If you want to cite the framework feel free to use this:
