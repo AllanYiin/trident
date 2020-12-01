@@ -426,6 +426,20 @@ class Signature(object):
         self.inputs = OrderedDict()
         self.outputs = OrderedDict()
 
+    def maybe_not_complete(self):
+        if len(self.inputs)<1 and len(self.outputs)<1:
+            return True
+
+        elif any([item is not None or 'TensorSpec' not in item.__class__.__name__  for item in self.inputs.value_list ]):
+            return True
+        elif any([item is not None or 'TensorSpec' not in item.__class__.__name__  for item in self.outputs.value_list ]):
+            return True
+        elif any([ 'TensorSpec' in item.__class__.__name__ and item.shape is None  for item in self.inputs.value_list ]):
+            return True
+        elif any([ 'TensorSpec' in item.__class__.__name__ and item.shape is None  for item in self.outputs.value_list ]):
+            return True
+        else:
+            return False
     def get_kvsting(self, k, v):
         if v is None:
             return '{0}'.format(k)
