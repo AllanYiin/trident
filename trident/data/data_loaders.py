@@ -105,7 +105,7 @@ def load_mnist(dataset_name='mnist', **kwargs):
             with gzip.open(labels_path, 'rb') as lbpath:
                 labels = np.frombuffer(lbpath.read(), dtype=np.uint8, offset=8)
                 labels = np.squeeze(labels).astype(np.int64)
-                labeldata = LabelDataset(labels.tolist())
+                labeldata = LabelDataset(labels.tolist(),object_type=ObjectType.classification_label)
 
             with gzip.open(images_path, 'rb') as imgpath:
                 images = np.frombuffer(imgpath.read(), dtype=np.uint8, offset=16)
@@ -185,8 +185,8 @@ def load_cifar(dataset_name='cifar10'):
                 test_label.extend(entry['labels'])
 
 
-    trainData = Iterator(data=ImageDataset(data), label=LabelDataset(label))
-    testData = Iterator(data=ImageDataset(test_data), label=LabelDataset(test_label))
+    trainData = Iterator(data=ImageDataset(data,object_type=ObjectType.rgb), label=LabelDataset(label,object_type=ObjectType.classification_label))
+    testData = Iterator(data=ImageDataset(test_data,object_type=ObjectType.rgb), label=LabelDataset(test_label,object_type=ObjectType.classification_label))
     dataset = DataProvider(dataset_name, traindata=trainData, testdata=testData)
     dataset.binding_class_names(['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship',
                                  'truck'] if dataset_name == 'cifar10' else [], 'en-US')
@@ -376,7 +376,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
 
             imagedata = ImageDataset(imgs, object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
             print('extract {0} images...'.format(len(imagedata)))
-            labelsdata = LabelDataset(labels)
+            labelsdata = LabelDataset(labels,object_type=ObjectType.classification_label)
             labelsdata.binding_class_names(class_names)
 
             traindata = Iterator(data=imagedata, label=labelsdata)
@@ -644,12 +644,12 @@ def load_examples_data(dataset_name):
 
         trainarray = ImageDataset(np.array(trainData[0].tolist()).transpose([0, 2, 3, 1]),
                                   object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
-        trainlabel = LabelDataset(trainData[1].tolist())
+        trainlabel = LabelDataset(trainData[1].tolist(),object_type=ObjectType.classification_label)
         train_iter = Iterator(data=trainarray, label=trainlabel)
 
         testarray = ImageDataset(np.array(testData[0].tolist()).transpose([0, 2, 3, 1]),
                                  object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
-        testlabel = LabelDataset(testData[1].tolist())
+        testlabel = LabelDataset(testData[1].tolist(),object_type=ObjectType.classification_label)
         test_iter = Iterator(data=testarray, label=testlabel)
         print('training images: {0}  test images:{1}'.format(len(trainarray), len(testarray)))
 
@@ -766,7 +766,7 @@ def load_examples_data(dataset_name):
         print('{0} faces loaded...'.format(len(imgs)))
         imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb, symbol='faces')
         landmarkdata = LandmarkDataset(landmarks=landmarks, object_type=ObjectType.landmarks, symbol='target_landmarks')
-        labeldata = LabelDataset(data=ratings, object_type=ObjectType.array_data, symbol='target_beauty')
+        labeldata = LabelDataset(data=ratings,object_type=ObjectType.classification_label, symbol='target_beauty')
         data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=Dataset.zip(landmarkdata,labeldata)))
         return data_provider
 
@@ -789,22 +789,21 @@ def load_examples_data(dataset_name):
                 img = images_dict['images\\' + data[0]][0]
                 img = img.transpose([2, 0, 1])[::-1].transpose([1, 2, 0])
                 imgs.append(img)
-                landmark = images_dict['images\\' + data[0]][1].astype(np.float32) / 256.0
+                landmark = images_dict['images\\' + data[0]][1].astype(np.float32)
+                landmarks.append(landmark)
                 rating = np.zeros(2)
                 if 'm' in data[0]:
                     rating[0] = 1
                 if 'w' in data[0]:
                     rating[1] = 1
-                landmarks.append(landmark)
                 ratings.append(rating)
-
         print('{0} faces loaded...'.format(len(imgs)))
         imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb, symbol='faces')
-        landmarkdata = LandmarkDataset(landmarks=landmarks, object_type=ObjectType.array_data, symbol='landmarks')
-       # labeldata = NumpyDataset(data=ratings, object_type=ObjectType.array_data, symbol='ratings')
-
-        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=landmarkdata))
+        landmarkdata = LandmarkDataset(landmarks=landmarks, object_type=ObjectType.landmarks, symbol='target_landmarks')
+        labeldata = LabelDataset(data=ratings, object_type=ObjectType.classification_label, symbol='target_label')
+        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=Dataset.zip(landmarkdata, labeldata)))
         return data_provider
+
     elif dataset_name == 'examples_antisproofing':
         download_file_from_google_drive('1e7Zjn2MHNCvA5gXdJUECzY8NjK4KVpa7', dirname, 'antisproofing.tar')
         tar_file_path = os.path.join(dirname, 'antisproofing.tar')
