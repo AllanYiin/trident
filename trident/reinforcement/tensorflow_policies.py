@@ -1,12 +1,15 @@
+import copy
 from  copy import deepcopy
 import math
 import random
 from itertools import count
-import torch
+
 import numpy as np
 from matplotlib.pylab import plt
-from torch import nn
+import tensorflow as tf
 from typing import Any, List, Union, Mapping, Optional, Callable
+
+from trident.backend.tensorspec import TensorSpec,ObjectType
 
 from trident.misc.visualization_utils import loss_metric_curve
 
@@ -28,21 +31,25 @@ class PolicyBase(Model):
     """The base class for any RL policy.
     """
     def __init__( self,network:Layer,env:gym.Env,memory_length:int=1000,name=None) -> None:
+        self.network = network
+        if name is not None:
+            self.network._name=name
 
-        self.env=env
+        self.env = env
         self.env.reset()
         self.observation_space = env.observation_space
         self.action_space = env.action_space
-        self.network=network
-        #self.agent_id = self.uuid
-        self.memory=ReplayBuffer(memory_length)
-        super().__init__(inputs=self.get_observation().repeat(2,0),output=deepcopy(network))
+        super().__init__(inputs=to_tensor(self.get_observation()).repeat_elements(2,0),output=deepcopy(self.network))
+        self.setting_network()
+
+        self.memory = ReplayBuffer(memory_length)
         self.name = name
 
-
+    def setting_network(self):
+        pass
 
     def get_observation(self):
-        return np.expand_dims(self.process_flow(self.env.render('rgb_array')),0)
+        return self.data_preprocess(self.env.render('rgb_array'))
 
     def select_action(self, state, **kwargs):
         pass
@@ -56,23 +63,46 @@ class PolicyBase(Model):
 
         return train_data
 
-    def process_flow(self,data):
-        if not hasattr(self, 'transform_funcs') or self.transform_funcs is None:
-            self.transform_funcs = []
-        if len(self.transform_funcs) == 0:
-            return image_backend_adaption(data)
-        if isinstance(data, np.ndarray):
-            for fc in self.transform_funcs:
-                data = fc(data)
-            data = image_backend_adaption(data)
-            return data
-
-
     def learn(self,num_episodes = 3000,**kwargs):
         pass
 
     def resume(self,num_episodes = 3000,**kwargs):
         pass
+
+    @property
+    def preprocess_flow(self):
+        return self._preprocess_flow
+
+    @preprocess_flow.setter
+    def preprocess_flow(self, value):
+        self._preprocess_flow = value
+        if isinstance(self.input_spec, TensorSpec):
+            self.input_spec = None
+        super()._initial_graph(inputs=to_tensor(self.get_observation()).repeat_elements(2, 0), output=deepcopy(self.network))
+        self.setting_network()
+        self.env.reset()
+
+    def data_preprocess(self, img_data):
+        if not hasattr(self,'_preprocess_flow') or self._preprocess_flow is None:
+            self._preprocess_flow=[]
+        if img_data.ndim==4:
+            return to_tensor(to_numpy([self.data_preprocess(im) for im in img_data]))
+        if len(self._preprocess_flow) == 0:
+            return image_backend_adaption(img_data)
+        if isinstance(img_data, np.ndarray):
+            for fc in self._preprocess_flow:
+                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+                    img_data = fc(img_data,spec=self.input_spec)
+                else:
+                    img_data = fc(img_data)
+            img_data = image_backend_adaption(img_data)
+            if self.input_spec is None :
+                self._model.input_spec= TensorSpec(shape=tensor_to_shape(to_tensor(img_data),need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+                self.input_shape =self._model.input_spec.shape[1:]
+            return img_data
+        else:
+            return img_data
+
 
 class Dqn(PolicyBase):
     """The base class for any RL policy.
@@ -80,7 +110,7 @@ class Dqn(PolicyBase):
 
     def __init__(self, network: Layer, env: gym.Env, memory_length: int = 100000, gamma=0.9, max_epsilon=0.9, min_epsilon=0.01, decay=200, target_update=10, batch_size=10,
                  name='dqn') -> None:
-        super(Dqn, self).__init__(network=network, env=env, memory_length=memory_length, name=name)
+        super().__init__(network=network, env=env, memory_length=memory_length, name=name)
         self.policy_net = self._model
         self.policy_net.train()
 
@@ -95,6 +125,16 @@ class Dqn(PolicyBase):
         self.target_update = target_update
         self.batch_size = batch_size
         self.steps_done = 0
+
+    def setting_network(self):
+        super()._initial_graph(inputs=to_tensor(self.get_observation()).repeat_elements(2, 0), output=copy.deepcopy(self.network))
+
+        self.policy_net = self.model
+        self.policy_net.train()
+
+        self.target_net = deepcopy(self.network)
+        self.target_net.eval()
+        self.summary()
 
     def get_observation(self):
         # 在這邊維護取得STATE的方法
@@ -135,7 +175,8 @@ class Dqn(PolicyBase):
         reward_batch = to_tensor(batch.reward).squeeze(1).detach()
 
         # Predict expected rewards Q(s_t) base on current state。
-        self.policy_net.eval()
+        #self.policy_net.eval()
+
         predict_rewards = self.policy_net(state_batch).gather(1, action_batch).squeeze(1)
 
         # Predict future rewards Q(s_{t+1}) base on next state。
@@ -197,12 +238,11 @@ class Dqn(PolicyBase):
                 next_state = self.get_observation()
 
                 # 將四元組儲存於記憶中，建議要減少「好案例」的儲存比例
-                if reward < 1 or (reward == 1 and i_episode < 20) or (
-                        reward == 1 and i_episode >= 20 and t < 100 and random.random() < 0.1 and i_episode >= 20 and t >= 100 and random.random() < 0.2):
-                    self.memory.push(state, action, next_state, reward)
+                #if reward<1.0 or (reward>=1.0 and i_episode<50 ) or (reward>=1.0 and i_episode>=50 and random.random()<0.5):
+                self.memory.push(state, action, next_state, reward)
 
                 # switch next t
-                state = deepcopy(next_state)
+                state = next_state
 
                 if start_train:
                     # get batch data from experimental replay
@@ -237,8 +277,7 @@ class Dqn(PolicyBase):
                             print('predict_rewards:', self.training_context['train_data']['predict_rewards'][:5])
                             print('target_rewards:', self.training_context['train_data']['target_rewards'][:5])
                             print('reward_batch:', self.training_context['train_data']['reward_batch'][:5])
-                            loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,
-                                              legend=['dqn'], calculate_base='epoch', imshow=imshow)
+                            loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,legend=['dqn'], calculate_base='epoch', imshow=imshow)
 
                     break
 
@@ -246,6 +285,7 @@ class Dqn(PolicyBase):
             if start_train and i_episode % self.target_update == 0:
                 self.target_net.load_state_dict(self.policy_net.state_dict(), strict=True)
                 self.save_model(save_path=self.training_context['save_path'])
+
 
         print('Complete')
         self.env.render()

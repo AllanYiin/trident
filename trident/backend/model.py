@@ -14,7 +14,7 @@ import sys
 import time
 import uuid
 import json
-from typing import List
+from typing import List, Callable
 
 import numpy as np
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session,get_backend, \
@@ -60,6 +60,7 @@ class ModelBase(object):
         self._outputs = OrderedDict()
         self._targets = OrderedDict()
         self._model = None
+        self.output_fn:Callable=None
 
         self.lr_scheduler = None
         self._losses = OrderedDict()
@@ -70,7 +71,8 @@ class ModelBase(object):
         self._constraints = OrderedDict()
 
 
-        self.preprocess_flow = []
+        self._preprocess_flow = []
+        self.input_spec=None
 
         self.current_save_path=None
 
@@ -119,8 +121,8 @@ class ModelBase(object):
             self.name=name
 
 
-
-        self._initial_graph(inputs, input_shape,output)
+        if output is not None and (inputs is not None or input_shape is not None):
+            self._initial_graph(inputs, input_shape,output)
 
     @property
     def model(self):
@@ -259,6 +261,15 @@ class ModelBase(object):
         elif len(self.signature) != len(arg_names):
             raise ValueError('data deed and arg_names should be the same length')
 
+    @property
+    def preprocess_flow(self):
+        return self._preprocess_flow
+
+    @preprocess_flow.setter
+    def preprocess_flow(self,value):
+        self._preprocess_flow=value
+        if isinstance(self.input_spec,TensorSpec):
+            self.input_spec=None
 
     @property
     def reverse_preprocess_flow(self):
@@ -272,15 +283,21 @@ class ModelBase(object):
         return return_list
 
     def data_preprocess(self, img_data):
+
         if img_data.ndim==4:
-            return to_tensor(to_numpy([self.data_preprocess(im) for im in img_data]))
+            return to_numpy([self.data_preprocess(im) for im in img_data])
         if len(self.preprocess_flow) == 0:
-            return image_backend_adaption(img_data)
+            return np.expand_dims(image_backend_adaption(img_data),0)
         if isinstance(img_data, np.ndarray):
             for fc in self.preprocess_flow:
-                if not fc.__qualname__.startswith('random_') or  'crop' in fc.__qualname__  or  'rescale' in fc.__qualname__  or  (fc.__qualname__.startswith('random_') and random.randint(0,10)%2==0):
+                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+                    img_data = fc(img_data,spec=self.input_spec)
+                else:
                     img_data = fc(img_data)
-            img_data = to_tensor(image_backend_adaption(img_data)).unsqueeze(0)
+            img_data = np.expand_dims(image_backend_adaption(img_data),0)
+            if self.input_spec is None :
+                self.input_spec= TensorSpec(shape=tensor_to_shape(to_tensor(img_data),need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+
             return img_data
         else:
             return img_data
@@ -515,7 +532,7 @@ class ModelBase(object):
 
     def do_on_data_received(self, train_data, test_data):
 
-        return train_data, test_data
+        return self
 
     def do_preparation_for_loss(self):
         pass
@@ -729,27 +746,30 @@ class ModelBase(object):
 
             if  'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output']==False:
                 try:
-                    output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
-                    if isinstance(output, (list, tuple)):
-                        for i in range(len(output)):
-                            train_data[self.outputs.key_list[i]] = output[i]
-                    elif isinstance(output, (OrderedDict)):
-                        for k,v in output.items():
-                            train_data[k] = v
-                    elif 'tensor' in output.__class__.__name__.lower():
-                        train_data[self.outputs.key_list[0]] = output
-                        if self.use_output_as_loss==True:
-
-                            this_loss=output.sum()
-                            self.training_context['losses'].collect(self.outputs.key_list[0],self.training_context['steps'],this_loss)
-                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                    if self.output_fn is not None and callable(self.output_fn):
+                        self.output_fn()
                     else:
-                        train_data[self.outputs.key_list[0]] = output
-                        if self.use_output_as_loss==True:
+                        output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'])
+                        if isinstance(output, (list, tuple)):
+                            for i in range(len(output)):
+                                self.train_data[self.outputs.key_list[i]] = output[i]
+                        elif isinstance(output, (OrderedDict)):
+                            for k,v in output.items():
+                                self.train_data[k] = v
+                        elif 'tensor' in output.__class__.__name__.lower():
+                            self.train_data[self.outputs.key_list[0]] = output
+                            if self.use_output_as_loss==True:
 
-                            this_loss=output.sum()
-                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
-                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                                this_loss=output.sum()
+                                self.training_context['losses'].collect(self.outputs.key_list[0],self.training_context['steps'],this_loss)
+                                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                        else:
+                            self.train_data[self.outputs.key_list[0]] = output
+                            if self.use_output_as_loss==True:
+
+                                this_loss=output.sum()
+                                self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
+                                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                 except Exception as e:
                     print(e)
                     PrintException()
@@ -775,7 +795,7 @@ class ModelBase(object):
                         if k in self.loss_weights:
                             loss_weight = self.loss_weights[k]
                         loss_weight=to_tensor(loss_weight,'float32')
-                        this_loss = loss_weight*try_map_args_and_call(v, train_data, self.training_context['data_feed']) # v.forward(output, target) if hasattr(v, 'forward') else v(
+                        this_loss = loss_weight*try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) # v.forward(output, target) if hasattr(v, 'forward') else v(
 
                         if isinstance(this_loss, tuple):
                             overall_loss =to_tensor(0.0,requires_grad=True)
@@ -814,7 +834,7 @@ class ModelBase(object):
                         this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,requires_grad=True)
                     elif 'output' in v.signature.inputs:
 
-                        this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
+                        this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
                     if not any_abnormal_number(this_loss):
                         # a leaf Variable that requires grad connotused in an in-place operation.
                         self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
@@ -855,15 +875,15 @@ class ModelBase(object):
 
 
 
-                if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and  self.training_context['stop_update']<1 :
-                    tmp_output = try_map_args_and_call(self._model, test_data, self.training_context['data_feed'])
+                if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and  self.training_context['stop_update']<1 :
+                    tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'])
                     if isinstance(tmp_output, (list, tuple)):
                         for i in range(len(tmp_output)):
-                            test_data[self.outputs.key_list[i]] = tmp_output[i]
+                            self.test_data[self.outputs.key_list[i]] = tmp_output[i]
                     elif 'tensor' in tmp_output.__class__.__name__.lower():
-                        test_data[self.outputs.key_list[0]] = tmp_output
+                        self.test_data[self.outputs.key_list[0]] = tmp_output
                     else:
-                        test_data[self.outputs.key_list[0]] = tmp_output
+                        self.test_data[self.outputs.key_list[0]] = tmp_output
 
 
 
@@ -880,12 +900,12 @@ class ModelBase(object):
                         self.training_context['metrics'].regist(k)
                         self.training_context['tmp_metrics'].regist(k)
 
-                    this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
+                    this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
                     self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
 
 
-                    if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and collect_history!=False :
-                        this_out_metric = try_map_args_and_call(v, test_data , self.training_context['data_feed'])
+                    if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and collect_history!=False :
+                        this_out_metric = try_map_args_and_call(v, self.test_data , self.training_context['data_feed'])
                         self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
 
                 # ON_EVALUATION_END
@@ -923,7 +943,7 @@ class ModelBase(object):
                 else:
                     self.training_context['print_batch_progress_frequency'] += 1
 
-                if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0:
+                if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0:
                     verbose=[]
                     for k in self.training_context['out_sample_metrics'].get_keys():
                         test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
