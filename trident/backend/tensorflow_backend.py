@@ -38,16 +38,16 @@ from trident.backend.tensorflow_ops import *
 from trident.backend.tensorspec import *
 from trident.data.utils import pickle_it
 
-__all__ = ['set_device', 'Layer', 'get_device', 'get_flops', 'Sequential','ModuleList','ModuleDict','summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
+__all__ = ['set_device','Dtype' ,'Layer', 'get_device', 'get_flops', 'Sequential','ModuleList','ModuleDict','summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
 
 _FUN_NAMES = [
     ('float', tops.float),
     ('long', tops.long),
+    ('equal', tops.equal),
     ('int', tops.int),
     ('to', tops.to)]
 for target_fun_name, source_fun in _FUN_NAMES:
-    if not hasattr(Tensor, target_fun_name):
-        setattr(Tensor, target_fun_name, source_fun)
+    setattr(Tensor, target_fun_name, source_fun)
 
 
 def get_device():
@@ -72,7 +72,8 @@ def set_device(device='/cpu:0'):
         set_session('device', device)
 
         if 'cpu' in device:
-            os.environ["CUDA_VISIBLE_DEVICES"] = '999'
+            if len(tf.config.list_physical_devices('GPU')) >0:
+                os.environ["CUDA_VISIBLE_DEVICES"] = '999'
             if tf.test.gpu_device_name():
                 print('GPU found')
             else:
@@ -83,6 +84,15 @@ def set_device(device='/cpu:0'):
 
     except Exception as e:
         print(e)
+
+class Dtype(object):
+    float32 = tf.float32
+    int64 = tf.int64
+    int32 = tf.int32
+    int16 = tf.int16
+    uint8 = tf.uint8
+    int8 = tf.int8
+    bool = tf.bool
 
 
 version = tf.version
@@ -465,21 +475,9 @@ class Layer(tf.Module):
     # Trick mypy into not applying contravariance rules to inputs by defining
     # forward as a value, rather than a function.  See also
     # https://github.com/python/mypy/issues/8795
-    def _forward_unimplemented(self, *input: Any) -> None:
+
+    def forward(self, *input, **kwargs):
         raise NotImplementedError
-
-    r"""Defines the computation performed at every call.
-
-    Should be overridden by all subclasses.
-
-    .. note::
-        Although the recipe for forward pass needs to be defined within
-        this function, one should call the :class:`Module` instance afterwards
-        instead of this since the former takes care of running the
-        registered hooks while the latter silently ignores them.
-    """
-    forward: Callable[..., Any] = _forward_unimplemented
-
 
     def get_root(self):
         if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:
@@ -1328,7 +1326,7 @@ class Layer(tf.Module):
 
 
     @tf.Module.with_name_scope
-    def _call_impl(self, *input, **kwargs):
+    def __call__(self, *input, **kwargs):
         # Maintains info about the `Layer.call` stack.
         is_all_numpy = True
         input = list(input)
@@ -1387,7 +1385,7 @@ class Layer(tf.Module):
             print(e)
             raise e
 
-    __call__: Callable[..., Any] = _call_impl
+
 
     def __setstate__(self, state):
         self.__dict__.update(state)

@@ -78,27 +78,6 @@ if get_backend()== 'pytorch':
 
     from trident.backend.pytorch_ops import *
     from trident.backend.pytorch_backend import *
-    from trident.optims.pytorch_optimizers import *
-    from trident.layers.pytorch_activations import *
-    from trident.layers.pytorch_layers import *
-    from trident.layers.pytorch_pooling import *
-    from trident.layers.pytorch_blocks import *
-    from trident.layers.pytorch_normalizations import *
-    from trident.layers.pytorch_rnn import *
-
-
-    from trident.optims.pytorch_constraints import *
-    from trident.optims.pytorch_regularizers import *
-    from trident.optims.pytorch_losses import *
-    from trident.optims.pytorch_metrics import *
-
-    from trident.optims.pytorch_trainer import *
-
-
-
-    #module = importlib.import_module(mName)
-    #layers=importlib.import_module('layers.pytorch_layers')
-
 
 elif _session.backend == 'tensorflow':
     stdout.write('Using TensorFlow backend.\n')
@@ -114,18 +93,26 @@ elif _session.backend == 'tensorflow':
     if gpus:
         # Restrict TensorFlow to only allocate 1GB * 2 of memory on the first GPU
         try:
-            tf.config.experimental.set_virtual_device_configuration(
-                gpus[0],
-                [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 2)])
+
+            # tf.config.experimental.set_virtual_device_configuration(
+            #     gpus[0],
+            #     [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 2)])
             logical_gpus = tf.config.list_logical_devices('GPU')
+            tf.config.experimental.set_memory_growth( gpus[0], True)
+
             print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+            os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+            set_session('device', '/gpu:0')
         except RuntimeError as e:
             # Virtual devices must be set before GPUs have been initialized
             print(e)
-        set_session('device', '/gpu:0')
-        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
-        tf.device('/gpu:0')
+
+    else:
+        set_session('device', '/cpu:0')
+
+    from trident.backend.tensorflow_ops import *
+    from trident.backend.tensorflow_backend import *
 
 
 

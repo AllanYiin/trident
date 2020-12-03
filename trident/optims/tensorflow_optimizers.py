@@ -10,8 +10,10 @@ import math
 import re
 import scipy.optimize as sciopt
 import tensorflow as tf
+from tensorflow.python.training.tracking import base as trackable
+from tensorflow.python.training.tracking import tracking
 from tensorflow.python.keras.optimizer_v2 import adam
-from trident.backend.common import get_session, get_class, snake2camel
+from trident.backend.common import get_session, get_class, snake2camel,get_time_suffix,camel2snake,get_session_value
 from trident.backend.tensorflow_ops import *
 
 
@@ -139,7 +141,7 @@ class OptimizerWrapper(object):
                             setattr(cls, name, property(make_proxy(name)))
 
 
-class Optimizer(object):
+class Optimizer(trackable.Trackable):
     """Base class for all optimizers.
 
     .. warning::
@@ -157,6 +159,7 @@ class Optimizer(object):
     """
 
     def __init__(self, params, defaults):
+        self._name=camel2snake(self.__class__.__name__)+get_time_suffix()
         self.defaults = defaults
         self.gradient_centralization = None
         if isinstance(params, tf.Variable):
@@ -450,6 +453,7 @@ class Adam(Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
                  gradient_centralization=None):
+
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -465,6 +469,8 @@ class Adam(Optimizer):
         self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
         defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
         super(Adam, self).__init__(params, defaults)
+
+
 
     def __setstate__(self, state):
         super(Adam, self).__setstate__(state)
