@@ -394,7 +394,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                 else:
 
                     for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
-                        if v is not None and v.requires_grad==True:
+                        if 'bias' not in k and v is not None and not any_abnormal_number(v) and v.requires_grad==True:
                             grad_dict[k] = np.abs(to_numpy(0 if v.grad is None else v.grad))
                             if grad_dict[k].ndim > 1:
                                 if self.first_layer == '':
