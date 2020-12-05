@@ -47,7 +47,7 @@ from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 __all__ = [ 'Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel','FaceRecognitionModel']
 _session = get_session()
-
+working_direcory=_session.working_direcory
 _, term_width = get_terminal_size()
 term_width = int(term_width)
 TOTAL_BAR_LENGTH = 65.
@@ -139,7 +139,7 @@ class Model(ModelBase):
             self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:]),name='input')
         elif isinstance(inputs,np.ndarray):
             inputs=to_tensor(inputs)
-            self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:]),name='input')
+            #self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:]),name='input')
 
         #single model
         if isinstance(output, (Layer, nn.Module)):
@@ -152,13 +152,14 @@ class Model(ModelBase):
             # output.cpu()
             if  output.built and hasattr(output,'_output_shape') and  output._output_shape is not None:
                 self._model =output
-                self._model.signature = None
+                if self._model.signature.maybe_not_complete():
+                    self._model.signature = None
                 if self._model.signature is not None and hasattr(self._model.signature,"outputs"):
                     self._outputs['output'] = self._model.signature.outputs
                     self._targets = OrderedDict()
                     for k,v in self._model.signature.outputs.item_list:
                         self._targets[k.replace("output","target")]=v
-                self._signature = self._model.signature
+                #self._signature = self._model.signature
             else:
                 out=None
                 if inputs is not None:
@@ -191,7 +192,8 @@ class Model(ModelBase):
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]),name='output_{0}'.format(i))
                         self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index+1:]),name='target_{0}'.format(i))
-            self._model.signature = None
+            if self._model.signature.maybe_not_complete():
+                self._model.signature = None
         elif isinstance(output, (list,tuple)) and  all([isinstance(m,(nn.Module)) for m in output]):
             output_list = []
             model_list = []
@@ -211,7 +213,8 @@ class Model(ModelBase):
             for i in range(len(output_list)):
                 self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(output_list[i])[self.batch_index + 1:]), name='output_{0}'.format(i))
                 self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(output_list[i])[self.batch_index + 1:]), name='target_{0}'.format(i))
-            self._signature = self._model.signature
+            if self._model.signature.maybe_not_complete():
+                self._model.signature = None
         elif isinstance(output,(np.ndarray,torch.Tensor)):
             #style transfer , or adversarial attack
             self._model =to_tensor(output,requires_grad=True)
@@ -670,12 +673,7 @@ class Model(ModelBase):
                 if len(self.training_context['losses'][k])>0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
             print(temp)
-            if is_tensor(self._model):
-                if self._model.grad is not None:
-                    self._model.requires_grad=False
-                    self._model.requires_grad=True
-            #elif isinstance(self._model, nn.Module):
-            #     self._model.zero_grad()
+
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -798,7 +796,7 @@ class Model(ModelBase):
 
         except:
             PrintException()
-        return train_data, test_data
+        return self.training_context['train_data'] , self.training_context['test_data']
 
     def do_preparation_for_loss(self):
         pass
@@ -812,7 +810,7 @@ class Model(ModelBase):
             if isinstance(self._model,(Layer,nn.Module)):
                 #double check!!!
                 self._model.train()
-
+            self.optimizer.zero_grad()
             if self.training_context['stop_update'] <1:
                 if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda' :
                     if self.gradscaler is None:
@@ -834,17 +832,7 @@ class Model(ModelBase):
                     else:
                         torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
-                    # for name,para in self._model.named_parameters():
-                    #     try:
-                    #         if para is not None  and para.grad is not None:
-                    #             grad_norm=para.grad.norm()
-                    #             if grad_norm>1e3:
-                    #
-                    #             if not 0<grad_norm<1e5:
-                    #                 sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
-                    #     except Exception as e:
-                    #         print(e)
-                    #         PrintException()
+
                 elif isinstance(self._model,torch.Tensor):
                     grad_norm = self._model.grad.norm()
                     if not is_tensor(self._model) and not 0 < grad_norm < 1e5:
@@ -857,22 +845,22 @@ class Model(ModelBase):
                 if log_gradients:
                     self.log_gradient()
 
-            if self.training_context['stop_update'] == 0:
+            if self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update']):
                 #amp support
                 if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda':
                     self.gradscaler.step(self.optimizer)
                     self.gradscaler.update()
                 else:
                     self.optimizer.step(self.get_current_loss, )
-            elif 0 < self.training_context['stop_update'] < 1:
-                if random.random() <= self.training_context['stop_update']:
-                    # amp support
-                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device()=='cuda':
-                        self.gradscaler.step(self.optimizer)
-                        self.gradscaler.update()
-                    else:
-                        self.optimizer.step(self.get_current_loss, )
-            else:
+
+                if is_tensor(self._model):
+                    if self._model.grad is not None:
+                        self._model.requires_grad = False
+                        self._model.requires_grad = True
+                elif isinstance(self._model, nn.Module):
+                    self._model.zero_grad()
+
+            elif self.training_context['stop_update'] >1:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
             for callback in self.training_context['callbacks']:
@@ -917,8 +905,7 @@ class Model(ModelBase):
 
             sys.stderr.write(self._get_name() + '  nan detected!!\n')
 
-        if save_path is None or save_path=='':
-            save_path=self.training_context['save_path']
+        save_path=self.training_context['save_path']
 
         if isinstance(self._model,nn.Module):
             folder,filename,ext=split_path(save_path)
@@ -1073,6 +1060,62 @@ class Model(ModelBase):
     def test(self, input,target):
         raise NotImplementedError
 
+
+    @property
+    def preprocess_flow(self):
+        return self._preprocess_flow
+
+    @preprocess_flow.setter
+    def preprocess_flow(self,value):
+        self._preprocess_flow=value
+        if isinstance(self.input_spec,TensorSpec):
+            self.input_spec=None
+
+    @property
+    def reverse_preprocess_flow(self):
+        return_list = []
+        return_list.append(reverse_image_backend_adaption)
+        for i in range(len(self._preprocess_flow)):
+            fn = self._preprocess_flow[-1 - i]
+            if fn.__qualname__ == 'normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean, fn.std))
+        return_list.append(array2image)
+        return return_list
+
+    def data_preprocess(self, img_data):
+        if not hasattr(self,'_preprocess_flow') or self._preprocess_flow is None:
+            self._preprocess_flow=[]
+        if img_data.ndim==4:
+            return to_tensor(to_numpy([self.data_preprocess(im) for im in img_data]))
+        if len(self._preprocess_flow) == 0:
+            return image_backend_adaption(img_data)
+        if isinstance(img_data, np.ndarray):
+            for fc in self._preprocess_flow:
+                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+                    img_data = fc(img_data,spec=self.input_spec)
+                else:
+                    img_data = fc(img_data)
+            img_data = image_backend_adaption(img_data)
+            if self.input_spec is None :
+                self.input_spec= TensorSpec(shape=tensor_to_shape(to_tensor(img_data),need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+
+            return img_data
+        else:
+            return img_data
+
+    def reverse_data_preprocess(self, img_data: np.ndarray):
+        if img_data.ndim==4:
+            return to_numpy([self.reverse_data_preprocess(im) for im in img_data])
+        if len(self.reverse_preprocess_flow) == 0:
+            return reverse_image_backend_adaption(img_data)
+        if isinstance(img_data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.reverse_preprocess_flow:
+                img_data = fc(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
+        return img_data
+
+
     def extra_repr(self):
         return ''
 
@@ -1094,13 +1137,14 @@ class Model(ModelBase):
             try:
                 if isinstance(value, OrderedDict):
                     for subkey, subvalue in value.items():
-                        mod_str = repr(subvalue)
+                        mod_str = repr(subvalue)if sys.getsizeof(subvalue)<=1000000 else '<large item>'
                         mod_str = addindent(mod_str, 2)
                         child_lines.append('(' + key + '): ' + mod_str)
                 else:
-                    mod_str = repr(value)
-                    mod_str = addindent(mod_str, 2)
-                    child_lines.append('(' + key + '): ' + mod_str)
+                    pass
+                    # mod_str = repr(value) if sys.getsizeof(value)<=1000000 else '<large item>'
+                    # mod_str = addindent(mod_str, 2)
+                    # child_lines.append('(' + key + '): ' + mod_str)
             except:
                 pass
         lines = extra_lines + child_lines
