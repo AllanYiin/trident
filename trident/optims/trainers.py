@@ -17,7 +17,7 @@ import numpy as np
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need
 from trident.backend.model import ModelBase, progress_bar
 from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
@@ -29,6 +29,9 @@ __all__ = ['TrainingPlan']
 
 _session = get_session()
 _backend = _session.backend
+working_direcory=_session.working_direcory
+
+
 if _backend == 'pytorch':
     import torch
     import torch.nn as nn
@@ -60,8 +63,9 @@ class TrainingPlan(object):
         self.save_model_frequency = -1
         self.save_model_unit = 'batch'
         self.execution_id = None
-
+        self.enable_tensorboard=False
         self._is_optimizer_warmup = False
+        self.summary_writer = None
 
         self.callbacks = []  # if self.callbacks is None:  #     self.callbacks = [  #
         # NumberOfEpochsStoppingCriterionCallback(1)]  # elif not any([issubclass(type(cb),
@@ -205,6 +209,10 @@ class TrainingPlan(object):
 
     def within_minibatch_size(self, minibatch_size: int):
         self.minibatch_size = minibatch_size
+        return self
+
+    def within_tensorboard(self):
+        self.enable_tensorboard = True
         return self
 
     def out_sample_evaluation_scheduling(self, frequency: int, unit='batch', on_epoch_end=True):
@@ -363,6 +371,10 @@ class TrainingPlan(object):
             exception_cnt = 0
             abnormal_num_count = 0
             # update callback
+            if self.enable_tensorboard:
+                make_dir_if_need(os.path.join(working_direcory,'Logs'))
+                os.system('cmd /k "tensorboard --logdir={0}"'.format(os.path.join(working_direcory,'Logs')))
+                sys.stdout.writelines(['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/'])
             if not is_resume or only_steps == True:
                 max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
                 for item in self.training_items.values():
@@ -401,6 +413,7 @@ class TrainingPlan(object):
                                     callback.on_training_terminated(self.__dict__)
 
                             for k, trainitem in self.training_items.items():
+
                                 for callback in trainitem.training_context['callbacks']:
                                     if callback.is_shared == False:
                                         callback.on_training_terminated(trainitem.training_context)
@@ -450,26 +463,28 @@ class TrainingPlan(object):
                             # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
                             for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
+
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
 
                                 trainitem.training_context['model_name'] = trainitem_name
                                 if epoch < int(trainitem.start_epoch):
                                     trainitem.training_context['stop_update'] = 1
-                                trainitem.train_model(train_data, test_data, epoch if only_steps == False else 0,
+
+                                trainitem.train_model(train_data, test_data,
+                                                      epoch if only_steps == False else 0,
                                                       mbs if only_steps == False else num_batches,
-                                                      self.num_epochs if only_steps == False else 1, len(
-                                        data_loader.batch_sampler) if only_steps == False else max_batches,
+                                                      self.num_epochs if only_steps == False else 1,
+                                                      len(data_loader.batch_sampler) if only_steps == False else max_batches,
                                                       is_collect_data=mbs % collect_data_inteval == 0,
-                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs
-                                                                              % self.print_progress_frequency == 0,
-                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and (
-                                                              epoch + 1) % self.print_progress_frequency == 0,
+                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0,
+                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
                                                       accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
-                            if self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0 and \
-                                    self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0:
-                                print('\n', flush=True)
+
+                            if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
+                                    (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
+                                print(' \n', flush=True)
 
                             for k, trainitem in self.training_items.items():
                                 for callback in trainitem.training_context['callbacks']:

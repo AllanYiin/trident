@@ -201,6 +201,7 @@ def _initialize_session():
     _SESSION.epoch_equivalent =1000
     _SESSION.floatx = 'float32'
     _SESSION.epsilon = 1e-8
+    _SESSION.working_direcory =os.getcwd()
     _SESSION.plateform = get_plateform()
     _SESSION.numpy_print_format = '{0:.4e}'
     _SESSION.amp_available=False

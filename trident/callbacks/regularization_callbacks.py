@@ -22,7 +22,7 @@ elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like
     from trident.optims.tensorflow_losses import CrossEntropyLoss
 
-
+working_direcory=get_session().working_direcory
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']
 
 class RegularizationCallbacksBase(CallbackBase):
@@ -50,9 +50,11 @@ class MixupCallback(RegularizationCallbacksBase):
         self.alpha=alpha
         self.loss_criterion=loss_criterion()
         self.loss_weight=loss_weight
-        self.save_path=save_path
-        if save_path is not None:
-            make_dir_if_need(save_path)
+        if save_path is None:
+            self.save_path = os.path.join(working_direcory, 'Results')
+        else:
+            self.save_path = save_path
+        make_dir_if_need(self.save_path)
     def on_loss_calculation_end(self, training_context):
         """Returns mixed inputs, pairs of targets, and lambda"""
         train_data = training_context['train_data']
@@ -92,7 +94,7 @@ class MixupCallback(RegularizationCallbacksBase):
                 if self.save_path is None and not is_in_colab():
                     item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = unnormalize(0, 255)(item)
-                    array2image(item).save('Results/mixup_{0}.jpg'.format(get_time_suffix()))
+                    array2image(item).save(os.path.join(self.save_path,'mixup_{0}.jpg'.format(get_time_suffix())))
                 elif self.save_path is not None:
                     item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = unnormalize(0, 255)(item)
@@ -117,7 +119,11 @@ class CutMixCallback(RegularizationCallbacksBase):
         self.alpha=alpha
         self.loss_criterion=loss_criterion()
         self.loss_weight=loss_weight
-        self.save_path=save_path
+        if save_path is None:
+            self.save_path=os.path.join(working_direcory,'Results')
+        else:
+            self.save_path =save_path
+        make_dir_if_need(self.save_path)
 
     def rand_bbox(self, width, height, lam):
         """
@@ -197,7 +203,8 @@ class CutMixCallback(RegularizationCallbacksBase):
                 for item in x:
                     item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = unnormalize(0, 255)(item)
-                    array2image(item).save('Results/cutmix_{0}.jpg'.format(get_time_suffix()))
+                    array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+
             elif self.save_path is not None:
                 for item in x:
                     item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))

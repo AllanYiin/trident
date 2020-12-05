@@ -43,11 +43,7 @@ __all__ = ['Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageSeg
 _session = get_session()
 _backend = _session.backend
 
-_device = 'CPU'
-for device in device_lib.list_local_devices():
-    if tf.DeviceSpec.from_string(device.name).device_type == 'GPU':
-        _device = 'GPU'
-        break
+_device =get_device()
 
 
 def _to_tuple(x):
@@ -774,7 +770,7 @@ class Model(ModelBase):
         except:
             PrintException()
 
-        return train_data, test_data
+        return self.training_context['train_data'], self.training_context['test_data']
 
     def do_preparation_for_loss(self):
         pass
@@ -1012,33 +1008,37 @@ class Model(ModelBase):
 
             with tf.GradientTape() as grad_tape:
                 # grad_tape.watch(self._model.trainable_variables)
-                try:
-                    output = try_map_args_and_call(self._model, train_data, self.training_context['data_feed'])
-                    if isinstance(output, (list, tuple)):
-                        for i in range(len(output)):
-                            train_data[self.outputs.key_list[i]] = output[i]
-                    elif isinstance(output, (OrderedDict)):
-                        for k,v in output.items():
-                            train_data[k] = v
-                    elif 'tensor' in output.__class__.__name__.lower():
-                        train_data[self.outputs.key_list[0]] = output
-                        if self.use_output_as_loss == True:
-                            this_loss = output.sum()
-                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
-                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
-                    else:
-                        train_data[self.outputs.key_list[0]] = output
-                        if self.use_output_as_loss == True:
-                            this_loss = output.sum()
-                            self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
-                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
-                except Exception as e:
-                    print(e)
-                    PrintException()
-                    if isinstance(self._model, Layer) and any_abnormal_number(self._model):
-                        for para in self._model.parameters():
-                            if any_abnormal_number(para):
-                                para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+                if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
+                    try:
+                        if self.output_fn is not None:
+                             self.output_fn()
+                        else:
+                            output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'])
+                            if isinstance(output, (list, tuple)):
+                                for i in range(len(output)):
+                                    self.train_data[self.outputs.key_list[i]] = output[i]
+                            elif isinstance(output, (OrderedDict)):
+                                for k,v in output.items():
+                                    self.train_data[k] = v
+                            elif 'tensor' in output.__class__.__name__.lower():
+                                self.train_data[self.outputs.key_list[0]] = output
+                                if self.use_output_as_loss == True:
+                                    this_loss = output.sum()
+                                    self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
+                                    self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                            else:
+                                self.train_data[self.outputs.key_list[0]] = output
+                                if self.use_output_as_loss == True:
+                                    this_loss = output.sum()
+                                    self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
+                                    self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                    except Exception as e:
+                        print(e)
+                        PrintException()
+                        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+                            for para in self._model.parameters():
+                                if any_abnormal_number(para):
+                                    para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
 
                 # write output in to data
 
@@ -1053,8 +1053,7 @@ class Model(ModelBase):
                             if k in self.loss_weights:
                                 loss_weight = self.loss_weights[k]
                             loss_weight = to_tensor(loss_weight, 'float32')
-                            this_loss = loss_weight * try_map_args_and_call(v, train_data,
-                                                                            self.training_context['data_feed'])  # v.forward(output, target) if hasattr(v, 'forward') else v(
+                            this_loss = loss_weight * try_map_args_and_call(v, self.train_data,self.training_context['data_feed'])  # v.forward(output, target) if hasattr(v, 'forward') else v(
                             if self.training_context['stop_update'] >= 1:
                                 pass  # this_loss= to_tensor(0.0,requires_grad=True)
                             # output, target)
@@ -1096,7 +1095,7 @@ class Model(ModelBase):
                             this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
                         elif 'output' in v.signature.inputs:
 
-                            this_loss = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
+                            this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
                         if not any_abnormal_number(this_loss):
                             # a leaf Variable that requires grad connotused in an in-place operation.
                             current_loss = current_loss  + this_loss# self.training_context[
@@ -1136,15 +1135,15 @@ class Model(ModelBase):
                 elif is_tensor(self._model):
                     self.log_weight(weghts=self._model)
 
-            if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and self.training_context['stop_update'] < 1:
-                tmp_output = try_map_args_and_call(self._model, test_data, self.training_context['data_feed'])
+            if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and self.training_context['stop_update'] < 1:
+                tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'])
                 if isinstance(tmp_output, (list, tuple)):
                     for i in range(len(tmp_output)):
-                        test_data[self.outputs.key_list[i]] = tmp_output[i]
+                        self.test_data[self.outputs.key_list[i]] = tmp_output[i]
                 elif 'tensor' in tmp_output.__class__.__name__.lower():
-                    test_data[self.outputs.key_list[0]] = tmp_output
+                    self.test_data[self.outputs.key_list[0]] = tmp_output
                 else:
-                    test_data[self.outputs.key_list[0]] = tmp_output
+                    self.test_data[self.outputs.key_list[0]] = tmp_output
 
             # ON_EVALUATION_START
             self.do_on_metrics_evaluation_start()
@@ -1157,11 +1156,11 @@ class Model(ModelBase):
                     self.training_context['metrics'].regist(k)
                     self.training_context['tmp_metrics'].regist(k)
 
-                this_metric = try_map_args_and_call(v, train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
+                this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0)
                 self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_metric)))
 
-                if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0 and collect_history != False:
-                    this_out_metric = try_map_args_and_call(v, test_data, self.training_context['data_feed'])
+                if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and collect_history != False:
+                    this_out_metric = try_map_args_and_call(v, self.test_data, self.training_context['data_feed'])
                     self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], float(to_numpy(this_out_metric)))
 
             # ON_EVALUATION_END
@@ -1198,7 +1197,7 @@ class Model(ModelBase):
             else:
                 self.training_context['print_batch_progress_frequency'] += 1
 
-            if is_out_sample_evaluation==True and test_data is not None and len(test_data) > 0:
+            if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0:
                 verbose=[]
                 for k in self.training_context['out_sample_metrics'].get_keys():
                     test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
@@ -1265,6 +1264,62 @@ class Model(ModelBase):
         else:
             raise ValueError('This model has not yet been built. ')
 
+
+    @property
+    def preprocess_flow(self):
+        return self._preprocess_flow
+
+    @preprocess_flow.setter
+    def preprocess_flow(self,value):
+        self._preprocess_flow=value
+        if isinstance(self.input_spec,TensorSpec):
+            self.input_spec=None
+
+    @property
+    def reverse_preprocess_flow(self):
+        return_list = []
+        return_list.append(reverse_image_backend_adaption)
+        for i in range(len(self._preprocess_flow)):
+            fn = self._preprocess_flow[-1 - i]
+            if fn.__qualname__ == 'normalize.<locals>.img_op':
+                return_list.append(unnormalize(fn.mean, fn.std))
+        return_list.append(array2image)
+        return return_list
+
+    def data_preprocess(self, img_data):
+        if not hasattr(self,'_preprocess_flow') or self._preprocess_flow is None:
+            self._preprocess_flow=[]
+        if img_data.ndim==4:
+            return to_numpy([self.data_preprocess(im) for im in img_data])
+        if len(self._preprocess_flow) == 0:
+            return np.expand_dims(image_backend_adaption(img_data))
+        if isinstance(img_data, np.ndarray):
+            for fc in self._preprocess_flow:
+                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+                    img_data = fc(img_data,spec=self.input_spec)
+                else:
+                    img_data = fc(img_data)
+            img_data =np.expand_dims(image_backend_adaption(img_data))
+            if self.input_spec is None :
+                self.input_spec= TensorSpec(shape=tensor_to_shape(to_tensor(img_data),need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+
+            return img_data
+        else:
+            return img_data
+
+    def reverse_data_preprocess(self, img_data: np.ndarray):
+        if img_data.ndim==4:
+            return to_numpy([self.reverse_data_preprocess(im) for im in img_data])
+        if len(self.reverse_preprocess_flow) == 0:
+            return reverse_image_backend_adaption(img_data)
+        if isinstance(img_data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.reverse_preprocess_flow:
+                img_data = fc(img_data)
+            img_data = reverse_image_backend_adaption(img_data)
+        return img_data
+
+
     def extra_repr(self):
         return ''
 
@@ -1289,9 +1344,10 @@ class Model(ModelBase):
                     mod_str = addindent(mod_str, 2)
                     child_lines.append('(' + key + '): ' + mod_str)
             else:
-                mod_str = repr(value)
-                mod_str = addindent(mod_str, 2)
-                child_lines.append('(' + key + '): ' + mod_str)
+                pass
+                # mod_str = repr(value)
+                # mod_str = addindent(mod_str, 2)
+                # child_lines.append('(' + key + '): ' + mod_str)
         lines = extra_lines + child_lines
 
         main_str = self._get_name() + '('
