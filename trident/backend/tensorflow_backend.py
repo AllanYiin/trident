@@ -25,7 +25,7 @@ import tensorflow as tf
 from tensorflow.python import enable_eager_execution
 from tensorflow.python.eager import context
 from tensorflow.python.framework import func_graph, ops
-from tensorflow.python.keras.engine import base_layer_utils
+
 from tensorflow.python.module import module
 from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.training.tracking import data_structures, tracking
@@ -1076,9 +1076,7 @@ class Layer(tf.Module):
     def signature(self, value):
         self._signature = value
 
-    @property
-    def input(self):
-        return NotImplemented
+
 
     @property
     def output(self):
@@ -1955,6 +1953,7 @@ class Sequential(Layer):
 
         self._signature = None
 
+
     def remove_at(self, idx):
         self.__delitem__(idx)
         if len(self._modules) > 0:
@@ -1990,6 +1989,7 @@ class Sequential(Layer):
         else:
             key = self._get_item_by_idx(self._modules.keys(), idx)
             delattr(self, key)
+
 
     def __len__(self):
         return len(self._modules)
@@ -2280,7 +2280,7 @@ class ModuleDict(Layer):
                 module.output_shape=tensor_to_shape(out)
             self._built = True
 
-    def forward(self, *x):
+    def forward(self, x):
         if self.is_multicasting == True:
             results = OrderedDict()
             x = enforce_singleton(x)
