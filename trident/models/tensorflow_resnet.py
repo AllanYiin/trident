@@ -146,7 +146,7 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=F
 
 def ResNet50(include_top=True,
              pretrained=True,
-            freeze_features=False,
+             freeze_features=False,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -160,20 +160,23 @@ def ResNet50(include_top=True,
         download_model_from_google_drive('1vReSW_l8fldyYQ6ay5HCYFGoMaGbdW2T',dirname,'resnet50_tf.pth')
         recovery_model=load(os.path.join(dirname,'resnet50_tf.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
         recovery_model.eval()
+        recovery_model.to(get_device())
+        with tf.device(get_device()):
+            if freeze_features:
+                recovery_model.trainable = False
+                recovery_model.fc.trainable = True
 
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-        else:
-            if classes!=1000:
+            if include_top==False:
                 recovery_model.remove_at(-1)
                 recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+                recovery_model.remove_at(-1)
+            else:
+                if classes!=1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
         recovery_model.signature=None
         if recovery_model.signature != recovery_model._signature:
@@ -199,19 +202,23 @@ def ResNet101(include_top=True,
         download_model_from_google_drive('13QYdFX3CvsNiegi-iUX1PUC0KKKgPNwr',dirname,'resnet101_tf.pth')
         recovery_model=load(os.path.join(dirname,'resnet101_tf.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
         recovery_model.eval()
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-        else:
-            if classes != 1000:
+        recovery_model.to(get_device())
+        with tf.device(get_device()):
+            if freeze_features:
+                recovery_model.trainable = False
+                recovery_model.fc.trainable = True
+
+            if include_top == False:
                 recovery_model.remove_at(-1)
                 recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+                recovery_model.remove_at(-1)
+            else:
+                if classes != 1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
         recovery_model.signature = None
         if recovery_model.signature != recovery_model._signature:
@@ -238,20 +245,24 @@ def ResNet152(include_top=True,
         download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152.pth')
         recovery_model=load(os.path.join(dirname,'resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
         recovery_model.eval()
+        recovery_model.to(get_device())
+        with tf.device(get_device()):
+            if freeze_features:
+                recovery_model.trainable = False
+                recovery_model.fc.trainable = True
 
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-        else:
-            if classes != 1000:
+
+            if include_top == False:
                 recovery_model.remove_at(-1)
                 recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+                recovery_model.remove_at(-1)
+            else:
+                if classes != 1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
         recovery_model.signature = None
         if recovery_model.signature != recovery_model._signature:

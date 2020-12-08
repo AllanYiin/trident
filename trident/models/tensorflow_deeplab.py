@@ -31,7 +31,7 @@ __all__ = ['DeeplabV3_plus','DeeplabV3']
 _session = get_session()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
-_backend = _session.backend
+_backend = get_backend()
 
 dirname = os.path.join(_trident_dir, 'models')
 if not os.path.exists(dirname):

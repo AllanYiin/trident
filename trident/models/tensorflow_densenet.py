@@ -14,10 +14,10 @@ from itertools import repeat
 
 import numpy as np
 
-
+import tensorflow as tf
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer,get_device
 from trident.backend.tensorflow_ops import *
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
@@ -330,17 +330,17 @@ def DenseNet121(include_top=True,
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
         recovery_model.eval()
-
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-        else:
-            if classes!=1000:
+        with tf.device(get_device()):
+            if include_top==False:
                 recovery_model.remove_at(-1)
                 recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
-                densenet121.class_names = []
+            else:
+                if classes!=1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
+                    densenet121.class_names = []
 
 
         recovery_model.signature = Signature(name='DenseNetFcn')
@@ -447,14 +447,16 @@ def DenseNet169(include_top=True,
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
         recovery_model.eval()
-        if include_top==False:
-            recovery_model.remove_at(-1)
-        else:
-            if classes!=1000:
+        with tf.device(get_device()):
+            if include_top==False:
                 recovery_model.remove_at(-1)
                 recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+            else:
+                if classes!=1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
         recovery_model.signature = Signature(name='DenseNetFcn')
         if is_tensor(recovery_model._input_shape):
             recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
@@ -503,15 +505,16 @@ def DenseNet201(include_top=True,
         recovery_model = fix_layer(recovery_model)
         recovery_model._name = 'densenet201'
         recovery_model.eval()
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-        else:
-            if classes!=1000:
+        with tf.device(get_device()):
+            if include_top==False:
                 recovery_model.remove_at(-1)
                 recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
+            else:
+                if classes!=1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
         recovery_model.signature = Signature(name='DenseNetFcn')
         if is_tensor(recovery_model._input_shape):
             recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')

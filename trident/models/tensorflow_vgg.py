@@ -17,7 +17,7 @@ import tensorflow as tf
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.model import *
-from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.tensorflow_activations import get_activation, Identity, Relu
@@ -153,16 +153,16 @@ def VGG16(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg16_tf.pth'))
         recovery_model.name = 'vgg16'
         recovery_model.eval()
+        with tf.device(get_device()):
+            if include_top==False:
+                [recovery_model.remove_at(-1) for i in range(7)]
+            else:
+                if classes!=1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('fc3', Dense(classes, activation=None, name='fc3'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
-        if include_top==False:
-            [recovery_model.remove_at(-1) for i in range(7)]
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc3', Dense(classes, activation=None, name='fc3'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
-
-        vgg16.model=recovery_model
+            vgg16.model=recovery_model
     return vgg16
 
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)
@@ -182,14 +182,14 @@ def VGG19(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg19_tf.pth'))
         recovery_model.name = 'vgg19'
         recovery_model.eval()
+        with tf.device(get_device()):
+            if include_top==False:
+                [recovery_model.remove_at(-1) for i in range(7)]
+            else:
+                if classes!=1000:
+                    recovery_model.remove_at(-1)
+                    recovery_model.add_module('fc3', Dense(classes, activation=None, name='fc3'))
+                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
 
-        if include_top==False:
-            [recovery_model.remove_at(-1) for i in range(7)]
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc3', Dense(classes, activation=None, name='fc3'))
-                recovery_model.add_module('softmax', SoftMax(name='softmax'))
-
-        vgg19.model=recovery_model
+            vgg19.model=recovery_model
     return vgg19
