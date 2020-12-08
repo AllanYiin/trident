@@ -18,7 +18,7 @@ from trident.backend.tensorflow_ops import *
 
 
 
-__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger','LARS','RangerLars','AdaBelief','RangerBelief', 'get_optimizer']
+__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger','LARS','RangerLars','AdaBelief','RangerBelief','DiffGrad', 'get_optimizer']
 
 from collections import defaultdict
 
@@ -1785,7 +1785,7 @@ class Ranger(Optimizer):
             beta1, beta2 = group['betas']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(grad.size())) > 3:
+                if len(int_shape(grad)) > 3:
                     grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim())),keepdims=True))
 
             state['step'] += 1
@@ -2095,7 +2095,7 @@ class RangerLars(Optimizer):
             beta1, beta2 = group['betas']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(grad.size())) > 3:
+                if len(int_shape(grad)) > 3:
                     grad += (-grad.reduce_mean(axis=list(range(1, grad.ndim())), keepdims=True))
 
             state['step'] += 1
@@ -2158,7 +2158,7 @@ class RangerLars(Optimizer):
                                    p_data_fp32 - group['lr'] * trust_ratio* radam_step_size * G_grad)
 
                 if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(grad.size())) < 3:
+                    if len(int_shape(grad)) < 3:
                         G_grad += (-G_grad.reduce_mean(axis=list(range(1, G_grad.ndim())), keepdims=True))
 
                 p_data_fp32+=(G_grad*(-radam_step_size * group['lr']))
@@ -2434,7 +2434,7 @@ class RangerBelief(Optimizer):
             beta1, beta2 = group['betas']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(grad.size())) > 3:
+                if len(int_shape(grad)) > 3:
                     grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim())),keepdims=True))
 
             state['step'] += 1
@@ -2503,6 +2503,110 @@ class RangerBelief(Optimizer):
                     sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                     slow_p = where(is_nan(slow_p), p.value().detach(), slow_p)
                 p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
+
+        return True
+
+class DiffGrad(Optimizer):
+    r"""Implements diffGrad algorithm. It is modified from the pytorch implementation of Adam.
+
+    It has been proposed in `diffGrad: An Optimization Method for Convolutional Neural Networks`_.
+
+    Arguments:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float, optional): learning rate (default: 1e-3)
+        betas (Tuple[float, float], optional): coefficients used for computing
+            running averages of gradient and its square (default: (0.9, 0.999))
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-8)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
+            algorithm from the paper `On the Convergence of Adam and Beyond`_
+            (default: False)
+
+    .. _diffGrad: An Optimization Method for Convolutional Neural Networks:
+        https://arxiv.org/abs/1909.11015
+    .. _Adam\: A Method for Stochastic Optimization:
+        https://arxiv.org/abs/1412.6980
+    .. _On the Convergence of Adam and Beyond:
+        https://openreview.net/forum?id=ryQu7f-RZ
+    """
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0):
+        if not 0.0 <= lr:
+            raise ValueError("Invalid learning rate: {}".format(lr))
+        if not 0.0 <= eps:
+            raise ValueError("Invalid epsilon value: {}".format(eps))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+        super(DiffGrad, self).__init__(params, defaults)
+
+    def __setstate__(self, state):
+        super(DiffGrad, self).__setstate__(state)
+
+    def step(self, grads_and_vars=None, **kwargs):
+        """Performs a single optimization step.
+
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
+        """
+        group = self.param_groups[0]
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(grad) or not p.trainable:
+                continue
+
+            if is_sparse(grad):
+                raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+            p_data = p.value().detach()
+            state = self.state[p.ref()]
+
+
+            # State initialization
+            if len(state) == 0:
+                state['step'] = 0
+                # Exponential moving average of gradient values
+                state['exp_avg'] = zeros_like(p)
+                # Exponential moving average of squared gradient values
+                state['exp_avg_sq'] = zeros_like(p)
+                # Previous gradient
+                state['previous_grad'] =  zeros_like(p)
+
+            exp_avg, exp_avg_sq, previous_grad = state['exp_avg'], state['exp_avg_sq'], state['previous_grad']
+            beta1, beta2 = group['betas']
+
+            state['step'] += 1
+
+            if group['weight_decay'] != 0:
+                grad=grad+ p_data*group['weight_decay']
+
+            # Decay the first and second moment running average coefficient
+
+            exp_avg=exp_avg*beta1+ (1 - beta1) * grad
+            exp_avg_sq = exp_avg_sq*beta2  + (1 - beta2) * (grad * grad)
+            denom = exp_avg_sq.sqrt()+group['eps']
+
+            bias_correction1 = 1 - beta1 ** state['step']
+            bias_correction2 = 1 - beta2 ** state['step']
+
+            # compute diffgrad coefficient (dfc)
+            diff = abs(previous_grad - grad)
+            dfc = 1. / (1. + exp(-diff))
+            state['previous_grad'] = grad
+
+            # update momentum with dfc
+            exp_avg1 = exp_avg * dfc
+
+            step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
+
+            p_data=p_data - step_size * (exp_avg1 / denom)
+            if any_abnormal_number(p_data):
+                sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                p_data = where(is_nan(p_data), p.value().detach(), p_data)
+            p.assign(p_data)
 
         return True
 
