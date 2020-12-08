@@ -18,8 +18,8 @@ import weakref
 from collections import defaultdict, namedtuple
 from distutils.version import Version, LooseVersion
 from itertools import islice
-from typing import List, Callable, TypeVar, Union, Tuple, overload, Mapping, Dict, Optional, Iterable, Iterator, Any
-
+from typing import List, Callable, TypeVar, Union, Tuple, overload, Mapping, Dict, Optional, Iterable, Any
+import typing
 import numpy as np
 import tensorflow as tf
 from tensorflow.python import enable_eager_execution
@@ -31,14 +31,10 @@ from tensorflow.python.training.tracking import base as trackable
 from tensorflow.python.training.tracking import data_structures, tracking
 from tensorflow.python.training.tracking import layer_utils as trackable_layer_utils
 from tensorflow.python.util import object_identity
-from trident.backend import tensorflow_ops as tops
-from trident.backend import tensorflow_serialization as serialization
+
 from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException, device
 from trident.backend.tensorflow_ops import *
-from trident.backend.tensorspec import *
-from trident.data.utils import pickle_it
-
-__all__ = ['set_device','Dtype' ,'Layer', 'get_device', 'get_flops', 'Sequential','ModuleList','ModuleDict','summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
+from trident.backend import tensorflow_ops as tops
 
 _FUN_NAMES = [
     ('float', tops.float),
@@ -48,6 +44,12 @@ _FUN_NAMES = [
     ('to', tops.to)]
 for target_fun_name, source_fun in _FUN_NAMES:
     setattr(Tensor, target_fun_name, source_fun)
+from trident.backend.tensorspec import *
+from trident.data.utils import pickle_it
+from trident.backend import tensorflow_serialization as serialization
+
+
+__all__ = ['set_device','Dtype' ,'Layer', 'get_device', 'get_flops', 'Sequential','ModuleList','ModuleDict','summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
 
 
 def get_device():
@@ -803,11 +805,14 @@ class Layer(tf.Module):
             with tf.device(self._device):
                 for module in self.modules():
                     try:
+                        module._device = self._device
+                        module._input_shape =None if module._input_shape is None else to_tensor(to_numpy(module._input_shape), dtype='int32')
+                        module._output_shape =None if module._output_shape is None else  to_tensor(to_numpy(module._output_shape), dtype='int32')
                         for name, para in module._parameters.items():
-                            module._parameters[name] = tf.Variable(initial_value=para.numpy(), dtype=para.dtype,trainable=para.trainable,name=para.name)
+                            module._parameters[name] = tf.Variable(initial_value=para.value().detach(), dtype=para.dtype,trainable=para.trainable,name=para.name)
                         for name, buff in module._buffers.items():
                             module._buffers[name] = to_tensor(buff.numpy(), dtype=buff.dtype)
-                        module._device = self._device
+
                     except Exception as e:
                         print(e)
                         PrintException()
@@ -827,11 +832,13 @@ class Layer(tf.Module):
         with tf.device(self._device):
             for module in self.modules():
                 try:
+                    module._device = self._device
+                    module._input_shape=None if module._input_shape is None else to_tensor(to_numpy(module._input_shape),dtype='int32')
+                    module._output_shape =None if module._output_shape is None else  to_tensor(to_numpy(module._output_shape), dtype='int32')
                     for name, para in module._parameters.items():
-                        module._parameters[name] = tf.Variable(para.numpy(), dtype=para.dtype)
+                        module._parameters[name] = tf.Variable(para.value().detach(), dtype=para.dtype)
                     for name, buff in module._buffers.items():
                         module._buffers[name] = to_tensor(buff.numpy(), dtype=buff.dtype)
-                    module._device = self._device
                 except Exception as e:
                     print(e)
                     PrintException()
@@ -975,42 +982,47 @@ class Layer(tf.Module):
 
     @input_shape.setter
     def input_shape(self, value):
-        if isinstance(value, tf.TensorShape):
-            value = to_tensor(value.as_list()).to('int')
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-            value = to_tensor(value).int()
-        elif isinstance(value, (list, tuple)) and len(value) > 0:
-            value = stack(value)
-
-        else:
-            value = to_tensor(value).to('int')
-        if self.is_root:
-            self.input_spec = TensorSpec(shape=value)
-        if self._built == False or  self._input_shape is None or  self.input_filters  is None :
+        if value is None:
             self._input_shape = value
-            if len(self._input_shape) == 0:
-                self.input_filters = to_numpy(self._input_shape)[self.filter_index]
-            elif len(self._input_shape) == 1:
-                self.input_filters = to_numpy(self._input_shape)[self.filter_index]
-            else:
-                if self.filter_index < 0:
-                    self.input_filters = int(self._input_shape[self.filter_index])
-                elif self.filter_index > self.batch_index:
-                    self.input_filters = int(self._input_shape[self.filter_index - self.batch_index - 1])
-                else:
-                    raise NotImplementedError('filter_index>batch_index')
+            self.input_filters=None
+            self._signature=None
+        else:
+            if isinstance(value, tf.TensorShape):
+                value = to_tensor(value.as_list()).to('int')
+            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+                value = to_tensor(value).int()
+            elif isinstance(value, (list, tuple)) and len(value) > 0:
+                value = stack(value)
 
-        self.build(self._input_shape)
-        self._built = True
-        if self.is_root:
-            if self._signature is None:
-                self._signature = Signature(name=self.name)
-            self._signature.inputs = OrderedDict()
-            if is_tensor(self._input_shape):
-                self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
             else:
-                for k in range(len(self._input_shape)):
-                    self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
+                value = to_tensor(value).to('int')
+            if self.is_root:
+                self.input_spec = TensorSpec(shape=value)
+            if self._built == False or  self._input_shape is None or  self.input_filters  is None :
+                self._input_shape = value
+                if len(self._input_shape) == 0:
+                    self.input_filters = to_numpy(self._input_shape)[self.filter_index]
+                elif len(self._input_shape) == 1:
+                    self.input_filters = to_numpy(self._input_shape)[self.filter_index]
+                else:
+                    if self.filter_index < 0:
+                        self.input_filters = int(self._input_shape[self.filter_index])
+                    elif self.filter_index > self.batch_index:
+                        self.input_filters = int(self._input_shape[self.filter_index - self.batch_index - 1])
+                    else:
+                        raise NotImplementedError('filter_index>batch_index')
+
+            self.build(self._input_shape)
+            self._built = True
+            if self.is_root:
+                if self._signature is None:
+                    self._signature = Signature(name=self.name)
+                self._signature.inputs = OrderedDict()
+                if is_tensor(self._input_shape):
+                    self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
+                else:
+                    for k in range(len(self._input_shape)):
+                        self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
 
     @property
     def output_shape(self):
@@ -1018,29 +1030,32 @@ class Layer(tf.Module):
 
     @output_shape.setter
     def output_shape(self, value):
-
-        if is_tensor(value) and value.ndim == 1 and value.dtype == tf.int32:
-            pass
-        elif isinstance(value, tf.TensorShape):
-            value = to_tensor(to_numpy(value)).int()
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-            value = to_tensor(list(value)).int()
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
-            value = tuple(value)
+        if value is None:
+            self._output_shape = value
+            self._signature = None
         else:
-            value = to_tensor(value).int()
-
-        self._output_shape = value
-
-        if self.is_root:
-            if self._signature is None:
-                self._signature = Signature(name=self.name)
-            self._signature.outputs = OrderedDict()
-            if is_tensor(self._output_shape):
-                self._signature.outputs['output'] = TensorSpec(shape=self._output_shape, name='output')
+            if is_tensor(value) and value.ndim == 1 and value.dtype == tf.int32:
+                pass
+            elif isinstance(value, tf.TensorShape):
+                value = to_tensor(to_numpy(value)).int()
+            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+                value = to_tensor(list(value)).int()
+            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
+                value = tuple(value)
             else:
-                for k in range(len(self._output_shape)):
-                    self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k], name='output_{0}'.format(k))
+                value = to_tensor(value).int()
+
+            self._output_shape = value
+
+            if self.is_root:
+                if self._signature is None:
+                    self._signature = Signature(name=self.name)
+                self._signature.outputs = OrderedDict()
+                if is_tensor(self._output_shape):
+                    self._signature.outputs['output'] = TensorSpec(shape=self._output_shape, name='output')
+                else:
+                    for k in range(len(self._output_shape)):
+                        self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k], name='output_{0}'.format(k))
     @property
     def signature(self) -> Signature:
         if self.is_root:
@@ -1128,10 +1143,10 @@ class Layer(tf.Module):
         """
         for name, param in self._parameters.items():
             if param is not None:
-                destination[prefix + name] = param if keep_vars else tf.stop_gradient(param)
+                destination[prefix + name] = param if keep_vars else param.value().detach()
         for name, buf in self._buffers.items():
             if buf is not None:
-                destination[prefix + name] = buf if keep_vars else tf.stop_gradient(buf)
+                destination[prefix + name] = buf if keep_vars else buf.value().detach() if isinstance(buf,tf.Variable) else buf.numpy()
 
     def state_dict(self, destination=None, prefix='', keep_vars=False):
         r"""Returns a dictionary containing a whole state of the module.
@@ -1145,20 +1160,21 @@ class Layer(tf.Module):
             ['bias', 'weight']
         """
 
-        if destination is None:
-            destination = OrderedDict()
-            destination._metadata = OrderedDict()
-        destination._metadata[prefix[:-1]] = local_metadata = dict(version=self._version)
+        with tf.device(self.get_root().device):
+            if destination is None:
+                destination = OrderedDict()
+                destination._metadata = OrderedDict()
+            destination._metadata[prefix[:-1]] = local_metadata = dict(version=self._version)
 
-        self._save_to_state_dict(destination, prefix, keep_vars)
-        for name, module in self._modules.items():
-            if module is not None:
-                module.state_dict(destination, prefix + name + '.', keep_vars=keep_vars)
-        for hook in self._state_dict_hooks.values():
-            hook_result = hook(self, destination, prefix, local_metadata)
-            if hook_result is not None:
-                destination = hook_result
-        return destination
+            self._save_to_state_dict(destination, prefix, keep_vars)
+            for name, module in self._modules.items():
+                if module is not None:
+                    module.state_dict(destination, prefix + name + '.', keep_vars=keep_vars)
+            for hook in self._state_dict_hooks.values():
+                hook_result = hook(self, destination, prefix, local_metadata)
+                if hook_result is not None:
+                    destination = hook_result
+            return destination
 
     def _register_load_state_dict_pre_hook(self, hook):
         r"""These hooks will be called with arguments: `state_dict`, `prefix`,
@@ -1262,39 +1278,40 @@ class Layer(tf.Module):
                 * **missing_keys** is a list of str containing the missing keys
                 * **unexpected_keys** is a list of str containing the unexpected keys
         """
-        missing_keys = []
-        unexpected_keys = []
-        error_msgs = []
+        with tf.device(self.get_root().device):
+            missing_keys = []
+            unexpected_keys = []
+            error_msgs = []
 
-        # copy state_dict so _load_from_state_dict can modify it
-        metadata = getattr(state_dict, '_metadata', None)
-        state_dict = state_dict.copy()
-        if metadata is not None:
-            state_dict._metadata = metadata
+            # copy state_dict so _load_from_state_dict can modify it
+            metadata = getattr(state_dict, '_metadata', None)
+            state_dict = state_dict.copy()
+            if metadata is not None:
+                state_dict._metadata = metadata
 
-        def load(module, prefix=''):
-            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-            module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys,
-                                         error_msgs)
-            for name, child in module._modules.items():
-                if child is not None:
-                    load(child, prefix + name + '.')
+            def load(module, prefix=''):
+                local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+                module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys,
+                                             error_msgs)
+                for name, child in module._modules.items():
+                    if child is not None:
+                        load(child, prefix + name + '.')
 
-        load(self)
-        load = None  # break load->load reference cycle
+            load(self)
+            load = None  # break load->load reference cycle
 
-        if strict:
-            if len(unexpected_keys) > 0:
-                error_msgs.insert(0, 'Unexpected key(s) in state_dict: {}. '.format(
-                    ', '.join('"{}"'.format(k) for k in unexpected_keys)))
-            if len(missing_keys) > 0:
-                error_msgs.insert(0, 'Missing key(s) in state_dict: {}. '.format(
-                    ', '.join('"{}"'.format(k) for k in missing_keys)))
+            if strict:
+                if len(unexpected_keys) > 0:
+                    error_msgs.insert(0, 'Unexpected key(s) in state_dict: {}. '.format(
+                        ', '.join('"{}"'.format(k) for k in unexpected_keys)))
+                if len(missing_keys) > 0:
+                    error_msgs.insert(0, 'Missing key(s) in state_dict: {}. '.format(
+                        ', '.join('"{}"'.format(k) for k in missing_keys)))
 
-        # if len(error_msgs) > 0:
-        #     raise RuntimeError(
-        #         'Error(s) in loading state_dict for {}:\n\t{}'.format(self.__class__.__name__, "\n\t".join(error_msgs)))
-        return _IncompatibleKeys(missing_keys, unexpected_keys)
+            # if len(error_msgs) > 0:
+            #     raise RuntimeError(
+            #         'Error(s) in loading state_dict for {}:\n\t{}'.format(self.__class__.__name__, "\n\t".join(error_msgs)))
+            return _IncompatibleKeys(missing_keys, unexpected_keys)
 
     def save(self, file_path=''):
         # save({'state_dict': self.state_dict()}, file_path)
@@ -1939,18 +1956,13 @@ class Sequential(Layer):
 
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
             last_output = self[-1]._output_shape
-            dummay_input = random_normal((2,) + tuple(to_list(last_output))).to(self.device)
-            out = module(dummay_input)
+            module.input_shape=last_output
             self._modules[name] = module
-            if is_tensor(out):
-                self._output_shape = tensor_to_shape(out)
-            elif isinstance(out,tuple):
-                self._output_shape = [tensor_to_shape(item) for item in out ]
-            self._signature = None
+            if module.output_shape is not None:
+                self._output_shape =module.output_shape
+
         else:
             super(Sequential, self).add_module(name, module)
-            self._signature = None
-
         self._signature = None
 
 
@@ -2068,7 +2080,7 @@ class ModuleList(Layer):
         return len(self._modules)
 
     # @_copy_to_script_wrapper
-    def __iter__(self) -> Iterator[Layer]:
+    def __iter__(self) -> typing.Iterator[Layer]:
         return iter(self._modules.values())
 
     def __iadd__(self: T, modules: Iterable[Layer]) -> T:
@@ -2185,7 +2197,7 @@ class ModuleDict(Layer):
         return len(self._modules)
 
     # @_copy_to_script_wrapper
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) :
         return iter(self._modules)
 
     # @_copy_to_script_wrapper
@@ -2463,13 +2475,15 @@ def summary(model, input_size, batch_size=-1):
         module.relative_name = name
 
     if isinstance(input_size, tuple):
-        input_size = [input_size]
+        input_size = list(input_size)
 
     if isinstance(input_size, int):
         x = [to_tensor(np.random.standard_normal((1, *input_size)).astype(np.float32))]
     else:
         # batch_size of 2 for batchnorm
         x = [to_tensor(np.random.standard_normal((1, *in_size)).astype(np.float32)) for in_size in input_size]
+
+    x=unpack_singleton(x)
     # p    rint(type(x[0]))
 
     # create properties
@@ -2482,7 +2496,10 @@ def summary(model, input_size, batch_size=-1):
 
     # make a forward pass
     # print(x.shape)
-    model(*x)
+    if is_tensor(x):
+        model(x)
+    elif isinstance(x,(list,tuple)):
+        model(*x)
 
     # remove these hooks
     for h in hooks:

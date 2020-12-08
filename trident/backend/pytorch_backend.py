@@ -1,7 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import gc
+import subprocess
 import functools
 import os
 import numbers
@@ -9,6 +10,7 @@ import copy
 import itertools
 import logging
 import operator
+import numpy as np
 import random
 import sys
 import uuid
@@ -17,7 +19,8 @@ from types import MethodType
 from collections import defaultdict
 from copy import copy
 from functools import update_wrapper, partial
-from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Iterator, Mapping, TypeVar
+from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Mapping, TypeVar
+import typing
 from itertools import islice
 from distutils.version import Version, LooseVersion
 import torch.nn as nn
@@ -33,7 +36,7 @@ from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
-__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine', 'try_map_args_and_call',
+__all__ = ['Dtype','get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine', 'try_map_args_and_call',
            'print_mem_stack',
            'normalize_padding', 'fix_layer']
 
@@ -43,7 +46,14 @@ for target_fun_name, source_fun in _FUN_NAMES:
     setattr(Tensor, target_fun_name, source_fun)
 
 
-
+class Dtype(object):
+    float32 = torch.float32
+    int64 = torch.int64
+    int32 = torch.int32
+    int16 = torch.int16
+    uint8 = torch.uint8
+    int8 = torch.int8
+    bool = torch.bool
 
 version = torch.__version__
 sys.stdout.write('Pytorch version:{0}.\n'.format(version))
@@ -239,7 +249,7 @@ def register_module_forward_hook(hook: Callable[..., None]) -> RemovableHandle:
     return handle
 
 def register_module_backward_hook(
-    hook: Callable[['Module', _grad_t, _grad_t], Union[None, Tensor]]
+    hook: Callable[['Module', _grad_t, _grad_t], Optional[Tensor]]
 ) -> RemovableHandle:
     r"""Registers a backward hook common to all the modules.
 
@@ -358,7 +368,7 @@ class Layer(nn.Module):
         self.input_spec = None
 
         self.keep_output = keep_output
-        self._output_tensor = None
+        self.register_buffer('_output_tensor',None,False)
 
         self._signature = None
         self._device = get_device()
@@ -511,7 +521,12 @@ class Layer(nn.Module):
             necessary to ensure uniqueness.
 
         """
-        return [x for x in self.parameters() if x.requires_grad]
+        paras=[]
+        for p in self.parameters():
+            if p.requires_grad:
+                paras.append(p)
+
+        return paras
 
     @property
     def non_trainable_weights(self) -> List[nn.Parameter]:
@@ -524,7 +539,12 @@ class Layer(nn.Module):
             necessary to ensure uniqueness.
 
         """
-        return [x for x in self.parameters() if x.requires_grad == False]
+        paras = []
+        for p in self.parameters():
+            if not p.requires_grad:
+                paras.append(p)
+
+        return paras
 
     @property
     def weights(self):
@@ -581,8 +601,11 @@ class Layer(nn.Module):
         return self._device
 
     @device.setter
-    def device(self, value):
-        self._device = value
+    def device(self, value:str):
+        if isinstance(value,str):
+            self._device = value
+        else:
+            print(value)
 
     def cuda(self, device=None):
         self._device = 'cuda'
@@ -604,8 +627,9 @@ class Layer(nn.Module):
         """Shape of input tensor,not including the batch axis."""
         return self._input_shape
 
+
     @input_shape.setter
-    def input_shape(self, value) -> Union[Tensor, Tuple[Tensor]]:
+    def input_shape(self, value) -> Tensor:
         """ Setting the input_shape, means the layer get shape information and start to do the shape inferrence """
 
         if is_tensor(value) and value.ndim == 1 and value.dtype == torch.int32:
@@ -653,7 +677,7 @@ class Layer(nn.Module):
         #     pass
 
     @property
-    def output_shape(self) -> Union[Tensor, Tuple[Tensor]]:
+    def output_shape(self) :
         return self._output_shape
 
     @output_shape.setter
@@ -720,9 +744,9 @@ class Layer(nn.Module):
     def signature(self, value):
         self._signature = value
 
-    @property
-    def input(self):
-        return NotImplemented
+    # @property
+    # def input(self):
+    #     return NotImplemented
 
     @property
     def output(self):
@@ -736,7 +760,7 @@ class Layer(nn.Module):
 
         """
         if self.keep_output == False:
-            raise ValueError('Layer {0} has not set self.keep_output  to True, cannot access output '.format(self.name))
+            return None
         return list(self._output_tensor) if isinstance(self._output_tensor, tuple) else self._output_tensor
 
     def reset_parameters(self):
@@ -867,7 +891,7 @@ class Layer(nn.Module):
             return self.__dict__[name]
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
-    def __setattr__(self, name: str, value: Union[Tensor, 'Module']) -> None:
+    def __setattr__(self, name: str, value) -> None:
         def remove_from(*dicts_or_sets):
             for d in dicts_or_sets:
                 if name in d:
@@ -1074,7 +1098,7 @@ class Sequential(Layer):
         keys = [key for key in keys if not key.isdigit()]
         return keys
 
-    def forward(self, *x):
+    def forward(self, x):
         for module in self._modules.values():
             x = enforce_singleton(x)
             x = module(x)
@@ -1258,7 +1282,7 @@ class ModuleDict(Layer):
         return len(self._modules)
 
     # @_copy_to_script_wrapper
-    def __iter__(self) -> Iterator[str]:
+    def __iter__(self) :
         return iter(self._modules)
 
     # @_copy_to_script_wrapper
@@ -1353,7 +1377,7 @@ class ModuleDict(Layer):
                 module.output_shape = tensor_to_shape(out)
             self._built = True
 
-    def forward(self, *x):
+    def forward(self, x):
         if self.is_multicasting == True:
             x=enforce_singleton(x)
             results = OrderedDict()
@@ -1523,7 +1547,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         module.relative_name = name
     # multiple inputs to the network
     if isinstance(input_size, tuple):
-        input_size = [input_size]
+        input_size = list(input_size)
 
     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
     model.to(get_device())
@@ -1652,165 +1676,6 @@ def normalize_padding(padding, rank):
     return padding
 
 
-import gc
-import subprocess
-
-import numpy as np
-import pandas as pd
-import torch
-
-
-class ModelSummary(object):
-
-    def __init__(self, model, mode='full'):
-        """
-        Generates summaries of model layers and dimensions.
-        """
-        self.model = model
-        self.mode = mode
-        self.in_sizes = []
-        self.out_sizes = []
-
-        self.summarize()
-
-    def __str__(self):
-        return self.summary.__str__()
-
-    def __repr__(self):
-        return self.summary.__str__()
-
-    def named_modules(self):
-        if self.mode == 'full':
-            mods = self.model.named_modules()
-            mods = list(mods)[1:]  # do not include root module (LightningModule)
-        elif self.mode == 'top':
-            # the children are the top-level modules
-            mods = self.model.named_children()
-        else:
-            mods = []
-        return list(mods)
-
-    def get_variable_sizes(self):
-        """Run sample input through each layer to get output sizes"""
-        mods = self.named_modules()
-        in_sizes = []
-        out_sizes = []
-        input_ = self.model.example_input_array
-
-        if self.model.on_gpu:
-            input_ = input_.cuda()
-
-        if self.model.trainer.use_amp:
-            input_ = input_.half()
-
-        with torch.no_grad():
-
-            for _, m in mods:
-                if type(input_) is list or type(input_) is tuple:  # pragma: no cover
-                    out = m(*input_)
-                else:
-                    out = m(input_)
-
-                if type(input_) is tuple or type(input_) is list:  # pragma: no cover
-                    in_size = []
-                    for x in input_:
-                        if type(x) is list:
-                            in_size.append(len(x))
-                        else:
-                            in_size.append(x.size())
-                else:
-                    in_size = np.array(input_.size())
-
-                in_sizes.append(in_size)
-
-                if type(out) is tuple or type(out) is list:  # pragma: no cover
-                    out_size = np.asarray([x.size() for x in out])
-                else:
-                    out_size = np.array(out.size())
-
-                out_sizes.append(out_size)
-                input_ = out
-
-        self.in_sizes = in_sizes
-        self.out_sizes = out_sizes
-        assert len(in_sizes) == len(out_sizes)
-        return
-
-    def get_layer_names(self):
-        """Collect Layer Names"""
-        mods = self.named_modules()
-        names = []
-        layers = []
-        for name, m in mods:
-            names += [name]
-            layers += [str(m.__class__)]
-
-        layer_types = [x.split('.')[-1][:-2] for x in layers]
-
-        self.layer_names = names
-        self.layer_types = layer_types
-        return
-
-    def get_parameter_sizes(self):
-        """Get sizes of all parameters in `model`"""
-        mods = self.named_modules()
-        sizes = []
-        for _, m in mods:
-            p = list(m.parameters())
-            modsz = []
-            for j in range(len(p)):
-                modsz.append(np.array(p[j].size()))
-            sizes.append(modsz)
-
-        self.param_sizes = sizes
-        return
-
-    def get_parameter_nums(self):
-        """Get number of parameters in each layer"""
-        param_nums = []
-        for mod in self.param_sizes:
-            all_params = 0
-            for p in mod:
-                all_params += np.prod(p)
-            param_nums.append(all_params)
-        self.param_nums = param_nums
-        return
-
-    def make_summary(self):
-        """
-        Makes a summary listing with:
-
-        Layer Name, Layer Type, Input Size, Output Size, Number of Parameters
-        """
-
-        cols = ['Name', 'Type', 'Params']
-        if self.model.example_input_array is not None:
-            cols.extend(['In_sizes', 'Out_sizes'])
-
-        df = pd.DataFrame(np.zeros((len(self.layer_names), len(cols))))
-        df.columns = cols
-
-        df['Name'] = self.layer_names
-        df['Type'] = self.layer_types
-        df['Params'] = self.param_nums
-        df['Params'] = df['Params'].map(get_human_readable_count)
-
-        if self.model.example_input_array is not None:
-            df['In_sizes'] = self.in_sizes
-            df['Out_sizes'] = self.out_sizes
-
-        self.summary = df
-        return
-
-    def summarize(self):
-        self.get_layer_names()
-        self.get_parameter_sizes()
-        self.get_parameter_nums()
-
-        if self.model.example_input_array is not None:
-            self.get_variable_sizes()
-        self.make_summary()
-
 
 def print_mem_stack():  # pragma: no cover
     """
@@ -1840,55 +1705,6 @@ def count_mem_items():  # pragma: no cover
 
     return nb_params, nb_tensors
 
-
-def get_memory_profile(mode):
-    """
-    'all' means return memory for all gpus
-    'min_max' means return memory for max and min
-    :param mode:
-    :return:
-    """
-    memory_map = get_gpu_memory_map()
-
-    if mode == 'min_max':
-        min_mem = 1000000
-        min_k = None
-        max_mem = 0
-        max_k = None
-        for k, v in memory_map:
-            if v > max_mem:
-                max_mem = v
-                max_k = k
-            if v < min_mem:
-                min_mem = v
-                min_k = k
-
-        memory_map = {min_k: min_mem, max_k: max_mem}
-
-    return memory_map
-
-
-def get_gpu_memory_map():
-    """Get the current gpu usage.
-
-    Returns
-    -------
-    usage: dict
-        Keys are device ids as integers.
-        Values are memory usage as integers in MB.
-    """
-    result = subprocess.check_output(
-        [
-            'nvidia-smi', '--query-gpu=memory.used',
-            '--format=csv,nounits,noheader'
-        ], encoding='utf-8')
-    # Convert lines into a dictionary
-    gpu_memory = [int(x) for x in result.strip().split('\n')]
-    gpu_memory_map = {}
-    for k, v in zip(range(len(gpu_memory)), gpu_memory):
-        k = 'gpu_{k}'
-        gpu_memory_map[k] = v
-    return gpu_memory_map
 
 
 def get_human_readable_count(number):
