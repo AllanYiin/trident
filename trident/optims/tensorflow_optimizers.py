@@ -18,7 +18,7 @@ from trident.backend.tensorflow_ops import *
 
 
 
-__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger','AdaBelief', 'get_optimizer']
+__all__ = ['Adam', 'RMSprop', 'SGD', 'RAdam', 'Lookahead', 'Ranger','LARS','RangerLars','AdaBelief','RangerBelief', 'get_optimizer']
 
 from collections import defaultdict
 
@@ -1678,8 +1678,8 @@ class Ranger(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6,eps=1e-8, N_sma_threshhold=5, weight_decay=0,
-                 degenerated_to_sgd=False, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(.95, 0.999), alpha=0.5, k=6,eps=1e-5, N_sma_threshhold=5, weight_decay=0,
+                  gradient_centralization=None):
         """Construct a new RAdam optimizer.
          Args:
              params: trainable parameters from model
@@ -1692,7 +1692,6 @@ class Ranger(Optimizer):
 
              N_sma_threshhold (float). The threshold for simple mean average.
 
-             degenerated_to_sgd(bool): If True will be degenerated as sgd.
 
              gradient_centralization (None,string):
                 if None, do nothing.
@@ -1706,29 +1705,25 @@ class Ranger(Optimizer):
 
          """
         if not 0.0 <= alpha <= 1.0:
-            raise ValueError('Invalid slow update rate: {alpha}')
+            raise ValueError('Invalid slow update rate: {}'.format(alpha))
         if not 1 <= k:
-            raise ValueError('Invalid lookahead steps: {k}')
-        if not 0.0 <= lr:
-            raise ValueError("Invalid learning rate: {}".format(lr))
-        if not 0.0 <= eps:
-            raise ValueError("Invalid epsilon value: {}".format(eps))
-        if not 0.0 <= betas[0] < 1.0:
-            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
-        if not 0.0 <= betas[1] < 1.0:
-            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
+            raise ValueError('Invalid lookahead steps: {}'.format(k))
+        if not lr > 0:
+            raise ValueError('Invalid Learning Rate: {}'.format(lr))
+        if not eps > 0:
+            raise ValueError('Invalid eps: {}'.format(eps))
 
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
-        self.degenerated_to_sgd = degenerated_to_sgd
-
-        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,eps=eps, weight_decay=weight_decay)
-        super(Ranger, self).__init__(params, defaults)
+        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
+                        N_sma_threshhold=N_sma_threshhold, eps=eps,
+                        weight_decay=weight_decay)
+        super().__init__(params, defaults)
 
         # adjustable threshold
         self.N_sma_threshhold = N_sma_threshhold
 
         # now we can get to work...
-        # removed as we now use step from RAdam...no need for duplicate step counting
+        # removed as we now use step from RAdam...no need for
+        # duplicate step counting
         # for group in self.param_groups:
         #    group["step_counter"] = 0
         # print("group step counter init")
@@ -1745,7 +1740,7 @@ class Ranger(Optimizer):
         # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
         # resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
 
-        # self.slow_weights = [[p.clone().detach() for p in group['params']]  #                     for group in
+        # self.slow_weights = [[p.copy().detach() for p in group['params']]  #                     for group in
         # self.param_groups]
 
         # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
@@ -1767,83 +1762,95 @@ class Ranger(Optimizer):
 
         group = self.param_groups[0]
         for grad, p in grads_and_vars:
-            if grad is None or any_abnormal_number(p) or not p.trainable:
+            if grad is None or any_abnormal_number(grad) or not p.trainable:
                 continue
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-
+            p_data = p.value().detach()
             state = self.state[p.ref()]
 
             # State initialization
             if len(state) == 0:
                 state['step'] = 0
-                state['m'] = zeros_like(p)
-                state['v'] = zeros_like(p)
+                state['exp_avg'] = zeros_like(p_data)
+                state['exp_avg_sq'] = zeros_like(p_data)
                 # look ahead weight storage now in state dict
-                state['slow_buffer'] =tf.raw_ops.DeepCopy(x=p.value())
+                state['slow_buffer'] =p_data.copy()
             else:
-                state['m'] = cast(state['m'], p.dtype)
-                state['v'] = cast(state['v'], p.dtype)
+                state['exp_avg'] = cast(state['exp_avg'], p.dtype)
+                state['exp_avg_sq'] = cast(state['exp_avg_sq'], p.dtype)
 
-            m, v = state['m'], state['v']
+            exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
             beta1, beta2 = group['betas']
-            if self.gradient_centralization!='gc':
-                grad = gc_grads(grad, self.gradient_centralization)
-            # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
-            # Decay the first and second moment running average coefficient
-            # m_t = beta1 * m + (1 - beta1) * g_t
-            m_t = beta1 * m + (1 - beta1) * grad
 
-            # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
-            # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
-            v_t = beta2 * v + (1 - beta2) * (grad * grad)
-            state['m'] = m_t
-            state['v'] = v_t
-
+            if self.gradient_centralization in ['all', 'gcc']:
+                if len(list(grad.size())) > 3:
+                    grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim())),keepdims=True))
 
             state['step'] += 1
-
             buffered = self.radam_buffer[int(state['step'] % 10)]
+            # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+            # Decay the first and second moment running average coefficient
+            # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+            # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+            exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * (grad * grad)
+
+            # m_t = beta1 * m + (1 - beta1) * g_t
+            exp_avg= beta1 * exp_avg + (1 - beta1) * grad
+
+
+
             if state['step'] == buffered[0]:
                 N_sma, step_size = buffered[1], buffered[2]
             else:
                 buffered[0] = state['step']
-                beta2_t = beta2 ** state['step']
+                beta2_t = pow(beta2 ,state['step'] )
+
                 N_sma_max = 2.0 / (1.0 - beta2) - 1.0
                 N_sma = N_sma_max - 2.0 * state['step'] * beta2_t / (1.0 - beta2_t)
                 buffered[1] = N_sma
 
-                step_size = 1.0 / (1.0 - beta1 ** state['step'])
-                if N_sma >= 5:
+                step_size = 1.0 / (1 - beta1 ** state['step'])
+                if N_sma >=self.N_sma_threshhold:
                     step_size = math.sqrt(
                         (1.0 - beta2_t) * (N_sma - 4.0) / (N_sma_max - 4.0) * (N_sma - 2.0) / N_sma * N_sma_max / (
-                                N_sma_max - 2.0)) / (1.0 - beta1 ** state['step'])
-                else:
-                    step_size = 1.0 / (1 - beta1 ** state['step'])
-                if self.degenerated_to_sgd:
-                    step_size = 1.0
+                                N_sma_max - 2.0)) / (1.0 - pow(beta1 ,state['step']))
 
                 buffered[2] = step_size
 
-            p_data =tf.raw_ops.DeepCopy(x=p.value())
-            if group['weight_decay'] != 0:
-                p_data = p_data - group['weight_decay'] * group['lr'] * p_data
 
-            p_t = where(N_sma > self.N_sma_threshhold,
-                        p_data - group['lr'] * step_size * m_t / (sqrt(v_t) + group['eps']),
-                        p_data - group['lr'] * step_size * m_t)
-            p.assign(p_t)
+
+            if group['weight_decay'] != 0:
+                p_data =p_data+p_data* (- group['weight_decay'] * group['lr'])
+
+
+
+            if N_sma >= self.N_sma_threshhold:
+                denom = sqrt(exp_avg_sq) + group['eps']
+                p_data=p_data+true_divide(exp_avg,denom)*(-step_size * group['lr'])
+            else:
+                p_data=p_data+exp_avg*(-step_size * group['lr'])
+
+
+
+            if any_abnormal_number(p_data):
+                sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                p_data = where(is_nan(p_data), p.value().detach(), p_data)
+
+
+            p.assign(p_data)
+            state['exp_avg'] = exp_avg
+            state['exp_avg_sq'] = exp_avg_sq
 
             # integrated look ahead...
             # we do it at the param level instead of group level
             if state['step'] % group['k'] == 0:
                 slow_p = state['slow_buffer']  # get access to slow param tensor
-                slow_p+=(self.alpha*(p_t- slow_p))  # (fast weights - slow weights) * alpha
-                state['slow_buffer']=slow_p
+                slow_p =slow_p+ ((p.value().detach() - slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
                 if any_abnormal_number(slow_p):
                     sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                    slow_p = where(is_nan(slow_p), p_t, slow_p)
+                    slow_p = where(is_nan(slow_p), p.value().detach(), slow_p)
                 p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
 
         return True
@@ -1936,34 +1943,36 @@ class LARS(Optimizer):
             self.epoch += 1
 
         group = self.param_groups[0]
+        weight_decay = group["weight_decay"]
+        momentum = group["momentum"]
+        eeta = group["eeta"]
+        lr = group["lr"]
+
         for grad, p in grads_and_vars:
             if grad is None or any_abnormal_number(p) or not p.trainable:
                 continue
 
-            weight_decay = group["weight_decay"]
-            momentum = group["momentum"]
-            eeta = group["eeta"]
-            lr = group["lr"]
-            param = p.data
-            grad = p.grad.data
 
-            param_state = self.state[p]
+            param = p.value().detach()
+
+            param_state = self.state[p.ref()]
 
             # TODO: get param names
             # if self._use_weight_decay(param_name):
-            grad += self.weight_decay * param
+            grad =grad+ self.weight_decay * param
+
 
             if self.classic_momentum:
                 trust_ratio = 1.0
 
                 # TODO: get param names
                 # if self._do_layer_adaptation(param_name):
-                w_norm = tf.nn.l2_normalize(param)
-                g_norm = tf.nn.l2_normalize(grad)
+                w_norm = norm(param)
+                g_norm =norm(grad)
 
                 device = g_norm.get_device()
                 trust_ratio = tf.where(
-                    w_norm.ge(0),
+                    greater_equal(w_norm,0),
                     tf.where(
                         greater_equal(g_norm, 0),
                         (self.eeta * w_norm / g_norm),
@@ -1974,7 +1983,7 @@ class LARS(Optimizer):
                 scaled_lr = lr * trust_ratio
                 if "momentum_buffer" not in param_state:
                     next_v = param_state["momentum_buffer"] = zeros_like(
-                        p.data
+                        param
                     )
                 else:
                     next_v = param_state["momentum_buffer"]
@@ -1985,7 +1994,7 @@ class LARS(Optimizer):
                 else:
                     update = next_v
 
-                p.data.add_(-update)
+                p.assign(p.value()-update)
             else:
                 raise NotImplementedError
 
@@ -2009,6 +2018,167 @@ class LARS(Optimizer):
                     return False
         return True
 
+class RangerLars(Optimizer):
+    """
+    https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
+    """
+
+    def __init__(self, params, lr=1e-3,alpha=0.5, k=6,N_sma_threshhold=5,betas=(0.9, 0.999), eps=1e-8, weight_decay=0,gradient_centralization=None):
+        # parameter checks
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError('Invalid slow update rate: {alpha}')
+        if not 1 <= k:
+            raise ValueError('Invalid lookahead steps: {k}')
+
+        if not lr > 0:
+            raise ValueError('Invalid Learning Rate: {lr}')
+        if not eps > 0:
+            raise ValueError('Invalid eps: {eps}')
+        self.gradient_centralization=gradient_centralization
+        # parameter comments:
+        # beta1 (momentum) of .95 seems to work better than .90...
+        # N_sma_threshold of 5 seems better in testing than 4.
+        # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
+
+        # prep defaults and init torch.optim base
+        defaults = dict(lr=lr, alpha=alpha, k=k, N_sma_threshhold=N_sma_threshhold, betas=betas, eps=eps, weight_decay=weight_decay)
+
+        super().__init__(params, defaults)
+        # radam buffer for state
+        self.radam_buffer = [[None, None, None] for ind in range(10)]
+        self.N_sma_threshhold=N_sma_threshhold
+        self.alpha = alpha
+        self.k = k
+
+        # self.first_run_check=0
+
+        # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
+        # resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
+
+        # self.slow_weights = [[p.copy().detach() for p in group['params']]  #                     for group in
+        # self.param_groups]
+
+        # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
+
+    def __setstate__(self, state):
+        print("set state called")
+        super(RangerLars, self).__setstate__(state)
+
+
+    def step(self, grads_and_vars=None, **kwargs):
+        """Performs a single optimization step.
+
+        Args:
+            grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+
+        """
+        group = self.param_groups[0]
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(p) or not p.trainable:
+                continue
+
+            if is_sparse(grad):
+                raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+
+            state = self.state[p.ref()]
+            p_data_fp32=p.value().copy()
+            if len(state) == 0:
+                state['step'] = 0
+                state['exp_avg'] = zeros_like(p_data_fp32)
+                state['exp_avg_sq'] = zeros_like(p_data_fp32)
+                state['slow_buffer'] =p_data_fp32
+            else:
+                state['exp_avg'] =cast(state['exp_avg'],p_data_fp32.dtype)
+                state['exp_avg_sq'] =cast( state['exp_avg_sq'],p_data_fp32.dtype)
+
+            exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+            beta1, beta2 = group['betas']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if len(list(grad.size())) > 3:
+                    grad += (-grad.reduce_mean(axis=list(range(1, grad.ndim())), keepdims=True))
+
+            state['step'] += 1
+            buffered = self.radam_buffer[int(state['step'] % 10)]
+            # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+            # Decay the first and second moment running average coefficient
+            # m_t = beta1 * m + (1 - beta1) * g_t
+            exp_avg = beta1 * exp_avg + (1 - beta1) * grad
+
+            # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+            # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+            exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * (grad * grad)
+            state['exp_avg'] = exp_avg
+            state['exp_avg_sq'] = exp_avg_sq
+
+            if state['step'] == buffered[0]:
+                N_sma, radam_step_size = buffered[1], buffered[2]
+            else:
+                buffered[0] = state['step']
+                beta2_t = beta2 ** state['step']
+                N_sma_max = 2 / (1 - beta2) - 1
+                N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                buffered[1] = N_sma
+
+                # more conservative since it's an approximated value
+                radam_step_size=None
+                if N_sma >= 5:
+                    radam_step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (
+                                1 - beta1 ** state['step'])
+                else:
+                    radam_step_size = 1.0 / (1 - beta1 ** state['step'])
+                buffered[2] = radam_step_size
+
+                if group['weight_decay'] != 0:
+                    p_data_fp32+=(p_data_fp32*-group['weight_decay'] * group['lr'])
+
+                # more conservative since it's an approximated value
+                radam_step = p_data_fp32.copy()
+
+                radam_step = where(N_sma > self.N_sma_threshhold,
+                            radam_step - group['lr'] * radam_step_size * exp_avg / (sqrt(exp_avg_sq) + group['eps']),
+                            radam_step - group['lr'] * radam_step_size * exp_avg)
+
+                radam_norm = radam_step.pow(2).sum().sqrt()
+                weight_norm = p.value().pow(2).sum().sqrt().clip(0, 10)
+                if weight_norm == 0 or radam_norm == 0:
+                    trust_ratio = 1
+                else:
+                    trust_ratio = weight_norm / radam_norm
+
+                state['weight_norm'] = weight_norm
+                state['adam_norm'] = radam_norm
+                state['trust_ratio'] = trust_ratio
+
+
+                G_grad = exp_avg
+
+                p_data_fp32 = where(N_sma > self.N_sma_threshhold,
+                                   p_data_fp32 - group['lr'] * trust_ratio* radam_step_size * G_grad / (sqrt(exp_avg_sq) + group['eps']),
+                                   p_data_fp32 - group['lr'] * trust_ratio* radam_step_size * G_grad)
+
+                if self.gradient_centralization in ['all', 'gc']:
+                    if len(list(grad.size())) < 3:
+                        G_grad += (-G_grad.reduce_mean(axis=list(range(1, G_grad.ndim())), keepdims=True))
+
+                p_data_fp32+=(G_grad*(-radam_step_size * group['lr']))
+
+                if any_abnormal_number(p_data_fp32):
+                    p_data_fp32.copy_(where(is_nan(p_data_fp32), p.value(), p_data_fp32))
+
+                p.assign(p_data_fp32)
+
+                # integrated look ahead...
+                # we do it at the param level instead of group level
+                if state['step'] % group['k'] == 0:
+                    slow_p = state['slow_buffer']  # get access to slow param tensor
+                    slow_p+=((p.value() - slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
+                    if any_abnormal_number(slow_p):
+                        slow_p = where(is_nan(slow_p), p.value(), slow_p)
+                    p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
+
+
+            return True
 
 
 class AdaBelief(Optimizer):
@@ -2133,6 +2303,208 @@ class AdaBelief(Optimizer):
         return True
 
 
+class RangerBelief(Optimizer):
+    """Variant of the Adam optimizer whose adaptive learning rate is rectified
+
+    so as to have a consistent variance.
+    It implements the Rectified Adam (a.k.a. RAdam) proposed by
+    Liyuan Liu et al. in [On The Variance Of The Adaptive Learning Rate
+    And Beyond](https://arxiv.org/pdf/1908.03265v1.pdf).
+
+    Examples:
+        >>> opt =RAdam(lr=1e-3)
+
+
+    Note: `amsgrad` is not described in the original paper. Use it with
+          caution.
+
+    RAdam is not a placement of the heuristic warmup, the settings should be
+    kept if warmup has already been employed and tuned in the baseline method.
+
+    """
+
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6,eps=1e-8, N_sma_threshhold=5, weight_decay=0,
+                  gradient_centralization=None):
+        """Construct a new RAdam optimizer.
+         Args:
+             params: trainable parameters from model
+
+             lr (float): The learning rate.
+             betas:  beta1 means the exponential decay rate for the 1st moment estimates.
+                 beta_2 means he exponential decay rate for the 2nd moment estimates.
+             eps (float): A small constant for numerical stability.
+             weight_decay(float): A floating point value. Weight decay for each param.
+
+             N_sma_threshhold (float). The threshold for simple mean average.
+
+
+             gradient_centralization (None,string):
+                if None, do nothing.
+                if 'gcc' , means only convolution layer will apply 'Gradient Centralization'
+                if 'gc', means convolution layer  and dense layer will apply 'Gradient Centralization'
+
+         References:
+             Gradient Centralization: A New Optimization Technique for Deep Neural Networks
+             https://arxiv.org/abs/2004.01461
+
+
+         """
+        if not 0.0 <= alpha <= 1.0:
+            raise ValueError('Invalid slow update rate: {alpha}')
+        if not 1 <= k:
+            raise ValueError('Invalid lookahead steps: {k}')
+        if not 0.0 <= lr:
+            raise ValueError("Invalid learning rate: {}".format(lr))
+        if not 0.0 <= eps:
+            raise ValueError("Invalid epsilon value: {}".format(eps))
+        if not 0.0 <= betas[0] < 1.0:
+            raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
+        if not 0.0 <= betas[1] < 1.0:
+            raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
+
+        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+
+
+        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,eps=eps, weight_decay=weight_decay)
+        super(RangerBelief, self).__init__(params, defaults)
+
+        # adjustable threshold
+        self.N_sma_threshhold = N_sma_threshhold
+
+        # now we can get to work...
+        # removed as we now use step from RAdam...no need for duplicate step counting
+        # for group in self.param_groups:
+        #    group["step_counter"] = 0
+        # print("group step counter init")
+
+        # look ahead params
+        self.alpha = alpha
+        self.k = k
+
+        # radam buffer for state
+        self.radam_buffer = [[None, None, None] for ind in range(10)]
+
+        # self.first_run_check=0
+
+        # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
+        # resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
+
+        # self.slow_weights = [[p.copy().detach() for p in group['params']]  #                     for group in
+        # self.param_groups]
+
+        # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
+
+
+    def __setstate__(self, state):
+        super(RangerBelief, self).__setstate__(state)
+
+    def step(self, grads_and_vars=None, **kwargs):
+        """Performs a single optimization step.
+
+        Args:
+            **kwargs ():
+            grads_and_vars (zipped tuple): A zipped gradients and parameters from gradient_tape.
+
+        """
+        # self.grads_and_vars = self._filter_grads(grads_and_vars)
+        # grads_and_vars=zip(new_grads, new_vars)
+
+        group = self.param_groups[0]
+        for grad, p in grads_and_vars:
+            if grad is None or any_abnormal_number(grad) or not p.trainable:
+                continue
+
+            if is_sparse(grad):
+                raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+            p_data = p.value().detach()
+            state = self.state[p.ref()]
+
+            # State initialization
+            if len(state) == 0:
+                state['step'] = 0
+                state['exp_avg'] = zeros_like(p_data)
+                state['exp_avg_sq'] = zeros_like(p_data)
+                # look ahead weight storage now in state dict
+                state['slow_buffer'] =p_data.copy()
+            else:
+                state['exp_avg'] = cast(state['exp_avg'], p.dtype)
+                state['exp_avg_sq'] = cast(state['exp_avg_sq'], p.dtype)
+
+            exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+            beta1, beta2 = group['betas']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if len(list(grad.size())) > 3:
+                    grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim())),keepdims=True))
+
+            state['step'] += 1
+            buffered = self.radam_buffer[int(state['step'] % 10)]
+            # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+            # Decay the first and second moment running average coefficient
+            # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+            # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
+
+
+            # m_t = beta1 * m + (1 - beta1) * g_t
+            exp_avg= beta1 * exp_avg + (1 - beta1) * grad
+            grad_residual = grad - exp_avg
+            exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * (grad_residual * grad_residual)
+
+
+
+            if state['step'] == buffered[0]:
+                N_sma, step_size = buffered[1], buffered[2]
+            else:
+                buffered[0] = state['step']
+                beta2_t = pow(beta2 ,state['step'] )
+
+                N_sma_max = 2.0 / (1.0 - beta2) - 1.0
+                N_sma = N_sma_max - 2.0 * state['step'] * beta2_t / (1.0 - beta2_t)
+                buffered[1] = N_sma
+
+                step_size = 1.0 / (1 - beta1 ** state['step'])
+                if N_sma >=self.N_sma_threshhold:
+                    step_size = math.sqrt(
+                        (1.0 - beta2_t) * (N_sma - 4.0) / (N_sma_max - 4.0) * (N_sma - 2.0) / N_sma * N_sma_max / (
+                                N_sma_max - 2.0)) / (1.0 - pow(beta1 ,state['step']))
+
+                buffered[2] = step_size
+
+
+
+            if group['weight_decay'] != 0:
+                p_data =p_data+p_data* (- group['weight_decay'] * group['lr'])
+
+
+
+            if N_sma >= self.N_sma_threshhold:
+                denom = sqrt(exp_avg_sq) + group['eps']
+                p_data=p_data+true_divide(exp_avg,denom)*(-step_size * group['lr'])
+            else:
+                p_data=p_data+exp_avg*(-step_size * group['lr'])
+
+
+
+            if any_abnormal_number(p_data):
+                sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                p_data = where(is_nan(p_data), p.value().detach(), p_data)
+
+
+            p.assign(p_data)
+            state['exp_avg'] = exp_avg
+            state['exp_avg_sq'] = exp_avg_sq
+
+            # integrated look ahead...
+            # we do it at the param level instead of group level
+            if state['step'] % group['k'] == 0:
+                slow_p = state['slow_buffer']  # get access to slow param tensor
+                slow_p =slow_p+ ((p.value().detach() - slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
+                if any_abnormal_number(slow_p):
+                    sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                    slow_p = where(is_nan(slow_p), p.value().detach(), slow_p)
+                p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
+
+        return True
 
 def get_optimizer(optimizer_name):
     """
