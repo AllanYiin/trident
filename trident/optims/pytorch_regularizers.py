@@ -19,7 +19,7 @@ def l1_reg(model:nn.Module,reg_weight=1e-4):
     #with torch.enable_grad():
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
-        if 'bias' not in name:
+        if 'bias' not in name and param.requires_grad==True:
             loss = loss + (reg_weight * torch.sum(abs(param)))
         return loss
 
@@ -27,7 +27,7 @@ def l1_reg(model:nn.Module,reg_weight=1e-4):
 def l2_reg(model:nn.Module,reg_weight=1e-4):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
-        if 'bias' not in name:
+        if 'bias' not in name and param.requires_grad==True:
             loss=loss+ reg_weight *param.norm().sum()
         return loss
 
@@ -35,7 +35,7 @@ def l2_reg(model:nn.Module,reg_weight=1e-4):
 def orth_reg(model:nn.Module,reg_weight=1e-4):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
-        if 'bias' not in name:
+        if 'bias' not in name and param.requires_grad==True:
             param_flat = param.view(param.shape[0], -1)
             sym = torch.mm(param_flat, torch.t(param_flat))
             sym -= torch.eye(param_flat.shape[0])
