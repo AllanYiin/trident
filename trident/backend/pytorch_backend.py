@@ -1074,7 +1074,7 @@ class Sequential(Layer):
             returnDict = OrderedDict()
             for k, v in list(self._modules.items())[idx]:
                 returnDict[k] = v
-            return returnDict
+            return tuple(returnDict.value_list)
         else:
             return self._get_item_by_idx(self._modules.values(), idx)
 
