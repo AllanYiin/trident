@@ -2607,6 +2607,9 @@ class DiffGrad(Optimizer):
                 sys.stderr.write('{0} p_data_fp32 has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                 p_data = where(is_nan(p_data), p.value().detach(), p_data)
             p.assign(p_data)
+            state['exp_avg']=exp_avg
+            state['exp_avg_sq']=exp_avg_sq
+            state['previous_grad']=previous_grad
 
         return True
 

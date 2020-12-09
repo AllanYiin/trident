@@ -423,20 +423,36 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
 
 
 class UnfreezeModelCallback(CallbackBase):
-    def __init__(self, frequency: int, unit='epoch', slice_from=0, slice_to=None):
+    def __init__(self, frequency: int, unit='epoch',slice_from=None, slice_to=None, module_name=None):
         super().__init__()
         self.unit=unit
         self.frequency=frequency
         self.slice_from=slice_from
+        if self.slice_from is None:
+            self.slice_from=0
         self.slice_to=slice_to
+        self.module_name=module_name
 
     def unfreeze_model(self,training_context):
         model=training_context["current_model"]
-        if "Sequential" in model.__class__.__name__:
-                if self.slice_from == 0 or self.slice_to is None:
+
+        if self.module_name is not None:
+            for name,module in model.named_modules():
+                if name==self.module_name or module.name==self.module_name:
+                    module.trainable = True
+        else:
+            if "Sequential" in model.__class__.__name__:
+                if self.slice_from == 0 and  self.slice_to is None:
                     model.trainable = True
                 elif isinstance(self.slice_from, int) and isinstance(self.slice_to, int):
-                    model[self.slice_from:self.slice_to].trainable = True
+                    layers=model[self.slice_from:self.slice_to]
+                    for layer in layers:
+                        layer.trainable = True
+                elif isinstance(self.slice_from, int) and self.slice_to is None:
+                    layers=model[self.slice_from:]
+                    for layer in layers:
+                        layer.trainable = True
+
 
     def on_batch_end(self, training_context):
         if self.unit == 'batch' and training_context['steps'] == self.frequency:
