@@ -34,7 +34,7 @@ from trident.layers.tensorflow_layers import SoftMax
 from trident.optims.tensorflow_constraints import get_constraint
 from trident.optims.tensorflow_losses import get_loss, _ClassificationLoss
 from trident.optims.tensorflow_metrics import get_metric
-from trident.optims.tensorflow_optimizers import get_optimizer, OptimizerWrapper
+from trident.optims.tensorflow_optimizers import get_optimizer
 from trident.optims.tensorflow_regularizers import *
 
 # from tensorflow.python.framework.ops import EagerTensor
@@ -317,17 +317,7 @@ class Model(ModelBase):
             optimizer_class = get_optimizer(optimizer)
             self.optimizer = optimizer_class(
                 self._model.parameters() if isinstance(self._model, Layer) else [self._model], **kwargs)
-        elif inspect.isclass(optimizer) and issubclass(optimizer, tf.keras.optimizers.Optimizer):
-            if 'learning_rate' not in kwargs:
-                kwargs['learning_rate'] = kwargs.get('lr')
-                kwargs.pop('lr')
-            if 'betas' in kwargs:
-                kwargs['beta_1'] = kwargs.get('betas')[0]
-                kwargs['beta_2'] = kwargs.get('betas')[1]
-                kwargs.pop('betas')
 
-            opt = optimizer(name=None, **kwargs)
-            self.optimizer = OptimizerWrapper(opt)
         else:
             self.optimizer = optimizer(self._model.parameters() if isinstance(self._model, Layer) else [self._model], **kwargs)
         self.base_lr = kwargs.get('lr', 1e-3)
@@ -1024,11 +1014,10 @@ class Model(ModelBase):
                     callback.on_data_received(self.training_context)
 
                 if accumulate_grads == False:
-                    self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
+                    self.training_context['current_loss']= to_tensor(0.0, requires_grad=True)
                     self.do_preparation_for_loss()
                     self.training_context['optimizer'] = self.optimizer
 
-                current_loss = to_tensor(0.0)
 
                 with tf.GradientTape() as grad_tape:
                     grad_tape.watch(self._model.trainable_variables)
@@ -1091,7 +1080,7 @@ class Model(ModelBase):
                                         else:
                                             # a leaf Variable that requires grad connotused in an in-place operation.
                                             overall_loss = overall_loss + this_loss[i]
-                                    current_loss = current_loss + overall_loss
+                                    self.training_context['current_loss'] = self.training_context['current_loss'] +overall_loss
                                     if is_collect_data:
                                         self.training_context['losses'].collect(k, self.training_context['steps'], float(to_numpy(overall_loss)))
                                 else:
@@ -1100,7 +1089,7 @@ class Model(ModelBase):
                                             'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
                                     else:
                                         # a leaf Variable that requires grad connotused in an in-place operation.
-                                        current_loss = current_loss  + this_loss
+                                        self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                                     if is_collect_data:
                                         self.training_context['losses'].collect(k, self.training_context['steps'], float(to_numpy(this_loss)))
                             except Exception as e:
@@ -1110,6 +1099,7 @@ class Model(ModelBase):
                     self.do_post_loss_calculation()
                     for callback in self.callbacks:
                         callback.on_loss_calculation_end(self.training_context)
+
 
                     if accumulate_grads == False:
                         # regularizer
@@ -1122,18 +1112,18 @@ class Model(ModelBase):
                                 this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
                             if not any_abnormal_number(this_loss):
                                 # a leaf Variable that requires grad connotused in an in-place operation.
-                                current_loss = current_loss  + this_loss# self.training_context[
-                            # 'current_loss'] + this_loss
+                                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss# self.training_context[
+
                             if is_collect_data:
                                 self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], float(to_numpy(this_loss)))
 
                 vars = grad_tape.watched_variables()
-                grads = grad_tape.gradient(current_loss, vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
+                grads = grad_tape.gradient(self.training_context['current_loss'] , vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
                 #grads = tuple([where(is_nan(grad), zeros_like(grad), grad) for grad in grads])
                 self.optimizer.grads_and_vars = zip(grads, vars)
                 # self.training_context['grads'] = grads
                 # self.training_context['vars'] = vars
-                self.training_context['current_loss'] = current_loss
+
 
                 self.do_pre_optimization_step()
                 # self.optimizer.step(zip(grads,vars))
