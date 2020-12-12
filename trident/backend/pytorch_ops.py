@@ -5,7 +5,9 @@ import numbers
 import builtins
 import math
 import random
+from distutils.version import Version, LooseVersion
 from collections import Sized, Iterable
+from enum import Enum
 from functools import wraps
 from typing import Tuple, List, Optional
 
@@ -16,6 +18,10 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
+version = torch.__version__
+pt_version = LooseVersion(vstring=version)
+version1_7 = LooseVersion(vstring='1.7.0')
+
 
 __all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
@@ -27,9 +33,9 @@ __all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu',
-           'gpt_gelu', 'moments', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
-           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements', 'gram_matrix', 'set_seed', 'shuffle',
-           'random_choice', 'random_normal', 'random_normal_like','multinomial' ,'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
+           'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
+           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
+           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial' ,'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
 
 Tensor=torch.Tensor
 
@@ -107,6 +113,7 @@ def numpy_compatible(func):
 #
 # def get_session_value('device'):
 #     return get_session().device
+
 
 
 ############################
@@ -195,6 +202,8 @@ def to_numpy(*x) -> np.ndarray:
     elif x is None:
         return None
     elif isinstance(x, Tensor):
+        if isinstance(x, torch.autograd.Variable):
+            x = x.data
         return x.clone().cpu().detach().numpy()
     elif isinstance(x, list):
         return np.array(x)
@@ -355,7 +364,7 @@ def is_sparse(x):
     return is_tensor(x) and 'sparse' in str(type(x))
 
 
-def str2dtype(dtype):
+def str2dtype(dtype:(str,torch.dtype)):
     """ Mapping string to dtype
 
     Args:
@@ -387,6 +396,10 @@ def str2dtype(dtype):
         elif 'bool' in dtype.lower():
             return torch.bool
     return None
+
+
+
+
 
 
 def cast(x, dtype):
@@ -1581,9 +1594,9 @@ def element_cosine_distance(v1, v2, axis=-1):
     cos=matmul(x_normalized,y_normalized,False,True)
 
 
-    cos1 = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
-            (v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt() * (v2 * v2).sum(dim=reduce_dim,
-                                                                                 keepdims=False).sqrt())
+    # cos1 = (v1 * v2).sum(dim=reduce_dim, keepdims=False) / (
+    #         (v1 * v1).sum(dim=reduce_dim, keepdims=False).sqrt() * (v2 * v2).sum(dim=reduce_dim,
+    #                                                                              keepdims=False).sqrt())
     return cos
 
 @numpy_compatible
@@ -2564,6 +2577,59 @@ def moments(x: Tensor, axis, keepdims=True):
     norm_variance = reduce_mean(square(x - norm_mean), axis=_axes, keepdims=keepdims)
     return norm_mean, norm_variance
 
+def norm(x:Tensor, order=None, axis=1,  keepdims=False):
+    """
+
+    Args:
+
+        x (Tensor): The input tensor. If dim is None, x must be 1-D or 2-D, unless :attr:`ord`
+            is None. If both :attr:`dim` and :attr:`ord` are None, the 2-norm of the input flattened to 1-D
+            will be returned.
+
+        order (int, float, inf, -inf, 'fro', 'nuc', optional): The order of norm.
+            inf refers to :attr:`float('inf')`, numpy's :attr:`inf` object, or any equivalent object.
+            The following norms can be calculated:
+
+            =====  ============================  ==========================
+            ord    norm for matrices             norm for vectors
+            =====  ============================  ==========================
+            None   Frobenius norm                2-norm
+            'fro'  Frobenius norm                -- not supported --
+            'nuc'  nuclear norm                  -- not supported --
+            inf    max(sum(abs(x), dim=1))       max(abs(x))
+            -inf   min(sum(abs(x), dim=1))       min(abs(x))
+            0      -- not supported --           sum(x != 0)
+            1      max(sum(abs(x), dim=0))       as below
+            -1     min(sum(abs(x), dim=0))       as below
+            2      2-norm (largest sing. value)  as below
+            -2     smallest singular value       as below
+            other  -- not supported --           sum(abs(x)**ord)**(1./ord)
+            =====  ============================  ==========================
+
+            Default: ``None``
+
+        axis (int, 2-tuple of ints, 2-list of ints, optional): If :attr:`dim` is an int,
+            vector norm will be calculated over the specified dimension. If :attr:`dim`
+            is a 2-tuple of ints, matrix norm will be calculated over the specified
+            dimensions. If :attr:`dim` is None, matrix norm will be calculated
+            when the input tensor has two dimensions, and vector norm will be
+            calculated when the input tensor has one dimension. Default: ``None``
+
+        keepdims (bool, optional): If set to True, the reduced dimensions are retained
+            in the result as dimensions with size one. Default: ``False``
+
+
+    Returns:
+
+    """
+    if ndim(x) == 1:
+        axis = 0
+    if pt_version >= version1_7:
+        return torch.linalg.norm(x, ord=order,dim=axis, keepdim=keepdims)
+    else:
+        return x.norm(p=order,dim=axis, keepdim=keepdims)
+
+
 @numpy_compatible
 def l2_normalize(x: Tensor,axis=1, keepdims=True, eps=epsilon()):
     """
@@ -2577,12 +2643,24 @@ def l2_normalize(x: Tensor,axis=1, keepdims=True, eps=epsilon()):
     Returns:
         (Tensor): output tensor and have same shape with x.
 
+    Examples:
+        >>> a=arange(9).float()-4.0
+        >>> b=a.reshape((3, 3))
+        >>> l2_normalize(a)
+        >>> l2_normalize(b)
+        >>> torch.nn.functional.normalize(a, p=2,dim=0)-l2_normalize(a)
+        0.0
+        >>> torch.nn.functional.normalize(b, p=2,dim=1)-l2_normalize(b)
+        0.0
 
 
     """
     if ndim(x)==1:
         axis=0
-    return x / (x.norm(dim=axis, keepdim=keepdims) + eps)
+    if pt_version>=version1_7:
+        return x / (torch.linalg.norm(x,dim=axis, keepdim=keepdims) + eps)
+    else:
+        return x / (x.norm(dim=axis, keepdim=keepdims) + eps)
 
 ############################
 ## tensor shape operation
@@ -3146,7 +3224,29 @@ def repeat_elements(x: Tensor, multiples:int,axis=1):
     """
     return torch.repeat_interleave(x,repeats=multiples,dim=axis)
 
+@numpy_compatible
+def gather(x: Tensor,gather_axis, indices):
+    return torch.gather(input=x,dim=gather_axis,index=indices)
 
+
+@numpy_compatible
+def scatter_add(x: Tensor,indices: Tensor,updates: Tensor):
+    return torch.scatter_add(x,dim=None, index=indices, src=updates)
+
+
+@numpy_compatible
+def scatter_sub(x: Tensor,indices: Tensor,updates: Tensor):
+    return torch.scatter_sub(x,dim=None, index=indices, src=updates)
+
+
+@numpy_compatible
+def scatter_max(x: Tensor,indices: Tensor,updates: Tensor):
+    return torch.ops.torch_scatter.scatter_max(x, indices, None, updates, None)
+
+
+@numpy_compatible
+def scatter_min(x: Tensor,indices: Tensor,updates: Tensor):
+    return torch.ops.torch_scatter.scatter_min(x, indices, None, updates, None)
 
 
 @numpy_compatible
@@ -3230,7 +3330,7 @@ def random_choice(x: Tensor,n:int=1):
 
 
 
-def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3275,7 +3375,7 @@ def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):
 
 
 @numpy_compatible
-def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
+def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3315,8 +3415,167 @@ def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is not None:
-        return cast(torch.normal(mean=mean, std=std, size=a.shape), dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std, size=a.shape), dtype=torch.float32)
+        return cast(torch.normal(mean=mean, std=std, size=x.shape), dtype=dtype)
+    return cast(torch.normal(mean=mean, std=std, size=x.shape), dtype=torch.float32)
+
+
+
+def random_uniform(shape, min_value=0.0, max_value=None, dtype='float32', seed=None):
+    """Outputs random values from a uniform distribution.
+
+    The generated values follow a uniform distribution in the range
+    `[min, max)`. The lower bound `minval` is included in the range, while
+    the upper bound `maxval` is excluded.
+
+    For floats, the default range is `[0, 1)`.  For ints, at least `maxval` must
+    be specified explicitly.
+
+    In the integer case, the random integers are slightly biased unless
+    `max_value - min_value` is an exact power of two.  The bias is small for values of
+    `max_value - min_value` significantly smaller than the range of the output (either
+    `2**32` or `2**64`).
+
+    Examples:
+
+    >>> tf.random.uniform(shape=[2])
+    <tf.Tensor: shape=(2,), dtype=float32, numpy=array([..., ...], dtype=float32)>
+    >>> tf.random.uniform(shape=[], minval=-1., maxval=0.)
+    <tf.Tensor: shape=(), dtype=float32, numpy=-...>
+    >>> tf.random.uniform(shape=[], minval=5, maxval=10, dtype=tf.int64)
+    <tf.Tensor: shape=(), dtype=int64, numpy=...>
+
+    The `seed` argument produces a deterministic sequence of tensors across
+    multiple calls. To repeat that sequence, use `tf.random.set_seed`:
+
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+
+    Without `tf.random.set_seed` but with a `seed` argument is specified, small
+    changes to function graphs or previously executed operations will change the
+    returned value. See `tf.random.set_seed` for details.
+
+    Args:
+      shape: A 1-D integer Tensor or Python array. The shape of the output tensor.
+      min_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The lower bound on the range of random values to generate
+        (inclusive).  Defaults to 0.
+      max_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The upper bound on the range of random values to generate
+        (exclusive). Defaults to 1 if `dtype` is floating point.
+      dtype: The type of the output: `float16`, `float32`, `float64`, `int32`,
+        or `int64`.
+      seed: A Python integer. Used in combination with `tf.random.set_seed` to
+        create a reproducible sequence of tensors across multiple calls.
+
+
+    Returns:
+      A tensor of the specified shape filled with random uniform values.
+
+    Raises:
+      ValueError: If `dtype` is integral and `maxval` is not specified.
+    """
+    if seed is not None:
+        set_seed(seed)
+        if dtype is not None:
+            dtype = str2dtype(dtype)
+    if dtype is not None:
+        t=zeros(shape=shape,dtype=dtype)
+        t.uniform_(min_value, max_value)
+        return t
+    else:
+        t = zeros(shape=shape, dtype=torch.float32)
+        t.uniform_(min_value, max_value)
+        return t
+
+
+@numpy_compatible
+def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype='float32', seed=None):
+    """Outputs random values from a uniform distribution.
+
+    The generated values follow a uniform distribution in the range
+    `[min, max)`. The lower bound `minval` is included in the range, while
+    the upper bound `maxval` is excluded.
+
+    For floats, the default range is `[0, 1)`.  For ints, at least `maxval` must
+    be specified explicitly.
+
+    In the integer case, the random integers are slightly biased unless
+    `max_value - min_value` is an exact power of two.  The bias is small for values of
+    `max_value - min_value` significantly smaller than the range of the output (either
+    `2**32` or `2**64`).
+
+    Examples:
+
+    >>> tf.random.uniform(shape=[2])
+    <tf.Tensor: shape=(2,), dtype=float32, numpy=array([..., ...], dtype=float32)>
+    >>> tf.random.uniform(shape=[], minval=-1., maxval=0.)
+    <tf.Tensor: shape=(), dtype=float32, numpy=-...>
+    >>> tf.random.uniform(shape=[], minval=5, maxval=10, dtype=tf.int64)
+    <tf.Tensor: shape=(), dtype=int64, numpy=...>
+
+    The `seed` argument produces a deterministic sequence of tensors across
+    multiple calls. To repeat that sequence, use `tf.random.set_seed`:
+
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+
+    Without `tf.random.set_seed` but with a `seed` argument is specified, small
+    changes to function graphs or previously executed operations will change the
+    returned value. See `tf.random.set_seed` for details.
+
+    Args:
+      x: inutput tensor.
+      min_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The lower bound on the range of random values to generate
+        (inclusive).  Defaults to 0.
+      max_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The upper bound on the range of random values to generate
+        (exclusive). Defaults to 1 if `dtype` is floating point.
+      dtype: The type of the output: `float16`, `float32`, `float64`, `int32`,
+        or `int64`.
+      seed: A Python integer. Used in combination with `tf.random.set_seed` to
+        create a reproducible sequence of tensors across multiple calls.
+
+
+    Returns:
+      A tensor of the specified shape filled with random uniform values.
+
+    Raises:
+      ValueError: If `dtype` is integral and `maxval` is not specified.
+    """
+    if seed is not None:
+        set_seed(seed)
+        if dtype is not None:
+            dtype = str2dtype(dtype)
+    if dtype is not None:
+        t=zeros(shape=int_shape(x),dtype=dtype)
+        t.uniform_(min_value, max_value)
+        return t
+    else:
+        t = zeros(shape=int_shape(x), dtype=torch.float32)
+        t.uniform_(min_value, max_value)
+        return t
+
 
 @numpy_compatible
 def multinomial(x:Tensor,num_samples: int=1):
@@ -3336,6 +3595,11 @@ def binary_crossentropy(output,target, from_logits=False):
     loss = -target * torch.log(output) # (1.0 - target) * torch.log(1.0 - output)
     return loss
 
+
+
+############################
+## summary
+###########################
 
 def torch_rot90_(x: Tensor):
     return x.transpose_(2, 3).flip(2)
@@ -3948,6 +4212,8 @@ _FUN_NAMES = [
     ('transpose', transpose),
     ('squeeze', squeeze),
     ('expand_dims', expand_dims),
+    ('repeat_elements', repeat_elements),
+    ('gather', gather),
     ('gram_matrix', gram_matrix),
     ('shuffle', shuffle),
     ('random_choice', random_choice),

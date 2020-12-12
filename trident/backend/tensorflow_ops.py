@@ -3,12 +3,15 @@ from copy import deepcopy
 import math
 import builtins
 import numbers
+from enum import Enum
 from functools import wraps
 from typing import List, Optional,Tuple
 from types import MethodType
 import random
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.ops import state_ops
+from tensorflow.python.training import moving_averages
 from tensorflow.python.eager import core as _core
 from tensorflow.python.eager import execute as _execute
 from tensorflow.python.eager import context
@@ -30,8 +33,9 @@ __all__ = ['Tensor','is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu',
-           'gpt_gelu','moments','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
-           'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements', 'gram_matrix','set_seed', 'shuffle', 'random_choice','random_normal','random_normal_like','multinomial','binary_crossentropy']
+           'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
+           'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
+           'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_crossentropy']
 
 Tensor=tf.Tensor
 
@@ -193,13 +197,13 @@ def to_numpy(x) -> np.ndarray:
 
      """
 
-    if isinstance(x, np.ndarray):
+    if x is None:
         return x
-    # elif isinstance(x,EagerTensor):
-    #     return x.numpy()
+    elif isinstance(x, np.ndarray):
+        return x
     elif isinstance(x, tf.Variable):
         return x.value()._copy_nograd().numpy()
-    elif isinstance(x,EagerTensor):
+    elif context.executing_eagerly() and isinstance(x, EagerTensor):
         return x._copy_nograd().numpy()
     elif isinstance(x, tf.TensorShape):
         return np.array(deepcopy(x).as_list())
@@ -207,7 +211,7 @@ def to_numpy(x) -> np.ndarray:
         return  ops.convert_to_tensor_v2(x)._copy_nograd().numpy()
     elif isinstance(x, (list,tuple)):
         return np.asarray(x)
-    elif hasattr(x, '__len__') and len(x) > 1 and all( [isinstance(k, (list, tuple, int, float, np.ndarray)) for k in x]):
+    elif hasattr(x, '__len__') and len(x) > 1 and all( [isinstance(k, (list, tuple,numbers.Number, np.ndarray)) for k in x]):
         x=unpack_singleton(x)
         return np.array([x])
     # elif isinstance(x, ops.Tensor):
@@ -215,13 +219,19 @@ def to_numpy(x) -> np.ndarray:
     #     x= sess.run(x)
     #     return x
 
-    elif isinstance(x, (list, tuple, int, float)):
+    elif isinstance(x, (list, tuple,numbers.Number)):
         return np.array(x)
     else:
         try:
-            x = tf.keras.backend.get_value(x)
-            if isinstance(x, np.ndarray):
-                return x
+
+            if not getattr(x, '_in_graph_mode', True):
+                # This is a variable which was created in an eager context, but is being
+                # evaluated from a Graph.
+                with context.eager_mode():
+                    return x.numpy()
+            with x.graph.as_default():
+                return x.eval(session=get_session((x,)))
+
         except:
             raise ValueError("Unsupported type")
 
@@ -274,7 +284,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         else:
             dtype = tf.float32
     with tf.device(device):
-        return tf.convert_to_tensor(x, dtype=dtype)
+        return tf.convert_to_tensor(x, dtype=dtype,)
 
 
 
@@ -530,8 +540,7 @@ def is_inf(x):
 
 
 def is_abnormal_number(x):
-
-    return is_nan(x) or is_inf(x)
+    return cast(greater(cast(is_nan(x), tf.int8) + cast(is_inf(x), tf.int8), 0),tf.bool)
 
 
 def any_nan(x):
@@ -579,7 +588,7 @@ def any_abnormal_number(x):
 ## compare operation
 ###########################
 @numpy_compatible
-def less(left: Tensor, right:(Tensor,np.ndarray,float,int),name='less'):
+def less(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='less'):
     """Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
@@ -601,7 +610,7 @@ def less(left: Tensor, right:(Tensor,np.ndarray,float,int),name='less'):
     return tf.cast(tf.less(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='equal'):
+def equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='equal'):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
 
@@ -622,7 +631,7 @@ def equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='equal'):
     return tf.cast(tf.equal(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def greater(left: Tensor, right:(Tensor,np.ndarray,float,int),name='greater'):
+def greater(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='greater'):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
 
@@ -644,7 +653,7 @@ def greater(left: Tensor, right:(Tensor,np.ndarray,float,int),name='greater'):
     return tf.cast(tf.greater(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def greater_equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='greater_equal'):
+def greater_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='greater_equal'):
     """Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
@@ -665,7 +674,7 @@ def greater_equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='greate
     return tf.cast(tf.greater_equal(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def not_equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='not_equal'):
+def not_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='not_equal'):
     """Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
@@ -686,7 +695,7 @@ def not_equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='not_equal'
     return tf.cast(tf.not_equal(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def less_equal(left: Tensor, right:(Tensor,np.ndarray,float,int),name='less_equal'):
+def less_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='less_equal'):
     """Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
@@ -1063,23 +1072,22 @@ def true_divide(x, y):
     Raises:
       TypeError: If `x` and `y` have different dtypes.
     """
-    if isinstance(x,(float,int)) and isinstance(y,(float,int)):
+    if isinstance(x,(numbers.Number)) and isinstance(y,(numbers.Number)):
         return x/y
-    elif isinstance(x,(np.ndarray)) and isinstance(y,(float,int,np.ndarray)):
-        if isinstance(y, (float, int,)):
+    elif isinstance(x,(np.ndarray)) and isinstance(y,(numbers.Number,np.ndarray)):
+        if isinstance(y, numbers.Number):
             return x.astype(np.float32) / y
         else:
             return x.astype(np.float32) / y.astype(np.float32)
     else:
         if not is_tensor(x):
             x=cast(to_tensor(x),'float32')
-        else:
-            x = cast(x, 'float32')
+
         if not is_tensor(y):
-            y=cast(to_tensor(y),'float32')
+            y=cast(to_tensor(y),x.dtype.base_dtype)
         else:
-            y = cast(y, 'float32')
-    return tf.truediv(x, y)
+            y = cast(y,x.dtype.base_dtype)
+    return tf.math.divide_no_nan(x, y)
 
 @numpy_compatible
 def floor(x: Tensor):
@@ -1200,7 +1208,7 @@ def sqrt(x: Tensor):
 
     """
 
-    return tf.math.sqrt(x)
+    return tf.math.sqrt(tf.clip_by_value(x,clip_value_min=0,clip_value_max=np.inf))
 
 @numpy_compatible
 def rsqrt(x: Tensor):
@@ -1556,7 +1564,7 @@ def tanh(x: Tensor):
 ## element-wise operation
 ###########################
 @numpy_compatible
-def element_times(left: Tensor, right:[Tensor,float,int]):
+def element_times(left: Tensor, right:[Tensor,numbers.Number]):
     """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
@@ -1582,7 +1590,7 @@ def element_times(left: Tensor, right:[Tensor,float,int]):
     return left * right
 
 @numpy_compatible
-def element_max(left: Tensor, right:[Tensor,float,int]):
+def element_max(left: Tensor, right:[Tensor,numbers.Number]):
     """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
@@ -1606,7 +1614,7 @@ def element_max(left: Tensor, right:[Tensor,float,int]):
     return maximum(left, right)
 
 @numpy_compatible
-def element_min(left: Tensor, right:[Tensor,float,int]):
+def element_min(left: Tensor, right:[Tensor,numbers.Number]):
     """
     The output of this operation is the element-wise product of the two  input
     tensors. It supports broadcasting.
@@ -1630,7 +1638,7 @@ def element_min(left: Tensor, right:[Tensor,float,int]):
     return minimum(left, right)
 
 @numpy_compatible
-def element_divide(left: Tensor, right:[Tensor,float,int]):
+def element_divide(left: Tensor, right:[Tensor,numbers.Number]):
     """
     The output of this operation is the element-wise divide of the two  input
     tensors. It supports broadcasting.
@@ -1654,7 +1662,7 @@ def element_divide(left: Tensor, right:[Tensor,float,int]):
     return true_divide(left, right)
 
 @numpy_compatible
-def element_cosine_distance(v1: Tensor, v2:[Tensor,float,int], axis=-1):
+def element_cosine_distance(v1: Tensor, v2:[Tensor,numbers.Number], axis=-1):
     """    The output of this operation is the element-wise cosine_distance of the two  input
     tensors. It supports broadcasting.
 
@@ -2572,6 +2580,10 @@ def moments(x:Tensor, axis,  keepdims=True):
       """
     return tf.nn.moments(x,axes=axis,keepdims=keepdims)
 
+def norm(x:Tensor, order=None, axis=-1,  keepdims=False):
+    if order is None:
+        order='euclidean'
+    return tf.norm(x,ord=order,axis=axis,keepdims=keepdims)
 
 @numpy_compatible
 def l2_normalize(x:Tensor,axis=-1,  keepdims=True, eps=epsilon()):
@@ -2585,6 +2597,15 @@ def l2_normalize(x:Tensor,axis=-1,  keepdims=True, eps=epsilon()):
 
     Returns:
 
+    Examples:
+        >>> a=cast(arange(9),'float32')-4.0
+        >>> b=a.reshape((3, 3))
+        >>> l2_normalize(a)
+        >>> reduce_mean(l2_normalize(a)-tf.nn.l2_normalize(a)).numpy()
+        0.0
+        >>> l2_normalize(b)
+        >>> reduce_mean(l2_normalize(b)-tf.nn.l2_normalize(b)).numpy()
+        0.0
     """
     return x / (tf.norm(x,keepdims=keepdims)+eps)
 
@@ -3248,6 +3269,105 @@ def repeat_elements(x: Tensor, multiples:int,axis=-1):
     return x_rep
 
 
+@numpy_compatible
+def gather(x: Tensor,gather_axis, indices):
+    all_indices = tf.where(tf.fill(indices.shape, True))
+    gather_locations = tf.reshape(indices, [indices.shape.num_elements()])
+    # splice in our pytorch style index at the correct axis
+    gather_indices = []
+    for axis in range(len(indices.shape)):
+        if axis == gather_axis:
+            gather_indices.append(gather_locations)
+        else:
+            gather_indices.append(all_indices[:, axis])
+
+    gather_indices = tf.stack(gather_indices, axis=-1)
+    gathered = tf.gather_nd(x, gather_indices)
+    reshaped = tf.reshape(gathered, indices.shape)
+    return reshaped
+
+@numpy_compatible
+def scatter_add(x: Tensor,indices: Tensor,updates: Tensor):
+    return tf.tensor_scatter_nd_add(x, indices, updates)
+
+@numpy_compatible
+def scatter_sub(x: Tensor,indices: Tensor,updates: Tensor):
+    return tf.tensor_scatter_nd_sub(x, indices, updates)
+
+
+@numpy_compatible
+def scatter_max(x: Tensor,indices: Tensor,updates: Tensor):
+    return tf.tensor_scatter_nd_max(x, indices, updates)
+
+
+@numpy_compatible
+def scatter_min(x: Tensor,indices: Tensor,updates: Tensor):
+    return tf.tensor_scatter_nd_min(x, indices, updates)
+
+
+
+def assign(x:tf.Variable, new_x):
+  return state_ops.assign(x, new_x)
+
+
+
+def assign_add(x:tf.Variable, increment):
+  """Update the value of `x` by adding `increment`.
+  Arguments:
+      x: A Variable.
+      increment: A tensor of same shape as `x`.
+  Returns:
+      The variable `x` updated.
+  """
+  return state_ops.assign_add(x, increment)
+
+
+
+def assign_sub(x:tf.Variable, decrement):
+  """Update the value of `x` by subtracting `decrement`.
+  Arguments:
+      x: A Variable.
+      decrement: A tensor of same shape as `x`.
+  Returns:
+      The variable `x` updated.
+  """
+  return state_ops.assign_sub(x, decrement)
+
+
+
+def moving_average_assign(x:tf.Variable, value, momentum):
+  """Compute the exponential moving average of a value.
+  The moving average 'x' is updated with 'value' following:
+  ```
+  x = x * momentum + value * (1 - momentum)
+  ```
+  For example:
+  >>> x = tf.Variable(0.0)
+  >>> momentum=0.9
+  >>> moving_average_assign(x, value = 2.0, momentum=momentum).numpy()
+  >>> x.numpy()
+  0.2
+  The result will be biased towards the initial value of the variable.
+  If the variable was initialized to zero, you can divide by
+  `1 - momentum ** num_updates` to debias it (Section 3 of
+  [Kingma et al., 2015](https://arxiv.org/abs/1412.6980)):
+  >>> num_updates = 1.0
+  >>> x_zdb = x/(1 - momentum**num_updates)
+  >>> x_zdb.numpy()
+  2.0
+  Arguments:
+      x: A Variable, the moving average.
+      value: A tensor with the same shape as `x`, the new value to be
+        averaged in.
+      momentum: The moving average momentum.
+  Returns:
+      The updated variable.
+  """
+
+  return moving_averages.assign_moving_average(
+      x, value, momentum, zero_debias=False)
+
+
 
 @numpy_compatible
 def gram_matrix(x: Tensor):
@@ -3319,7 +3439,7 @@ def random_choice(x: Tensor,n:int=1):
 
 
 
-def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3354,10 +3474,10 @@ def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):
 
 
     """
-    return tf.random.normal(shape,mean=mean,stddev=std,dtype=str2dtype(dtype))
+    return tf.random.normal(to_list(shape),mean=mean,stddev=std,dtype=str2dtype(dtype))
 
 @numpy_compatible
-def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
+def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3365,7 +3485,7 @@ def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
     information.
 
     Args:
-      shape: A 1-D integer Tensor or Python array. The shape of the output tensor.
+      x: input tensor.
       mean: A Tensor or Python value of type `dtype`, broadcastable with `stddev`.
         The mean of the normal distribution.
       std: A Tensor or Python value of type `dtype`, broadcastable with `mean`.
@@ -3392,7 +3512,152 @@ def random_normal_like(a, dtype='float32', mean=0.0, std=1.0, seed=None):
 
 
     """
-    return tf.random.normal(a.shape,mean=mean,stddev=std,dtype=str2dtype(dtype))
+    return tf.random.normal(to_list(int_shape(x)),mean=mean,stddev=std,dtype=str2dtype(dtype))
+
+def random_uniform(shape, min_value=0.0, max_value=None, dtype='float32', seed=None):
+    """Outputs random values from a uniform distribution.
+
+    The generated values follow a uniform distribution in the range
+    `[min, max)`. The lower bound `minval` is included in the range, while
+    the upper bound `maxval` is excluded.
+
+    For floats, the default range is `[0, 1)`.  For ints, at least `maxval` must
+    be specified explicitly.
+
+    In the integer case, the random integers are slightly biased unless
+    `max_value - min_value` is an exact power of two.  The bias is small for values of
+    `max_value - min_value` significantly smaller than the range of the output (either
+    `2**32` or `2**64`).
+
+    Examples:
+
+    >>> tf.random.uniform(shape=[2])
+    <tf.Tensor: shape=(2,), dtype=float32, numpy=array([..., ...], dtype=float32)>
+    >>> tf.random.uniform(shape=[], minval=-1., maxval=0.)
+    <tf.Tensor: shape=(), dtype=float32, numpy=-...>
+    >>> tf.random.uniform(shape=[], minval=5, maxval=10, dtype=tf.int64)
+    <tf.Tensor: shape=(), dtype=int64, numpy=...>
+
+    The `seed` argument produces a deterministic sequence of tensors across
+    multiple calls. To repeat that sequence, use `tf.random.set_seed`:
+
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+
+    Without `tf.random.set_seed` but with a `seed` argument is specified, small
+    changes to function graphs or previously executed operations will change the
+    returned value. See `tf.random.set_seed` for details.
+
+    Args:
+      shape: A 1-D integer Tensor or Python array. The shape of the output tensor.
+      min_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The lower bound on the range of random values to generate
+        (inclusive).  Defaults to 0.
+      max_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The upper bound on the range of random values to generate
+        (exclusive). Defaults to 1 if `dtype` is floating point.
+      dtype: The type of the output: `float16`, `float32`, `float64`, `int32`,
+        or `int64`.
+      seed: A Python integer. Used in combination with `tf.random.set_seed` to
+        create a reproducible sequence of tensors across multiple calls.
+
+
+    Returns:
+      A tensor of the specified shape filled with random uniform values.
+
+    Raises:
+      ValueError: If `dtype` is integral and `maxval` is not specified.
+    """
+
+    return tf.random.uniform(shape=to_list(shape),
+    minval = min_value,
+    maxval = max_value,
+    dtype = str2dtype(dtype),
+    seed = seed,
+    name = 'random_uniform')
+
+@numpy_compatible
+def random_uniform_like(x,  min_value=0.0, max_value=None, dtype='float32', seed=None):
+    """Outputs random values from a uniform distribution.
+
+    The generated values follow a uniform distribution in the range
+    `[min, max)`. The lower bound `minval` is included in the range, while
+    the upper bound `maxval` is excluded.
+
+    For floats, the default range is `[0, 1)`.  For ints, at least `maxval` must
+    be specified explicitly.
+
+    In the integer case, the random integers are slightly biased unless
+    `max_value - min_value` is an exact power of two.  The bias is small for values of
+    `max_value - min_value` significantly smaller than the range of the output (either
+    `2**32` or `2**64`).
+
+    Examples:
+
+    >>> tf.random.uniform(shape=[2])
+    <tf.Tensor: shape=(2,), dtype=float32, numpy=array([..., ...], dtype=float32)>
+    >>> tf.random.uniform(shape=[], minval=-1., maxval=0.)
+    <tf.Tensor: shape=(), dtype=float32, numpy=-...>
+    >>> tf.random.uniform(shape=[], minval=5, maxval=10, dtype=tf.int64)
+    <tf.Tensor: shape=(), dtype=int64, numpy=...>
+
+    The `seed` argument produces a deterministic sequence of tensors across
+    multiple calls. To repeat that sequence, use `tf.random.set_seed`:
+
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+    >>> tf.random.set_seed(5)
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=2>
+    >>> tf.random.uniform(shape=[], maxval=3, dtype=tf.int32, seed=10)
+    <tf.Tensor: shape=(), dtype=int32, numpy=0>
+
+    Without `tf.random.set_seed` but with a `seed` argument is specified, small
+    changes to function graphs or previously executed operations will change the
+    returned value. See `tf.random.set_seed` for details.
+
+    Args:
+      x: inutput tensor.
+      min_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The lower bound on the range of random values to generate
+        (inclusive).  Defaults to 0.
+      max_value: A Tensor or Python value of type `dtype`, broadcastable with
+        `shape` (for integer types, broadcasting is not supported, so it needs to
+        be a scalar). The upper bound on the range of random values to generate
+        (exclusive). Defaults to 1 if `dtype` is floating point.
+      dtype: The type of the output: `float16`, `float32`, `float64`, `int32`,
+        or `int64`.
+      seed: A Python integer. Used in combination with `tf.random.set_seed` to
+        create a reproducible sequence of tensors across multiple calls.
+
+
+    Returns:
+      A tensor of the specified shape filled with random uniform values.
+
+    Raises:
+      ValueError: If `dtype` is integral and `maxval` is not specified.
+    """
+    return tf.random.uniform(shape=to_list(int_shape(x)),
+                             minval=min_value,
+                             maxval=max_value,
+                             dtype=str2dtype(dtype),
+                             seed=seed,
+                             name='random_uniform')
+
 
 @numpy_compatible
 def multinomial(x:Tensor,num_samples: int=1):
@@ -3552,6 +3817,8 @@ _FUN_NAMES = [
     ('transpose', transpose),
     ('squeeze', squeeze),
     ('expand_dims', expand_dims),
+    ('repeat_elements', repeat_elements),
+    ('gather', gather),
     ('gram_matrix', gram_matrix),
     ('shuffle', shuffle),
     ('random_choice', random_choice),
