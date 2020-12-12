@@ -1,29 +1,112 @@
 import os
-from warnings import warn
-
-import torch
-import os
-import six
 import time
-import torch
-
-from tensorboard.compat import tf
+import numpy as np
+import tensorboard
+from distutils.version import LooseVersion
+if not hasattr(tensorboard, '__version__') or LooseVersion(tensorboard.__version__) < LooseVersion('1.15'):
+    raise ImportError('TensorBoard logging requires TensorBoard version 1.15 or above')
+del LooseVersion
+del tensorboard
 from tensorboard.compat.proto.event_pb2 import SessionLog
 from tensorboard.compat.proto.event_pb2 import Event
 from tensorboard.compat.proto import event_pb2
+from tensorboard.compat.proto.summary_pb2 import *
 from tensorboard.plugins.projector.projector_config_pb2 import ProjectorConfig
 from tensorboard.summary.writer.event_file_writer import EventFileWriter
+import tensorboard.summary as summary
+from trident.backend.common import *
+from trident.backend.tensorflow_backend import *
+from trident.backend.tensorflow_ops import *
 
-from torch.utils.tensorboard._onnx_graph  import load_onnx_graph
+from tensorboard.compat.proto.graph_pb2 import GraphDef
+from tensorboard.compat.proto.node_def_pb2 import NodeDef
+from tensorboard.compat.proto.versions_pb2 import VersionDef
+from tensorboard.compat.proto.attr_value_pb2 import AttrValue
+from tensorboard.compat.proto.tensor_shape_pb2 import TensorShapeProto
 
 
-from torch.utils.tensorboard._pytorch_graph import graph
-from torch.utils.tensorboard._utils import figure_to_image
+def load_onnx_graph(fname):
+    import onnx
+    m = onnx.load(fname)
+    g = m.graph
+    return parse(g)
 
-from torch.utils.tensorboard.summary import (
-    scalar, histogram, histogram_raw, image, hparams
-)
-from trident.backend.pytorch_ops import to_numpy
+
+def parse(graph):
+    nodes_proto = []
+    nodes = []
+    import itertools
+    for node in itertools.chain(graph.input, graph.output):
+        nodes_proto.append(node)
+
+    for node in nodes_proto:
+        print(node.name)
+        shapeproto = TensorShapeProto(
+            dim=[TensorShapeProto.Dim(size=d.dim_value) for d in node.type.tensor_type.shape.dim])
+        nodes.append(NodeDef(
+            name=node.name.encode(encoding='utf_8'),
+            op='Variable',
+            input=[],
+            attr={
+                'dtype': AttrValue(type=node.type.tensor_type.elem_type),
+                'shape': AttrValue(shape=shapeproto),
+            })
+        )
+
+    for node in graph.node:
+        _attr = []
+        for s in node.attribute:
+            _attr.append(' = '.join([str(f[1]) for f in s.ListFields()]))
+        attr = ', '.join(_attr).encode(encoding='utf_8')
+        print(node.output[0])
+        nodes.append(NodeDef(
+            name=node.output[0].encode(encoding='utf_8'),
+            op=node.op_type,
+            input=node.input,
+            attr={'parameters': AttrValue(s=attr)},
+        ))
+
+    # two pass token replacement, appends opname to object id
+    mapping = {}
+    for node in nodes:
+        mapping[node.name] = node.op + '_' + node.name
+
+    return GraphDef(node=nodes, versions=VersionDef(producer=22))
+
+
+# Functions for converting
+def figure_to_image(figures, close=True):
+    """Render matplotlib figure to numpy format.
+
+    Note that this requires the ``matplotlib`` package.
+
+    Args:
+        figures (matplotlib.pyplot.figure) or list of figures: figure or a list of figures
+        close (bool): Flag to automatically close the figure
+
+    Returns:
+        numpy.array: image in [CHW] order
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.backends.backend_agg as plt_backend_agg
+
+    def render_to_rgb(figure):
+        canvas = plt_backend_agg.FigureCanvasAgg(figure)
+        canvas.draw()
+        data = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+        w, h = figure.canvas.get_width_height()
+        image_hwc = data.reshape([h, w, 4])[:, :, 0:3]
+        image_chw = np.moveaxis(image_hwc, source=2, destination=0)
+        if close:
+            plt.close(figure)
+        return image_chw
+
+    if isinstance(figures, list):
+        images = [render_to_rgb(figure) for figure in figures]
+        return np.stack(images)
+    else:
+        image = render_to_rgb(figures)
+        return image
 
 
 class FileWriter(object):
@@ -56,10 +139,6 @@ class FileWriter(object):
         # TODO: See if we can remove this in the future if we are
         # actually the ones passing in a PosixPath
         log_dir = str(log_dir)
-        self.log_dir=log_dir
-        self.max_queue=max_queue
-        self.flush_secs=flush_secs
-        self.filename_suffix=filename_suffix
         self.event_writer = EventFileWriter(
             log_dir, max_queue, flush_secs, filename_suffix)
 
@@ -143,14 +222,11 @@ class FileWriter(object):
         The events will go into a new events file.
         Does nothing if the EventFileWriter was not closed.
         """
-        self.event_writer = EventFileWriter(
-            self.log_dir, self.max_queue, self.flush_secs, self.filename_suffix)
-
+        self.event_writer.reopen()
 
 class SummaryWriter(object):
     """Writes entries directly to event files in the log_dir to be
     consumed by TensorBoard.
-
     The `SummaryWriter` class provides a high-level API to create an event file
     in a given directory and add summaries and events to it. The class updates the
     file contents asynchronously. This allows a training program to call methods
@@ -165,6 +241,7 @@ class SummaryWriter(object):
         if SummaryWriter.__instance == None:
             SummaryWriter()
         return SummaryWriter.__instance
+
     def __init__(self, log_dir=None, comment='', purge_step=None, max_queue=10,
                  flush_secs=120, filename_suffix=''):
         """ Virtually private constructor. """
@@ -172,9 +249,9 @@ class SummaryWriter(object):
             raise Exception("This class is a singleton!")
         else:
             SummaryWriter.__instance = self
+
         """Creates a `SummaryWriter` that will write out events and summaries
         to the event file.
-
         Args:
             log_dir (string): Save directory location. Default is
               runs/**CURRENT_DATETIME_HOSTNAME**, which changes after each run.
@@ -196,25 +273,19 @@ class SummaryWriter(object):
             filename_suffix (string): Suffix added to all event filenames in
               the log_dir directory. More details on filename construction in
               tensorboard.summary.writer.event_file_writer.EventFileWriter.
-
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
-
             # create a summary writer with automatically generated folder name.
             writer = SummaryWriter()
             # folder location: runs/May04_22-14-54_s-MacBook-Pro.local/
-
             # create a summary writer using the specified folder name.
             writer = SummaryWriter("my_experiment")
             # folder location: my_experiment
-
             # create a summary writer with comment appended.
             writer = SummaryWriter(comment="LR_0.1_BATCH_16")
             # folder location: runs/May04_22-14-54_s-MacBook-Pro.localLR_0.1_BATCH_16/
-
         """
-
+        
         if not log_dir:
             import socket
             from datetime import datetime
@@ -242,20 +313,7 @@ class SummaryWriter(object):
             v *= 1.1
         self.default_bins = neg_buckets[::-1] + [0] + buckets
 
-    def _check_caffe2_blob(self, item):
-        """
-        Caffe2 users have the option of passing a string representing the name of
-        a blob in the workspace instead of passing the actual Tensor/array containing
-        the numeric values. Thus, we need to check if we received a string as input
-        instead of an actual Tensor/array, and if so, we need to fetch the Blob
-        from the workspace corresponding to that name. Fetching can be done with the
-        following:
 
-        from caffe2.python import workspace (if not already imported)
-        workspace.FetchBlob(blob_name)
-        workspace.FetchBlobs([blob_name1, blob_name2, ...])
-        """
-        return isinstance(item, six.string_types)
 
     def _get_file_writer(self):
         """Returns the default FileWriter instance. Recreates it if closed."""
@@ -276,96 +334,39 @@ class SummaryWriter(object):
         """Returns the directory where event files will be written."""
         return self.log_dir
 
-    def add_hparams(
-        self, hparam_dict, metric_dict, hparam_domain_discrete=None, run_name=None
-    ):
-        """Add a set of hyperparameters to be compared in TensorBoard.
 
-        Args:
-            hparam_dict (dict): Each key-value pair in the dictionary is the
-              name of the hyper parameter and it's corresponding value.
-              The type of the value can be one of `bool`, `string`, `float`,
-              `int`, or `None`.
-            metric_dict (dict): Each key-value pair in the dictionary is the
-              name of the metric and it's corresponding value. Note that the key used
-              here should be unique in the tensorboard record. Otherwise the value
-              you added by ``add_scalar`` will be displayed in hparam plugin. In most
-              cases, this is unwanted.
-            hparam_domain_discrete: (Optional[Dict[str, List[Any]]]) A dictionary that
-              contains names of the hyperparameters and all discrete values they can hold
-            run_name (str): Name of the run, to be included as part of the logdir.
-              If unspecified, will use current timestamp.
-
-        Examples::
-
-            from torch.utils.tensorboard import SummaryWriter
-            with SummaryWriter() as w:
-                for i in range(5):
-                    w.add_hparams({'lr': 0.1*i, 'bsize': i},
-                                  {'hparam/accuracy': 10*i, 'hparam/loss': 10*i})
-
-        Expected result:
-
-        .. image:: _static/img/tensorboard/add_hparam.png
-           :scale: 50 %
-
-        """
-
-        if type(hparam_dict) is not dict or type(metric_dict) is not dict:
-            raise TypeError('hparam_dict and metric_dict should be dictionary.')
-        exp, ssi, sei = hparams(hparam_dict, metric_dict, hparam_domain_discrete)
-
-        if not run_name:
-            run_name = str(time.time())
-        logdir = os.path.join(self._get_file_writer().get_logdir(), run_name)
-        with SummaryWriter(log_dir=logdir) as w_hp:
-            w_hp.file_writer.add_summary(exp)
-            w_hp.file_writer.add_summary(ssi)
-            w_hp.file_writer.add_summary(sei)
-            for k, v in metric_dict.items():
-                w_hp.add_scalar(k, v)
 
     def add_scalar(self, tag, scalar_value, global_step=None, walltime=None):
         """Add scalar data to summary.
-
         Args:
             tag (string): Data identifier
             scalar_value (float or string/blobname): Value to save
             global_step (int): Global step value to record
             walltime (float): Optional override default walltime (time.time())
               with seconds after epoch of event
-
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
             writer = SummaryWriter()
             x = range(100)
             for i in x:
                 writer.add_scalar('y=2x', i * 2, i)
             writer.close()
-
         Expected result:
-
         .. image:: _static/img/tensorboard/add_scalar.png
            :scale: 50 %
-
         """
+        self._get_file_writer().add_summary(scalar_value,global_step,walltime)
 
-        self._get_file_writer().add_summary(
-            scalar(tag, scalar_value), global_step, walltime)
 
     def add_scalars(self, main_tag, tag_scalar_dict, global_step=None, walltime=None):
         """Adds many scalar data to summary.
-
         Args:
             main_tag (string): The parent name for the tags
             tag_scalar_dict (dict): Key-value pair storing the tag and corresponding values
             global_step (int): Global step value to record
             walltime (float): Optional override default walltime (time.time())
               seconds after epoch of event
-
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
             writer = SummaryWriter()
             r = 5
@@ -376,12 +377,9 @@ class SummaryWriter(object):
             writer.close()
             # This call adds three values to the same scalar plot with the tag
             # 'run_14h' in TensorBoard's scalar section.
-
         Expected result:
-
         .. image:: _static/img/tensorboard/add_scalars.png
            :scale: 50 %
-
         """
 
         walltime = time.time() if walltime is None else walltime
@@ -396,12 +394,10 @@ class SummaryWriter(object):
                                 self.filename_suffix)
                 self.all_writers[fw_tag] = fw
 
-            fw.add_summary(scalar(main_tag, scalar_value),
-                           global_step, walltime)
+            fw.add_summary(Summary(value=[Summary.Value(tag=main_tag, simple_value=scalar_value)]),global_step, walltime)
 
     def add_histogram(self, tag, values, global_step=None, bins='tensorflow', walltime=None):
         """Add histogram to summary.
-
         Args:
             tag (string): Data identifier
             values (torch.Tensor, numpy.array, or string/blobname): Values to build histogram
@@ -410,9 +406,7 @@ class SummaryWriter(object):
               other options in: https://docs.scipy.org/doc/numpy/reference/generated/numpy.histogram.html
             walltime (float): Optional override default walltime (time.time())
               seconds after epoch of event
-
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
             import numpy as np
             writer = SummaryWriter()
@@ -420,25 +414,16 @@ class SummaryWriter(object):
                 x = np.random.random(1000)
                 writer.add_histogram('distribution centers', x + i, i)
             writer.close()
-
         Expected result:
-
         .. image:: _static/img/tensorboard/add_histogram.png
            :scale: 50 %
-
         """
-
-
-        if isinstance(bins, six.string_types) and bins == 'tensorflow':
-            bins = self.default_bins
-        self._get_file_writer().add_summary(
-            histogram(tag, values, bins, max_bins=100), global_step, walltime)
+        self._get_file_writer().add_summary(summary.histogram(tag, values, step=global_step,buckets=self.default_bins), global_step=global_step, walltime=walltime)
 
     def add_histogram_raw(self, tag, min, max, num, sum, sum_squares,
                           bucket_limits, bucket_counts, global_step=None,
                           walltime=None):
         """Adds histogram with raw data.
-
         Args:
             tag (string): Data identifier
             min (float or int): Min value
@@ -452,17 +437,14 @@ class SummaryWriter(object):
             global_step (int): Global step value to record
             walltime (float): Optional override default walltime (time.time())
               seconds after epoch of event
-              see: https://github.com/tensorflow/tensorboard/blob/master/tensorboard/plugins/histogram/README.md
-
+            see: https://github.com/tensorflow/tensorboard/blob/master/tensorboard/plugins/histogram/README.md
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
             import numpy as np
             writer = SummaryWriter()
             dummy_data = []
             for idx, value in enumerate(range(50)):
                 dummy_data += [idx + 0.001] * value
-
             bins = list(range(50+2))
             bins = np.array(bins)
             values = np.array(dummy_data).astype(float).reshape(-1)
@@ -479,33 +461,26 @@ class SummaryWriter(object):
                 bucket_counts=counts.tolist(),
                 global_step=0)
             writer.close()
-
         Expected result:
-
         .. image:: _static/img/tensorboard/add_histogram_raw.png
            :scale: 50 %
-
         """
 
         if len(bucket_limits) != len(bucket_counts):
             raise ValueError('len(bucket_limits) != len(bucket_counts), see the document.')
-        self._get_file_writer().add_summary(
-            histogram_raw(tag,
-                          min,
-                          max,
-                          num,
-                          sum,
-                          sum_squares,
-                          bucket_limits,
-                          bucket_counts),
-            global_step,
-            walltime)
+        hist = HistogramProto(min=min,
+                              max=max,
+                              num=num,
+                              sum=sum,
+                              sum_squares=sum_squares,
+                              bucket_limit=bucket_limits,
+                              bucket=bucket_counts)
+
+        self._get_file_writer().add_summary(Summary(value=[Summary.Value(tag=tag, histo=hist)]),global_step,  walltime)
 
     def add_image(self, tag, img_tensor, global_step=None, walltime=None):
         """Add image data to summary.
-
         Note that this requires the ``pillow`` package.
-
         Args:
             tag (string): Data identifier
             img_tensor (torch.Tensor, numpy.array, or string/blobname): Image data
@@ -517,75 +492,59 @@ class SummaryWriter(object):
             convert a batch of tensor into 3xHxW format or call ``add_images`` and let us do the job.
             Tensor with :math:`(1, H, W)`, :math:`(H, W)`, :math:`(H, W, 3)` is also suitable as long as
             corresponding ``dataformats`` argument is passed, e.g. ``CHW``, ``HWC``, ``HW``.
-
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
             import numpy as np
             img = np.zeros((3, 100, 100))
             img[0] = np.arange(0, 10000).reshape(100, 100) / 10000
             img[1] = 1 - np.arange(0, 10000).reshape(100, 100) / 10000
-
             img_HWC = np.zeros((100, 100, 3))
             img_HWC[:, :, 0] = np.arange(0, 10000).reshape(100, 100) / 10000
             img_HWC[:, :, 1] = 1 - np.arange(0, 10000).reshape(100, 100) / 10000
-
             writer = SummaryWriter()
             writer.add_image('my_image', img, 0)
-
             # If you have non-default dimension setting, set the dataformats argument.
             writer.add_image('my_image_HWC', img_HWC, 0, dataformats='HWC')
             writer.close()
-
         Expected result:
-
         .. image:: _static/img/tensorboard/add_image.png
            :scale: 50 %
-
         """
 
-        self._get_file_writer().add_summary(
-            image(tag, img_tensor, dataformats='HWC'), global_step, walltime)
+
+        self._get_file_writer().add_summary(summary.image(tag, img_tensor,max_outputs=1), global_step, walltime)
 
     def add_images(self, tag, img_tensor, global_step=None, walltime=None):
         """Add batched image data to summary.
-
         Note that this requires the ``pillow`` package.
-
         Args:
             tag (string): Data identifier
             img_tensor (torch.Tensor, numpy.array, or string/blobname): Image data
             global_step (int): Global step value to record
             walltime (float): Optional override default walltime (time.time())
               seconds after epoch of event
-
+            dataformats (string): Image data format specification of the form
+              NCHW, NHWC, CHW, HWC, HW, WH, etc.
         Shape:
             img_tensor: Default is :math:`(N, 3, H, W)`. If ``dataformats`` is specified, other shape will be
             accepted. e.g. NCHW or NHWC.
-
         Examples::
-
             from torch.utils.tensorboard import SummaryWriter
             import numpy as np
-
             img_batch = np.zeros((16, 3, 100, 100))
             for i in range(16):
                 img_batch[i, 0] = np.arange(0, 10000).reshape(100, 100) / 10000 / 16 * i
                 img_batch[i, 1] = (1 - np.arange(0, 10000).reshape(100, 100) / 10000) / 16 * i
-
             writer = SummaryWriter()
             writer.add_images('my_image_batch', img_batch, 0)
             writer.close()
-
         Expected result:
-
         .. image:: _static/img/tensorboard/add_images.png
            :scale: 30 %
-
         """
 
-        self._get_file_writer().add_summary(
-            image(tag, img_tensor, dataformats='NHWC'), global_step, walltime)
+
+        self._get_file_writer().add_summary(summary.image(tag, img_tensor,max_outputs=3), global_step, walltime)
 
     def add_figure(self, tag, figure, global_step=None, close=True, walltime=None):
         """Render matplotlib figure into an image and add it to summary.
@@ -606,12 +565,29 @@ class SummaryWriter(object):
             self.add_image(tag, figure_to_image(figure, close), global_step, walltime)
 
 
-
     def add_onnx_graph(self, prototxt):
-
         self._get_file_writer().add_onnx_graph(load_onnx_graph(prototxt))
 
-
+    # def add_graph(self, model, input_to_model=None, verbose=False):
+    #     # prohibit second call?
+    #     # no, let tensorboard handle it and show its warning message.
+    #     """Add graph data to summary.
+    #     Args:
+    #         model (torch.nn.Module): Model to draw.
+    #         input_to_model (torch.Tensor or list of torch.Tensor): A variable or a tuple of
+    #             variables to be fed.
+    #         verbose (bool): Whether to print graph structure in console.
+    #     """
+    #
+    #     if hasattr(model, 'forward'):
+    #         # A valid PyTorch model should have a 'forward' method
+    #         self._get_file_writer().add_graph(graph(model, input_to_model, verbose))
+    #
+    #         # # Handles cnn.CNNModelHelper, model_helper.ModelHelper
+    #         # current_graph = model_to_graph_def(model)
+    #         # event = event_pb2.Event(
+    #         #     graph_def=current_graph.SerializeToString())
+    #         # self._get_file_writer().add_event(event)
 
     @staticmethod
     def _encode(rawstr):
@@ -621,6 +597,7 @@ class SummaryWriter(object):
         retval = retval.replace("/", "%%%02x" % (ord("/")))
         retval = retval.replace("\\", "%%%02x" % (ord("\\")))
         return retval
+
 
     def flush(self):
         """Flushes the event file to disk.

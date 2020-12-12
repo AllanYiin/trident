@@ -16,7 +16,7 @@ import builtins
 import numpy as np
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset
-from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
+from trident.backend.common import get_backend,to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
     snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need
 from trident.backend.model import ModelBase, progress_bar
 from trident.callbacks.visualization_callbacks import *
@@ -24,12 +24,12 @@ from trident.data.data_provider import *
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from trident.backend.tensorspec import TensorSpec, assert_spec_compatibility
-
+from trident.loggers.history import HistoryBase
 __all__ = ['TrainingPlan']
 
 _session = get_session()
-_backend = _session.backend
-working_direcory=_session.working_direcory
+_backend =get_backend()
+working_directory=_session.working_directory
 
 
 if _backend == 'pytorch':
@@ -212,7 +212,25 @@ class TrainingPlan(object):
         return self
 
     def within_tensorboard(self):
-        self.enable_tensorboard = True
+        self.enable_tensorboard=True
+        #check weather have tensorboard
+        if get_backend() == 'pytorch':
+            try:
+                from trident.loggers.pytorch_tensorboard import SummaryWriter
+                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+
+            except Exception as e:
+                print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                print(e)
+                PrintException()
+        elif get_backend() == 'tensorflow':
+            try:
+                from trident.loggers.tensorflow_tensorboard import SummaryWriter
+                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+            except Exception as e:
+                print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                print(e)
+                PrintException()
         return self
 
     def out_sample_evaluation_scheduling(self, frequency: int, unit='batch', on_epoch_end=True):
@@ -372,9 +390,16 @@ class TrainingPlan(object):
             abnormal_num_count = 0
             # update callback
             if self.enable_tensorboard:
-                make_dir_if_need(os.path.join(working_direcory,'Logs'))
-                os.system('cmd /k "tensorboard --logdir={0}"'.format(os.path.join(working_direcory,'Logs')))
+                for item in self.training_items:
+                    if hasattr(item,'training_context'):
+                        for context_item in list(item.training_context.values()):
+                            if isinstance(context_item,HistoryBase):
+                                HistoryBase.enable_tensorboard=True
+
+                make_dir_if_need(os.path.join(working_directory,'Logs'))
+                os.system('cmd /k "tensorboard --logdir={0}  --port 6006"'.format(os.path.join(working_directory,'Logs')))
                 sys.stdout.writelines(['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/'])
+
             if not is_resume or only_steps == True:
                 max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
                 for item in self.training_items.values():

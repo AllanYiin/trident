@@ -22,9 +22,12 @@ from trident.backend.common import to_list, addindent, get_time_suffix, format_t
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
 from trident.callbacks import LambdaCallback, UnfreezeModelCallback
+from trident.loggers.history import HistoryBase
 
 _session = get_session()
+working_directory=_session.working_directory
 _backend = get_backend()
+
 if _backend == 'pytorch':
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
@@ -36,7 +39,7 @@ elif _backend == 'tensorflow':
 
 
 
-__all__ = ['progress_bar','ModelBase','HistoryBase']
+__all__ = ['progress_bar','ModelBase']
 
 
 
@@ -86,15 +89,15 @@ class ModelBase(object):
         self.grad_clipping_threshold = None
         self.use_output_as_loss = False
         self.training_context = {
-                                 'losses': HistoryBase('losses'),  # loss_wrapper
-                                 'metrics': HistoryBase('metrics'),  # loss_wrapper
-                                 'epoch_losses': HistoryBase('epoch_losses'),  # loss_wrapper
-                                 'epoch_metrics': HistoryBase('epoch_metrics'),  # loss_wrapper
-                                 'grads_state': OrderedDict(),  # loss_wrapper
-                                 'tmp_losses': HistoryBase('tmp_losses'), # loss_wrapper
-                                 'tmp_metrics': HistoryBase('tmp_metrics'),  # loss_wrapper
+                                 'losses': HistoryBase('losses'),
+                                 'metrics': HistoryBase('metrics'),
+                                 'epoch_losses': HistoryBase('epoch_losses'),
+                                 'epoch_metrics': HistoryBase('epoch_metrics'),
+                                 'grads_state': OrderedDict(),
+                                 'tmp_losses': HistoryBase('tmp_losses'),
+                                 'tmp_metrics': HistoryBase('tmp_metrics'),
                                  'out_sample_metrics': HistoryBase('out_sample_metrics'),
-                                'print_progress_frequency': 10,
+                                 'print_progress_frequency': 10,
                                 'print_progress_unit': 'batch',
                                 'optimizer':None,
                                  'warmup':0,
@@ -114,7 +117,7 @@ class ModelBase(object):
                                  'best_model': None,  # current model
                                 'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
                                 'current_lr': None,  # current loss
-                                'save_path': None, 'is_collect_data': True, 'callbacks': [],
+                                'save_path': os.path.join(working_directory,'Models'), 'is_collect_data': True, 'callbacks': [],
                                  'stop_update': 0, 'retain_graph': False,
                                  'skip_generate_output':False}
         if name is not None:
@@ -377,29 +380,32 @@ class ModelBase(object):
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __setattr__(self, name, value):
-        if name=='signature' or name=='_signature':
-            _model = self.__dict__['_model']
-            if _model is not None and isinstance(_model ,Layer):
-                object.__setattr__(_model, "_" + 'signature', value)
-        if 'training_context' in self.__dict__ and name in self.__dict__['training_context']:
-            self.__dict__['training_context'][name]=value
-        elif '_model' in self.__dict__ and self.__dict__['_model']  :
-            _model = self.__dict__['_model']
-            if _model is not None and name in _model.__dict__['_parameters']:
-                _model.__dict__['_parameters'][name]=value
-            elif _model is not None and name in _model.__dict__['_buffers']:
-                 _model.__dict__['_buffers'][name]=value
-            elif _model is not None and name in _model.__dict__['_modules']:
-                _model.__dict__['_modules'][name]=value
+        if name in ['_input_shape','_output_shape']:
+            pass
+        else:
+            if name=='signature' or name=='_signature':
+                _model = self.__dict__['_model']
+                if _model is not None and isinstance(_model ,Layer):
+                    object.__setattr__(_model, "_" + 'signature', value)
+            if 'training_context' in self.__dict__ and name in self.__dict__['training_context']:
+                self.__dict__['training_context'][name]=value
+            elif '_model' in self.__dict__ and self.__dict__['_model']  :
+                _model = self.__dict__['_model']
+                if _model is not None and name in _model.__dict__['_parameters']:
+                    _model.__dict__['_parameters'][name]=value
+                elif _model is not None and name in _model.__dict__['_buffers']:
+                     _model.__dict__['_buffers'][name]=value
+                elif _model is not None and name in _model.__dict__['_modules']:
+                    _model.__dict__['_modules'][name]=value
 
-            elif _model is not None and name in _model.__dict__:
-                object.__setattr__(self.__dict__['_model'], name, value)
-            elif _model is not None and "_"+name in _model.__dict__:
-                object.__setattr__(self.__dict__['_model'], "_"+name, value)
+                elif _model is not None and name in _model.__dict__:
+                    object.__setattr__(self.__dict__['_model'], name, value)
+                elif _model is not None and "_"+name in _model.__dict__:
+                    object.__setattr__(self.__dict__['_model'], "_"+name, value)
+                else:
+                    object.__setattr__(self, name, value)
             else:
                 object.__setattr__(self, name, value)
-        else:
-            object.__setattr__(self, name, value)
 
     def __call__(self, *input, **kwargs):
         return self._model(*input, **kwargs)
@@ -489,7 +495,7 @@ class ModelBase(object):
             'best_model': None,  # current model
             'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
             'current_lr': None,  # current loss
-            'save_path': None, 'is_collect_data': True, 'callbacks': [],
+            'save_path': os.path.join(working_directory,'Models'), 'is_collect_data': True, 'callbacks': [],
             'stop_update': 0, 'retain_graph': False,
             'skip_generate_output': False}
 
@@ -1029,8 +1035,8 @@ class ModelBase(object):
         self.with_callbacks(new_callbacks)
         return self
 
-    def unfreeze_model_scheduling(self, frequency: int, unit='epoch', slice_from=0, slice_to=None):
-        self.callbacks.append(UnfreezeModelCallback(frequency, unit, slice_from, slice_to))
+    def unfreeze_model_scheduling(self, frequency: int, unit='epoch', slice_from=None, slice_to=None, module_name=None):
+        self.callbacks.append(UnfreezeModelCallback(frequency, unit, slice_from, slice_to,module_name=module_name))
         return self
 
     def cpu(self):
@@ -1085,57 +1091,3 @@ def progress_bar(step_time,current, total, msg=None, name=''):
     sys.stdout.flush()  # # Go back to the center of the bar.  # for i in range(term_width-int(TOTAL_BAR_LENGTH/2)+2):  #     sys.stdout.write('\b')  # sys.stdout.write(' %d/%d ' % (current+1, total))  # if current < total-1:  #     sys.stdout.write('\r')  # else:  #     sys.stdout.write('\n')  # sys.stdout.flush()
 
 
-
-class HistoryBase(OrderedDict):
-    def __init__(self, name='', *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.name=name
-
-    def regist(self,data_name:str):
-        if data_name not in self:
-            self[data_name]=[]
-
-    def collect(self,data_name:str,step:int,value:(float,Tensor)):
-        if data_name not in self:
-            self.regist(data_name)
-        if is_tensor(value):
-            value=value.clone().cpu().detach()
-            if ndim(value)==0:
-                value=value.item()
-            elif ndim(value)==1 and len(value)==1:
-                value = value[0].item()
-            else:
-                value=value.mean().item()
-            self[data_name].append((step, value))
-        else:
-            self[data_name].append((step, value))
-
-
-    def reset(self):
-        for i in range(len(self)):
-            self.value_list[i]=[]
-    def get_keys(self):
-        return self.key_list
-
-    def get_series(self,data_name):
-        if data_name in self:
-            steps,values=zip(*self[data_name].copy())
-            return list(steps),list(values)
-        else:
-            raise ValueError('{0} is not in this History.'.format(data_name))
-
-    def get_last(self,data_name):
-        if data_name in self:
-            return self[data_name][-1]
-        else:
-            raise ValueError('{0} is not in this History.'.format(data_name))
-
-    def get_best(self,data_name,is_larger_better=True):
-            if data_name in self:
-                steps,values=zip(*self[data_name].copy())
-                if is_larger_better:
-                    return builtins.max(values)
-                else:
-                    return builtins.min(values)
-            else:
-                raise ValueError('{0} is not in this History.'.format(data_name))
