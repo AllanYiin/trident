@@ -28,6 +28,7 @@ from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import get_activation
 from trident.layers.pytorch_normalizations import get_normalization
+from trident.layers.pytorch_initializers import *
 __all__ = ['Dense','Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot','Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
            'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d','GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape','Permute',
@@ -111,7 +112,7 @@ class Dense(Layer):
             if isinstance(input_shape, int):
                 self.input_filters = input_shape
             self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters))
-            init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+            kaiming_uniform(self.weight, a=math.sqrt(5))
             # self._parameters['weight'] =self.weight
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(self.num_filters))
@@ -119,8 +120,8 @@ class Dense(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self, 'kernel_regularizer') and self.kernel_regularizer is not None:
             x = F.linear(x, self.kernel_regularizer(self.weight), self.bias)
         else:
@@ -331,8 +332,8 @@ class Flatten(Layer):
     def __init__(self,keep_output: bool=False,name:Optional[str] = None):
         super(Flatten, self).__init__(name=name, keep_output=keep_output)
 
-    def forward(self, *x: torch.Tensor) -> torch.Tensor:
-        x = enforce_singleton(x)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
         return x.view(x.size()[0], -1)
 
 
@@ -343,7 +344,7 @@ class Concate(Layer):
         super(Concate, self).__init__(name=name, keep_output=keep_output)
         self.axis = axis
 
-    def forward(self, *x) -> torch.Tensor:
+    def forward(self, x) -> torch.Tensor:
         if not isinstance(x, list) or len(x) < 2:
             raise ValueError('A `Concatenate` layer should be called on a list of at least 2 inputs')
 
@@ -376,7 +377,7 @@ class Add(Layer):
             self.output_shape = input_shape
             self._built = True
 
-    def forward(self, *x) -> torch.Tensor:
+    def forward(self, x) -> torch.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if isinstance(x, tuple):
@@ -398,7 +399,7 @@ class Subtract(Layer):
             self.output_shape = input_shape
             self._built = True
 
-    def forward(self, *x) -> torch.Tensor:
+    def forward(self, x) -> torch.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if not isinstance(x, tuple):
@@ -420,7 +421,7 @@ class Dot(Layer):
             self.output_shape = input_shape
             self._built = True
 
-    def forward(self, *x) -> torch.Tensor:
+    def forward(self, x) -> torch.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if not isinstance(x, tuple):
@@ -458,8 +459,7 @@ class SoftMax(Layer):
         self.add_noise = add_noise
         self.noise_intensity = noise_intensity
 
-    def forward(self, *x) -> torch.Tensor:
-        x = enforce_singleton(x)
+    def forward(self, x) -> torch.Tensor:
         if not hasattr(self, 'add_noise'):
             self.add_noise = False
             self.noise_intensity = 0.005
@@ -550,8 +550,7 @@ class Scale(Layer):
             remove_from('_power',self.__dict__, self._buffers)
             self._built = True
 
-    def forward(self, *x) -> torch.Tensor:
-        x=enforce_singleton(x)
+    def forward(self, x) -> torch.Tensor:
         x = pow(x*self.scale+self.shift,self.power)
         return x
 
@@ -719,7 +718,7 @@ class _ConvNd(Layer):
                 if self.separable:
                     self.pointwise = Parameter(torch.Tensor(int(self.input_filters * self.depth_multiplier), int(self.num_filters), 1, 1))
 
-            init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+            kaiming_uniform(self.weight, a=math.sqrt(5))
 
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(int(self.num_filters)))
@@ -875,8 +874,7 @@ class Conv1d(_ConvNd):
         x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1018,8 +1016,7 @@ class Conv2d(_ConvNd):
 
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1060,8 +1057,7 @@ class Conv3d(_ConvNd):
 
         return F.conv3d(x, self.weight, self.bias, self.strides, _triple(0), self.dilation, self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv3d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1098,8 +1094,7 @@ class TransConv1d(_ConvNd):
             self.output_padding = _single(1)
         return F.conv_transpose1d(x, self.weight, self.bias, self.strides, padding=_single(0), output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1172,8 +1167,7 @@ class TransConv2d(_ConvNd):
         return F.conv_transpose2d(x, self.weight, self.bias, self.strides, padding=(self.padding[0], self.padding[2]),
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1222,8 +1216,7 @@ class TransConv3d(_ConvNd):
         return F.conv_transpose3d(x, self.weight, self.bias, self.strides, padding=_triple(0),
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv3d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1255,8 +1248,7 @@ class SeparableConv1d(_ConvNd):
         self.conv1 = None
         self.pointwise = None
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv1(x)
         x = self.pointwise(x)
         if self.activation is not None:
@@ -1301,8 +1293,7 @@ class SeparableConv2d(_ConvNd):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv1(x)
         x = self.pointwise(x)
 
@@ -1345,8 +1336,7 @@ class SeparableConv3d(_ConvNd):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv1(x)
         x = self.pointwise(x)
         if self.activation is not None:
@@ -1384,8 +1374,7 @@ class DepthwiseConv1d(_ConvNd):
         x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
-    def forward(self, *x):
-        x = self.conv1d_forward(x)
+    def forward(self, x):
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -1503,8 +1492,7 @@ class DepthwiseConv2d(_ConvNd):
 
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1535,8 +1523,7 @@ class DepthwiseConv3d(_ConvNd):
         self.activation = get_activation(activation)
         self._built = False
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         if self.padding_mode == 'circular':
             expanded_padding = (
             (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
@@ -1612,10 +1599,10 @@ class DeformConv2d(Layer):
                 raise ValueError('out_channels must be divisible by groups')
 
             self.offset = Parameter(torch.Tensor(self.input_filters, 2 * self.input_filters, 3, 3))
-            init.kaiming_uniform_(self.offset, a=math.sqrt(5))
+            kaiming_uniform(self.offset, a=math.sqrt(5))
             self.weight = Parameter(
                 torch.Tensor(self.num_filters, self.input_filters // self.groups, *self.kernel_size))
-            init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+            kaiming_uniform(self.weight, a=math.sqrt(5))
             if self.use_bias:
                 self.bias = Parameter(torch.empty(self.num_filters))
                 init.zeros_(self.bias)
@@ -1647,7 +1634,7 @@ class DeformConv2d(Layer):
                 x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2], mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
         return F.conv2d(x, self.weight, self.bias, self.strides, self.padding, self.dilation, self.groups)
 
-    def forward(self, *x):
+    def forward(self, x):
         """
         Args:
             input (Tensor[batch_size, in_channels, in_height, in_width]): input tensor
@@ -1655,7 +1642,7 @@ class DeformConv2d(Layer):
                 out_height, out_width]): offsets to be applied for each position in the
                 convolution kernel.
         """
-        x = enforce_singleton(x)
+
         # B 2*input,H,W
         offset = self.offetconv2d_forward(x).round_()
         # 2,H,W-->B,2,H,W
@@ -1742,7 +1729,7 @@ class GcdConv1d(Layer):
 
             self.weight = Parameter(torch.Tensor(self.num_filters // self.groups, self._input_shape[0] // self.groups,
                                                  *self.kernel_size))  #
-            init.kaiming_uniform_(self.weight, mode='fan_in')
+            kaiming_uniform(self.weight, mode='fan_in')
             self._parameters['weight'] = self.weight
 
             if self.use_bias:
@@ -1758,8 +1745,8 @@ class GcdConv1d(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if self.auto_pad:
             ih, iw = x.size()[-2:]
             kh, kw = self.kernel_size[-2:]
@@ -1950,7 +1937,7 @@ class GcdConv2d(_ConvNd):
             self.get_padding([input_shape[0] // self.groups, self.groups, input_shape[1], input_shape[2]])
 
             self.weight = Parameter(torch.Tensor(self.num_filters // self.groups, self.input_filters // self.groups, *self.actual_kernel_size))  #
-            init.kaiming_uniform_(self.weight, mode='fan_in')
+            kaiming_uniform(self.weight, mode='fan_in')
 
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(self.num_filters // self.groups))
@@ -1961,8 +1948,8 @@ class GcdConv2d(_ConvNd):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         x = x.view(x.size(0), x.size(1) // self.groups, self.groups, x.size(2), x.size(3))
         x = F.pad(x, (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 0, 0), mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
@@ -2011,8 +1998,8 @@ class Lambda(Layer):
         super(Lambda, self).__init__(name=name)
         self.function = function
 
-    def forward(self, *x):
-        return self.function(*x)
+    def forward(self, x):
+        return self.function(x)
 
 
 class Reshape(Layer):
@@ -2035,7 +2022,7 @@ class Reshape(Layer):
 
         self.register_buffer('target_shape', target_shape)
 
-    def forward(self, *x):
+    def forward(self, x):
         x = enforce_singleton(x)
         shp = self.target_shape
         new_shape = None
@@ -2059,8 +2046,8 @@ class Permute(Layer):
         """
         super(Permute, self).__init__(name=name)
         self.pattern=args
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
 
         return permute(x, self.pattern)
 
@@ -2090,7 +2077,7 @@ class SelfAttention(Layer):
         self.value_conv = nn.Conv2d(in_channels=self.input_filters, out_channels=self.input_filters, kernel_size=1)
         self.to(self.device)
 
-    def forward(self, *x):
+    def forward(self, x):
         """
             inputs :
                 x : input feature maps( B X C X W X H)
@@ -2098,7 +2085,7 @@ class SelfAttention(Layer):
                 out : self attention value + input feature
                 attention: B X N X N (N is Width*Height)
         """
-        x = enforce_singleton(x)
+
         B, C, width, height = x.size()
         proj_query = self.query_conv(x).view(B, -1, width * height).permute(0, 2, 1)  # B X CX(N)
         proj_key = self.key_conv(x).view(B, -1, width * height)  # B X C x (*W*H)
@@ -2176,8 +2163,8 @@ class CoordConv2d(Layer):
 
         return ret
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         ret = self.append_coords(x)
         ret = self.conv(ret)
         return ret
@@ -2195,8 +2182,8 @@ class Upsampling2d(Layer):
         self.mode = mode
         self.align_corners = align_corners
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+    
         if self.mode == 'pixel_shuffle':
             return F.pixel_shuffle(x, int(self.scale_factor))
         elif self.mode == 'nearest':
@@ -2224,8 +2211,8 @@ class Dropout(Layer):
             raise ValueError("dropout probability has to be between 0 and 1, ""but got {}".format(dropout_rate))
         self.dropout_rate = dropout_rate
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+       
         return F.dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2252,8 +2239,8 @@ class AlphaDropout(Layer):
             raise ValueError("dropout probability has to be between 0 and 1, ""but got {}".format(dropout_rate))
         self.dropout_rate = dropout_rate
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         return F.alpha_dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2289,8 +2276,8 @@ class DropBlock2d(Layer):
         self.dropout_rate = dropout_rate
         self.block_size = block_size
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if not self.training or self.dropout_rate == 0:
             return x
         gamma = self.dropout_rate / self.block_size ** 2
