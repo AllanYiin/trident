@@ -20,7 +20,7 @@ from torch._six import container_abcs
 from torch.nn import init
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,  summary
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,  summary,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -33,7 +33,7 @@ from trident.optims.pytorch_trainer import *
 __all__ = ['DeeplabV3_plus','DeeplabV3']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device = get_device()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
 _backend = _session.backend

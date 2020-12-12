@@ -24,7 +24,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList, fix_layer, load
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList, fix_layer, load,get_device
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import xywh2xyxy, xyxy2xywh
 from trident.data.image_common import *
@@ -40,7 +40,7 @@ from trident.models.pytorch_ssd import *
 __all__ = ['RfbNet', 'generate_priors']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device = get_device()
 _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
 

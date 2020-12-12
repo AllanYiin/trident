@@ -21,7 +21,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, load
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, load,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -34,7 +34,7 @@ from trident.optims.pytorch_trainer import *
 __all__ = ['se_bottleneck', 'SE_ResNet','SE_ResNet50','SE_ResNet101','SE_ResNet152']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device = get_device()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
 

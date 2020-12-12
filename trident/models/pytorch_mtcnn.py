@@ -26,7 +26,7 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine, load
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine, load,get_device
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import clip_boxes_to_image, nms
 from trident.data.image_common import *
@@ -42,7 +42,7 @@ from trident.optims.pytorch_trainer import ImageDetectionModel
 __all__ = ['Pnet','Rnet','Onet','Mtcnn']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device = get_device()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
 

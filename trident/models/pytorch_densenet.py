@@ -22,7 +22,7 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer,load
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer,load,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -35,7 +35,7 @@ from trident.optims.pytorch_trainer import *
 __all__ = ['DenseNet','DenseNet121','DenseNet161','DenseNet169','DenseNet201','DenseNetFcn']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device = get_device()
 _epsilon=_session.epsilon
 _trident_dir=_session.trident_dir
 
