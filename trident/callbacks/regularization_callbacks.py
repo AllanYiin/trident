@@ -22,7 +22,7 @@ elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like
     from trident.optims.tensorflow_losses import CrossEntropyLoss
 
-working_direcory=get_session().working_direcory
+working_directory=get_session().working_directory
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']
 
 class RegularizationCallbacksBase(CallbackBase):
@@ -51,18 +51,19 @@ class MixupCallback(RegularizationCallbacksBase):
         self.loss_criterion=loss_criterion()
         self.loss_weight=loss_weight
         if save_path is None:
-            self.save_path = os.path.join(working_direcory, 'Results')
+            self.save_path = os.path.join(working_directory, 'Results')
         else:
             self.save_path = save_path
         make_dir_if_need(self.save_path)
     def on_loss_calculation_end(self, training_context):
         """Returns mixed inputs, pairs of targets, and lambda"""
+        model = training_context['current_model']
         train_data = training_context['train_data']
         x=None
         y=None
-        x = train_data.value_list[0].copy().detach()  # input
-        y = train_data.value_list[1].copy().detach()  # label
-        model=training_context['current_model']
+        x = train_data.value_list[0].copy().detach().to(model.device)  # input
+        y = train_data.value_list[1].copy().detach().to(model.device)   # label
+
 
         lam=builtins.min(builtins.max(np.random.beta(self.alpha,self.alpha),0.3), 0.7)
 
@@ -76,6 +77,10 @@ class MixupCallback(RegularizationCallbacksBase):
             pred = model(to_tensor(mixed_x, requires_grad=True))
             y_a, y_b = y, y[index]
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+            training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+            if training_context['is_collect_data']:
+                training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
         elif get_backend()=='tensorflow':
             x1 = tf.gather(x, index,axis=0)
             y1 = tf.gather(y, index,axis=0)
@@ -85,9 +90,9 @@ class MixupCallback(RegularizationCallbacksBase):
 
             this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
 
-        training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
-        if training_context['is_collect_data']:
-            training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+            training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
+            if training_context['is_collect_data']:
+                training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         if training_context['current_batch']==0:
             for item in mixed_x:
@@ -99,6 +104,10 @@ class MixupCallback(RegularizationCallbacksBase):
                     item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+        mixed_x=None
+        x=None
+        y=None
+
 
 
 class CutMixCallback(RegularizationCallbacksBase):
@@ -120,7 +129,7 @@ class CutMixCallback(RegularizationCallbacksBase):
         self.loss_criterion=loss_criterion()
         self.loss_weight=loss_weight
         if save_path is None:
-            self.save_path=os.path.join(working_direcory,'Results')
+            self.save_path=os.path.join(working_directory,'Results')
         else:
             self.save_path =save_path
         make_dir_if_need(self.save_path)
@@ -155,13 +164,14 @@ class CutMixCallback(RegularizationCallbacksBase):
 
     def on_loss_calculation_end(self, training_context):
         """Returns mixed inputs, pairs of targets, and lambda"""
+        model = training_context['current_model']
         train_data = training_context['train_data']
         x = None
         y = None
-        x = train_data.value_list[0].copy().detach()   # input
-        y = train_data.value_list[1].copy().detach()   # label
+        x = train_data.value_list[0].copy().detach().to(model.device)    # input
+        y = train_data.value_list[1].copy().detach().to(model.device)    # label
 
-        model = training_context['current_model']
+
 
         lam=builtins.min(builtins.max(np.random.beta(self.alpha,self.alpha),0.1), 0.4)
 
@@ -178,6 +188,9 @@ class CutMixCallback(RegularizationCallbacksBase):
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
             pred = model(to_tensor(x, requires_grad=True))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+            training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
+            if training_context['is_collect_data']:
+                training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         elif get_backend() == 'tensorflow':
 
@@ -196,7 +209,9 @@ class CutMixCallback(RegularizationCallbacksBase):
             loss1=self.loss_criterion(pred, y_a)
             loss2=self.loss_criterion(pred, y_b)
             this_loss = lam *loss1  + (1 - lam) * loss2
-
+            training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+            if training_context['is_collect_data']:
+                training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         if training_context['current_batch'] == 0:
             if self.save_path is None and not is_in_colab():
@@ -210,12 +225,11 @@ class CutMixCallback(RegularizationCallbacksBase):
                     item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path,'cutmix_{0}.jpg'.format(get_time_suffix())))
+        x=None
+        y=None
 
 
 
-        training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
-        if training_context['is_collect_data']:
-            training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
 
 
