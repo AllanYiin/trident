@@ -10,7 +10,7 @@ from collections import Sized, Iterable
 from enum import Enum
 from functools import wraps
 from typing import Tuple, List, Optional
-
+import gc
 import numpy as np
 import torch
 import torch.nn as nn
@@ -22,6 +22,36 @@ version = torch.__version__
 pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
 
+
+def _get_device():
+    """get current device
+
+    Returns: device string ('cpu', 'cuda)
+
+    """
+    if get_session().device is None:
+        _set_device("cuda" if torch.cuda.is_available() else "cpu")
+    return get_session().device
+
+def _set_device(device='cpu'):
+    device = device.lower().replace('gpu', 'cuda')
+    if device == 'cuda' and not torch.cuda.is_available():
+        raise ValueError('Gpu is not available...')
+    try:
+        set_session('device', device)
+        if device == 'cpu':
+            gcitems = gc.get_objects()
+            for i in range(len(gcitems)):
+                obj = gcitems[i]
+                try:
+                    if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                        obj.to(device)
+                    elif isinstance(obj, nn.Module):
+                        obj.to(device)
+                except Exception:
+                    pass
+    except Exception as e:
+        print(e)
 
 __all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
@@ -206,11 +236,11 @@ def to_numpy(*x) -> np.ndarray:
             x = x.data
         return x.clone().cpu().detach().numpy()
     elif isinstance(x, list):
-        return np.array(x)
+        return np.asarray(x)
     elif isinstance(x, tuple):
-        return np.array(list(x))
+        return np.asarray(list(x))
     elif isinstance(x,numbers.Number):
-        return np.array([x])
+        return np.asarray([x])
     else:
         raise ValueError("Unsupported type")
 
@@ -250,9 +280,10 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         else:
             device = get_session_value('device')
     else:
-        device = get_session_value('device')
+        pass
     if isinstance(x, Tensor):
-        x = x.to(device)
+        if x.device!= device:
+            x = x.to(device)
         if dtype is None:
             dtype = x.dtype
         if dtype is not None:
@@ -265,19 +296,19 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         if isinstance(x, int):
             if dtype is None:
                 dtype = torch.int64
-            t= torch.tensor([x]).int().to(get_session_value('device')) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(get_session_value('device'))
+            t= torch.tensor([x]).int().to(device) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(get_session_value('device'))
             if dtype is not None:
                 t=cast(t,dtype)
-            return t.to(get_session_value('device'))
+            return t
         elif isinstance(x, float):
             if dtype is None:
                 dtype = torch.float32
-            return torch.tensor([x],dtype=dtype).to(get_session_value('device')) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
+            return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
         elif isinstance(x, (list, tuple)):
             if all([isinstance(item,numbers.Integral) for item in x]):
                 if dtype is None:
                     dtype = torch.int64
-                x = torch.tensor(x).int().to(get_session_value('device')) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
+                x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
             else:
                 if dtype is None:
                     dtype = torch.float32
@@ -286,21 +317,20 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
             return x
         elif isinstance(x, np.ndarray):
             npdtype = x.dtype
-            x = torch.tensor(x)
+            x = torch.tensor(x,device=device)
             if 'int' in str(npdtype):
                 x = x.type(torch.int64)
             else:
                 if dtype is None:
                     dtype = torch.float32
                 x = x.type(dtype)
-            x = x.to(device)
             if requires_grad == False:
                 x.requires_grad = False
             elif requires_grad == True:
                 x.requires_grad = True
-            return x.to(device)
+            return x
         else:
-            return x.to(device)
+            return x
 
 def copy(x: Tensor):
     return x.clone()
@@ -347,9 +377,9 @@ def int_shape(x: Tensor):
 
 def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
     if need_exclude_batch_axis:
-        return to_tensor(to_numpy(x.shape)[1:],requires_grad=False).int()
+        return to_tensor(to_numpy(int_shape(x))[1:],device=_get_device(),requires_grad=False).int()
     else:
-        return to_tensor(to_numpy(x.shape),requires_grad=False).int()
+        return to_tensor(to_numpy(int_shape(x)),device=_get_device(),requires_grad=False).int()
 
 def is_sparse(x):
     """ Check whether the tensor is sparse
@@ -2081,6 +2111,7 @@ def leaky_relu(x, slope=0.2):
         f(x) = x if x >= 0
         ```
     Args:
+        slope ():
         x (Tensor): input tensor.
 
     Returns:
@@ -2101,6 +2132,7 @@ def leaky_relu6(x, slope=0.2):
           ```
 
     Args:
+        slope ():
         x (Tensor): input tensor.
 
     Returns:
@@ -3383,7 +3415,7 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
     information.
 
     Args:
-      a: A 1-D integer Tensor or Python array. The shape of the output tensor.
+      x: A 1-D integer Tensor or Python array. The shape of the output tensor.
       mean: A Tensor or Python value of type `dtype`, broadcastable with `stddev`.
         The mean of the normal distribution.
       std: A Tensor or Python value of type `dtype`, broadcastable with `mean`.
@@ -3909,6 +3941,7 @@ def warp_grid(dst_homo_src: Tensor, dsize) -> Tensor:
     r"""Computes the grid to warp the coordinates grid by an homography.
 
     Args:
+        dsize ():
         dst_homo_src (Tensor): Homography or homographies (stacked) to
                           transform all points in the grid. Shape of the
                           homography has to be :math:`(N, 3, 3)`.
@@ -4110,6 +4143,7 @@ _FUN_NAMES = [
     # source_fun, target_fun
     ('to_numpy', to_numpy),
     ('copy', copy),
+    ('numel', numel),
     ('ndim', ndim),
     ('int_shape', int_shape),
     ('cast', cast),
