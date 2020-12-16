@@ -31,7 +31,7 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 
-__all__ = ['basic_block','bottleneck', 'ResNet','ResNet50','ResNet101','ResNet152']
+__all__ = ['basic_block','bottleneck', 'ResNet','ResNet18','ResNet50','ResNet101','ResNet152']
 
 _session = get_session()
 _device =get_device()
@@ -173,19 +173,20 @@ def ResNet18(include_top=True,
         recovery_model.name = 'resnet18'
         recovery_model.eval()
         recovery_model.to(_device)
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-        else:
-            if classes != 1000:
-                resnet18.class_names = []
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
-
         resnet18.model = recovery_model
+    if include_top == False:
+        resnet18.model.remove_at(-1)
+        resnet18.model.remove_at(-1)
+        resnet18.model.remove_at(-1)
+        resnet18.class_names = []
+    else:
+        if classes != 1000:
+            resnet18.class_names = []
+            resnet18.model.remove_at(-1)
+            resnet18.model.remove_at(-1)
+            resnet18.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+            resnet18.model.add_module('softmax', SoftMax())
+
     return resnet18
 
 def ResNet50(include_top=True,
@@ -209,20 +210,19 @@ def ResNet50(include_top=True,
         recovery_model.name = 'resnet50'
         recovery_model.eval()
         recovery_model.to(_device)
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+        resnet50.model = recovery_model
+    if include_top == False:
+        resnet50.model.remove_at(-1)
+        resnet50.model.remove_at(-1)
+        resnet50.model.remove_at(-1)
+        resnet50.class_names = []
+    else:
+        if classes != 1000:
             resnet50.class_names = []
-        else:
-            if classes!=1000:
-                resnet50.class_names = []
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
-
-        resnet50.model=recovery_model
+            resnet50.model.remove_at(-1)
+            resnet50.model.remove_at(-1)
+            resnet50.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+            resnet50.model.add_module('softmax', SoftMax())
     return resnet50
 
 def ResNet101(include_top=True,
@@ -246,19 +246,20 @@ def ResNet101(include_top=True,
         recovery_model.name = 'resnet101'
         recovery_model.eval()
         recovery_model.to(_device)
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+        resnet101.model = recovery_model
+    if include_top == False:
+        resnet101.model.remove_at(-1)
+        resnet101.model.remove_at(-1)
+        resnet101.model.remove_at(-1)
+        resnet101.class_names = []
+    else:
+        if classes != 1000:
             resnet101.class_names = []
-        else:
-            if classes != 1000:
-                resnet101.class_names = []
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
-        resnet101.model=recovery_model
+            resnet101.model.remove_at(-1)
+            resnet101.model.remove_at(-1)
+            resnet101.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+            resnet101.model.add_module('softmax', SoftMax())
+
     return resnet101
 
 

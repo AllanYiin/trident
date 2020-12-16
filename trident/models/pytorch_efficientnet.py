@@ -239,24 +239,21 @@ def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
-
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            effb0.class_names = []
-        else:
-            if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
-                effb0.class_names = []
-
         recovery_model.to(_device)
         effb0.model = recovery_model
-
+    if include_top == False:
+        effb0.model .remove_at(-1)
+        effb0.model .remove_at(-1)
+        effb0.model .remove_at(-1)
+        effb0.model .remove_at(-1)
+        effb0.class_names = []
+    else:
+        if classes != 1000:
+            effb0.model .remove_at(-1)
+            effb0.model .remove_at(-1)
+            effb0.model .add_module('fc', Dense(classes, activation=None, name='fc'))
+            effb0.model .add_module('softmax', SoftMax())
+            effb0.class_names = []
     return effb0
 
 
@@ -275,20 +272,21 @@ def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            effb1.class_names = []
-        else:
-            if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
-                effb1.class_names = []
+            recovery_model.to(_device)
         effb1.model = recovery_model
+    if include_top == False:
+        effb1.model.remove_at(-1)
+        effb1.model.remove_at(-1)
+        effb1.model.remove_at(-1)
+        effb1.model.remove_at(-1)
+        effb1.class_names = []
+    else:
+        if classes != 1000:
+            effb1.model.remove_at(-1)
+            effb1.model.remove_at(-1)
+            effb1.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+            effb1.model.add_module('softmax', SoftMax())
+            effb1.class_names = []
     return effb1
 
 
@@ -306,21 +304,21 @@ def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
+        effb2.model = recovery_model
         if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+            effb2.model.remove_at(-1)
+            effb2.model.remove_at(-1)
+            effb2.model.remove_at(-1)
+            effb2.model.remove_at(-1)
             effb2.class_names = []
         else:
             if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
+                effb2.model.remove_at(-1)
+                effb2.model.remove_at(-1)
+                effb2.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                effb2.model.add_module('softmax', SoftMax())
                 effb2.class_names = []
-        effb2.model = recovery_model
-    return effb2
+        return effb2
 
 
 def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 300, 300), classes=1000, **kwargs):
@@ -337,21 +335,21 @@ def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
+        effb3.model = recovery_model
         if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+            effb3.model.remove_at(-1)
+            effb3.model.remove_at(-1)
+            effb3.model.remove_at(-1)
+            effb3.model.remove_at(-1)
             effb3.class_names = []
         else:
             if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
+                effb3.model.remove_at(-1)
+                effb3.model.remove_at(-1)
+                effb3.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                effb3.model.add_module('softmax', SoftMax())
                 effb3.class_names = []
-        effb3.model = recovery_model
-    return effb3
+        return effb3
 
 
 def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 380, 380), classes=1000, **kwargs):
@@ -368,22 +366,21 @@ def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
+        effb4.model = recovery_model
         if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+            effb4.model.remove_at(-1)
+            effb4.model.remove_at(-1)
+            effb4.model.remove_at(-1)
+            effb4.model.remove_at(-1)
             effb4.class_names = []
-
         else:
             if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
+                effb4.model.remove_at(-1)
+                effb4.model.remove_at(-1)
+                effb4.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                effb4.model.add_module('softmax', SoftMax())
                 effb4.class_names = []
-        effb4.model = recovery_model
-    return effb4
+        return effb4
 
 
 def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 456, 456), classes=1000, **kwargs):
@@ -400,21 +397,21 @@ def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
+        effb5.model = recovery_model
         if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+            effb5.model.remove_at(-1)
+            effb5.model.remove_at(-1)
+            effb5.model.remove_at(-1)
+            effb5.model.remove_at(-1)
             effb5.class_names = []
         else:
             if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
+                effb5.model.remove_at(-1)
+                effb5.model.remove_at(-1)
+                effb5.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                effb5.model.add_module('softmax', SoftMax())
                 effb5.class_names = []
-        effb5.model = recovery_model
-    return effb5
+        return effb5
 
 
 def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 528, 528), classes=1000, **kwargs):
@@ -432,21 +429,21 @@ def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
+        effb6.model = recovery_model
         if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+            effb6.model.remove_at(-1)
+            effb6.model.remove_at(-1)
+            effb6.model.remove_at(-1)
+            effb6.model.remove_at(-1)
             effb6.class_names = []
         else:
             if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
+                effb6.model.remove_at(-1)
+                effb6.model.remove_at(-1)
+                effb6.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                effb6.model.add_module('softmax', SoftMax())
                 effb6.class_names = []
-        effb6.model = recovery_model
-    return effb6
+        return effb6
 
 
 def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 600, 600), classes=1000, **kwargs):
@@ -463,18 +460,18 @@ def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,inpu
         if freeze_features:
             recovery_model.trainable=False
             recovery_model.fc.trainable = True
+        effb7.model = recovery_model
         if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
+            effb7.model.remove_at(-1)
+            effb7.model.remove_at(-1)
+            effb7.model.remove_at(-1)
+            effb7.model.remove_at(-1)
             effb7.class_names = []
         else:
             if classes != 1000:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
+                effb7.model.remove_at(-1)
+                effb7.model.remove_at(-1)
+                effb7.model.add_module('fc', Dense(classes, activation=None, name='fc'))
+                effb7.model.add_module('softmax', SoftMax())
                 effb7.class_names = []
-        effb7.model = recovery_model
-    return effb7
+        return effb7
