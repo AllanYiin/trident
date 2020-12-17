@@ -23,7 +23,7 @@ from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_file_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, LeakyRelu
@@ -36,7 +36,7 @@ from trident.optims.pytorch_trainer import *
 __all__ = ['gan_builder', 'UpsampleMode', 'BuildBlockMode']
 
 _session = get_session()
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device =get_device()
 _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
 

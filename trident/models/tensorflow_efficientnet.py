@@ -252,17 +252,16 @@ def EfficientNetB1(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb1.model=recovery_model
-    return effb1
+        effb1.model = recovery_model
+        if include_top == False:
+            effb1.model.remove_at(-1)
+            effb1.model.remove_at(-1)
+            effb1.model.remove_at(-1)
+        else:
+            if classes != 1000:
+                new_fc = Dense(classes, activation=None, name='fc')
+                effb1.model.fc = new_fc
+        return effb1
 
 
 def EfficientNetB2(include_top=True,
@@ -285,17 +284,16 @@ def EfficientNetB2(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb2.model=recovery_model
-    return effb2
+        effb2.model = recovery_model
+        if include_top == False:
+            effb2.model.remove_at(-1)
+            effb2.model.remove_at(-1)
+            effb2.model.remove_at(-1)
+        else:
+            if classes != 1000:
+                new_fc = Dense(classes, activation=None, name='fc')
+                effb2.model.fc = new_fc
+        return effb2
 
 
 def EfficientNetB3(include_top=True,
@@ -318,18 +316,16 @@ def EfficientNetB3(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb3.model=recovery_model
-    return effb3
+        effb3.model = recovery_model
+        if include_top == False:
+            effb3.model.remove_at(-1)
+            effb3.model.remove_at(-1)
+            effb3.model.remove_at(-1)
+        else:
+            if classes != 1000:
+                new_fc = Dense(classes, activation=None, name='fc')
+                effb3.model.fc = new_fc
+        return effb3
 
 
 def EfficientNetB4(include_top=True,
@@ -352,18 +348,16 @@ def EfficientNetB4(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb4.model=recovery_model
-    return effb4
+        effb4.model = recovery_model
+        if include_top == False:
+            effb4.model.remove_at(-1)
+            effb4.model.remove_at(-1)
+            effb4.model.remove_at(-1)
+        else:
+            if classes != 1000:
+                new_fc = Dense(classes, activation=None, name='fc')
+                effb4.model.fc = new_fc
+        return effb4
 
 
 def EfficientNetB5(include_top=True,
@@ -399,18 +393,16 @@ def EfficientNetB5(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb5.model=recovery_model
-    return effb5
+        effb5.model = recovery_model
+        if include_top == False:
+            effb5.model.remove_at(-1)
+            effb5.model.remove_at(-1)
+            effb5.model.remove_at(-1)
+        else:
+            if classes != 1000:
+                new_fc = Dense(classes, activation=None, name='fc')
+                effb5.model.fc = new_fc
+        return effb5
 
 
 def EfficientNetB6(include_top=True,
@@ -433,18 +425,17 @@ def EfficientNetB6(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb6.model=recovery_model
+        effb6.model = recovery_model
+    if include_top == False:
+        effb6.model.remove_at(-1)
+        effb6.model.remove_at(-1)
+        effb6.model.remove_at(-1)
+    else:
+        if classes != 1000:
+            new_fc = Dense(classes, activation=None, name='fc')
+            effb6.model.fc = new_fc
     return effb6
+
 
 
 def EfficientNetB7(include_top=True,
@@ -467,16 +458,13 @@ def EfficientNetB7(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb7.model=recovery_model
+        effb7.model=recovery_model
+    if include_top==False:
+        effb7.model.remove_at(-1)
+        effb7.model.remove_at(-1)
+        effb7.model.remove_at(-1)
+    else:
+        if classes!=1000:
+            new_fc = Dense(classes, activation=None, name='fc')
+            effb7.model.fc=new_fc
     return effb7

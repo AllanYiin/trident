@@ -166,22 +166,21 @@ def ResNet50(include_top=True,
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
+        resnet50.model = recovery_model
+    if include_top==False:
+        resnet50.model .remove_at(-1)
+        resnet50.model .remove_at(-1)
+        resnet50.model .remove_at(-1)
+    else:
+        if classes!=1000:
+            resnet50.model .remove_at(-1)
+            resnet50.model .remove_at(-1)
+            resnet50.model .add_module('fc', Dense(classes, activation=None, name='fc'))
+            resnet50.model .add_module('softmax', SoftMax(name='softmax'))
 
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    recovery_model.remove_at(-1)
-                    recovery_model.remove_at(-1)
-                    recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
-
-        recovery_model.signature=None
-        if recovery_model.signature != recovery_model._signature:
-            recovery_model.signature = recovery_model._signature
-        resnet50.model=recovery_model
+        resnet50.model .signature=None
+        if resnet50.model .signature != recovery_model._signature:
+            resnet50.model .signature = recovery_model._signature
         if resnet50.signature!=resnet50.model.signature:
             resnet50.signature = resnet50.model.signature
     return resnet50
@@ -204,29 +203,30 @@ def ResNet101(include_top=True,
         recovery_model = fix_layer(recovery_model)
         recovery_model.eval()
         recovery_model.to(get_device())
+
         with tf.device(get_device()):
             if freeze_features:
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
-
-            if include_top == False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes != 1000:
-                    recovery_model.remove_at(-1)
-                    recovery_model.remove_at(-1)
-                    recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
-
-        recovery_model.signature = None
-        if recovery_model.signature != recovery_model._signature:
-            recovery_model.signature = recovery_model._signature
         resnet101.model = recovery_model
+        if include_top == False:
+            resnet101.model .remove_at(-1)
+            resnet101.model .remove_at(-1)
+            resnet101.model .remove_at(-1)
+        else:
+            if classes != 1000:
+                resnet101.model .remove_at(-1)
+                resnet101.model .remove_at(-1)
+                resnet101.model .add_module('fc', Dense(classes, activation=None, name='fc'))
+                resnet101.model .add_module('softmax', SoftMax(name='softmax'))
+
+        resnet101.model .signature = None
+        if resnet101.model .signature != recovery_model._signature:
+            resnet101.model .signature = recovery_model._signature
+
         if resnet101.signature != resnet101.model.signature:
             resnet101.signature = resnet101.model.signature
-    return resnet101
+        return resnet101
 
 
 def ResNet152(include_top=True,
@@ -252,22 +252,22 @@ def ResNet152(include_top=True,
                 recovery_model.trainable = False
                 recovery_model.fc.trainable = True
 
+        resnet152.model = recovery_model
+        if include_top == False:
+            resnet152.model .remove_at(-1)
+            resnet152.model .remove_at(-1)
+            resnet152.model .remove_at(-1)
+        else:
+            if classes != 1000:
+                resnet152.model .remove_at(-1)
+                resnet152.model .remove_at(-1)
+                resnet152.model .add_module('fc', Dense(classes, activation=None, name='fc'))
+                resnet152.model .add_module('softmax', SoftMax(name='softmax'))
 
-            if include_top == False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes != 1000:
-                    recovery_model.remove_at(-1)
-                    recovery_model.remove_at(-1)
-                    recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
+        resnet152.model .signature = None
+        if resnet152.model .signature != recovery_model._signature:
+            resnet152.model .signature = recovery_model._signature
 
-        recovery_model.signature = None
-        if recovery_model.signature != recovery_model._signature:
-            recovery_model.signature = recovery_model._signature
-        resnet152.model=recovery_model
         if resnet152.signature != resnet152.model.signature:
             resnet152.signature = resnet152.model.signature
 

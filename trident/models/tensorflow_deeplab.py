@@ -79,8 +79,7 @@ class ASPP(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         x=self.convs(x)
         x=self.project(x)
         return x
@@ -118,8 +117,8 @@ class _DeeplabV3_plus(Layer):
         self.num_filters=num_filters
         self.classes=classes
         self.atrous_rates=atrous_rates
-        self.backbond1=Sequential(backbond[:low_level_idx])
-        self.backbond2 = Sequential(backbond[low_level_idx:high_level_idx])
+        self.backbond1=Sequential(*backbond[:low_level_idx])
+        self.backbond2 = Sequential(*backbond[low_level_idx:high_level_idx])
         self.aspp=ASPP(atrous_rates=self.atrous_rates,num_filters=self.num_filters)
         self.low_level_conv=Conv2d_Block((1,1),num_filters=int(48*self.num_filters/256),strides=1,use_bias=False,activation='leaky_relu',normalization='batch')
         self.decoder=Sequential(
@@ -129,8 +128,7 @@ class _DeeplabV3_plus(Layer):
 
         )
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
         low_level_feature=self.backbond1(x)
         high_level_feature = self.backbond2(low_level_feature)
         x=self.aspp(high_level_feature)
