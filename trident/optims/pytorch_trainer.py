@@ -47,7 +47,7 @@ from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 __all__ = [ 'Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel','FaceRecognitionModel']
 _session = get_session()
-working_direcory=_session.working_direcory
+working_directory=_session.working_directory
 _, term_width = get_terminal_size()
 term_width = int(term_width)
 TOTAL_BAR_LENGTH = 65.
@@ -86,8 +86,12 @@ def make_deterministic(seed: int = 19260817, cudnn_deterministic: bool = False):
 
 
 class Model(ModelBase):
-    def __init__(self, inputs=None,  input_shape=None,output=None):
-        super(Model, self).__init__(inputs, input_shape,output)
+    def __init__(self, inputs=None,  input_shape=None,output=None, name=None):
+        super(Model, self).__init__(inputs, input_shape,output,name)
+        self.batch_index = 0
+        self.filter_index = 1
+        self._enable_tensorboard=False
+
 
 
     def _initial_graph(self, inputs=None, input_shape=None,output=None,initializer=None):
@@ -904,13 +908,18 @@ class Model(ModelBase):
                     para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
 
             sys.stderr.write(self._get_name() + '  nan detected!!\n')
-
-        save_path=self.training_context['save_path']
+        if save_path is  not None:
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filename = self.name
+            self.training_context['save_path']=save_path
+        else:
+            save_path=self.training_context['save_path']
 
         if isinstance(self._model,nn.Module):
-            folder,filename,ext=split_path(save_path)
-            if filename=='':
-                filename=self.name
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filename = self.name
 
             ext='.pth.tar_'
             save_path = os.path.join(folder, filename + ext)
@@ -918,7 +927,7 @@ class Model(ModelBase):
             save_path = sanitize_path(save_path)
             device=get_device()
             self._model.eval()
-
+            self._model.cpu()
             torch.save({
                 'state_dict': self._model.state_dict(),
                 'backend':'pytorch',
@@ -928,18 +937,17 @@ class Model(ModelBase):
             }, save_path)
 
 
-            self._model.train()
-            shutil.copy(save_path, save_path.replace('.pth.tar_','.pth.tar'))
-            os.remove(save_path)
-            save_path=save_path.replace('pth.tar','pth')
-            save(self._model,save_path)
-            shutil.copy(save_path, save_path.replace('.pth_', '.pth'))
-            os.remove(save_path)
 
+            shutil.copy2(save_path, save_path.replace('.pth.tar_','.pth.tar'))
+            os.remove(save_path)
+            save_path=save_path.replace('pth.tar_','pth_')
+            save(self._model,save_path)
+            shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
+            os.remove(save_path)
+            self._model.train()
+            self._model.to(device)
 
         elif isinstance(self._model,torch.Tensor):
-
-
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -950,7 +958,7 @@ class Model(ModelBase):
             save_path = sanitize_path(save_path)
             numpy_model=to_numpy(self._model)
             np.save(save_path,numpy_model)
-            shutil.copy(save_path, save_path.replace('.npy_', '.npy'))
+            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
             os.remove(save_path)
             sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
         else:
@@ -1009,7 +1017,16 @@ class Model(ModelBase):
 
     def load_model(self, file_path):
         print('Loading pretrained model from {}'.format(file_path))
-        state_dict = torch.load(file_path,  map_location=torch.device(get_device()))
+        folder, filename, ext = split_path(file_path)
+        if filename == '':
+            filename = self.name
+
+        ext = '.pth.tar'
+        save_path = os.path.join(folder, filename + ext)
+        if not os.path.exists(save_path):
+            save_path = os.path.join(working_directory, filename + ext)
+
+        state_dict = torch.load(save_path,  map_location=torch.device(get_device()))
         pretrained_dict=None
         optimizer_dict=None
         if "state_dict" in state_dict.keys():
@@ -1182,6 +1199,32 @@ class Model(ModelBase):
     def cuda(self):
         if isinstance(self._model, (nn.Module, Layer)):
             self._model.to("cuda")
+
+    @property
+    def enable_tensorboard(self):
+        return self._enable_tensorboard
+
+    @enable_tensorboard.setter
+    def enable_tensorboard(self, value):
+        self._enable_tensorboard = value
+        if value == True:
+            if get_backend() == 'pytorch':
+                try:
+                    from trident.loggers.pytorch_tensorboard import SummaryWriter
+                    self.training_context['summary_writer'] = SummaryWriter(os.path.join(working_directory, 'Logs'))
+
+                except Exception as e:
+                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    print(e)
+                    PrintException()
+            elif get_backend() == 'tensorflow':
+                try:
+                    from trident.loggers.tensorflow_tensorboard import SummaryWriter
+                    self.training_context['summary_writer'] = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                except Exception as e:
+                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    print(e)
+                    PrintException()
 
 
 class ImageClassificationModel(Model):
@@ -1398,6 +1441,8 @@ class FaceRecognitionModel(Model):
 
         else:
             raise ValueError('the model is not built yet.')
+
+
 
 
 

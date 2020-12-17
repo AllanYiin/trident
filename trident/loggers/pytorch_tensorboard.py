@@ -1,11 +1,13 @@
 import os
 from warnings import warn
-
+import numpy as np
 import torch
 import os
 import six
 import time
 import torch
+import threading
+
 
 from tensorboard.compat import tf
 from tensorboard.compat.proto.event_pb2 import SessionLog
@@ -13,18 +15,105 @@ from tensorboard.compat.proto.event_pb2 import Event
 from tensorboard.compat.proto import event_pb2
 from tensorboard.plugins.projector.projector_config_pb2 import ProjectorConfig
 from tensorboard.summary.writer.event_file_writer import EventFileWriter
+from tensorboard.compat.proto.graph_pb2 import GraphDef
+from tensorboard.compat.proto.node_def_pb2 import NodeDef
+from tensorboard.compat.proto.versions_pb2 import VersionDef
+from tensorboard.compat.proto.attr_value_pb2 import AttrValue
+from tensorboard.compat.proto.tensor_shape_pb2 import TensorShapeProto
 
-from torch.utils.tensorboard._onnx_graph  import load_onnx_graph
+
 
 
 from torch.utils.tensorboard._pytorch_graph import graph
-from torch.utils.tensorboard._utils import figure_to_image
+
 
 from torch.utils.tensorboard.summary import (
     scalar, histogram, histogram_raw, image, hparams
 )
+
 from trident.backend.pytorch_ops import to_numpy
 
+
+def figure_to_image(figures, close=True):
+    """Render matplotlib figure to numpy format.
+
+    Note that this requires the ``matplotlib`` package.
+
+    Args:
+        figures (matplotlib.pyplot.figure) or list of figures: figure or a list of figures
+        close (bool): Flag to automatically close the figure
+
+    Returns:
+        numpy.array: image in [CHW] order
+    """
+    import matplotlib.pyplot as plt
+    import matplotlib.backends.backend_agg as plt_backend_agg
+
+    def render_to_rgb(figure):
+        canvas = plt_backend_agg.FigureCanvasAgg(figure)
+        canvas.draw()
+        data = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
+        w, h = figure.canvas.get_width_height()
+        image_hwc = data.reshape([h, w, 4])[:, :, 0:3]
+        if close:
+            plt.close(figure)
+        return image_hwc
+
+    if isinstance(figures, list):
+        images = [render_to_rgb(figure) for figure in figures]
+        return np.stack(images)
+    else:
+        image = render_to_rgb(figures)
+        return image
+
+
+def load_onnx_graph(fname):
+    import onnx
+    m = onnx.load(fname)
+    g = m.graph
+    return parse(g)
+
+
+def parse(graph):
+    nodes_proto = []
+    nodes = []
+    import itertools
+    for node in itertools.chain(graph.input, graph.output):
+        nodes_proto.append(node)
+
+    for node in nodes_proto:
+        #print(node.name)
+        shapeproto = TensorShapeProto(
+            dim=[TensorShapeProto.Dim(size=d.dim_value) for d in node.type.tensor_type.shape.dim])
+        nodes.append(NodeDef(
+            name=node.name.encode(encoding='utf_8'),
+            op='Variable',
+            input=[],
+            attr={
+                'dtype': AttrValue(type=node.type.tensor_type.elem_type),
+                'shape': AttrValue(shape=shapeproto),
+            })
+        )
+
+    for node in graph.node:
+        _attr = []
+        for s in node.attribute:
+            _attr.append(' = '.join([str(f[1]) for f in s.ListFields()]))
+        attr = ', '.join(_attr).encode(encoding='utf_8')
+        #print(node.output[0])
+        nodes.append(NodeDef(
+            name=node.output[0].encode(encoding='utf_8'),
+            op=node.op_type,
+            input=node.input,
+            attr={'parameters': AttrValue(s=attr)},
+        ))
+
+    # two pass token replacement, appends opname to object id
+    mapping = {}
+    for node in nodes:
+        mapping[node.name] = node.op + '_' + node.name
+
+    return GraphDef(node=nodes, versions=VersionDef(producer=22))
 
 class FileWriter(object):
     """Writes protocol buffers to event files to be consumed by TensorBoard.
@@ -157,90 +246,92 @@ class SummaryWriter(object):
     to add data to the file directly from the training loop, without slowing down
     training.
     """
-    __instance = None
+    __singleton_lock = threading.Lock()
+    __singleton_instance = None
 
-    @staticmethod
-    def getInstance():
-        """ Static access method. """
-        if SummaryWriter.__instance == None:
-            SummaryWriter()
-        return SummaryWriter.__instance
+    # define the classmethod
+    @classmethod
+    def instance(cls):
+
+        # check for the singleton instance
+        if not cls.__singleton_instance:
+            with cls.__singleton_lock:
+                if not cls.__singleton_instance:
+                    cls.__singleton_instance = cls()
+
+                    # return the singleton instance
+        return cls.__singleton_instance
     def __init__(self, log_dir=None, comment='', purge_step=None, max_queue=10,
-                 flush_secs=120, filename_suffix=''):
-        """ Virtually private constructor. """
-        if SummaryWriter.__instance != None:
-            raise Exception("This class is a singleton!")
-        else:
-            SummaryWriter.__instance = self
-        """Creates a `SummaryWriter` that will write out events and summaries
-        to the event file.
+                     flush_secs=120, filename_suffix=''):
+            """Creates a `SummaryWriter` that will write out events and summaries
+            to the event file.
 
-        Args:
-            log_dir (string): Save directory location. Default is
-              runs/**CURRENT_DATETIME_HOSTNAME**, which changes after each run.
-              Use hierarchical folder structure to compare
-              between runs easily. e.g. pass in 'runs/exp1', 'runs/exp2', etc.
-              for each new experiment to compare across them.
-            comment (string): Comment log_dir suffix appended to the default
-              ``log_dir``. If ``log_dir`` is assigned, this argument has no effect.
-            purge_step (int):
-              When logging crashes at step :math:`T+X` and restarts at step :math:`T`,
-              any events whose global_step larger or equal to :math:`T` will be
-              purged and hidden from TensorBoard.
-              Note that crashed and resumed experiments should have the same ``log_dir``.
-            max_queue (int): Size of the queue for pending events and
-              summaries before one of the 'add' calls forces a flush to disk.
-              Default is ten items.
-            flush_secs (int): How often, in seconds, to flush the
-              pending events and summaries to disk. Default is every two minutes.
-            filename_suffix (string): Suffix added to all event filenames in
-              the log_dir directory. More details on filename construction in
-              tensorboard.summary.writer.event_file_writer.EventFileWriter.
+            Args:
+                log_dir (string): Save directory location. Default is
+                  runs/**CURRENT_DATETIME_HOSTNAME**, which changes after each run.
+                  Use hierarchical folder structure to compare
+                  between runs easily. e.g. pass in 'runs/exp1', 'runs/exp2', etc.
+                  for each new experiment to compare across them.
+                comment (string): Comment log_dir suffix appended to the default
+                  ``log_dir``. If ``log_dir`` is assigned, this argument has no effect.
+                purge_step (int):
+                  When logging crashes at step :math:`T+X` and restarts at step :math:`T`,
+                  any events whose global_step larger or equal to :math:`T` will be
+                  purged and hidden from TensorBoard.
+                  Note that crashed and resumed experiments should have the same ``log_dir``.
+                max_queue (int): Size of the queue for pending events and
+                  summaries before one of the 'add' calls forces a flush to disk.
+                  Default is ten items.
+                flush_secs (int): How often, in seconds, to flush the
+                  pending events and summaries to disk. Default is every two minutes.
+                filename_suffix (string): Suffix added to all event filenames in
+                  the log_dir directory. More details on filename construction in
+                  tensorboard.summary.writer.event_file_writer.EventFileWriter.
 
-        Examples::
+            Examples::
 
-            from torch.utils.tensorboard import SummaryWriter
+                from torch.utils.tensorboard import SummaryWriter
 
-            # create a summary writer with automatically generated folder name.
-            writer = SummaryWriter()
-            # folder location: runs/May04_22-14-54_s-MacBook-Pro.local/
+                # create a summary writer with automatically generated folder name.
+                writer = SummaryWriter()
+                # folder location: runs/May04_22-14-54_s-MacBook-Pro.local/
 
-            # create a summary writer using the specified folder name.
-            writer = SummaryWriter("my_experiment")
-            # folder location: my_experiment
+                # create a summary writer using the specified folder name.
+                writer = SummaryWriter("my_experiment")
+                # folder location: my_experiment
 
-            # create a summary writer with comment appended.
-            writer = SummaryWriter(comment="LR_0.1_BATCH_16")
-            # folder location: runs/May04_22-14-54_s-MacBook-Pro.localLR_0.1_BATCH_16/
+                # create a summary writer with comment appended.
+                writer = SummaryWriter(comment="LR_0.1_BATCH_16")
+                # folder location: runs/May04_22-14-54_s-MacBook-Pro.localLR_0.1_BATCH_16/
 
-        """
+            """
 
-        if not log_dir:
-            import socket
-            from datetime import datetime
-            current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-            log_dir = os.path.join(
-                'runs', current_time + '_' + socket.gethostname() + comment)
-        self.log_dir = log_dir
-        self.purge_step = purge_step
-        self.max_queue = max_queue
-        self.flush_secs = flush_secs
-        self.filename_suffix = filename_suffix
+            if not log_dir:
+                import socket
+                from datetime import datetime
+                current_time = datetime.now().strftime('%b%d_%H-%M-%S')
+                log_dir = os.path.join(
+                    'runs', current_time + '_' + socket.gethostname() + comment)
+            self.log_dir = log_dir
+            self.purge_step = purge_step
+            self.max_queue = max_queue
+            self.flush_secs = flush_secs
+            self.filename_suffix = filename_suffix
 
-        # Initialize the file writers, but they can be cleared out on close
-        # and recreated later as needed.
-        self.file_writer = self.all_writers = None
-        self._get_file_writer()
+            # Initialize the file writers, but they can be cleared out on close
+            # and recreated later as needed.
+            self.file_writer = self.all_writers = None
+            self._get_file_writer()
 
-        # Create default bins for histograms, see generate_testdata.py in tensorflow/tensorboard
-        v = 1E-12
-        buckets = []
-        neg_buckets = []
-        while v < 1E20:
-            buckets.append(v)
-            neg_buckets.append(-v)
-            v *= 1.1
-        self.default_bins = neg_buckets[::-1] + [0] + buckets
+            # Create default bins for histograms, see generate_testdata.py in tensorflow/tensorboard
+            v = 1E-12
+            buckets = []
+            neg_buckets = []
+            while v < 1E20:
+                buckets.append(v)
+                neg_buckets.append(-v)
+                v *= 1.1
+            self.default_bins = neg_buckets[::-1] + [0] + buckets
 
     def _check_caffe2_blob(self, item):
         """
@@ -608,7 +699,6 @@ class SummaryWriter(object):
 
 
     def add_onnx_graph(self, prototxt):
-
         self._get_file_writer().add_onnx_graph(load_onnx_graph(prototxt))
 
 

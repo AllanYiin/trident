@@ -52,6 +52,7 @@ class TrainingPlan(object):
         self._dataloaders = OrderedDict()
         self.num_epochs = 1
         self._minibatch_size = 1
+        self.steps=0
         self.warmup = 0
         self.default_collect_data_inteval = 1
         self.print_progress_frequency = 10
@@ -179,6 +180,7 @@ class TrainingPlan(object):
             training_item.name = 'model {0}'.format(n)
             self.training_names[n] = 'model {0}'.format(n)
         self.training_items[n] = training_item
+        training_item.training_context['training_name'] = self.training_names[n]
         self.training_items[n].start_epoch = start_epoch
         # backward compatibility
         for k, v in training_item.inputs.items():
@@ -390,14 +392,18 @@ class TrainingPlan(object):
             abnormal_num_count = 0
             # update callback
             if self.enable_tensorboard:
-                for item in self.training_items:
+                for idx,(item, item_name) in enumerate(zip(self.training_items.value_list,self.training_names.value_list)):
                     if hasattr(item,'training_context'):
                         for context_item in list(item.training_context.values()):
                             if isinstance(context_item,HistoryBase):
-                                HistoryBase.enable_tensorboard=True
+                                context_item.enable_tensorboard=True
+                                context_item.training_name=item_name
+                                context_item.summary_writer=self.summary_writer
+                        item.training_context['training_name'] = item_name
+                        item.training_context['summary_writer']=self.summary_writer
 
                 make_dir_if_need(os.path.join(working_directory,'Logs'))
-                os.system('cmd /k "tensorboard --logdir={0}  --port 6006"'.format(os.path.join(working_directory,'Logs')))
+                #os.system('cmd /k "tensorboard --logdir={0}  --port 6006"'.format(os.path.join(working_directory,'Logs')))
                 sys.stdout.writelines(['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/'])
 
             if not is_resume or only_steps == True:
@@ -432,6 +438,7 @@ class TrainingPlan(object):
             for epoch in range(self.num_epochs):
                 try:
                     for mbs, return_data in enumerate(data_loader):
+
                         if self.is_terminate:
                             for callback in self.callbacks:
                                 if callback.is_shared == True:
@@ -443,6 +450,7 @@ class TrainingPlan(object):
                                     if callback.is_shared == False:
                                         callback.on_training_terminated(trainitem.training_context)
                         else:
+
                             num_batches = len(data_loader.batch_sampler) * epoch + mbs
                             iter_data = OrderedDict()
                             if isinstance(return_data, OrderedDict):
@@ -506,7 +514,7 @@ class TrainingPlan(object):
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
                                                       accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
-
+                            self.steps +=1
                             if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
                                 print(' \n', flush=True)
@@ -523,6 +531,9 @@ class TrainingPlan(object):
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'])
+                                    # if self.enable_tensorboard:
+                                    #     trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth','.onnx'))
+                                    #     self.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth','.onnx'));
 
                             if only_steps == True and num_batches >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():

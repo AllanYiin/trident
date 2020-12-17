@@ -6,7 +6,7 @@ import math
 import os
 import sys
 import warnings
-
+import time
 import numpy as np
 
 from trident.backend.common import *
@@ -140,7 +140,10 @@ class TileImageCallback(VisualizationCallbackBase):
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        tile_rgb_images(*tile_images_list,row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
+        fig=tile_rgb_images(*tile_images_list,row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
+        if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
+            training_context['summary_writer'].add_figure(training_context['training_name']+'/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
+
 
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['current_batch']  % self.batch_inteval == 0):
@@ -223,8 +226,9 @@ class SegTileImageCallback(VisualizationCallbackBase):
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
-
+        fig=tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
+        if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
+            training_context['summary_writer'].add_figure(training_context['training_name']+'/plot/segtile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
             self.plot_tile_image(training_context)
@@ -232,12 +236,6 @@ class SegTileImageCallback(VisualizationCallbackBase):
     def on_epoch_end(self, training_context):
         if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
             self.plot_tile_image(training_context)
-
-
-
-
-
-
 
 
 class DetectionPlotImageCallback(VisualizationCallbackBase):
@@ -288,8 +286,9 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
 
 
         tile_images_list.append(input_image2)
-
-        tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
+        fig=tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix),imshow=True)
+        if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
+            training_context['summary_writer'].add_figure(training_context['training_name']+'/plot/detection_plot', fig, global_step=training_context['steps'], close=True, walltime=time.time())
 
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
@@ -298,8 +297,6 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
     def on_epoch_end(self, training_context):
         if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
             self.plot_detection_image(training_context)
-
-
 
 
 
@@ -333,10 +330,12 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                     self.loss_history_list.append(trainitem.batch_loss_history)
                     self.metric_history_list.append(trainitem.batch_metric_history)
                 self.counter += 1
-                loss_metric_curve(self.loss_history_list, self.metric_history_list,
+                fig=loss_metric_curve(self.loss_history_list, self.metric_history_list,
                                   legend=training_context['training_names'].value_list, calculate_base='batch',
                                   max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
                                   imshow=self.imshow)
+                if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
+                    training_context['summary_writer'].add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
 
 
                 # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
@@ -393,13 +392,17 @@ class PrintGradientsCallback(VisualizationCallbackBase):
 
                 else:
 
-                    for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
-                        if 'bias' not in k and v is not None and not any_abnormal_number(v) and v.requires_grad==True:
-                            grad_dict[k] = np.abs(to_numpy(0 if v.grad is None else v.grad))
-                            if grad_dict[k].ndim > 1:
-                                if self.first_layer == '':
-                                    self.first_layer = k
-                                self.last_layer = k
+                    for i, (k,v) in enumerate(training_context['current_model'].named_parameters()):
+                        if v.requires_grad==True:
+                            if 'bias' not in k and v is not None and v.grad is not None and  not any_abnormal_number(v.grad) and v.requires_grad==True:
+                                if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
+                                    training_context['summary_writer'].add_histogram(training_context['training_name']+'/gradients/'+k, v.grad.data, training_context['steps'])
+                                    training_context['summary_writer'].add_histogram(training_context['training_name']+'/weights/' + k, v.data, training_context['steps'])
+                                grad_dict[k] = np.abs(to_numpy(0 if v.grad is None else v.grad))
+                                if grad_dict[k].ndim > 1:
+                                    if self.first_layer == '':
+                                        self.first_layer = k
+                                    self.last_layer = k
                     if self.first_layer!='' and self.first_layer in grad_dict:
                         training_context['grads_state']['first_layer'].append(grad_dict[self.first_layer].mean())
                     if self.last_layer != '' and self.last_layer in grad_dict:

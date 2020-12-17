@@ -1,6 +1,7 @@
 import os
 import time
 import numpy as np
+import threading
 import tensorboard
 from distutils.version import LooseVersion
 if not hasattr(tensorboard, '__version__') or LooseVersion(tensorboard.__version__) < LooseVersion('1.15'):
@@ -96,10 +97,10 @@ def figure_to_image(figures, close=True):
         data = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
         w, h = figure.canvas.get_width_height()
         image_hwc = data.reshape([h, w, 4])[:, :, 0:3]
-        image_chw = np.moveaxis(image_hwc, source=2, destination=0)
+        #image_chw = np.moveaxis(image_hwc, source=2, destination=0)
         if close:
             plt.close(figure)
-        return image_chw
+        return image_hwc
 
     if isinstance(figures, list):
         images = [render_to_rgb(figure) for figure in figures]
@@ -224,6 +225,7 @@ class FileWriter(object):
         """
         self.event_writer.reopen()
 
+
 class SummaryWriter(object):
     """Writes entries directly to event files in the log_dir to be
     consumed by TensorBoard.
@@ -233,22 +235,23 @@ class SummaryWriter(object):
     to add data to the file directly from the training loop, without slowing down
     training.
     """
-    __instance = None
 
-    @staticmethod
-    def getInstance():
-        """ Static access method. """
-        if SummaryWriter.__instance == None:
-            SummaryWriter()
-        return SummaryWriter.__instance
+    __singleton_lock = threading.Lock()
+    __singleton_instance = None
 
+    # define the classmethod
+    @classmethod
+    def instance(cls):
+        # check for the singleton instance
+        if not cls.__singleton_instance:
+            with cls.__singleton_lock:
+                if not cls.__singleton_instance:
+                    cls.__singleton_instance = cls()
+
+                    # return the singleton instance
+        return cls.__singleton_instance
     def __init__(self, log_dir=None, comment='', purge_step=None, max_queue=10,
                  flush_secs=120, filename_suffix=''):
-        """ Virtually private constructor. """
-        if SummaryWriter.__instance != None:
-            raise Exception("This class is a singleton!")
-        else:
-            SummaryWriter.__instance = self
 
         """Creates a `SummaryWriter` that will write out events and summaries
         to the event file.
@@ -285,7 +288,7 @@ class SummaryWriter(object):
             writer = SummaryWriter(comment="LR_0.1_BATCH_16")
             # folder location: runs/May04_22-14-54_s-MacBook-Pro.localLR_0.1_BATCH_16/
         """
-        
+
         if not log_dir:
             import socket
             from datetime import datetime

@@ -28,6 +28,7 @@ class HistoryBase(OrderedDict):
     def __init__(self, name='', *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.name=name
+        self.training_name=None
         self._enable_tensorboard=False
         self.summary_writer=None
 
@@ -67,19 +68,15 @@ class HistoryBase(OrderedDict):
         if data_name not in self:
             self.regist(data_name)
         if is_tensor(value):
-            value=value.clone().cpu().detach()
-            if ndim(value)==0:
-                value=value.item()
-            elif ndim(value)==1 and len(value)==1:
-                value = value[0].item()
-            else:
-                value=value.mean().item()
+            value=to_numpy(value.copy().cpu().detach()).mean()
             self[data_name].append((step, value))
         else:
             self[data_name].append((step, value))
-        if self._enable_tensorboard:
-            self.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
-
+        if self.enable_tensorboard:
+            if self.training_name is None:
+                self.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
+            else:
+                self.summary_writer.add_scalar(self.training_name+ "/"+self.name + "/" + data_name, value, global_step=step, walltime=time.time())
 
     def reset(self):
         for i in range(len(self)):

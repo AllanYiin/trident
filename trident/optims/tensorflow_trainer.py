@@ -56,10 +56,12 @@ def _to_tuple(x):
 
 
 class Model(ModelBase):
-    def __init__(self, inputs=None, input_shape=None, output=None):
-        super(Model, self).__init__(inputs, input_shape, output)
+    def __init__(self, inputs=None, input_shape=None, output=None, name=None):
+        super(Model, self).__init__(inputs, input_shape, output,name)
         self.batch_index = 0
         self.filter_index = -1
+        self._enable_tensorboard=False
+        self.summary_writer=None
 
     def _initial_graph(self, inputs=None, input_shape=None,output=None,initializer=None):
         if output is None:
@@ -616,7 +618,7 @@ class Model(ModelBase):
         gc.collect()
 
     def do_on_epoch_end(self):
-        pass
+        self.training_context['time_epoch_end'] = time.time()
 
     def do_on_batch_start(self):
         self.training_context['time_batch_start'] = time.time()
@@ -626,13 +628,14 @@ class Model(ModelBase):
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
         self.training_context['steps'] += 1
-        if self.training_context['steps'] % 10== 0:
-            # if 'gpu' in get_device() or 'cuda' in get_device():
-            #     #swap memory
-            #     self._model.cpu()
-            #     gc.collect()
-            #     self._model.gpu()
+
+        if self.training_context['steps'] % 100 == 0:
             gc.collect()
+        if self.training_context['steps'] %200==0:
+            if 'gpu' in get_device() or 'cuda' in get_device():
+                self._model.cpu()
+                self._model.cuda()
+
         if self.training_context['steps'] % _session.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == self.training_context['steps'] // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
@@ -986,12 +989,6 @@ class Model(ModelBase):
                         self.do_on_training_start()
                         # epoch is not the logical inteval for us to control the flow
                         self.training_context['steps'] = 0
-                        self.training_context['tmp_losses'] = HistoryBase(name='tmp_losses')
-                        self.training_context['tmp_metrics'] = HistoryBase(name='tmp_metrics')
-                        self.training_context['out_sample_metrics'] = HistoryBase(name='out_sample_metrics')
-                        self.training_context['losses'] = HistoryBase(name='losses')
-                        self.training_context['losses'].regist('total_losses')
-                        self.training_context['metrics'] = HistoryBase(name='metrics')
                         self.training_context['grads_state'] = OrderedDict()
                         self.training_context['grads_state']['first_layer'] = []
                         self.training_context['grads_state']['last_layer'] = []
@@ -1037,13 +1034,13 @@ class Model(ModelBase):
                                     self.train_data[self.outputs.key_list[0]] = output
                                     if self.use_output_as_loss == True:
                                         this_loss = output.sum()
-                                        self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
+                                        self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                                 else:
                                     self.train_data[self.outputs.key_list[0]] = output
                                     if self.use_output_as_loss == True:
                                         this_loss = output.sum()
-                                        self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], to_numpy(this_loss).mean())
+                                        self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                         except Exception as e:
                             print(e)
@@ -1082,7 +1079,7 @@ class Model(ModelBase):
                                             overall_loss = overall_loss + this_loss[i]
                                     self.training_context['current_loss'] = self.training_context['current_loss'] +overall_loss
                                     if is_collect_data:
-                                        self.training_context['losses'].collect(k, self.training_context['steps'], float(to_numpy(overall_loss)))
+                                        self.training_context['losses'].collect(k, self.training_context['steps'],overall_loss)
                                 else:
                                     if any_abnormal_number(this_loss):
                                         sys.stderr.write(
@@ -1091,7 +1088,7 @@ class Model(ModelBase):
                                         # a leaf Variable that requires grad connotused in an in-place operation.
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                                     if is_collect_data:
-                                        self.training_context['losses'].collect(k, self.training_context['steps'], float(to_numpy(this_loss)))
+                                        self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
                             except Exception as e:
                                 print(e)
                                 PrintException()
@@ -1115,7 +1112,7 @@ class Model(ModelBase):
                                 self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss# self.training_context[
 
                             if is_collect_data:
-                                self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], float(to_numpy(this_loss)))
+                                self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
                 vars = grad_tape.watched_variables()
                 grads = grad_tape.gradient(self.training_context['current_loss'] , vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
@@ -1389,6 +1386,32 @@ class Model(ModelBase):
         keys = [key for key in keys if not key[0].isdigit()]
 
         return sorted(keys)
+
+    @property
+    def enable_tensorboard(self):
+        return self._enable_tensorboard
+
+    @enable_tensorboard.setter
+    def enable_tensorboard(self, value):
+        self._enable_tensorboard = value
+        if value == True:
+            if get_backend() == 'pytorch':
+                try:
+                    from trident.loggers.pytorch_tensorboard import SummaryWriter
+                    self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+
+                except Exception as e:
+                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    print(e)
+                    PrintException()
+            elif get_backend() == 'tensorflow':
+                try:
+                    from trident.loggers.tensorflow_tensorboard import SummaryWriter
+                    self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                except Exception as e:
+                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    print(e)
+                    PrintException()
 
 
 class ImageClassificationModel(Model):

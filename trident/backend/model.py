@@ -717,12 +717,7 @@ class ModelBase(object):
                     self.do_on_training_start()
                     # epoch is not the logical inteval for us to control the flow
                     self.training_context['steps']=0
-                    self.training_context['tmp_losses'] = HistoryBase(name='tmp_losses')
-                    self.training_context['tmp_metrics'] =HistoryBase(name='tmp_metrics')
-                    self.training_context['out_sample_metrics'] = HistoryBase(name='out_sample_metrics')
-                    self.training_context['losses'] = HistoryBase(name='losses')
-                    self.training_context['losses'].regist('total_losses')
-                    self.training_context['metrics'] = HistoryBase(name='metrics')
+
                     self.training_context['grads_state'] = OrderedDict()
                     self.training_context['grads_state']['first_layer'] = []
                     self.training_context['grads_state']['last_layer'] = []
@@ -963,7 +958,7 @@ class ModelBase(object):
                             format_string = '.3e'
                         verbose.append('{0}: {1:<8{2}}'.format(k, metric_value, format_string))
                     print(self.training_context['model_name'] + ': out-of-sample evaluation: ',','.join(verbose))
-
+            self.training_context['steps'] += 1
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
                 self.do_on_epoch_end()
                 batch_steps,batch_values=self.training_context['losses'].get_series('total_losses')
