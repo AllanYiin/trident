@@ -200,7 +200,7 @@ class Embedding(Layer):
         if dtype != tf.int32 and dtype !=tf.int64:
             x = math_ops.cast(x,tf.int32)
         if isinstance(self.weight, sharded_variable.ShardedVariable):
-            x = embedding_ops.embedding_lookup_v2(self.weight.variables, x)
+            x = embedding_ops.embedding_lookup_v2(self.weight.variables,x )
         else:
             x = embedding_ops.embedding_lookup_v2(self.weight, x)
         return x
@@ -610,16 +610,16 @@ class _ConvNd(Layer):
                     if self.transposed:
                         # filter_height, filter_width,  out_channels in_channels,
                         self.weight = tf.Variable(tf.random.normal(shape=[*self.kernel_size, int(channel_multiplier), int(self.input_filters)], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
-                        kaiming_uniform(self.weight, a=math.sqrt(5))
+
                     else:
 
                         # [filter_height, filter_width, in_channels, out_channels]`
                         self.weight = tf.Variable(  tf.random.normal(shape=[*self.kernel_size, int(self.input_filters), int(channel_multiplier)], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
-                        kaiming_uniform(self.weight, a=math.sqrt(5))
+
                         if self.separable:
                             pointwise_kernel_size = (1,) * len(self.kernel_size)
                             self.pointwise = tf.Variable(tf.random.normal( shape=[*pointwise_kernel_size, int(self.input_filters * channel_multiplier),int(self.num_filters)], mean=0, stddev=1) * 0.02, trainable=True, name='weight')
-                            kaiming_uniform(self.pointwise, a=math.sqrt(5))
+
                     if self.use_bias:
                         self.bias = tf.Variable(tf.random.normal([int(self.num_filters)]), name='bias')
                     else:

@@ -14,6 +14,8 @@ from functools import partial
 import builtins
 
 import numpy as np
+from trident.callbacks.lr_schedulers import AdjustLRCallback
+
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset
 from trident.backend.common import get_backend,to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
@@ -245,6 +247,7 @@ class TrainingPlan(object):
 
         return self
 
+
     def print_progress_scheduling(self, frequency: int, unit='batch', on_epoch_end=True, show_loss_metric_curve=True):
         self.print_progress_on_epoch_end = on_epoch_end
         self.print_progress_frequency = frequency
@@ -403,8 +406,9 @@ class TrainingPlan(object):
                         item.training_context['summary_writer']=self.summary_writer
 
                 make_dir_if_need(os.path.join(working_directory,'Logs'))
-                #os.system('cmd /k "tensorboard --logdir={0}  --port 6006"'.format(os.path.join(working_directory,'Logs')))
-                sys.stdout.writelines(['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/'])
+
+                sys.stdout.writelines(['Please execute the command to initial tensorboard:  tensorboard --logdir={0}  --port 6006 \n\r'.format(os.path.join(working_directory,'Logs'))])
+                sys.stdout.writelines(['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/   \n\r'])
 
             if not is_resume or only_steps == True:
                 max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
@@ -515,6 +519,30 @@ class TrainingPlan(object):
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
                                                       accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
                             self.steps +=1
+
+
+                            if self.enable_tensorboard and len(self.training_items)>1 and mbs % collect_data_inteval == 0:
+                                compare_dict = OrderedDict()
+                                step=None
+                                for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
+                                    for k,v in trainitem.training_context["losses"].items():
+                                        if k not in compare_dict:
+                                            compare_dict[k]=OrderedDict()
+                                        compare_dict[k][k+"/"+trainitem_name]=v[-1][1]
+                                        step=v[-1][0]
+                                    for k,v in trainitem.training_context["metrics"].items():
+                                        if k not in compare_dict:
+                                            compare_dict[k]=OrderedDict()
+                                        compare_dict[k][k+"/"+trainitem_name]=v[-1][1]
+                                for k,v in compare_dict.items():
+                                    self.summary_writer.add_scalars(k,v,step)
+
+
+
+
+
+
+
                             if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
                                 print(' \n', flush=True)

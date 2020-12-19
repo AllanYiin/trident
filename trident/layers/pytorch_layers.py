@@ -12,7 +12,7 @@ from typing import Optional
 
 import numpy as np
 import torch
-from  torch import Tensor
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F  # import torch functions
 import torch.utils.hooks as hooks
@@ -29,9 +29,10 @@ from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import get_activation
 from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_initializers import *
-__all__ = ['Dense','Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot','Scale', 'Conv1d', 'Conv2d', 'Conv3d',
+
+__all__ = ['Dense', 'Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot', 'Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
-           'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d','GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape','Permute',
+           'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape', 'Permute',
            'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer']
 
 _session = get_session()
@@ -141,6 +142,7 @@ class Dense(Layer):
 
         return s.format(**self.__dict__)
 
+
 class Embedding(Layer):
     r"""A simple lookup table that stores embeddings of a fixed dictionary and size.
     This module is often used to store word embeddings and retrieve them using indices.
@@ -201,7 +203,6 @@ class Embedding(Layer):
     __constants__ = ['num_embeddings', 'embedding_dim', 'padding_idx', 'max_norm',
                      'norm_type', 'scale_grad_by_freq', 'sparse']
 
-
     embedding_dim: int
     padding_idx: int
     max_norm: float
@@ -209,17 +210,18 @@ class Embedding(Layer):
     scale_grad_by_freq: bool
     weight: Tensor
     sparse: bool
-    keep_output:bool
-    name:str
-    def __init__(self,  embedding_dim: int,num_embeddings:Optional[int]=None , padding_idx: Optional[int] = None,
+    keep_output: bool
+    name: str
+
+    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = None,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
-                 sparse: bool = False, _weight: Optional[Tensor] = None,filter_index=-1,keep_output: bool=False,name:Optional[str] = None) -> None:
-        super(Embedding, self).__init__(keep_output=keep_output,name=name)
-        self.filter_index=filter_index
+                 sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=-1, keep_output: bool = False, name: Optional[str] = None) -> None:
+        super(Embedding, self).__init__(keep_output=keep_output, name=name)
+        self.filter_index = filter_index
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
 
-        self.register_parameter('weight',None)
+        self.register_parameter('weight', None)
 
         if padding_idx is not None:
             if padding_idx > 0:
@@ -231,13 +233,13 @@ class Embedding(Layer):
         self.max_norm = max_norm
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
-        if _weight is not None and int_shape(_weight)[-1] == embedding_dim and len( int_shape(_weight))==2:
+        if _weight is not None and int_shape(_weight)[-1] == embedding_dim and len(int_shape(_weight)) == 2:
             self.weight = Parameter(_weight)
-            self.weight.requires_grad =False
+            self.weight.requires_grad = False
             self.num_embeddings = int_shape(self.weight)[0]
             self._built = True
-        elif _weight is not None :
-            raise  ValueError('Shape[-1] of weight does not match embedding_dim')
+        elif _weight is not None:
+            raise ValueError('Shape[-1] of weight does not match embedding_dim')
         elif _weight is None and self.num_embeddings is not None:
             self.weight = Parameter(torch.Tensor(self.num_embeddings, self.embedding_dim))
             init.normal_(self.weight)
@@ -250,7 +252,7 @@ class Embedding(Layer):
         self.sparse = sparse
 
     def build(self, input_shape):
-        if self._built == False and self.sparse==False:
+        if self._built == False and self.sparse == False:
             raise ValueError('Only sparse embedding support shape inferred, please setting num_embeddings manually. ')
         elif self._built == False:
             if isinstance(input_shape, int):
@@ -261,17 +263,16 @@ class Embedding(Layer):
                 if self.padding_idx is not None:
                     with torch.no_grad():
                         self.weight[self.padding_idx].fill_(0)
-            self.to(self.device)
+            self.to(self.get_root().device)
             self._built = True
 
-
     def forward(self, x: torch.Tensor) -> Tensor:
-        if self.sparse and x.dtype!=str2dtype('long') and int_shape(x)[-1]==self.num_embeddings:
-            x=argmax(x,-1)
-        elif not self.sparse and x.dtype!=str2dtype('long')  and int_shape(x)[-1]!=self.num_embeddings:
-            x=x.long()
+        if self.sparse and x.dtype != str2dtype('long') and int_shape(x)[-1] == self.num_embeddings:
+            x = argmax(x, -1)
+        elif not self.sparse and x.dtype != str2dtype('long') and int_shape(x)[-1] != self.num_embeddings:
+            x = x.long()
 
-        return F.embedding( x, self.weight, self.padding_idx, self.max_norm,  self.norm_type, self.scale_grad_by_freq, self.sparse)
+        return F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
 
     def extra_repr(self) -> str:
         s = '{num_embeddings}, {embedding_dim}'
@@ -329,18 +330,17 @@ class Embedding(Layer):
 class Flatten(Layer):
     """Flatten layer to flatten a tensor after convolution."""
 
-    def __init__(self,keep_output: bool=False,name:Optional[str] = None):
+    def __init__(self, keep_output: bool = False, name: Optional[str] = None):
         super(Flatten, self).__init__(name=name, keep_output=keep_output)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-
         return x.view(x.size()[0], -1)
 
 
 class Concate(Layer):
     """Concate layer to splice  tensors ."""
 
-    def __init__(self, axis=1,keep_output: bool=False,name:Optional[str] = None):
+    def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Concate, self).__init__(name=name, keep_output=keep_output)
         self.axis = axis
 
@@ -369,7 +369,7 @@ Concatenate = Concate
 class Add(Layer):
     """Flatten layer to flatten a tensor after convolution."""
 
-    def __init__(self, axis=1,keep_output: bool=False,name:Optional[str] = None):
+    def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Add, self).__init__(name=name, keep_output=keep_output)
 
     def build(self, input_shape):
@@ -391,7 +391,7 @@ class Add(Layer):
 class Subtract(Layer):
     """Flatten layer to flatten a tensor after convolution."""
 
-    def __init__(self, axis=1,keep_output: bool=False,name:Optional[str] = None):
+    def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Subtract, self).__init__(name=name, keep_output=keep_output)
 
     def build(self, input_shape):
@@ -413,7 +413,7 @@ class Subtract(Layer):
 class Dot(Layer):
     """Flatten layer to flatten a tensor after convolution."""
 
-    def __init__(self, axis=1,keep_output: bool=False,name:Optional[str] = None):
+    def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Dot, self).__init__(name=name, keep_output=keep_output)
 
     def build(self, input_shape):
@@ -446,7 +446,7 @@ class SoftMax(Layer):
 
     """
 
-    def __init__(self, axis=1, add_noise=False, noise_intensity=0.005,keep_output: bool=False,name:Optional[str] = None, **kwargs):
+    def __init__(self, axis=1, add_noise=False, noise_intensity=0.005, keep_output: bool = False, name: Optional[str] = None, **kwargs):
         """
         Args:
             axis (int,default=1): The axis all the transformation processed across.
@@ -486,72 +486,75 @@ class Scale(Layer):
                 >>> (output2.to('cpu')==pow((x*(to_tensor([1,2,3,4]).reshape((1,4,1,1)))+0.5),1.2).to('cpu')).all()
                 tensor(True)
     """
-    def __init__(self, scale:(float,Tensor)=1.0, shift:(float,Tensor)=0.0, power:(float,Tensor)=1.0,mode='uniform',keep_output: bool=False,name:Optional[str] = None):
-        super(Scale, self).__init__(keep_output=keep_output,name=name)
-        self._scale=to_tensor(scale).float()
-        self._shift=to_tensor(shift).float()
-        self._power=to_tensor(power).float()
 
-        if mode == 'uniform' and (numel(self._scale)!=1.0 or numel(self._shift)!=1.0 or numel(self._power)!=1):
+    def __init__(self, scale: (float, Tensor) = 1.0, shift: (float, Tensor) = 0.0, power: (float, Tensor) = 1.0, mode='uniform', keep_output: bool = False,
+                 name: Optional[str] = None):
+        super(Scale, self).__init__(keep_output=keep_output, name=name)
+        self._scale = to_tensor(scale).float()
+        self._shift = to_tensor(shift).float()
+        self._power = to_tensor(power).float()
+
+        if mode == 'uniform' and (numel(self._scale) != 1.0 or numel(self._shift) != 1.0 or numel(self._power) != 1):
             raise ValueError('Scale/ Shift/ Power should float, 0d Tensor or One element Tensor whem mode=uniform')
-        if mode in [ 'uniform', 'channel', 'elementwise']:
+        if mode in ['uniform', 'channel', 'elementwise']:
             self.mode = mode
-        else :
+        else:
             raise ValueError('Only [uniform,channel,elementwise] is valid value for mode ')
 
     def build(self, input_shape):
-        def remove_from(name:str,*dicts):
+        def remove_from(name: str, *dicts):
             for d in dicts:
                 if name in d:
                     del d[name]
+
         if self._built == False:
-            if self.mode =='uniform':
-                self.scale=Parameter(self._scale.clone(),requires_grad=True)
+            if self.mode == 'uniform':
+                self.scale = Parameter(self._scale.clone(), requires_grad=True)
                 self.shift = Parameter(self._shift.clone(), requires_grad=True)
                 self.power = Parameter(self._power.clone(), requires_grad=True)
-            elif self.mode =='channel':
+            elif self.mode == 'channel':
                 new_shape = [1] * (len(input_shape) + 1)
                 new_shape[self.filter_index] = self.input_filters
-                if ndim(self._scale) == 1 and numel(self._scale) in [1,self.input_filters]:
-                    if numel(self._scale) ==1:
-                        self._scale=repeat_elements(self._scale,self.input_filters,0)
-                    self._scale=reshape(self._scale,new_shape)
-                if ndim(self._shift) == 1 and numel(self._shift) in [1,self.input_filters]:
-                    if numel(self._shift) ==1:
-                        self._shift=repeat_elements(self._shift,self.input_filters,0)
-                    self._shift=reshape(self._shift,new_shape)
-                if ndim(self._power) == 1 and numel(self._power)in [1,self.input_filters]:
-                    if numel(self._power) ==1:
-                        self._power=repeat_elements(self._power,self.input_filters,0)
-                    self._power=reshape(self._power,new_shape)
+                if ndim(self._scale) == 1 and numel(self._scale) in [1, self.input_filters]:
+                    if numel(self._scale) == 1:
+                        self._scale = repeat_elements(self._scale, self.input_filters, 0)
+                    self._scale = reshape(self._scale, new_shape)
+                if ndim(self._shift) == 1 and numel(self._shift) in [1, self.input_filters]:
+                    if numel(self._shift) == 1:
+                        self._shift = repeat_elements(self._shift, self.input_filters, 0)
+                    self._shift = reshape(self._shift, new_shape)
+                if ndim(self._power) == 1 and numel(self._power) in [1, self.input_filters]:
+                    if numel(self._power) == 1:
+                        self._power = repeat_elements(self._power, self.input_filters, 0)
+                    self._power = reshape(self._power, new_shape)
 
                 self.scale = Parameter(self._scale.clone(), requires_grad=True)
                 self.shift = Parameter(self._shift.clone(), requires_grad=True)
                 self.power = Parameter(self._power.clone(), requires_grad=True)
             elif self.mode == 'elementwise':
-                if ndim(self._scale) == 1 and numel(self._scale) ==1:
-                    self._scale=ones(input_shape)*self._scale
-                if ndim(self._shift) == 1 and numel(self._shift) ==1:
-                    self._shift=ones(input_shape)*self._shift
-                if ndim(self._power) == 1 and numel(self._power) ==1:
-                    self._power=ones(input_shape)*self._power
+                if ndim(self._scale) == 1 and numel(self._scale) == 1:
+                    self._scale = ones(input_shape) * self._scale
+                if ndim(self._shift) == 1 and numel(self._shift) == 1:
+                    self._shift = ones(input_shape) * self._shift
+                if ndim(self._power) == 1 and numel(self._power) == 1:
+                    self._power = ones(input_shape) * self._power
 
-                if int_shape(self._scale) ==input_shape:
-                    self._scale=self._scale.expand_dims(0,1)
-                if int_shape(self._shift) ==input_shape:
-                    self._shift=self._shift.expand_dims(0,1)
-                if int_shape(self._power) ==input_shape:
-                    self._power=self._power.expand_dims(0,1)
+                if int_shape(self._scale) == input_shape:
+                    self._scale = self._scale.expand_dims(0, 1)
+                if int_shape(self._shift) == input_shape:
+                    self._shift = self._shift.expand_dims(0, 1)
+                if int_shape(self._power) == input_shape:
+                    self._power = self._power.expand_dims(0, 1)
                 self.scale = Parameter(self._scale.clone(), requires_grad=True)
                 self.shift = Parameter(self._shift.clone(), requires_grad=True)
                 self.power = Parameter(self._power.clone(), requires_grad=True)
-            remove_from('_scale',self.__dict__, self._buffers)
-            remove_from('_shift',self.__dict__, self._buffers)
-            remove_from('_power',self.__dict__, self._buffers)
+            remove_from('_scale', self.__dict__, self._buffers)
+            remove_from('_shift', self.__dict__, self._buffers)
+            remove_from('_power', self.__dict__, self._buffers)
             self._built = True
 
     def forward(self, x) -> torch.Tensor:
-        x = pow(x*self.scale+self.shift,self.power)
+        x = pow(x * self.scale + self.shift, self.power)
         return x
 
 
@@ -1049,7 +1052,7 @@ class Conv3d(_ConvNd):
     def conv3d_forward(self, x):
         if self.padding_mode == 'circular':
             expanded_padding = (
-            (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
+                (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
             x = F.pad(x, expanded_padding, mode='circular')
         else:
             x = F.pad(x, (self.padding[2], self.padding[2], self.padding[1], self.padding[1], self.padding[0], self.padding[0]),
@@ -1526,7 +1529,7 @@ class DepthwiseConv3d(_ConvNd):
     def forward(self, x):
         if self.padding_mode == 'circular':
             expanded_padding = (
-            (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
+                (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
             x = F.pad(x, expanded_padding, mode='circular')
         else:
             x = F.pad(x, (self.padding[2], self.padding[2], self.padding[1], self.padding[1], self.padding[0], self.padding[0]),
@@ -1799,7 +1802,7 @@ class GatedConv2d(Conv2d):
     """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, norm=l2_normalize, name=None,**kwargs):
+                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, norm=l2_normalize, name=None, **kwargs):
         """
         Extra keyword arguments supported in addition to those in `torch.nn.Conv2d`:
         Args:
@@ -1807,19 +1810,19 @@ class GatedConv2d(Conv2d):
             activation (callable(Tensor) -> Tensor): a callable activation function
         It assumes that norm layer is used before activation.
         """
-        super(GatedConv2d, self).__init__(kernel_size=kernel_size, num_filters=num_filters, strides=strides, auto_pad=auto_pad, padding=padding, padding_mode=padding_mode, activation=activation,
-                 use_bias=use_bias, dilation=dilation, groups=groups, name=name, depth_multiplier=depth_multiplier,
-                                              **kwargs)
+        super(GatedConv2d, self).__init__(kernel_size=kernel_size, num_filters=num_filters, strides=strides, auto_pad=auto_pad, padding=padding, padding_mode=padding_mode,
+                                          activation=activation,
+                                          use_bias=use_bias, dilation=dilation, groups=groups, name=name, depth_multiplier=depth_multiplier,
+                                          **kwargs)
 
         self.norm = norm
 
-
     def forward(self, x):
         x = super().forward(x)
-        if self.strides==(2,2):
+        if self.strides == (2, 2):
             x = x[:, :, 1::2, 1::2]
 
-        x, g =split(x,axis=1,num_splits=2)
+        x, g = split(x, axis=1, num_splits=2)
         if self.norm is not None:
             x = self.norm(x)
         if self.activation is not None:
@@ -2037,6 +2040,7 @@ class Permute(Layer):
     """Permute Layer
 
     """
+
     def __init__(self, *args, name=None):
         """
         Permute the input tensor
@@ -2045,11 +2049,11 @@ class Permute(Layer):
             dimension, as it will remain unchanged.
         """
         super(Permute, self).__init__(name=name)
-        self.pattern=args
+        self.pattern = args
+
     def forward(self, x):
-
-
         return permute(x, self.pattern)
+
 
 class SelfAttention(Layer):
     """ Self attention Laye"""
@@ -2152,7 +2156,7 @@ class CoordConv2d(Layer):
         https://github.com/mkocabas/CoordConv-pytorch/blob/master/CoordConv.py
         """
         batch_size, _, y_dim, x_dim = x.size()
-        if y_dim!=int_shape(self.coord)[2] or x_dim!=int_shape(self.coord)[3]:
+        if y_dim != int_shape(self.coord)[2] or x_dim != int_shape(self.coord)[3]:
             self.comput_coord(int_shape(x)[1:])
         grid = self.coord.repeat(batch_size, 1, 1, 1).cast(x.dtype).to(x.device)
         ret = torch.cat([x, grid], dim=1)
@@ -2183,7 +2187,7 @@ class Upsampling2d(Layer):
         self.align_corners = align_corners
 
     def forward(self, x):
-    
+
         if self.mode == 'pixel_shuffle':
             return F.pixel_shuffle(x, int(self.scale_factor))
         elif self.mode == 'nearest':
@@ -2200,8 +2204,8 @@ class Upsampling2d(Layer):
         return info
 
 
-
 from torch.nn.modules import Dropout
+
 
 class Dropout(Layer):
     def __init__(self, dropout_rate=0, name=None):
@@ -2212,7 +2216,6 @@ class Dropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x):
-       
         return F.dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2220,7 +2223,6 @@ class Dropout(Layer):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
-
         super(Dropout, self)._load_from_state_dict(
             state_dict, prefix, local_metadata, strict,
             missing_keys, unexpected_keys, error_msgs)
@@ -2240,7 +2242,6 @@ class AlphaDropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x):
-
         return F.alpha_dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2298,11 +2299,12 @@ class SingleImageLayer(Layer):
         super(SingleImageLayer, self).__init__(name=name)
         self.rank = 2
         if isinstance(image, (np.ndarray, torch.Tensor)):
-            self.origin_image = to_tensor(image,requires_grad=True).squeeze()
-            self.input_shape =int_shape(self.origin_image)[1:]
+            self.origin_image = to_tensor(image, requires_grad=True).squeeze()
+            self.input_shape = int_shape(self.origin_image)[1:]
             self.weight = Parameter(self.origin_image.clone(), requires_grad=True)
-            self.input_filters =int_shape(self.origin_image)[1]
+            self.input_filters = int_shape(self.origin_image)[1]
             self._built = True
+
     def forward(self):
         return self.weight.unsqueeze(0)
 

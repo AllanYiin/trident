@@ -26,7 +26,7 @@ from trident.backend.model import ModelBase, HistoryBase, progress_bar
 from trident.backend.tensorflow_backend import Sequential, Layer, Combine, try_map_args_and_call, summary, get_device, fix_layer, set_device
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_serialization import save, load, load_pthtar
-from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase
+from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
 from trident.data.image_common import *
 from trident.backend.tensorspec import *
 from trident.layers.tensorflow_layers import SoftMax
@@ -57,7 +57,7 @@ def _to_tuple(x):
 
 class Model(ModelBase):
     def __init__(self, inputs=None, input_shape=None, output=None, name=None):
-        super(Model, self).__init__(inputs, input_shape, output,name)
+        super().__init__(inputs, input_shape, output,name)
         self.batch_index = 0
         self.filter_index = -1
         self._enable_tensorboard=False
@@ -95,24 +95,24 @@ class Model(ModelBase):
         elif isinstance(inputs, (tuple, list)):
             if len(inputs)==1 and is_tensor(inputs[0]):
                 input_name = 'input'
-                self.inputs[input_name] = TensorSpec(shape=to_tensor(int_shape(inputs[0])[self.batch_index+1:]).to('int'),name=input_name)
+                self.inputs[input_name] = TensorSpec(shape=to_tensor(int_shape(inputs[0])[self.batch_index+1:],dtype=inputs[0].dtype).to('int'),name=input_name)
             else:
                 for m in range(len(inputs)):
                     inp=inputs[m]
                     if is_tensor(inp) or isinstance(inp,np.ndarray):
                         input_name = 'input_{0}'.format(m)
-                        self.inputs[input_name] = TensorSpec(shape=to_tensor(int_shape(inputs[m])[self.batch_index+1:]).to('int'),name=input_name)
+                        self.inputs[input_name] = TensorSpec(shape=to_tensor(int_shape(inputs[m])[self.batch_index+1:],dtype=inputs[m].dtype).to('int'),name=input_name)
         elif isinstance(inputs, dict):
             for k, v in inputs.items():
                 if isinstance(v, TensorSpec):
                     self.inputs[k] =v
                 elif is_tensor(v)or isinstance(v,np.ndarray):
-                    self.inputs[k] =   TensorSpec(shape=to_tensor(int_shape(v)[self.batch_index+1:]).to('int'),name=k)
+                    self.inputs[k] =   TensorSpec(shape=to_tensor(int_shape(v)[self.batch_index+1:],dtype=v.dtype).to('int'),name=k)
         elif is_tensor(inputs):
-            self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:]).to('int'),name='input')
+            self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:],dtype=inputs.dtype).to('int'),name='input')
         elif isinstance(inputs,np.ndarray):
             inputs=to_tensor(inputs)
-            self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:]).to('int'),name='input')
+            self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:],dtype=inputs.dtype).to('int'),name='input')
 
         #single model
         if isinstance(output, (Layer, tf.Module)):
@@ -588,6 +588,14 @@ class Model(ModelBase):
         self.grad_clipping_by_norm = True
         self.grad_clipping_threshold = clipping_threshold
         return self
+
+
+    def adjust_learning_rate_scheduling(self, index: int, unit='batch', new_value:float=None):
+        callback=AdjustLRCallback(index,unit,new_value)
+        callback.is_shared=False
+        self.callbacks.append(callback)
+        return self
+
 
     def adjust_learning_rate(self, lr):
         if self.optimizer is not None:
