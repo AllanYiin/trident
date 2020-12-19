@@ -24,12 +24,13 @@ def  max_norm(model,max_value=3, axis=0):
         axis (int):axis along which to calculate weight norms.
 
     """
-    ws = model.weights()
+    ws = model.parameters()
     for i in range(len(ws)):
         w = ws[i]
-        norms = sqrt(reduce_sum(square(w), axis=axis, keepdims=True))
+        w_data=w.value().detach()
+        norms = sqrt(reduce_sum(square(w_data), axis=axis, keepdims=True))
         desired = clip(norms, 0, max_value)
-        w=w * (desired / (epsilon() + norms))
+        w.assign(w_data * (desired / (epsilon() + norms)))
 
 def  non_neg_norm(model):
     """
@@ -38,10 +39,11 @@ def  non_neg_norm(model):
         model : the model contains  weights need to setting the constraints.
 
     """
-    ws = model.get_weights()
+    ws = model.parameters()
     for i in range(len(ws)):
         w = ws[i]
-        w=w * tf.cast(greater_equal(w, 0.), tf.float32)
+        w_data=w.value().detach()
+        w.assign(w_data * tf.cast(greater_equal(w, 0.), tf.float32))
 
 def  unit_norm(model,axis=0):
     """
@@ -51,10 +53,11 @@ def  unit_norm(model,axis=0):
         model : the model contains  weights need to setting the constraints.
 
     """
-    ws = model.get_weights()
+    ws = model.parameters()
     for i in range(len(ws)):
         w = ws[i]
-        w=w / (epsilon() +sqrt(reduce_sum(square(w),axis=axis,keepdims=True)))
+        w_data = w.value().detach()
+        w.assign(w_data/ (epsilon() +sqrt(reduce_sum(square(w_data),axis=axis,keepdims=True))))
 
 def  min_max_norm(model,min_value=0.0, max_value=1.0, rate=3.0, axis=0):
     """
@@ -70,12 +73,13 @@ def  min_max_norm(model,min_value=0.0, max_value=1.0, rate=3.0, axis=0):
     """
 
 
-    ws = model.get_weights()
+    ws = model.parameters()
     for i in range(len(ws)):
         w=ws[i]
-        norms = sqrt(reduce_sum(square(w), axis=axis, keepdims=True))
+        w_data = w.value().detach()
+        norms = sqrt(reduce_sum(square(w_data), axis=axis, keepdims=True))
         desired = (rate * clip(norms, min_value, max_value) + (1 - rate) * norms)
-        w= w * (desired / (epsilon() + norms))
+        w.assign(w_data * (desired / (epsilon() + norms)))
 
 
 
