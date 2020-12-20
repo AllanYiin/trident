@@ -17,24 +17,24 @@ _epsilon=_session.epsilon
 def l1_reg(model:Layer,reg_weight=1e-6):
     loss=0.0
     for  param in model.trainable_weights:
-        if not any_abnormal_number(param):
-            loss = loss + (reg_weight * reduce_sum(abs(param)))
+        if not any_abnormal_number(param) and param.trainable:
+            loss = loss + (reg_weight * reduce_sum(abs(param.value())))
     return loss
 
 
 def l2_reg(model:Layer ,reg_weight=1e-6):
     loss = 0.0
     for param in model.trainable_weights:
-        if not any_abnormal_number(param):
-            loss = loss +  reg_weight * tf.norm(param)
+        if not any_abnormal_number(param) and param.trainable:
+            loss = loss +  reg_weight * tf.norm(param.value())
     return loss
 
 
 def orth_reg(model:tf.Module,reg_weight=1e-6):
-    loss = 0.0=>
+    loss = 0.0
     for  param in model.trainable_weights:
-        if not any_abnormal_number(param):
-            param_flat =tf.reshape(param.int_shape[0], -1)
+        if not any_abnormal_number(param) and param.trainable:
+            param_flat =tf.reshape(param,(param.int_shape[0], -1))
             sym =tf.math.multiply(param_flat, tf.transpose(param_flat))
             sym -= tf.eye(param_flat.int_shape[0])
             loss = loss +reduce_sum(reg_weight * abs(sym))
