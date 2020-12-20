@@ -26,7 +26,7 @@ def max_norm(model, max_value=3,axis=0):
 
     """
     for name, param in model.named_parameters():
-        if 'bias' not in name:
+        if 'bias' not in name and param.requires_grad==True:
             norm = param.norm(2, dim=axis, keepdim=True)
             desired = torch.clamp(norm, 0, max_value)
             param = param * (desired / (_epsilon + norm))
@@ -39,8 +39,8 @@ def non_neg_norm(model):
 
     """
     for name, param in model.named_parameters():
-        if 'bias' not in name:
-            param = torch.clamp(param, 0, torch.inf)
+        if 'bias' not in name and param.requires_grad==True:
+            param = torch.clamp(param, 0, np.inf)
 
 def unit_norm(model,axis=0):
     """
@@ -51,7 +51,7 @@ def unit_norm(model,axis=0):
 
     """
     for name, param in model.named_parameters():
-        if 'bias' not in name:
+        if 'bias' not in name and param.requires_grad==True:
             norm = param.norm(2, dim=axis, keepdim=True)
             param = param/ (_epsilon + norm)
 
@@ -70,7 +70,7 @@ def min_max_norm(model,min_value=1e-8, max_value=1, rate=3.0, axis=0):
 
     """
     for name, param in model.named_parameters():
-        if 'bias' not in name:
+        if 'bias' not in name and param.requires_grad==True:
             norm = param.norm(2, dim=axis, keepdim=True)
             desired = rate *torch.clamp(norm, min_value, max_value)+ (1 - rate) * norm
             param = param * (desired / (_epsilon + norm))
