@@ -26,7 +26,7 @@ from trident.backend.pytorch_ops import *
 from trident.backend.pytorch_backend import Layer, Sequential
 
 __all__ = [ 'MaxPool1d','MaxPool2d', 'MaxPool3d', 'MaxUnpool1d', 'MaxUnpool2d', 'MaxUnpool3d', 'AvgPool1d', 'AvgPool2d',
-           'AvgPool3d', 'GlobalAvgPool2d', 'AdaptiveAvgPool2d']
+           'AvgPool3d', 'GlobalAvgPool2d','GlobalAvgPool1d', 'AdaptiveAvgPool2d']
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -124,8 +124,8 @@ class MaxPool1d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         return F.max_pool1d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
                             self.return_indices)
 
@@ -224,8 +224,8 @@ class MaxPool2d(_PoolNd):
 
         self.padding = (int(pad_h // 2), int(pad_w // 2))
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         # self.get_padding(x.size()[1:])
         # if self.padding[0] > 0 or self.padding[1] > 0:
         #     x = F.pad(x, (self.padding[1] , self.padding[1], self.padding[0] , self.padding[0] ), mode='constant'
@@ -655,9 +655,7 @@ class AvgPool2d(_PoolNd):
 
         self.padding = (int(pad_h // 2), int(pad_w // 2))
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
-
+    def forward(self, x):
         return F.avg_pool2d(x, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad,
                             self.divisor_override)
 
@@ -731,8 +729,8 @@ class AvgPool3d(_PoolNd):
         self.count_include_pad = kwargs.get('count_include_pad', False)
         self.divisor_override = kwargs.get('divisor_override', None)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         return F.avg_pool3d(x, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad,
                             self.divisor_override)
 
@@ -742,6 +740,33 @@ class AvgPool3d(_PoolNd):
         self.__dict__.setdefault('ceil_mode', False)
         self.__dict__.setdefault('count_include_pad', True)
 
+class GlobalAvgPool1d(Layer):
+    """Global Average Pooling Imprementation """
+    def __init__(self, keepdims=False, name='global_avg_pool',**kwargs):
+        """
+
+        Args:
+            keepdims ():
+            name ():
+        """
+        super(GlobalAvgPool1d, self).__init__(name=name)
+        self.keepdims = kwargs.get('keepdim',keepdims)
+
+    def build(self, input_shape):
+        if self._built == False:
+            if self.keepdims == True:
+                output_shape = input_shape.clone()
+                output_shape[1] = 1
+                self.output_shape = output_shape
+            else:
+                self.output_shape = input_shape[0]
+            self._built = True
+
+    def forward(self, x):
+
+        N,C,W=x.size()
+        x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdims)
+        return x
 
 class GlobalAvgPool2d(Layer):
     """Global Average Pooling Imprementation """
@@ -766,8 +791,8 @@ class GlobalAvgPool2d(Layer):
                 self.output_shape = input_shape[0]
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         N,C,H,W=x.size()
         x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdims)
         return x
@@ -780,7 +805,7 @@ class AdaptiveAvgPool2d(Layer):
         self.output_size = _pair(output_size)
         self.name = name
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         return F.adaptive_avg_pool2d(x, self.output_size)
 

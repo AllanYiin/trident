@@ -16,15 +16,11 @@ from trident.backend.tensorflow_ops import *
 _tf_data_format = 'channels_last'
 
 __all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d', 'MaxUnpool2d', 'AvgPool1d', 'AvgPool2d', 'AvgPool3d',
-           'GlobalAvgPool2d']
+           'GlobalAvgPool1d','GlobalAvgPool2d']
 
 _session = get_session()
 
-_device = 'CPU'
-for device in device_lib.list_local_devices():
-    if tf.DeviceSpec.from_string(device.name).device_type == 'GPU':
-        _device = 'GPU'
-        break
+_device =get_device()
 
 _epsilon = _session.epsilon
 
@@ -117,8 +113,9 @@ class MaxPool1d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x) :
+
         return tf.nn.max_pool1d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NWC", name=None)
 
@@ -195,8 +192,9 @@ class MaxPool2d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x) :
+
         return tf.nn.max_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NHWC", name=None)
 
@@ -274,6 +272,7 @@ class MaxPool3d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
+
     def forward(self, input):
         return tf.nn.max_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NDHWC", name=None)
@@ -348,6 +347,7 @@ class MaxUnpool2d(_PoolNd):
         self.auto_pad = auto_pad
         self.padding = _pair(0)
 
+
     def forward(self, x, indices, output_size=None):
         return tf.nn.max_pool_with_argmax(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                           data_format="NHWC", output_dtype=tf.int64, include_batch_in_index=False,
@@ -404,6 +404,7 @@ class AvgPool1d(_PoolNd):
         self.padding = _single(
             self.padding)  # self.ceil_mode = kwargs.get('ceil_mode', False)  # self.count_include_pad = kwargs.get(
         # 'count_include_pad', False)
+
 
     def forward(self, input):
         return tf.nn.avg_pool1d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
@@ -476,8 +477,9 @@ class AvgPool2d(_PoolNd):
         self.count_include_pad = kwargs.get('count_include_pad', True)
         self.divisor_override = kwargs.get('divisor_override', None)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x) :
+
 
         return tf.nn.avg_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NHWC", name=None)
@@ -553,6 +555,7 @@ class AvgPool3d(_PoolNd):
         self.count_include_pad = kwargs.get('count_include_pad', False)
         self.divisor_override = kwargs.get('divisor_override', None)
 
+
     def forward(self, input):
         return tf.nn.avg_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NDHWC", name=None)
@@ -563,6 +566,24 @@ class AvgPool3d(_PoolNd):
         self.__dict__.setdefault('ceil_mode', False)
         self.__dict__.setdefault('count_include_pad', True)
 
+
+class GlobalAvgPool1d(Layer):
+    def __init__(self, keepdims=False, name='global_avg_pool',**kwargs):
+        super(GlobalAvgPool1d, self).__init__(name=name)
+        self.keepdims = kwargs.get('keepdim',keepdims)
+
+    def build(self, input_shape):
+        if self._built == False:
+            if self.keepdims == True:
+                self._output_shape = to_tensor([1, 1, self.input_filters]).int()
+            else:
+                self._output_shape = to_tensor([self.input_filters]).int()
+            self._built = True
+
+
+    def forward(self, x) :
+        x = tf.reduce_mean(x, axis=1, keepdims=self.keepdims)
+        return x
 
 class GlobalAvgPool2d(Layer):
     def __init__(self, keepdims=False, name='global_avg_pool',**kwargs):
@@ -576,7 +597,9 @@ class GlobalAvgPool2d(Layer):
             else:
                 self._output_shape = to_tensor([self.input_filters]).int()
             self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+
+    def forward(self, x) :
+
         x = tf.reduce_mean(x, [1, 2], keepdims=self.keepdims)
         return x
