@@ -12,6 +12,7 @@ import platform
 import re
 import shlex
 import struct
+import gc
 import subprocess
 import sys
 import threading
@@ -33,10 +34,11 @@ __all__ = ['get_session','set_session','get_session_value','get_backend','get_im
            'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
-          'get_args_spec', 'get_gpu_memory_map']
+          'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map']
 
 
 _SESSION = threading.local()
+
 
 
 def sanitize_path(path):
@@ -201,7 +203,7 @@ def _initialize_session():
     _SESSION.epoch_equivalent =1000
     _SESSION.floatx = 'float32'
     _SESSION.epsilon = 1e-8
-    _SESSION.working_direcory =os.getcwd()
+    _SESSION.working_directory =os.getcwd()
     _SESSION.plateform = get_plateform()
     _SESSION.numpy_print_format = '{0:.4e}'
     _SESSION.amp_available=False
@@ -215,12 +217,15 @@ def _initialize_session():
                     try:
                         if k == 'floatx':
                             assert v in {'float16', 'float32', 'float64'}
-                        if k not in  ['trident_dir','device']:
+                        if k not in  ['trident_dir','device','working_directory']:
                             _SESSION.__setattr__(k, v)
                     except Exception as e:
                         print(e)
         except ValueError as ve:
             print(ve)
+    if 'TRIDENT_WORKING_DIR' in os.environ:
+        _SESSION.working_directory = os.environ['TRIDENT_WORKING_DIR']
+        os.chdir(os.environ['TRIDENT_WORKING_DIR'])
 
     if 'TRIDENT_BACKEND' in os.environ:
         if _SESSION.backend != os.environ['TRIDENT_BACKEND']:
@@ -1057,6 +1062,52 @@ def nearest_prime(n):
     else:
         return nextp
 
+
+
+def get_memory_profile(mode):
+    """
+    'all' means return memory for all gpus
+    'min_max' means return memory for max and min
+    :param mode:
+    :return:
+    """
+    memory_map = get_gpu_memory_map()
+
+    if mode == 'min_max':
+        min_mem = 1000000
+        min_k = None
+        max_mem = 0
+        max_k = None
+        for k, v in memory_map:
+            if v > max_mem:
+                max_mem = v
+                max_k = k
+            if v < min_mem:
+                min_mem = v
+                min_k = k
+
+        memory_map = {min_k: min_mem, max_k: max_mem}
+
+    return memory_map
+
+
+def get_gpu_memory_map():
+    """Get the current gpu usage.
+
+    Returns
+    -------
+    usage: dict
+        Keys are device ids as integers.
+        Values are memory usage as integers in MB.
+    """
+    result = subprocess.check_output(
+        [
+            'nvidia-smi', '--query-gpu=memory.used',
+            '--format=csv,nounits,noheader'
+        ], encoding='utf-8')
+    gpu_memory = [int(x) for x in result.strip().split('\n')]
+    gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
+    return gpu_memory_map
 
 
 
