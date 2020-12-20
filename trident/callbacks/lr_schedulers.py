@@ -6,7 +6,7 @@ from __future__ import print_function
 import math
 import random
 import warnings
-
+import types
 import numpy as np
 
 from trident.backend.common import *
@@ -22,7 +22,11 @@ elif get_backend()=='tensorflow':
 
 
 
-__all__ = ['AdjustLRCallbackBase','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr','CosineLR','cosine_lr']
+__all__ = ['AdjustLRCallback','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr','CosineLR','cosine_lr']
+
+
+
+
 
 class AdjustLRCallbackBase(CallbackBase):
     """Basic class for learning rate scheduler"""
@@ -30,8 +34,29 @@ class AdjustLRCallbackBase(CallbackBase):
         super(AdjustLRCallbackBase, self).__init__()
         self.base_lr=1e-3
         self.base_lrs = [1e-3]
-    pass
+    def adjust_learning_rate(self,training_context,new_lr):
+        if hasattr(training_context['optimizer'],'adjust_learning_rate' ) and isinstance(training_context['optimizer'].adjust_learning_rate, types.MethodType):
+            training_context['optimizer'].adjust_learning_rate(new_lr,True)
+        else:
+            old_lr=training_context['optimizer'].lr
+            training_context['optimizer'].param_groups[0]['lr'] = new_lr
+            training_context['current_lr'] =new_lr
+            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
+
+class AdjustLRCallback(AdjustLRCallbackBase):
+    def __init__(self, index: int, unit:str='epoch',new_lr:float=1e-3):
+        super().__init__()
+        self.unit=unit
+        self.index=index
+        self.new_lr=new_lr
+
+    def on_batch_end(self, training_context):
+        if self.unit == 'batch' and training_context['steps'] == self.index:
+            self.adjust_learning_rate(training_context,self.new_lr)
+    def on_epoch_end(self, training_context):
+        if self.unit == 'epoch' and training_context['current_epoch'] == self.index and training_context['current_batch'] == 0:
+            self.adjust_learning_rate(training_context,self.new_lr)
 
 
 
@@ -156,7 +181,8 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                         if old_lr > self.min_lr:
                             new_lr = old_lr * self.factor
                             new_lr = max(new_lr, self.min_lr)
-                            training_context['optimizer'].adjust_learning_rate(new_lr,True)
+                            self.adjust_learning_rate(training_context, new_lr)
+
 
                             if self.verbose > 0:
                                 print('\nEpoch %05d: ReduceLROnPlateau reducing '
@@ -201,7 +227,7 @@ class ReduceLROnPlateau(AdjustLRCallbackBase):
                         if old_lr > self.min_lr:
                             new_lr = old_lr * self.factor
                             new_lr = max(new_lr, self.min_lr)
-                            training_context['optimizer'].adjust_learning_rate(new_lr,True)
+                            self.adjust_learning_rate(training_context, new_lr)
 
                             if self.verbose > 0:
                                 print('\nEpoch %05d: ReduceLROnPlateau reducing '
