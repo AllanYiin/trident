@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+from enum import Enum
 from itertools import islice
 import operator
 import copy
@@ -49,7 +51,12 @@ from trident.data.utils import pickle_it
 from trident.backend import tensorflow_serialization as serialization
 
 
-__all__ = ['set_device','Dtype' ,'Layer', 'get_device', 'get_flops', 'Sequential','ModuleList','ModuleDict','summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
+__all__ = ['set_device', 'Layer', 'get_device', 'Parameter', 'Sequential', 'ModuleList', 'ModuleDict', 'summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call', 'fix_layer']
+
+
+
+
+
 
 
 def get_device():
@@ -87,14 +94,7 @@ def set_device(device='/cpu:0'):
     except Exception as e:
         print(e)
 
-class Dtype(object):
-    float32 = tf.float32
-    int64 = tf.int64
-    int32 = tf.int32
-    int16 = tf.int16
-    uint8 = tf.uint8
-    int8 = tf.int8
-    bool = tf.bool
+
 
 
 version = tf.version
@@ -125,10 +125,11 @@ def load(path):
     Returns:
 
     """
-    if '.tar' in path:
-        return serialization.load_pthtar(path)
-    else:
-        return serialization.load(path)
+    with tf.device(get_device()):
+        if '.tar' in path:
+            return serialization.load_pthtar(path)
+        else:
+            return serialization.load(path)
 
 
 def save(obj, path, is_compressed=False):
@@ -170,15 +171,20 @@ class RemovableHandle(object):
         self.remove()
 
 
-def get_flops(model):
-    run_meta = tf.compat.v1.RunMetadata()
-    opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
-
-    # We use the Keras session graph in the call to the profiler.
-    flops = tf.compat.v1.profiler.profile(graph=tf.compat.v1.keras.backend.get_session().graph, run_meta=run_meta,
-                                          cmd='op', options=opts)
-
-    return flops.total_float_ops  # Prints the "flops" of the model.
+# def get_flops(model):
+#     run_meta = tf.compat.v1.RunMetadata()
+#     opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
+#     with graph.as_default():
+#         with session.as_default():
+#
+#             run_meta = tf.compat.v1.RunMetadata()
+#             opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
+#
+#             # We use the Keras session graph in the call to the profiler.
+#             flops = tf.compat.v1.profiler.profile(graph= tf.compat.v1.get_default_graph(), run_meta=run_meta,
+#                                                   cmd='op', options=opts)
+#
+#     return flops.total_float_ops  # Prints the "flops" of the model.
 
 
 def _is_not_trainable_variable(obj):
@@ -374,6 +380,15 @@ def register_module_backward_hook(
     handle = RemovableHandle(_global_backward_hooks)
     _global_backward_hooks[handle.id] = hook
     return handle
+
+class Parameter(tf.Variable):
+
+    def __init__(self, data, trainable=True,dtype=None,  name=None, **kwargs):
+        if dtype is None:
+            dtype=dtype.float32
+
+        super().__init__(initial_value=data,trainable=trainable)
+
 
 
 class Layer(tf.Module):
@@ -593,6 +608,28 @@ class Layer(tf.Module):
         """
         pass
 
+    def rebuild(self, input_shape):
+        """ Do the shape inference and initialize weights and bias.
+
+        `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
+        In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
+
+        Args:
+            input_shape (tensor):  the shape representation exclude the batch axis.
+
+        """
+        print('Your model will start to rebuild, it will cause lost all existing trainable parameters, will you want to rebuild it?')
+        ans = input('(Y/N) << ').lower()
+        if ans in ['yes', 'y']:
+            for name, module in self.named_modules():
+                if module.trainable==True:
+                    module._input_shape = None
+                    module._output_shape = None
+                    module._built = False
+                    module._parameters = OrderedDict()
+            dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device())
+            out = self.forward(dummay_input)
+
     def register_backward_hook(self, hook):
         r"""Registers a backward hook on the module.
 
@@ -806,12 +843,12 @@ class Layer(tf.Module):
                 for module in self.modules():
                     try:
                         module._device = self._device
-                        module._input_shape =None if module._input_shape is None else to_tensor(to_numpy(module._input_shape), dtype='int32')
-                        module._output_shape =None if module._output_shape is None else  to_tensor(to_numpy(module._output_shape), dtype='int32')
+                        module._input_shape =None if module._input_shape is None else tf.identity(module._input_shape)
+                        module._output_shape =None if module._output_shape is None else  tf.identity(module._input_shape)
                         for name, para in module._parameters.items():
-                            module._parameters[name] = tf.Variable(initial_value=para.value().detach(), dtype=para.dtype,trainable=para.trainable,name=para.name)
+                            module._parameters[name].assign(tf.identity(module._parameters[name].value()))
                         for name, buff in module._buffers.items():
-                            module._buffers[name] = to_tensor(buff.numpy(), dtype=buff.dtype)
+                            module._buffers[name]=tf.identity(module._buffers[name])
 
                     except Exception as e:
                         print(e)
@@ -828,21 +865,20 @@ class Layer(tf.Module):
         """
 
         self._device = '/cpu:0'
-
-        with tf.device(self._device):
-            for module in self.modules():
-                try:
-                    module._device = self._device
-                    module._input_shape=None if module._input_shape is None else to_tensor(to_numpy(module._input_shape),dtype='int32')
-                    module._output_shape =None if module._output_shape is None else  to_tensor(to_numpy(module._output_shape), dtype='int32')
-                    for name, para in module._parameters.items():
-                        module._parameters[name] = tf.Variable(para.value().detach(), dtype=para.dtype)
-                    for name, buff in module._buffers.items():
-                        module._buffers[name] = to_tensor(buff.numpy(), dtype=buff.dtype)
-                except Exception as e:
-                    print(e)
-                    PrintException()
-
+        context_device = context.context().device_name
+        context_device = "/job:localhost/replica:0/task:0/device:CPU:0"
+        for module in self.modules():
+            try:
+                module._device = self._device
+                module._input_shape=None if module._input_shape is None else tf.identity(module._input_shape)
+                module._output_shape =None if module._output_shape is None else  tf.identity(module._output_shape)
+                for name, para in module._parameters.items():
+                    module._parameters[name].assign(tf.identity(module._parameters[name].value()))
+                for name, buff in module._buffers.items():
+                    module._buffers[name]=tf.identity(module._buffers[name])
+            except Exception as e:
+                print(e)
+                PrintException()
 
 
 
@@ -1400,7 +1436,8 @@ class Layer(tf.Module):
             print(e)
             raise e
 
-
+    def __getstate__(self):
+        return self.__dict__
 
     def __setstate__(self, state):
         self.__dict__.update(state)
@@ -1970,7 +2007,10 @@ class Sequential(Layer):
         self.__delitem__(idx)
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
-            self._signature = None
+            if isinstance(self._signature ,Signature) and len(self._signature.outputs)>0:
+                self._signature.outputs[self._signature.outputs.key_list[0]]=TensorSpec(shape=self[-1]._output_shape)
+            else:
+                self._signature = None
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""

@@ -23,6 +23,16 @@ pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
 
 
+class dtype:
+    float32 = torch.float32
+    int64 = torch.int64
+    int32 = torch.int32
+    int16 = torch.int16
+    uint8 = torch.uint8
+    int8 = torch.int8
+    bool = torch.bool
+
+
 def _get_device():
     """get current device
 
@@ -53,7 +63,7 @@ def _set_device(device='cpu'):
     except Exception as e:
         print(e)
 
-__all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['dtype', 'Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -295,19 +305,19 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     else:
         if isinstance(x, int):
             if dtype is None:
-                dtype = torch.int64
+                dtype = dtype.int64
             t= torch.tensor([x]).int().to(device) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(get_session_value('device'))
             if dtype is not None:
                 t=cast(t,dtype)
             return t
         elif isinstance(x, float):
             if dtype is None:
-                dtype = torch.float32
+                dtype = dtype.float32
             return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
         elif isinstance(x, (list, tuple)):
             if all([isinstance(item,numbers.Integral) for item in x]):
                 if dtype is None:
-                    dtype = torch.int64
+                    dtype = dtype.int64
                 x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
             else:
                 if dtype is None:

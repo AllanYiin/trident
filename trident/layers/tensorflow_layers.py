@@ -31,7 +31,7 @@ from tensorflow.python.ops import standard_ops
 
 from trident.backend.common import *
 from trident.backend.load_backend import *
-from trident.backend.tensorflow_backend import Layer, Sequential, normalize_padding, get_device
+from trident.backend.tensorflow_backend import Layer, Sequential, Parameter,normalize_padding, get_device
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_activations import get_activation
 from trident.layers.tensorflow_initializers import *
@@ -120,10 +120,10 @@ class Dense(Layer):
                 with self.name_scope:
                     if isinstance(input_shape, int):
                         self.input_filters = input_shape
-                    self.weight = tf.Variable(initial_value=random_normal(shape=(self.input_filters,self.num_filters), mean=0., std=0.2) , name='weight')
+                    self.weight =Parameter(data=random_normal(shape=(self.input_filters,self.num_filters), mean=0., std=0.2) , name='weight')
                     kaiming_uniform(self.weight, a=math.sqrt(5))
                     if self.use_bias:
-                        self.bias = tf.Variable(initial_value=random_normal(shape=(self.num_filters), mean=0., std=0.002) , name='bias')
+                        self.bias =Parameter(data=random_normal(shape=(self.num_filters), mean=0., std=0.002) , name='bias')
                     else:
                         self.bias=None
 
@@ -164,13 +164,13 @@ class Embedding(Layer):
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
         if _weight is not None and int_shape(_weight)[-1] == embedding_dim and len( int_shape(_weight))==2:
-            self.weight = tf.Variable(_weight)
+            self.weight =Parameter(_weight)
             self.num_embeddings = int_shape(self.weight)[0]
             self._built = True
         elif _weight is not None :
             raise  ValueError('Shape[-1] of weight does not match embedding_dim')
         elif _weight is None and self.num_embeddings is not None:
-            self.weight = tf.Variable(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
+            self.weight =Parameter(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
             self._built = True
         if self._built:
            # self.to(self.device)
@@ -186,16 +186,14 @@ class Embedding(Layer):
                 with self.name_scope:
                     if isinstance(input_shape, int):
                         self.input_filters = input_shape
-                        self.weight = tf.Variable(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
+                        self.weight =Parameter(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
                         if self.use_bias:
-                            self.bias = tf.Variable(to_tensor(np.zeros((self.num_filters))), name='bias')
+                            self.bias =Parameter(to_tensor(np.zeros((self.num_filters))), name='bias')
 
                         self._built = True
 
 
     def forward(self, x) :
-
-
         dtype = x.dtype
         if dtype != tf.int32 and dtype !=tf.int64:
             x = math_ops.cast(x,tf.int32)
@@ -405,8 +403,8 @@ class Scale(Layer):
         if self._built == False:
             if self.mode =='uniform':
                 self.scale=tf.Variable(self._scale.copy(),trainable=True)
-                self.shift = tf.Variable(self._shift.copy(), trainable=True)
-                self.power = tf.Variable(self._power.copy(), trainable=True)
+                self.shift =Parameter(self._shift.copy(), trainable=True)
+                self.power =Parameter(self._power.copy(), trainable=True)
             elif self.mode =='channel':
                 new_shape = [1] * (len(input_shape) + 1)
                 new_shape[self.filter_index] = self.input_filters
@@ -423,9 +421,9 @@ class Scale(Layer):
                         self._power = repeat_elements(self._power, self.input_filters, 0)
                     self._power = reshape(self._power, new_shape)
 
-                self.scale = tf.Variable(initial_value=self._scale.copy(), trainable=True)
-                self.shift = tf.Variable(initial_value=self._shift.copy(), trainable=True)
-                self.power = tf.Variable(initial_value=self._power.copy(), trainable=True)
+                self.scale =Parameter(data=self._scale.copy(), trainable=True)
+                self.shift =Parameter(data=self._shift.copy(), trainable=True)
+                self.power =Parameter(data=self._power.copy(), trainable=True)
             elif self.mode == 'elementwise':
                 if ndim(self._scale) == 1 and numel(self._scale) ==1:
                     self._scale=ones(input_shape)*self._scale
@@ -440,9 +438,9 @@ class Scale(Layer):
                     self._shift=self._shift.expand_dims(0,1)
                 if int_shape(self._power) ==input_shape:
                     self._power=self._power.expand_dims(0,1)
-                self.scale = tf.Variable(self._scale.copy(), trainable=True)
-                self.shift = tf.Variable(self._shift.copy(), trainable=True)
-                self.power = tf.Variable(self._power.copy(), trainable=True)
+                self.scale =Parameter(self._scale.copy(), trainable=True)
+                self.shift =Parameter(self._shift.copy(), trainable=True)
+                self.power =Parameter(self._power.copy(), trainable=True)
             remove_from('_scale',self.__dict__, self._buffers)
             remove_from('_shift',self.__dict__, self._buffers)
             remove_from('_power',self.__dict__, self._buffers)
@@ -609,19 +607,19 @@ class _ConvNd(Layer):
 
                     if self.transposed:
                         # filter_height, filter_width,  out_channels in_channels,
-                        self.weight = tf.Variable(tf.random.normal(shape=[*self.kernel_size, int(channel_multiplier), int(self.input_filters)], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
+                        self.weight =Parameter(tf.random.normal(shape=[*self.kernel_size, int(channel_multiplier), int(self.input_filters)], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
 
                     else:
 
                         # [filter_height, filter_width, in_channels, out_channels]`
-                        self.weight = tf.Variable(  tf.random.normal(shape=[*self.kernel_size, int(self.input_filters), int(channel_multiplier)], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
+                        self.weight =Parameter(  tf.random.normal(shape=[*self.kernel_size, int(self.input_filters), int(channel_multiplier)], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
 
                         if self.separable:
                             pointwise_kernel_size = (1,) * len(self.kernel_size)
-                            self.pointwise = tf.Variable(tf.random.normal( shape=[*pointwise_kernel_size, int(self.input_filters * channel_multiplier),int(self.num_filters)], mean=0, stddev=1) * 0.02, trainable=True, name='weight')
+                            self.pointwise =Parameter(tf.random.normal( shape=[*pointwise_kernel_size, int(self.input_filters * channel_multiplier),int(self.num_filters)], mean=0, stddev=1) * 0.02, trainable=True, name='weight')
 
                     if self.use_bias:
-                        self.bias = tf.Variable(tf.random.normal([int(self.num_filters)]), name='bias')
+                        self.bias =Parameter(tf.random.normal([int(self.num_filters)]), name='bias')
                     else:
                         self.bias=None
 
@@ -1480,7 +1478,7 @@ class SingleImageLayer(Layer):
     def build(self, input_shape):
         if self._built == False:
             with tf.device(get_device()):
-                self.weight = tf.Variable(to_tensor(self.origin_image.clone()), name='weight')
+                self.weight =Parameter(to_tensor(self.origin_image.clone()), name='weight')
                 self.input_filters = to_numpy(input_shape)[self.filter_index]
                 self._built = True
 

@@ -21,7 +21,6 @@ from torch._jit_internal import List
 from torch._six import container_abcs
 from torch.nn import Module
 from torch.nn import init
-from torch.nn.parameter import Parameter
 from trident.optims.pytorch_regularizers import get_reg
 from trident.backend.common import *
 from trident.backend.pytorch_backend import *

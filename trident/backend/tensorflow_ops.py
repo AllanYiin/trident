@@ -23,7 +23,16 @@ from tensorflow.python.ops import math_ops
 from trident.backend.common import to_list, unpack_singleton, epsilon,OrderedDict,get_function,get_session
 
 
-__all__ = ['Tensor','is_tensor', 'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
+class dtype:
+    float32 = tf.float32
+    float16 = tf.float16
+    int64 = tf.int64
+    int16 = tf.int16
+    uint8 = tf.uint8
+    int8= tf.int8
+    bool = tf.bool
+
+__all__ = ['Tensor','is_tensor',  'dtype','is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -1073,7 +1082,10 @@ def true_divide(x, y):
       TypeError: If `x` and `y` have different dtypes.
     """
     if isinstance(x,(numbers.Number)) and isinstance(y,(numbers.Number)):
-        return x/y
+        if y==0:
+            return 1
+        else:
+            return x/y
     elif isinstance(x,(np.ndarray)) and isinstance(y,(numbers.Number,np.ndarray)):
         if isinstance(y, numbers.Number):
             return x.astype(np.float32) / y
@@ -2647,8 +2659,8 @@ def spectral_norm(module, n_iterations=1,axis=-1):
         >>> m = spectral_norm(Dense(20, 40))
         >>> m
         Linear(in_features=20, out_features=40, bias=True)
-        >>> m.weight_u.size()
-        torch.Size([40])
+        >>> int_shape(m.weight)
+        ([40])
 
     """
     w_shape = module.shape.as_list()
@@ -3715,6 +3727,7 @@ _FUN_NAMES = [
     ('cpu', cpu),
     ('cuda', cuda),
     ('copy', copy),
+    ('numel', numel),
     ('ndim', ndim),
     ('int_shape', int_shape),
     ('cast', cast),

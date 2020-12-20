@@ -36,7 +36,7 @@ from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
-__all__ = ['Dtype','get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine', 'try_map_args_and_call',
+__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine', 'try_map_args_and_call',
            'print_mem_stack',
            'normalize_padding', 'fix_layer']
 
@@ -45,15 +45,6 @@ _FUN_NAMES = [
 for target_fun_name, source_fun in _FUN_NAMES:
     setattr(Tensor, target_fun_name, source_fun)
 
-
-class Dtype(object):
-    float32 = torch.float32
-    int64 = torch.int64
-    int32 = torch.int32
-    int16 = torch.int16
-    uint8 = torch.uint8
-    int8 = torch.int8
-    bool = torch.bool
 
 version = torch.__version__
 sys.stdout.write('Pytorch version:{0}.\n'.format(version))
@@ -289,6 +280,21 @@ def register_module_backward_hook(
     return handle
 
 
+class Parameter(nn.Parameter):
+    def __init__(self, data, trainable=True,dtype=None, name=None, **kwargs):
+        super().__init__(data,requires_grad=trainable)
+    @property
+    def trainable(self):
+        return super().requires_grad
+
+    @trainable.setter
+    def trainable(self,value):
+        super().requires_grad=value
+
+
+
+
+
 class Layer(nn.Module):
     """Trident extened pytorch nn.Module as base layer class.
 
@@ -509,6 +515,31 @@ class Layer(nn.Module):
 
         """
         pass
+
+    def rebuild(self, input_shape):
+        """ Do the shape inference and initialize weights and bias.
+
+        `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
+        In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
+
+        Args:
+            input_shape (tensor):  the shape representation exclude the batch axis.
+
+        """
+        print('Your model will start to rebuild, it will cause lost all existing trainable parameters, will you want to rebuild it?')
+        ans = input('(Y/N) << ').lower()
+        if ans in ['yes', 'y']:
+            for name, module in self.named_modules():
+                if module.trainable == True:
+                    module._input_shape = None
+                    module._output_shape = None
+                    module._built = False
+                    module._parameters = OrderedDict()
+            dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device())
+            out = self.forward(dummay_input)
+
+
+
 
     @property
     def trainable_weights(self) -> List[nn.Parameter]:
@@ -1057,8 +1088,11 @@ class Sequential(Layer):
     def remove_at(self, idx):
         self.__delitem__(idx)
         if len(self._modules) > 0:
-            self._output_shape = to_tensor(self[-1]._output_shape)
-            self._signature = None
+            self._output_shape = self[-1]._output_shape
+            if isinstance(self._signature ,Signature) and len(self._signature.outputs)>0:
+                self._signature.outputs[self._signature.outputs.key_list[0]]=TensorSpec(shape=self[-1]._output_shape)
+            else:
+                self._signature = None
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
