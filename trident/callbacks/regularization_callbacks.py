@@ -74,7 +74,7 @@ class MixupCallback(RegularizationCallbacksBase):
         mixed_x=None
         if get_backend()=='pytorch':
             mixed_x = lam * x + (1 - lam) * x[index, :]
-            pred = model(to_tensor(mixed_x, requires_grad=True))
+            pred = model(to_tensor(mixed_x, requires_grad=True,device=model.device))
             y_a, y_b = y, y[index]
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
@@ -186,7 +186,7 @@ class CutMixCallback(RegularizationCallbacksBase):
             x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
-            pred = model(to_tensor(x, requires_grad=True))
+            pred = model(to_tensor(x, requires_grad=True,device=model.device))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
             if training_context['is_collect_data']:
