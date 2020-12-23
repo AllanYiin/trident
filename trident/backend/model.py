@@ -26,13 +26,13 @@ from trident.loggers.history import HistoryBase
 
 _session = get_session()
 working_directory=_session.working_directory
-_backend = get_backend()
 
-if _backend == 'pytorch':
+
+if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
 
-elif _backend == 'tensorflow':
+elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
 
@@ -58,7 +58,7 @@ class ModelBase(object):
         if isinstance(inputs,tuple) and isinstance(inputs[0],int):
             input_shape,inputs=inputs,input_shape
         self.batch_index = 0
-        self.filter_index = 1
+        self.filter_index =1 if get_backend() == 'pytorch' else -1
         self.inputs = OrderedDict()
         self._outputs = OrderedDict()
         self._targets = OrderedDict()
@@ -464,6 +464,10 @@ class ModelBase(object):
 
                """
         return self
+
+    def adjust_learning_rate_scheduling(self, index: int, unit='batch', new_value:float=None):
+        return self
+
 
     def reset_training_context(self):
         self.training_context = {
