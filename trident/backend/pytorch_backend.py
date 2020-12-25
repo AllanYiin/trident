@@ -31,11 +31,12 @@ from torch._six import container_abcs
 from torch.nn.parameter import Parameter
 from trident.backend.tensorspec import *
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature
+    PrintException, Signature,TensorShape
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
+from trident.backend import dtype as Dtype
 __all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine', 'try_map_args_and_call',
            'print_mem_stack',
            'normalize_padding', 'fix_layer']
@@ -281,8 +282,10 @@ def register_module_backward_hook(
 
 
 class Parameter(nn.Parameter):
-    def __init__(self, data, trainable=True,dtype=None, name=None, **kwargs):
-        super().__init__(data,requires_grad=trainable)
+    def __new__(cls, data, trainable=True):
+        inst = nn.Parameter.__new__(cls, data, trainable)
+        return inst
+
     @property
     def trainable(self):
         return super().requires_grad
@@ -367,8 +370,8 @@ class Layer(nn.Module):
         self.default_name = camel2snake(prefix) + '_' + str(get_global_uid(camel2snake(prefix)))
         self.relative_name = ''
         reset_name(self, self._uid_prefixs)
-        self._input_shape = None
-        self._output_shape = None
+        self._input_shape:Optional[None,TensorShape,List[TensorShape]] = None
+        self._output_shape:Optional[None,TensorShape,List[TensorShape]]  = None
 
         self.input_filters = None
         self.input_spec = None
@@ -511,7 +514,7 @@ class Layer(nn.Module):
         In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
 
         Args:
-            input_shape (tensor):  the shape representation exclude the batch axis.
+            input_shape (TensorShape):  the shape representation exclude the batch axis.
 
         """
         pass
@@ -660,52 +663,36 @@ class Layer(nn.Module):
 
 
     @input_shape.setter
-    def input_shape(self, value) -> Tensor:
+    def input_shape(self, value) -> TensorShape:
         """ Setting the input_shape, means the layer get shape information and start to do the shape inferrence """
 
         if is_tensor(value) and value.ndim == 1 and value.dtype == torch.int32:
-            pass
+            value = TensorShape(value)
         elif isinstance(value, torch.Size):
-            value = to_tensor(to_numpy(value)).int()
+            value =TensorShape(value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-            value = to_tensor(list(value)).int()
+            value = TensorShape(value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
-            value = tuple(value)
+            value =[TensorShape(sh) for sh in value]
         else:
-            value = to_tensor(value).int()
-
-        if self.is_root:
-            self.input_spec = TensorSpec(value)
+            value =TensorShape(value)
 
         if self._built == False or self._input_shape is None or self.input_filters is None:
             self._input_shape = value
-            if len(self._input_shape) == 0:
-                self.input_filters = int(self._input_shape.data)
-            elif len(self._input_shape) == 1:
-                self.input_filters = self._input_shape[0]
-            else:
-                if self.filter_index < 0:
-                    self.input_filters = int(self._input_shape[self.filter_index])
-                elif self.filter_index > self.batch_index:
-                    self.input_filters = int(self._input_shape[self.filter_index - self.batch_index - 1])
-                else:
-                    raise NotImplementedError('filter_index>batch_index')
-
-        self.build(self._input_shape)
-        self._built = True
-        if self.is_root:
-            if self._signature is None:
-                self._signature = Signature(name=self.name)
-            self._signature.inputs = OrderedDict()
-            if is_tensor(self._input_shape):
-                self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
-            else:
-                for k in range(len(self._input_shape)):
-                    self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
-
-        # elif self._input_shape is not None and to_list(self._input_shape) == to_list(value):
-        #     'input_shape is already assigned, and shape is the same.'
-        #     pass
+            self.input_filters = self._input_shape.dims[self.filter_index]
+            self.build(value)
+            self._built = True
+            if self.is_root:
+                if self._signature is None:
+                    self._signature = Signature(name=self.name)
+                self._signature.inputs = OrderedDict()
+                if isinstance(self._input_shape,TensorShape):
+                    self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
+                    self.input_spec = self._signature.inputs['input']
+                elif isinstance(self._input_shape, list):
+                    for k in range(len(self._input_shape)):
+                        self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
+                self.input_spec = self._signature.inputs.value_list
 
     @property
     def output_shape(self) :
@@ -714,15 +701,15 @@ class Layer(nn.Module):
     @output_shape.setter
     def output_shape(self, value):
         if is_tensor(value) and value.ndim == 1 and value.dtype == torch.int32:
-            pass
+            value = TensorShape(value)
         elif isinstance(value, torch.Size):
-            value = to_tensor(to_numpy(value)).int()
+            value = TensorShape(value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-            value = to_tensor(list(value)).int()
+            value = TensorShape(value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
-            value = tuple(value)
+            value = [TensorShape(sh) for sh in value]
         else:
-            value = to_tensor(value).int()
+            value = TensorShape(value)
 
         self._output_shape = value
         if self.is_root:
@@ -747,23 +734,15 @@ class Layer(nn.Module):
                 self._signature = Signature(name=self.name)
 
                 if self._input_shape is not None:
-                    if is_tensor(self._input_shape) and ndim(self._input_shape) == 1 and 'int' in str(self._input_shape.dtype):
-                        self._signature.inputs["input"] = TensorSpec(shape=self._input_shape, name="input")
-
-                    elif isinstance(self._input_shape, tuple) and all([isinstance(item, numbers.Integral) for item in self._input_shape]):
-                        self._signature.inputs["input"] = TensorSpec(shape=to_tensor(self._input_shape).int(), name="input")
-
+                    if isinstance(self._input_shape, TensorShape):
+                        self._signature.inputs["input"] = TensorSpec(shape=TensorShape(self._input_shape), name="input")
                     elif isinstance(self._input_shape, tuple):
                         for i in range(len(self._input_shape)):
-                            self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=to_tensor(self._input_shape[i]), name="input_{0}".format(i))
+                            self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
 
                 if self._output_shape is not None:
-                    if is_tensor(self._output_shape) and ndim(self._output_shape) == 1 and 'int' in str(self._output_shape.dtype):
-                        self._signature.outputs["output"] = TensorSpec(shape=self._output_shape, name="output")
-
-                    elif isinstance(self._output_shape, tuple) and all([isinstance(item, numbers.Integral) for item in self._output_shape]):
-                        self._signature.outputs["output"] = TensorSpec(shape=to_tensor(self._output_shape).int(), name="output")
-
+                    if isinstance(self._output_shape,TensorShape) :
+                        self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
                     elif isinstance(self._output_shape, tuple):
                         for i in range(len(self._output_shape)):
                             self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
@@ -827,15 +806,15 @@ class Layer(nn.Module):
         is_all_numpy = True
         is_built=self._built
         input = list(input)
+        #only do in the root
         if self.is_root:
             new_input = []
             for inp in input:
                 if isinstance(inp, np.ndarray):
-                    inp = to_tensor(inp)
-                    new_input.append(inp)
+                    inp = to_tensor(inp,device=self.device)
                 else:
-                    new_input.append(inp)
                     is_all_numpy = False
+                new_input.append(inp.to(get_device()))
             input = new_input
         for hook in itertools.chain(
                 _global_forward_pre_hooks.values(),
@@ -849,23 +828,27 @@ class Layer(nn.Module):
         if self._built == False:
             inp = unpack_singleton(input)
             if is_tensor(inp):
-                self.input_shape = tensor_to_shape(inp)
+                shp= tensor_to_shape(inp)
+                self.input_filters = shp.dims[self.filter_index]
+                self.input_shape =shp
             elif isinstance(inp, (tuple, list)):
-                self.input_shape=tuple([tensor_to_shape(i) for i in inp  if not isinstance(i, (list, tuple))])
+                self.input_shape=tuple([int_shape(i) for i in inp  if not isinstance(i, (list, tuple))])
             else:
                 print('input shou be tensor or tuple of tensor')
                 print(inp)
+            self._built=True
 
         if torch._C._get_tracing_state():
             result = self._slow_forward(*input, **kwargs)
         else:
             result = self.forward(*input)
 
-            output = unpack_singleton(result)
             if hasattr(self, 'keep_output') and self.keep_output == True:
-                self._output_tensor = output
+                # make a op
+                self._output_tensor = identity(unpack_singleton(result))
             if self._output_shape is None or is_built==False:
-                if isinstance(output, torch.Tensor):  # one output
+                output= unpack_singleton(result)
+                if is_tensor(output):  # one output
                     self._output_shape = tensor_to_shape(output)
                 elif isinstance(output, (list, tuple)):
                     output_shape =tuple([tensor_to_shape(item) for item in output  if not isinstance(item, (list, tuple))])
@@ -1075,8 +1058,8 @@ class Sequential(Layer):
         """
 
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
-            last_output =tuple(to_numpy( self[-1]._output_shape))
-            dummay_input = random_normal((2,) + last_output).to(self.device)
+            last_output = self[-1]._output_shape
+            dummay_input = to_tensor(last_output.get_dummy_tensor()).to(self.device)
             out = module(dummay_input)
             self._modules[name] = module
             self._output_shape = module.output_shape
@@ -1580,17 +1563,14 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
     for name, module in model.named_modules():
         module.relative_name = name
     # multiple inputs to the network
-    if isinstance(input_size, tuple):
-        input_size = list(input_size)
+
 
     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
     model.to(get_device())
     model.eval()
-    if isinstance(input_size, int):
-        x = [torch.rand(1, input_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu")]
-    else:
-        # batch_size of 2 for batchnorm
-        x = [torch.rand(1, *in_size).type(dtype).to("cuda" if model.weights[0].data.is_cuda else "cpu") for in_size in input_size]
+
+    # batch_size of 2 for batchnorm
+    x = [ to_tensor(shape.get_dummy_tensor()).to(get_device()) for shape in input_size]
     # p    rint(type(x[0]))
 
     # create properties
@@ -1647,7 +1627,7 @@ def summary(model, input_size, batch_size=-1, device="cuda"):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = np.asarray([np.abs(np.prod(to_numpy(shp)) * batch_size * 4. / (1024 ** 2.)) for shp in input_size]).sum()
+    total_input_size = np.asarray([np.abs(np.prod(to_numpy(shp.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for shp in input_size]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
@@ -1892,10 +1872,12 @@ def fix_layer(layer: Layer):
         layer._uid_prefixs = {}
     reset_name(layer, layer._uid_prefixs)
 
-    if layer._input_shape is not None and isinstance(layer._input_shape, torch.Size):
-        layer._input_shape = to_tensor(to_numpy(layer._input_shape)).int()
-    if layer._output_shape is not None and isinstance(layer._output_shape, torch.Size):
-        layer._output_shape = to_tensor(to_numpy(layer._output_shape)).int()
+    if layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
+        layer._input_shape =TensorShape(layer._input_shape)
+
+    if layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
+        layer._output_shape =TensorShape(layer._output_shape)
+
     if not hasattr(layer, 'get_toot'):
         setattr(layer, 'get_root', MethodType(get_root, layer))
 
@@ -1938,12 +1920,12 @@ def fix_layer(layer: Layer):
         if not hasattr(module, 'input_spec'):
             module.input_spec = None
             if module.input_shape is not None:
-                module.input_spec = TensorSpec(shape=module.input_shape)
+                module.input_spec = TensorSpec(shape=TensorShape(module._input_shape))
         # fix for shape definition
-        if isinstance(module._input_shape,torch.Size):
-            module._input_shape=to_tensor(to_numpy(module._input_shape)).int()
-        if isinstance(module._output_shape,torch.Size):
-            module._output_shape=to_tensor(to_numpy(module._output_shape)).int()
+        if not isinstance(module._input_shape,TensorShape):
+            module._input_shape=TensorShape(module._input_shape)
+        if not isinstance(module._output_shape,TensorShape):
+            module._output_shape=TensorShape(module._output_shape)
 
         if not hasattr(module, 'batch_index'):
             setattr(module, 'batch_index', 0)
@@ -1975,20 +1957,20 @@ def fix_layer(layer: Layer):
         layer._signature = Signature()
         if layer._input_shape is not None:
             if is_tensor(layer._input_shape):
-                layer._signature.inputs["input"] = TensorSpec(shape=layer._input_shape, name="input")
+                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(layer._input_shape), name="input")
             elif isinstance(layer._input_shape, tuple) and isinstance(layer._input_shape[0], int):
-                layer._signature.inputs["input"] = TensorSpec(shape=to_tensor(layer._input_shape).int(), name="input")
+                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(layer._input_shape), name="input")
             elif isinstance(layer._input_shape, tuple):
                 for i in range(len(layer._input_shape)):
-                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=layer._input_shape[i], name="input_{0}".format(i))
+                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._input_shape[i]), name="input_{0}".format(i))
         if layer._output_shape is not None:
             if is_tensor(layer._output_shape):
-                layer._signature.outputs["output"] = TensorSpec(shape=layer._output_shape, name="output")
+                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(layer._output_shape), name="output")
             elif isinstance(layer._output_shape, tuple) and isinstance(layer._output_shape[0], int):
-                layer._signature.outputs["output"] = TensorSpec(shape=to_tensor(layer._output_shape).int(), name="output")
+                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(layer._output_shape), name="output")
             elif isinstance(layer._output_shape, tuple):
                 for i in range(len(layer._output_shape)):
-                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=layer._output_shape[i], name="output_{0}".format(i))
+                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._output_shape[i]), name="output_{0}".format(i))
         layer.signature = layer._signature
 
     return layer

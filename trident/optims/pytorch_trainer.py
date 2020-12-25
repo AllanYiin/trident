@@ -106,15 +106,16 @@ class Model(ModelBase):
             elif isinstance(input_shape, dict):
                 for k, v in input_shape.items():
                     if is_tensor(v):
-                        self.inputs[k] = TensorSpec(shape=v, name=k)
+                        self.inputs[k] = TensorSpec(shape=TensorShape(v), name=k)
                     elif isinstance(v, TensorSpec):
                         self.inputs[v.name] = v
             elif isinstance(input_shape, (tuple, list)) and all([isinstance(item, int) for item in input_shape]):
                 input_name = 'input'
-                self.inputs[input_name] = TensorSpec(shape=to_tensor(input_shape).int(), name=input_name)
+                input_shape=TensorShape((None,)+tuple(input_shape))
+                self.inputs[input_name] = TensorSpec(shape=input_shape, name=input_name)
             else:
-                input_shape = unpack_singleton(input_shape)
-                if is_tensor(input_shape):
+                input_shape = TensorShape(unpack_singleton(input_shape))
+                if isinstance(input_shape,TensorShape):
                     input_name = 'input'
                     self.inputs[input_name] = TensorSpec(shape=input_shape, name=input_name)
                 else:
@@ -123,13 +124,13 @@ class Model(ModelBase):
         elif isinstance(inputs, (tuple, list)):
             if len(inputs) == 1 and is_tensor(inputs[0]):
                 input_name = 'input'
-                self.inputs[input_name] = TensorSpec(shape=to_tensor(int_shape(inputs[0])[self.batch_index + 1:]), name=input_name)
+                self.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[0]), name=input_name)
             else:
                 for m in range(len(inputs)):
                     inp = inputs[m]
                     if is_tensor(inp) or isinstance(inp, np.ndarray):
                         input_name = 'input_{0}'.format(m)
-                        self.inputs[input_name] = TensorSpec(shape=to_tensor(int_shape(inputs[m])[self.batch_index + 1:]), name=input_name)
+                        self.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[m]), name=input_name)
         elif isinstance(inputs, dict):
             for k, v in inputs.items():
                 if isinstance(v, TensorSpec):
@@ -137,12 +138,12 @@ class Model(ModelBase):
                 elif is_tensor(v) or isinstance(v, np.ndarray):
                     if  isinstance(v, np.ndarray):
                         v = to_tensor(v)
-                    self.inputs[k] = TensorSpec(shape=to_tensor(int_shape(v)[self.batch_index + 1:],dtype=v.dtype), name=k)
+                    self.inputs[k] = TensorSpec(shape=tensor_to_shape(v),dtype=v.dtype, name=k)
         elif is_tensor(inputs):
-            self.inputs['input'] = TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index + 1:],dtype=inputs.dtype), name='input')
+            self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs),dtype=inputs.dtype, name='input')
         elif isinstance(inputs, np.ndarray):
             inputs = to_tensor(inputs)
-            self.inputs['input'] =   TensorSpec(shape=to_tensor(int_shape(inputs)[self.batch_index+1:]),dtype=inputs.dtype,name='input')
+            self.inputs['input'] =   TensorSpec(shape=tensor_to_shape(inputs),dtype=inputs.dtype,name='input')
 
         # single model
         if isinstance(output, (Layer, nn.Module)):
@@ -176,8 +177,8 @@ class Model(ModelBase):
 
                 else:
 
-                    output.input_shape = to_tensor(input_shape)
-                    dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device())
+                    output.input_shape = input_shape
+                    dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device())
                     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                     output.to(get_device())
                     output.eval()
@@ -185,8 +186,8 @@ class Model(ModelBase):
 
                 self._model = output
                 if isinstance(out, torch.Tensor):
-                    self._outputs['output'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index + 1:]), name='output')
-                    self._targets['target'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index + 1:]), name='target')
+                    self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
+                    self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
                 elif isinstance(out, OrderedDict):
                     for k, v in out.items():
                         self._outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
@@ -194,14 +195,14 @@ class Model(ModelBase):
                                                                                                                 name=k.replace('output', 'target').replace('student', 'teacher'))
                 else:
                     for i in range(len(out)):
-                        self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index + 1:]), name='output_{0}'.format(i))
-                        self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(out[i])[self.batch_index + 1:]), name='target_{0}'.format(i))
+                        self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
+                        self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='target_{0}'.format(i))
             if self._model.signature.maybe_not_complete():
                 self._model.signature = None
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (nn.Module)) for m in output]):
             output_list = []
             model_list = []
-            dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device()) if not is_tensor(inputs) else inputs.to(get_device())
+            dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device()) if not is_tensor(inputs) else inputs.to(get_device())
 
 
             for op in output:
@@ -216,16 +217,16 @@ class Model(ModelBase):
             self._model = model
             self.name = model.name
             for i in range(len(output_list)):
-                self._outputs['output_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(output_list[i])[self.batch_index + 1:]), name='output_{0}'.format(i))
-                self._targets['target_{0}'.format(i)] = TensorSpec(shape=to_tensor(int_shape(output_list[i])[self.batch_index + 1:]), name='target_{0}'.format(i))
+                self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='output_{0}'.format(i))
+                self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='target_{0}'.format(i))
             if self._model.signature.maybe_not_complete():
                 self._model.signature = None
         elif isinstance(output, (np.ndarray, torch.Tensor)):
             # style transfer , or adversarial attack
             self._model = to_tensor(output, requires_grad=True)
             out = self._model
-            self._outputs['output'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index + 1:]), name='output')
-            self._targets['target'] = TensorSpec(shape=to_tensor(int_shape(out)[self.batch_index + 1:]), name='target')
+            self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
+            self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
 
         else:
             raise ValueError('Invalid output')
@@ -1056,7 +1057,7 @@ class Model(ModelBase):
     def summary(self):
         # self.rebinding_input_output(self._model.input_shape)
 
-        summary(self._model, [list(item._shape_tuple[1:]) for item in self.inputs.value_list])
+        summary(self._model, [TensorShape(item.shape) for item in self.inputs.value_list])
         return self
 
     def predict(self, input):

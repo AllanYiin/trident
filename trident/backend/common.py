@@ -1,5 +1,6 @@
 """ common define the session ,basic class and basic function without internal dependency """
 import collections
+import functools
 import importlib
 import datetime
 import inspect
@@ -7,6 +8,7 @@ import builtins
 import json
 import linecache
 import math
+import operator
 import os
 import platform
 import re
@@ -22,19 +24,33 @@ import types
 from enum import Enum
 from inspect import signature
 from pydoc import locate
-from typing import Union, Tuple, Any, overload
+from typing import Union, Tuple, Any, overload,NewType,Text
+
+
 
 import numpy as np
 
 __all__ = ['get_session','set_session','get_session_value','get_backend','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
-           'check_keys', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
+           'check_keys','make_sure', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
-           'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'unpack_singleton', 'enforce_singleton',
+           'next_prime', 'prev_prime', 'nearest_prime', 'PrintException','TensorShape', 'unpack_singleton', 'enforce_singleton',
            'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature',
            'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
           'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map']
+
+
+# In some cases, these basic types are shadowed by corresponding
+# top-level values.  The underscore variants let us refer to these
+# types.  See https://github.com/python/mypy/issues/4146 for why these
+# workarounds is necessary
+import six
+
+_int = builtins.int
+_float = builtins.float
+_bool = builtins.bool
+
 
 
 _SESSION = threading.local()
@@ -385,6 +401,271 @@ def PrintException():
     traceback.print_exc(limit=None, file=sys.stderr)
     # traceback.print_tb(tb, limit=1, file=sys.stdout)
     # traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
+
+def make_sure(bool_val, error_msg, *args):
+    if not bool_val:
+        raise ValueError("make_sure failure: " + error_msg % args)
+
+class DeviceType(object):
+    _Type = NewType('_Type', int)
+    CPU = _Type(0)  # type: _Type
+    CUDA = _Type(1)  # type: _Type
+
+    type: str  # THPDevice_type
+    index: _int  # THPDevice_index
+
+
+class Device(object):
+    '''
+    Describes device type and device id
+    syntax: device_type:device_id(optional)
+    example: 'CPU', 'CUDA', 'CUDA:1'
+    '''
+
+    def __init__(self, device):  # type: (Text) -> None
+        options = device.split(':')
+        self.type = getattr(DeviceType, options[0])
+        self.device_id = 0
+        if len(options) > 1:
+            self.device_id = int(options[1])
+
+
+class TensorShape(object):
+    # TODO: __reduce__
+    """
+
+    Examples:
+        >>> a=TensorShape([2,128,64,64])
+        >>> print(a)
+        (2, 128, 64, 64)
+        >>> print(a[2])
+        64
+        >>> print(a[1:3])
+        (128, 64)
+        >>> b=TensorShape((128, 64, 65))
+        >>> b.is_compatible_with(a[1:3])
+        True
+    """
+
+    def __init__(self, dims):
+        """Creates a new TensorShape with the given dimensions.
+        Args:
+          dims: A list of Dimensions, or None if the shape is unspecified.
+        Raises:
+          TypeError: If dims cannot be converted to a list of dimensions.
+        """
+        if isinstance(dims, (tuple, list)):  # Most common case.
+            self._dims = [d for d in dims]
+        elif dims is None:
+            self._dims = None
+
+        elif isinstance(dims,TensorShape):
+            self._dims = dims.dims
+        else:
+            try:
+                dims_iter = iter(dims)
+            except TypeError:
+                # Treat as a singleton dimension
+                self._dims = to_list(dims)
+            else:
+                self._dims = []
+                for d in dims_iter:
+                    try:
+                        self._dims.append(d)
+                    except TypeError as e:
+                        six.raise_from(
+                            TypeError(
+                                "Failed to convert '{0!r}' to a shape: '{1!r}'"
+                                "could not be converted to a dimension. A shape should "
+                                "either be single dimension (e.g. 10), or an iterable of "
+                                "dimensions (e.g. [1, 10, None])."
+                                    .format(dims, d)), e)
+
+    def __repr__(self):
+            if self._dims is not None:
+                return "TensorShape(%r)" % [dim for dim in self._dims]
+            else:
+                return "TensorShape(None)"
+
+    def __str__(self):
+        if self._dims is None:
+          return "<unknown>"
+        elif self.rank == 1:
+            return "(%s,)" % self.dims[0]
+        else:
+            return "(%s)" % ", ".join(str(d) for d in self.dims)
+
+    @property
+    def rank(self):
+        """Returns the rank of this shape, or None if it is unspecified."""
+        if self._dims is not None:
+            return len(self)
+        return None
+
+    @property
+    def dims(self):
+        """Deprecated.  Returns list of dimensions for this shape.
+        Suggest `TensorShape.as_list` instead.
+        Returns:
+          A list containing `tf.compat.v1.Dimension`s, or None if the shape is
+          unspecified.
+        """
+        return self._dims
+
+    @property
+    def ndims(self):
+        """Deprecated accessor for `rank`."""
+        return self.rank
+
+    def tolist(self):
+        """Returns a list of integers or `None` for each dimension.
+        Returns:
+          A list of integers or `None` for each dimension.
+        Raises:
+          ValueError: If `self` is an unknown shape with an unknown rank.
+        """
+        if self._dims is None:
+            raise ValueError("as_list() is not defined on an unknown TensorShape.")
+        return [dim for dim in self.dims]
+
+    def is_fully_defined(self):
+        """Returns True iff `self` is fully defined in every dimension."""
+        return (self._dims is not None and all(dim is not None for dim in self.dims))
+
+    def numel(self):
+        """Returns the total number of elements, or none for incomplete shapes."""
+        if self.is_fully_defined():
+            return functools.reduce(operator.mul, self.to_list(), 1)
+        else:
+            return None
+
+
+
+    def __len__(self):
+        """Returns the rank of this shape, or raises ValueError if unspecified."""
+        if self._dims is None:
+            raise ValueError("Cannot take the length of shape with unknown rank.")
+        return len(self._dims)
+
+    def __iter__(self):
+        """Returns `self.dims` if the rank is known, otherwise raises ValueError."""
+        if self._dims is None:
+          raise ValueError("Cannot iterate over a shape with unknown rank.")
+        else:
+            return iter(d for d in self._dims)
+
+    def __getitem__(self, key):
+        """Returns the value of a dimension or a shape, depending on the key.
+        Args:
+          key: If `key` is an integer, returns the dimension at that index;
+            otherwise if `key` is a slice, returns a TensorShape whose dimensions
+            are those selected by the slice from `self`.
+        Returns:
+          An integer if `key` is an integer, or a `TensorShape` if `key` is a
+          slice.
+        Raises:
+          ValueError: If `key` is a slice and `self` is completely unknown and
+            the step is set.
+        """
+        if self.dims is not None:
+          if isinstance(key, slice):
+            return TensorShape(self.dims[key])
+          else:
+            return self.dims[key]
+        else:
+          if isinstance(key, slice):
+            start = key.start if key.start is not None else 0
+            stop = key.stop
+
+            if key.step is not None:
+              # TODO(mrry): Handle these maybe.
+              raise ValueError("Steps are not yet handled")
+            if stop is None:
+              # NOTE(mrry): This implies that TensorShape(None) is compatible with
+              # TensorShape(None)[1:], which is obviously not true. It would be
+              # possible to track the number of dimensions symbolically,
+              # and perhaps we should do that.
+              return TensorShape(None)
+            elif start < 0 or stop < 0:
+              # TODO(mrry): Handle this better, as it will be useful for handling
+              # suffixes of otherwise unknown shapes.
+              return TensorShape(None)
+            else:
+              return TensorShape(None)
+          else:
+            return None
+
+    def __eq__(self, other):
+        """Returns True if `self` is equivalent to `other`."""
+        try:
+            other = as_shape(other)
+        except TypeError:
+            return NotImplemented
+        return self.dims == other.dims
+
+    def __ne__(self, other):
+        """Returns True if `self` is known to be different from `other`."""
+        try:
+            other = as_shape(other)
+        except TypeError:
+            return NotImplemented
+        if self.rank is None or other.rank is None:
+            raise ValueError("The inequality of unknown TensorShapes is undefined.")
+        if self.rank != other.rank:
+            return True
+        return self.dims != other.dims
+
+    def is_compatible_with(self, other):
+        """Returns True iff `self` is compatible with `other`.
+        Two possibly-partially-defined shapes are compatible if there
+        exists a fully-defined shape that both shapes can represent. Thus,
+        compatibility allows the shape inference code to reason about
+        partially-defined shapes. For example:
+        * TensorShape(None) is compatible with all shapes.
+        * TensorShape([None, None]) is compatible with all two-dimensional
+          shapes, such as TensorShape([32, 784]), and also TensorShape(None). It is
+          not compatible with, for example, TensorShape([None]) or
+          TensorShape([None, None, None]).
+        * TensorShape([32, None]) is compatible with all two-dimensional shapes
+          with size 32 in the 0th dimension, and also TensorShape([None, None])
+          and TensorShape(None). It is not compatible with, for example,
+          TensorShape([32]), TensorShape([32, None, 1]) or TensorShape([64, None]).
+        * TensorShape([32, 784]) is compatible with itself, and also
+          TensorShape([32, None]), TensorShape([None, 784]), TensorShape([None,
+          None]) and TensorShape(None). It is not compatible with, for example,
+          TensorShape([32, 1, 784]) or TensorShape([None]).
+        The compatibility relation is reflexive and symmetric, but not
+        transitive. For example, TensorShape([32, 784]) is compatible with
+        TensorShape(None), and TensorShape(None) is compatible with
+        TensorShape([4, 4]), but TensorShape([32, 784]) is not compatible with
+        TensorShape([4, 4]).
+        Args:
+          other: Another TensorShape.
+        Returns:
+          True iff `self` is compatible with `other`.
+        """
+        other = as_shape(other)
+        if self.dims is not None and other.dims is not None:
+          if self.rank != other.rank:
+            return False
+          for x_dim, y_dim in zip(self.dims, other.dims):
+            if x_dim!=y_dim:
+              return False
+        return True
+
+    def get_dummy_tensor(self):
+        shape=self._dims
+        shape[0]=2
+        return np.random.standard_normal(shape)
+
+
+def as_shape(shape):
+    """Converts the given object to a TensorShape."""
+    if isinstance(shape, TensorShape):
+        return shape
+    else:
+        return TensorShape(shape)
+
 
 
 class OrderedDict(collections.OrderedDict):
@@ -1138,18 +1419,7 @@ def map_function_arguments(params, params_dict, *args, **kwargs):
     return arg_map
 
 
-class device:
-    type: str  # THPDevice_type
-    index: int  # THPDevice_index
 
-    # THPDevice_pynew
-    @overload
-    def __init__(self, device: Union[int, str]) -> None: ...
-
-    @overload
-    def __init__(self, type: str, index: int) -> None: ...
-
-    def __reduce__(self) -> Tuple[Any, ...]: ...  # THPDevice_reduce
 
 
 class ClassfierType(Enum):

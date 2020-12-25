@@ -28,7 +28,7 @@ from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import get_activation
 from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_initializers import *
-
+from trident.backend import dtype
 __all__ = ['Dense', 'Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot', 'Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
            'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape', 'Permute',
@@ -109,8 +109,8 @@ class Dense(Layer):
 
     def build(self, input_shape):
         if self._built == False:
-            if isinstance(input_shape, int):
-                self.input_filters = input_shape
+            if len(input_shape.dims)==1:
+                self.input_filters = input_shape.dims[0]
             self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters))
             kaiming_uniform(self.weight, a=math.sqrt(5))
             # self._parameters['weight'] =self.weight
@@ -266,9 +266,9 @@ class Embedding(Layer):
             self._built = True
 
     def forward(self, x: torch.Tensor) -> Tensor:
-        if self.sparse and x.dtype != str2dtype('long') and int_shape(x)[-1] == self.num_embeddings:
+        if self.sparse and x.dtype !=dtype.long and int_shape(x)[-1] == self.num_embeddings:
             x = argmax(x, -1)
-        elif not self.sparse and x.dtype != str2dtype('long') and int_shape(x)[-1] != self.num_embeddings:
+        elif not self.sparse and x.dtype !=dtype.long and int_shape(x)[-1] != self.num_embeddings:
             x = x.long()
 
         return F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
@@ -464,7 +464,7 @@ class SoftMax(Layer):
             self.noise_intensity = 0.005
         if self.training:
             if self.add_noise == True:
-                noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
+                noise = self.noise_intensity * torch.randn_like(x, dtype=dtype.float32)
                 x = x + noise
             x = F.log_softmax(x, dim=self.axis)
         else:
@@ -674,13 +674,13 @@ class _ConvNd(Layer):
 
     def build(self, input_shape):
         if self._built == False:
-            self.input_filters = input_shape[0].item()
+            self.input_filters =input_shape.dims[self.filter_index]
             if self.auto_pad:
                 if self.transposed == False:
-                    padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[1:])
+                    padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[2:])
                     self.padding = tuple(padding)
                 else:
-                    self.padding, self.output_padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[1:], self.transposed)
+                    self.padding, self.output_padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[2:], self.transposed)
             else:
                 if self.padding is None:
                     self.padding = [0] * (2 * self.rank)

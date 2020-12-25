@@ -17,20 +17,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
+from trident.backend.common import TensorShape
+from trident.backend import dtype as Dtype
 from trident.backend.common import *
+
 version = torch.__version__
 pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
 
-
-class dtype:
-    float32 = torch.float32
-    int64 = torch.int64
-    int32 = torch.int32
-    int16 = torch.int16
-    uint8 = torch.uint8
-    int8 = torch.int8
-    bool = torch.bool
 
 
 def _get_device():
@@ -63,7 +57,7 @@ def _set_device(device='cpu'):
     except Exception as e:
         print(e)
 
-__all__ = ['dtype', 'Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -149,10 +143,6 @@ def numpy_compatible(func):
             return y
 
     return wrapper
-#
-#
-# def get_session_value('device'):
-#     return get_session().device
 
 
 
@@ -284,19 +274,22 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     """
     if isinstance(dtype, str):
         dtype = str2dtype(dtype)
+
     if device is None:
         if isinstance(x, Tensor):
             device ='cuda' if x.is_cuda else 'cpu'
         else:
-            device = get_session_value('device')
+            device =_get_device()
     else:
         pass
     if isinstance(x, Tensor):
         if x.device!= device:
             x = x.to(device)
-        if dtype is None:
-            dtype = x.dtype
+
         if dtype is not None:
+            x = x.type(dtype)
+        else:
+            dtype = x.dtype
             x = x.type(dtype)
         if isinstance(requires_grad, bool) and requires_grad != x.requires_grad:
             x.requires_grad = requires_grad
@@ -305,23 +298,23 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     else:
         if isinstance(x, int):
             if dtype is None:
-                dtype = dtype.int64
+                dtype = Dtype.int64
             t= torch.tensor([x]).int().to(device) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(get_session_value('device'))
             if dtype is not None:
                 t=cast(t,dtype)
             return t
         elif isinstance(x, float):
             if dtype is None:
-                dtype = dtype.float32
+                dtype = Dtype.float32
             return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
         elif isinstance(x, (list, tuple)):
             if all([isinstance(item,numbers.Integral) for item in x]):
                 if dtype is None:
-                    dtype = dtype.int64
+                    dtype = Dtype.int64
                 x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
             else:
                 if dtype is None:
-                    dtype = torch.float32
+                    dtype = Dtype.float32
                 x = torch.tensor(x,dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad).to(device)
             x = x.to(get_session_value('device'))
             return x
@@ -329,10 +322,10 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
             npdtype = x.dtype
             x = torch.tensor(x,device=device)
             if 'int' in str(npdtype):
-                x = x.type(torch.int64)
+                x = x.type(Dtype.int64)
             else:
                 if dtype is None:
-                    dtype = torch.float32
+                    dtype = Dtype.float32
                 x = x.type(dtype)
             if requires_grad == False:
                 x.requires_grad = False
@@ -383,13 +376,29 @@ def int_shape(x: Tensor):
         (3, 3, 7)
 
     """
-    return tuple([item for item in  x.shape])
+    return tuple([d for d in  x.shape])
 
-def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
+
+
+def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True)->TensorShape:
+    """Get tensor shape information ten convert to TensorShape
+
+    Args:
+        x (Tensor):
+        need_exclude_batch_axis (bool):
+
+    Returns:
+        shape (TensorShape):
+
+    Examples:
+        >>> tensor_to_shape(random_normal((2,64,32,32)))
+        TensorShape([None, 64, 32, 32])
+
+    """
     if need_exclude_batch_axis:
-        return to_tensor(to_numpy(int_shape(x))[1:],device=_get_device(),requires_grad=False).int()
+        return TensorShape((None,)+int_shape(x)[1:])
     else:
-        return to_tensor(to_numpy(int_shape(x)),device=_get_device(),requires_grad=False).int()
+        return TensorShape(int_shape(x))
 
 def is_sparse(x):
     """ Check whether the tensor is sparse
@@ -418,23 +427,23 @@ def str2dtype(dtype:(str,torch.dtype)):
         return dtype
     elif isinstance(dtype, str):
         if 'float64' in dtype.lower() or 'double' in dtype.lower():
-            return torch.float64
+            return Dtype.float64
         elif 'float16' in dtype.lower() or 'half' in dtype.lower():
-            return torch.float16
+            return Dtype.float16
         elif 'float' in dtype.lower():
-            return torch.float32
+            return Dtype.float32
         elif 'int64' in dtype.lower() or 'long' in dtype.lower():
-            return torch.int64
+            return Dtype.int64
         elif 'int16' in dtype.lower() or 'short' in dtype.lower():
-            return torch.int16
+            return Dtype.int16
         elif 'uint8' in dtype.lower() or 'byte' in dtype.lower():
-            return torch.uint8
+            return Dtype.uint8
         elif 'int8' in dtype.lower() or 'char' in dtype.lower():
-            return torch.int8
+            return Dtype.int8
         elif 'int32' in dtype.lower() or 'int' in dtype.lower():
-            return torch.int32
+            return Dtype.int32
         elif 'bool' in dtype.lower():
-            return torch.bool
+            return Dtype.bool
     return None
 
 
@@ -477,23 +486,23 @@ def cast(x, dtype):
     """
     dtype = str2dtype(dtype)
     if isinstance(dtype, torch.dtype):
-        if dtype == torch.float64 or dtype == torch.double:
+        if dtype == Dtype.float64 or dtype == Dtype.double:
             return x.double()
-        elif dtype == torch.float16 or dtype == torch.half:
+        elif dtype == Dtype.float16 or dtype == Dtype.half:
             return x.float()
-        elif dtype == torch.float32:
+        elif dtype == Dtype.float32:
             return x.float()
-        elif dtype == torch.int64:
+        elif dtype == Dtype.int64:
             return x.long()
-        elif dtype == torch.int32:
+        elif dtype == Dtype.int32:
             return x.int()
-        elif dtype == torch.int16:
+        elif dtype == Dtype.int16:
             return x.short()
-        elif dtype == torch.int8:
+        elif dtype == Dtype.int8:
             return x.char()
-        elif dtype == torch.uint8:
+        elif dtype == Dtype.uint8:
             return x.byte()
-        elif dtype == torch.bool:
+        elif dtype == Dtype.bool:
             return x.bool()
         else:
             return x.float()
@@ -1089,7 +1098,7 @@ def round(x: (Tensor, float), digit: int = 0):
 
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     if digit != 0:
         factor = to_tensor(float(math.pow(10, -1 * digit)))
         return (x / factor).round() * factor
@@ -1173,7 +1182,7 @@ def sqrt(x: Tensor):
 
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     return x.sqrt()
 
 @numpy_compatible
@@ -1195,7 +1204,7 @@ def rsqrt(x: Tensor):
 
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     return x.rsqrt()
 
 @numpy_compatible
@@ -1218,7 +1227,7 @@ def square(x: Tensor):
 
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     return x ** 2
 
 @numpy_compatible
@@ -1251,7 +1260,7 @@ def abs(x: Tensor):
         returned `Tensor` will be of type `float32` or `float64`, respectively.
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     return x.abs()
 
 @numpy_compatible
@@ -1304,7 +1313,7 @@ def log(x: Tensor):
 
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     return x.log()
 
 @numpy_compatible
@@ -1348,7 +1357,7 @@ def exp(x: Tensor):
 
     """
     if not is_tensor(x):
-        x = to_tensor(x, dtype=torch.float32)
+        x = to_tensor(x, dtype=Dtype.float32)
     return x.exp()
 
 @numpy_compatible
@@ -2923,7 +2932,7 @@ def space_to_depth(x: Tensor, block_size=2):
 ## tensor generation
 ###########################
 
-def ones(shape, dtype=torch.float32, requires_grad=False):
+def ones(shape, dtype=Dtype.float32, requires_grad=False):
     """Instantiates an all-ones tensor and returns it.
 
     Args
@@ -2945,7 +2954,7 @@ def ones(shape, dtype=torch.float32, requires_grad=False):
     return torch.ones(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 @numpy_compatible
-def ones_like(a, dtype=torch.float32, requires_grad=False):
+def ones_like(a, dtype=Dtype.float32, requires_grad=False):
     """Instantiates an all-ones variable of the same shape as another tensor.
 
     Args
@@ -2967,7 +2976,7 @@ def ones_like(a, dtype=torch.float32, requires_grad=False):
     return torch.ones(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
-def zeros(shape, dtype=torch.float32, requires_grad=False):
+def zeros(shape, dtype=Dtype.float32, requires_grad=False):
     """Instantiates an all-zeros tensor and returns it.
 
     Args
@@ -2989,7 +2998,7 @@ def zeros(shape, dtype=torch.float32, requires_grad=False):
     return torch.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 @numpy_compatible
-def zeros_like(a, dtype=torch.float32, requires_grad=False):
+def zeros_like(a, dtype=Dtype.float32, requires_grad=False):
     """Instantiates an all-zeros variable of the same shape as another tensor.
 
     Args
@@ -3011,7 +3020,7 @@ def zeros_like(a, dtype=torch.float32, requires_grad=False):
     return torch.zeros(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
-def eye(shape, dtype=torch.float32, requires_grad=None):
+def eye(shape, dtype=Dtype.float32, requires_grad=None):
     """Instantiate an identity matrix and returns it.
 
     Args
@@ -3035,7 +3044,7 @@ def eye(shape, dtype=torch.float32, requires_grad=None):
         raise ValueError('input tensor must have exactly two axe.')
 
 @numpy_compatible
-def eye_like(a, dtype=torch.float32, requires_grad=False):
+def eye_like(a, dtype=Dtype.float32, requires_grad=False):
     """
     Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
     matrix, ``x`` must have exactly two axes (counting both dynamic and static axes).
@@ -3092,7 +3101,7 @@ def make_onehot(label, num_classes, axis=-1):
 
 
 
-def arange(*args, dtype=torch.int32, requires_grad=False):
+def arange(*args, dtype=Dtype.int32, requires_grad=False):
     """
 
     Args:
@@ -3157,11 +3166,11 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     >>> grid1.shape
     torch.Size([3, 2, 2])
     """
-    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
-    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
+    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=Dtype.float, requires_grad=requires_grad)
+    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=Dtype.float, requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
-        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=torch.float, requires_grad=requires_grad)
+        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=Dtype.float, requires_grad=requires_grad)
+        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=Dtype.float, requires_grad=requires_grad)
     grid_x, grid_y = torch.meshgrid([xs, ys])
 
     grid = torch.stack([grid_y, grid_x], -1).to(get_session_value('device'))

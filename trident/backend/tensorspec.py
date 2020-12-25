@@ -2,18 +2,18 @@ import inspect
 import numbers
 from enum import Enum
 from inspect import signature
-from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session
+from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session,get_backend,TensorShape
 from typing import Optional, Union, overload
 import numpy as np
 
 __all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType']
 
-_session = get_session()
-_backend = _session.backend
-if _backend == 'pytorch':
-    from trident.backend.pytorch_ops import *
-elif _backend == 'tensorflow':
-    from trident.backend.tensorflow_ops import *
+
+if get_backend()== 'pytorch':
+    from  trident.backend.pytorch_ops import *
+elif get_backend() == 'tensorflow':
+    from trident.backend.tensorflow_ops  import *
+
 
 
 class ObjectType(Enum):
@@ -77,7 +77,7 @@ class TensorSpec(object):
                  object_type: Optional[ObjectType] = None,
                  is_spatial=False,
                  name=None):
-        self._dtype = dtype if dtype is not None else str2dtype('float32')
+        self._dtype = dtype if dtype is not None else None
         self._shape_tuple = None
         self.object_type = object_type
         if object_type is not None:
@@ -87,20 +87,30 @@ class TensorSpec(object):
                 self.is_spatial = is_spatial
         self._name = name
         if shape is not None:
-            t = to_tensor([-1]).int().to('cpu')
-            if isinstance(shape, (list, tuple)) and all([isinstance(item, numbers.Number) for item in shape]):
+            if isinstance(shape,TensorShape) :
+                self.ndim =shape.ndims
+                self._shape_tuple =tuple(shape.dims)
+                self.shape =shape
+            elif isinstance(shape, (list, tuple)) and all([isinstance(item, numbers.Number) for item in shape]):
                 self.ndim = len(shape)
-                self._shape_tuple = (-1,)+tuple(shape)
-                self.shape = to_tensor(self._shape_tuple).int().to('cpu')
-            elif type(shape) == int or type(shape) == float:
+                self._shape_tuple = (None,)+tuple(shape)
+                self.shape = TensorShape(shape)
+            elif not is_tensor(shape) and  isinstance(shape,numbers.Number) :
                 self.ndim = 0
-                self.shape = to_tensor(-1).to('cpu')
-                self._shape_tuple = (-1,)
+                self.shape = TensorShape([None,shape])
+                self._shape_tuple = (None,shape)
+            elif is_tensor(shape) and 'int' in str(shape.dtype):
+                self.ndim = len(shape)
+
+                shape = to_list(to_numpy(shape))
+                self._shape_tuple = (None,) + tuple(shape)
+                self.shape = TensorShape(self._shape_tuple)
             else:
+                print(shape)
                 self.ndim = len(shape)
                 shape=to_list(to_numpy(shape))
-                self._shape_tuple = (-1,) + tuple(shape)
-                self.shape = to_tensor(self._shape_tuple).int().to('cpu')
+                self._shape_tuple = (None,) + tuple(shape)
+                self.shape = TensorShape(self._shape_tuple)
         else:
             self.ndim = ndim
             self.shape = None
@@ -339,8 +349,6 @@ def assert_spec_compatibility(input_spec: TensorSpec, other_spec: TensorSpec):
     """
     if not input_spec:
         return False
-    input_spec.shape.to('cpu')
-    other_spec.shape.to('cpu')
     if isinstance(input_spec, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in input_spec]):
         input_spec = TensorSpec(shape=to_tensor(input_spec))
 
