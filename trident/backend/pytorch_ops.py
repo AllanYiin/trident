@@ -84,7 +84,7 @@ def numpy_compatible(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if func.__name__ in ('max','min','maximum','minimum','abs','round') and isinstance(args[0],tuple):
+        if func.__name__ in ('max','min','abs','round','pow') and isinstance(args[0],tuple):
             args=unpack_singleton(args)
 
         x = args[0] if hasattr(args,'__len__') else args
@@ -92,12 +92,12 @@ def numpy_compatible(func):
         new_kwargs = OrderedDict()
 
 
-        if all([isinstance(arg, numbers.Number) for arg in args]) and all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()]) and  func.__name__ in ('max','min','maximum','minimum','abs','round'):
+        if all([isinstance(arg, numbers.Number) for arg in args]) and (len(kwargs)==0 or all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()])) and  func.__name__ in ('max','min','abs','round','pow'):
             builtins_funcs = get_function(func.__name__, ['builtins'])
             y = builtins_funcs(*args, **kwargs)
             return y
-        elif all([isinstance(arg,numbers.Number) for arg in args]) and all([isinstance(kv[1],numbers.Number) for kv in kwargs.items()]) and  get_function(func.__name__, ['math']) is not None:
-            mathfuncs=get_function(func.__name__, ['math'])
+        elif all([isinstance(arg,numbers.Number) for arg in args]) and (len(kwargs)==0 or all([isinstance(kv[1],numbers.Number) for kv in kwargs.items()]) )and  get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops']) is not None:
+            mathfuncs=get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
         elif isinstance(x, np.ndarray):

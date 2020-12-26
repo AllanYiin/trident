@@ -20,19 +20,9 @@ from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
 from tensorflow.python.ops import math_ops
 
-from trident.backend.common import to_list, unpack_singleton, epsilon,OrderedDict,get_function,get_session
+from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
 
-
-class dtype:
-    float32 = tf.float32
-    float16 = tf.float16
-    int64 = tf.int64
-    int16 = tf.int16
-    uint8 = tf.uint8
-    int8= tf.int8
-    bool = tf.bool
-
-__all__ = ['Tensor','is_tensor',  'dtype','is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -60,19 +50,20 @@ def numpy_compatible(func):
     """
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if func.__name__ in ('max', 'min', 'maximum', 'minimum', 'abs', 'round') and isinstance(args[0], tuple):
-            args = unpack_singleton(args)
+        if func.__name__ in ('max','min','abs','round','pow') and isinstance(args[0],tuple):
+            args=unpack_singleton(args)
 
-        x = args[0] if hasattr(args, '__len__') else args
+        x = args[0] if hasattr(args,'__len__') else args
         new_args = []
         new_kwargs = OrderedDict()
 
-        if all([isinstance(arg,numbers.Number) for arg in args]) and all([isinstance(kv[1],numbers.Number) for kv in kwargs.items()]) and  func.__name__ in ('max','min','maximum','minimum','abs','round'):
+
+        if all([isinstance(arg, numbers.Number) for arg in args]) and (len(kwargs)==0 or all([isinstance(kv[1], numbers.Number) for kv in kwargs.items()])) and  func.__name__ in ('max','min','abs','round','pow'):
             builtins_funcs = get_function(func.__name__, ['builtins'])
             y = builtins_funcs(*args, **kwargs)
             return y
-        elif all([isinstance(arg,numbers.Number)  for arg in args]) and all([isinstance(kv[1],numbers.Number) for kv in kwargs.items()]) and  get_function(func.__name__, ['math']) is not None:
-            mathfuncs=get_function(func.__name__, ['math'])
+        elif all([isinstance(arg,numbers.Number) for arg in args]) and (len(kwargs)==0 or all([isinstance(kv[1],numbers.Number) for kv in kwargs.items()]) )and  get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops']) is not None:
+            mathfuncs=get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
         elif isinstance(x, np.ndarray):
@@ -148,14 +139,14 @@ def is_tensor(x):
         False
 
     """
-    if hasattr(x, 'numpy'):
-        with context.eager_mode():
-            return True
-    elif isinstance(x,EagerTensor):
+
+    if isinstance(x,EagerTensor):
         return True
     elif x.__class__.__name__ == 'EagerTensor':
         return True
     elif isinstance(x, Tensor):
+        return True
+    elif isinstance(x, tf.Variable):
         return True
     return False
 
@@ -368,15 +359,16 @@ def int_shape(x):
     [3, 3, 7]
 
     """
-    return x.get_shape().as_list()
+    return tuple(x.get_shape().as_list())
 
 
 def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
     if need_exclude_batch_axis:
-
-        return cast(to_tensor(to_numpy(x.shape)[1:]),tf.int32)
+        shp=list(int_shape(x))
+        shp[0]=None
+        return TensorShape(shp)
     else:
-        return cast(to_tensor(to_numpy(x.shape)), tf.int32)
+        return TensorShape(int_shape(x))
 
 
 
