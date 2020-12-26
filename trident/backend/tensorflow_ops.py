@@ -199,6 +199,8 @@ def to_numpy(x) -> np.ndarray:
 
     if x is None:
         return x
+    elif isinstance(x, TensorShape):
+        return np.array(x.dims)
     elif isinstance(x, np.ndarray):
         return x
     elif isinstance(x, tf.Variable):

@@ -231,6 +231,8 @@ def to_numpy(*x) -> np.ndarray:
         return x
     elif x is None:
         return None
+    elif isinstance(x, TensorShape):
+        return np.array(x.dims)
     elif isinstance(x, Tensor):
         if isinstance(x, torch.autograd.Variable):
             x = x.data
