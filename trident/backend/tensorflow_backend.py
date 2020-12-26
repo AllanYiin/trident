@@ -34,9 +34,10 @@ from tensorflow.python.training.tracking import data_structures, tracking
 from tensorflow.python.training.tracking import layer_utils as trackable_layer_utils
 from tensorflow.python.util import object_identity
 
-from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException, device
+from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException,  TensorShape
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
+from trident.backend import dtype as Dtype
 
 _FUN_NAMES = [
     ('float', tops.float),
@@ -381,13 +382,10 @@ def register_module_backward_hook(
     _global_backward_hooks[handle.id] = hook
     return handle
 
-class Parameter(tf.Variable):
-
-    def __init__(self, data, trainable=True,dtype=None,  name=None, **kwargs):
-        if dtype is None:
-            dtype=dtype.float32
-
-        super().__init__(initial_value=data,trainable=trainable)
+def Parameter(data, trainable=True,dtype=None,  name=None, **kwargs):
+       if dtype is None:
+           dtype=tf.float32
+       return tf.Variable(initial_value=cast(data,dtype),trainable=trainable,name=name)
 
 
 
@@ -596,7 +594,7 @@ class Layer(tf.Module):
         else:
             raise ValueError('Not valid module')
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -608,7 +606,7 @@ class Layer(tf.Module):
         """
         pass
 
-    def rebuild(self, input_shape):
+    def rebuild(self, input_shape:TensorShape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -627,7 +625,7 @@ class Layer(tf.Module):
                     module._output_shape = None
                     module._built = False
                     module._parameters = OrderedDict()
-            dummay_input = to_tensor(np.random.standard_normal((1,) + tuple(input_shape)).astype(np.float32)).to(get_device())
+            dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device())
             out = self.forward(dummay_input)
 
     def register_backward_hook(self, hook):
@@ -843,12 +841,12 @@ class Layer(tf.Module):
                 for module in self.modules():
                     try:
                         module._device = self._device
-                        module._input_shape =None if module._input_shape is None else tf.identity(module._input_shape)
-                        module._output_shape =None if module._output_shape is None else  tf.identity(module._input_shape)
                         for name, para in module._parameters.items():
-                            module._parameters[name].assign(tf.identity(module._parameters[name].value()))
+                            if para is not None:
+                                module._parameters[name].assign(tf.identity(module._parameters[name].value()))
                         for name, buff in module._buffers.items():
-                            module._buffers[name]=tf.identity(module._buffers[name])
+                            if buff is not None:
+                                module._buffers[name]=tf.identity(module._buffers[name])
 
                     except Exception as e:
                         print(e)
@@ -870,12 +868,12 @@ class Layer(tf.Module):
         for module in self.modules():
             try:
                 module._device = self._device
-                module._input_shape=None if module._input_shape is None else tf.identity(module._input_shape)
-                module._output_shape =None if module._output_shape is None else  tf.identity(module._output_shape)
                 for name, para in module._parameters.items():
-                    module._parameters[name].assign(tf.identity(module._parameters[name].value()))
+                    if para is not None:
+                        module._parameters[name].assign(tf.identity(module._parameters[name].value()))
                 for name, buff in module._buffers.items():
-                    module._buffers[name]=tf.identity(module._buffers[name])
+                    if buff is not None:
+                        module._buffers[name]=tf.identity(module._buffers[name])
             except Exception as e:
                 print(e)
                 PrintException()
@@ -1006,7 +1004,12 @@ class Layer(tf.Module):
 
     @device.setter
     def device(self, value):
-        self._device=value
+        if isinstance(value, str):
+            self._device = value
+        elif isinstance(value, tf.device):
+            self._device = value.__str__()
+        else:
+            print(value)
 
     @property
     def built(self):
@@ -1018,47 +1021,35 @@ class Layer(tf.Module):
 
     @input_shape.setter
     def input_shape(self, value):
-        if value is None:
-            self._input_shape = value
-            self.input_filters=None
-            self._signature=None
+
+        if isinstance(value, tf.TensorShape):
+            value = TensorShape(value.as_list())
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+            value = TensorShape(list(value))
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+            value = TensorShape(value)
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
+            value = [TensorShape(to_list(to_numpy(sh))) for sh in value]
         else:
-            if isinstance(value, tf.TensorShape):
-                value = to_tensor(value.as_list()).to('int')
-            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-                value = to_tensor(value).int()
-            elif isinstance(value, (list, tuple)) and len(value) > 0:
-                value = stack(value)
+            value =  TensorShape(list(value))
 
-            else:
-                value = to_tensor(value).to('int')
-            if self.is_root:
-                self.input_spec = TensorSpec(shape=value)
-            if self._built == False or  self._input_shape is None or  self.input_filters  is None :
-                self._input_shape = value
-                if len(self._input_shape) == 0:
-                    self.input_filters = to_numpy(self._input_shape)[self.filter_index]
-                elif len(self._input_shape) == 1:
-                    self.input_filters = to_numpy(self._input_shape)[self.filter_index]
-                else:
-                    if self.filter_index < 0:
-                        self.input_filters = int(self._input_shape[self.filter_index])
-                    elif self.filter_index > self.batch_index:
-                        self.input_filters = int(self._input_shape[self.filter_index - self.batch_index - 1])
-                    else:
-                        raise NotImplementedError('filter_index>batch_index')
-
-            self.build(self._input_shape)
+        if self._built == False or self._input_shape is None or self.input_filters is None:
+            self._input_shape = value
+            self.input_filters = self._input_shape[self.filter_index]
+            self.build(value)
             self._built = True
+
             if self.is_root:
                 if self._signature is None:
                     self._signature = Signature(name=self.name)
                 self._signature.inputs = OrderedDict()
-                if is_tensor(self._input_shape):
+                if isinstance(self._input_shape, TensorShape):
                     self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
-                else:
+                    self.input_spec = self._signature.inputs['input']
+                elif isinstance(self._input_shape, list):
                     for k in range(len(self._input_shape)):
                         self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
+                self.input_spec = self._signature.inputs.value_list
 
     @property
     def output_shape(self):
@@ -1073,13 +1064,13 @@ class Layer(tf.Module):
             if is_tensor(value) and value.ndim == 1 and value.dtype == tf.int32:
                 pass
             elif isinstance(value, tf.TensorShape):
-                value = to_tensor(to_numpy(value)).int()
+                value = TensorShape(value.as_list())
             elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-                value = to_tensor(list(value)).int()
+                value = TensorShape(list(value))
             elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
-                value = tuple(value)
+                value =[TensorShape(to_list(to_numpy(sh))) for sh in value]
             else:
-                value = to_tensor(value).int()
+                value = TensorShape(list(value))
 
             self._output_shape = value
 
@@ -1099,23 +1090,15 @@ class Layer(tf.Module):
                 self._signature = Signature(name=self.name)
 
                 if self._input_shape is not None:
-                    if is_tensor(self._input_shape) and ndim(self._input_shape)==1 and 'int' in str(self._input_shape.dtype):
-                        self._signature.inputs["input"] = TensorSpec(shape=self._input_shape, name="input")
-
-                    elif isinstance(self._input_shape, tuple) and all([isinstance(item,numbers.Integral) for item in self._input_shape]):
-                        self._signature.inputs["input"] = TensorSpec(shape=to_tensor(self._input_shape).int(), name="input")
-
+                    if isinstance(self._input_shape, TensorShape):
+                        self._signature.inputs["input"] = TensorSpec(shape=TensorShape(self._input_shape), name="input")
                     elif isinstance(self._input_shape, tuple):
                         for i in range(len(self._input_shape)):
-                            self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=to_tensor(self._input_shape[i]), name="input_{0}".format(i))
+                            self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
 
                 if self._output_shape is not None:
-                    if is_tensor(self._output_shape) and ndim(self._output_shape)==1 and 'int' in str(self._output_shape.dtype):
-                        self._signature.outputs["output"] = TensorSpec(shape=self._output_shape, name="output")
-
-                    elif isinstance(self._output_shape, tuple) and all([isinstance(item,numbers.Integral) for item in self._output_shape]):
-                        self._signature.outputs["output"] = TensorSpec(shape=to_tensor(self._output_shape).int(), name="output")
-
+                    if isinstance(self._output_shape,TensorShape) :
+                        self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
                     elif isinstance(self._output_shape, tuple):
                         for i in range(len(self._output_shape)):
                             self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
@@ -1181,21 +1164,35 @@ class Layer(tf.Module):
             if param is not None:
                 destination[prefix + name] = param if keep_vars else param.value().detach()
         for name, buf in self._buffers.items():
-            if buf is not None:
-                destination[prefix + name] = buf if keep_vars else buf.value().detach() if isinstance(buf,tf.Variable) else buf.numpy()
+            if buf is not None  and name not in self._non_persistent_buffers_set:
+                destination[prefix + name] = buf if keep_vars else buf.copy().detach()
+
+    @overload
+    def state_dict(self, destination: T_destination, prefix: str = ..., keep_vars: bool = ...) -> T_destination:
+        ...
+
+    # TODO: annotate with OrderedDict not Dict, but there is a problem:
+    # https://docs.python.org/3/library/typing.html#typing.OrderedDict
+    @overload
+    def state_dict(self, prefix: str = ..., keep_vars: bool = ...) -> Dict[str, Tensor]:
+        ...
 
     def state_dict(self, destination=None, prefix='', keep_vars=False):
         r"""Returns a dictionary containing a whole state of the module.
+
         Both parameters and persistent buffers (e.g. running averages) are
         included. Keys are corresponding parameter and buffer names.
+
         Returns:
             dict:
                 a dictionary containing a whole state of the module
-        Examples:
+
+        Example::
+
             >>> module.state_dict().keys()
             ['bias', 'weight']
-        """
 
+        """
         with tf.device(self.get_root().device):
             if destination is None:
                 destination = OrderedDict()
@@ -1261,6 +1258,8 @@ class Layer(tf.Module):
         persistent_buffers = {k: v for k, v in self._buffers.items() if k not in self._non_persistent_buffers_set}
         local_name_params = itertools.chain(self._parameters.items(), persistent_buffers.items())
         local_state = {k: v for k, v in local_name_params if v is not None}
+
+
 
         for name, param in local_state.items():
             key = prefix + name
@@ -1380,12 +1379,15 @@ class Layer(tf.Module):
     def __call__(self, *input, **kwargs):
         # Maintains info about the `Layer.call` stack.
         is_all_numpy = True
-        input = list(input)
-        for i in range(len(input)):
-            if isinstance(input[i], np.ndarray):
-                input[i] = to_tensor(input[i])
+        is_built=self._built
+        is_all_numpy=True
+        if self.is_root:
+            if isinstance(input,np.ndarray):
+                to_tensor(input)
             else:
                 is_all_numpy = False
+
+
         for hook in itertools.chain(
                 _global_forward_pre_hooks.values(),
                 self._forward_pre_hooks.values()):
@@ -1396,30 +1398,33 @@ class Layer(tf.Module):
                 input = result
         if self._built == False:
             inp = unpack_singleton(input)
-            if isinstance(inp, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in inp]):
-                self.build(inp)
+            if is_tensor(inp):
+                shp= tensor_to_shape(inp)
+                self.input_filters = shp.dims[self.filter_index]
+                self.input_shape =shp
             elif isinstance(inp, (tuple, list)):
-                self.forward(*inp)
-            elif is_tensor(inp):
-                self.input_shape = tensor_to_shape(inp)
+                self.input_shape=tuple([int_shape(i) for i in inp  if not isinstance(i, (list, tuple))])
             else:
                 print('input shou be tensor or tuple of tensor')
                 print(inp)
+            self._built=True
+
 
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
         try:
             with tf.device(get_device()):
                 result = self.forward(*input, **kwargs)
-                output = unpack_singleton(result)
                 if hasattr(self, 'keep_output') and self.keep_output == True:
-                    self._output_tensor = output
-                if isinstance(output, Tensor):  # one output
-                    if self._output_shape is None or not np.array_equal(to_numpy(self._output_shape), to_numpy(int_shape(output))[self.batch_index + 1:]):
+                    #make a op
+                    self._output_tensor = identity(unpack_singleton(result))
+                if self._output_shape is None or is_built == False:
+                    output = unpack_singleton(result)
+                    if is_tensor(output):  # one output
                         self._output_shape = tensor_to_shape(output)
-                elif isinstance(output, (list, tuple)):
-                    output_shape = stack([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
-                    # if not isinstance(item, (list,tuple)) lstm
-                    self._output_shape = unpack_singleton(output_shape)
+                    elif isinstance(output, (list, tuple)):
+                        output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                        # if not isinstance(item, (list,tuple)) lstm
+                        self._output_shape = unpack_singleton(output_shape)
             for hook in self._forward_hooks.values():
                 hook_result = hook(self, input, result)
                 if hook_result is not None:
@@ -1434,6 +1439,7 @@ class Layer(tf.Module):
         except Exception as e:
             print('{0} ({1} call failed.)'.format(self.name, self.default_name))
             print(e)
+            PrintException()
             raise e
 
     def __getstate__(self):
@@ -1464,7 +1470,7 @@ class Layer(tf.Module):
                 return modules[name]
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
-    def __setattr__(self, name: str, value: Union[Tensor, tf.Module]) -> None:
+    def __setattr__(self, name: str, value: Union[Tensor, 'Module']) -> None:
         def remove_from(*dicts_or_sets):
             for d in dicts_or_sets:
                 if name in d:
@@ -1483,7 +1489,8 @@ class Layer(tf.Module):
         elif params is not None and name in params:
             if value is not None:
                 raise TypeError("cannot assign '{}' as parameter '{}' "
-                                "(tf.Variable or None expected)".format(type(value).__name__, name))
+                                "(torch.nn.Parameter or None expected)"
+                                .format(value, name))
             self.register_parameter(name, value)
         else:
             modules = self.__dict__.get('_modules')
@@ -1493,30 +1500,19 @@ class Layer(tf.Module):
                         "cannot assign module before Module.__init__() call")
                 remove_from(self.__dict__, self._parameters, self._buffers, self._non_persistent_buffers_set)
                 modules[name] = value
-                value.is_root = False
-                for mod in value.modules():
-                    if isinstance(mod, Layer) and mod.uuid != value.uuid:
-                        mod.is_root = False
-                reset_name(value, self._uid_prefixs)
-                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             elif modules is not None and name in modules:
                 if value is not None:
                     raise TypeError("cannot assign '{}' as child module '{}' "
-                                    "(torch.nn.Module or None expected)".format(type(value).__name__, name))
-
+                                    "(torch.nn.Module or None expected)"
+                                    .format(value, name))
                 modules[name] = value
-                value.is_root = False
-                for mod in value.modules():
-                    if isinstance(mod, Layer) and mod.uuid != value.uuid:
-                        mod.is_root = False
-                reset_name(value, self._uid_prefixs)
-                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             else:
                 buffers = self.__dict__.get('_buffers')
                 if buffers is not None and name in buffers:
-                    if value is not None and not is_tensor(value):
+                    if value is not None and not isinstance(value, tf.Tensor):
                         raise TypeError("cannot assign '{}' as buffer '{}' "
-                                        "(torch.Tensor or None expected)".format(type(value).__name__, name))
+                                        "(torch.Tensor or None expected)"
+                                        .format(value, name))
                     buffers[name] = value
                 else:
                     object.__setattr__(self, name, value)
@@ -1975,7 +1971,7 @@ class Sequential(Layer):
     #         self[-1]._output_shape = value
     #         self._signature=None
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False and len(self._modules) > 0:
             self.__getitem__(0).input_shape = self.input_shape
             self._built = True
@@ -1993,11 +1989,10 @@ class Sequential(Layer):
 
         if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
             last_output = self[-1]._output_shape
-            module.input_shape=last_output
+            dummay_input = to_tensor(last_output.get_dummy_tensor()).to(self.device)
+            out = module(dummay_input)
             self._modules[name] = module
-            if module.output_shape is not None:
-                self._output_shape =module.output_shape
-
+            self._output_shape = module.output_shape
         else:
             super(Sequential, self).add_module(name, module)
         self._signature = None
@@ -2051,7 +2046,7 @@ class Sequential(Layer):
         keys = [key for key in keys if not key.isdigit()]
         return keys
 
-    def forward(self, *x):
+    def forward(self, x):
         for module in self._modules.values():
             x = enforce_singleton(x)
             x = module(x)
@@ -2312,7 +2307,7 @@ class ModuleDict(Layer):
                                      "; 2 is required")
                 self[m[0]] = m[1]
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         """
 
         Args:
@@ -2513,17 +2508,8 @@ def summary(model, input_size, batch_size=-1):
     # multiple inputs to the network
     for name, module in model.named_modules():
         module.relative_name = name
+    x = [to_tensor(shape.get_dummy_tensor()).to(get_device()) for shape in input_size]
 
-    if isinstance(input_size, tuple):
-        input_size = list(input_size)
-
-    if isinstance(input_size, int):
-        x = [to_tensor(np.random.standard_normal((1, *input_size)).astype(np.float32))]
-    else:
-        # batch_size of 2 for batchnorm
-        x = [to_tensor(np.random.standard_normal((1, *in_size)).astype(np.float32)) for in_size in input_size]
-
-    x=unpack_singleton(x)
     # p    rint(type(x[0]))
 
     # create properties
@@ -2586,7 +2572,7 @@ def summary(model, input_size, batch_size=-1):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = np.abs(np.prod(input_size) * batch_size * 4. / (1024 ** 2.))
+    total_input_size =  np.asarray([np.abs(np.prod(to_numpy(shp.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for shp in input_size]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
@@ -2786,10 +2772,12 @@ def fix_layer(layer: Layer):
         layer._uid_prefixs = {}
     reset_name(layer, layer._uid_prefixs)
 
-    if layer._input_shape is not None and isinstance(layer._input_shape, tf.TensorShape):
-        layer._input_shape = to_tensor(layer._input_shape.as_list()).to('int')
-    if layer._output_shape is not None and isinstance(layer._output_shape, tf.TensorShape):
-        layer._output_shape = to_tensor(layer._output_shape.as_list()).to('int')
+    if layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
+        layer._input_shape =TensorShape(layer._input_shape)
+
+    if layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
+        layer._output_shape =TensorShape(layer._output_shape)
+
     if not (hasattr(layer, 'get_toot')):
         setattr(layer, 'get_root', MethodType(get_root, layer))
 
@@ -2831,16 +2819,13 @@ def fix_layer(layer: Layer):
         if not hasattr(module, 'input_spec'):
             module.input_spec = None
             if module.input_shape is not None:
-                if is_tensor(module.input_shape) and module.input_shape.dtype==tf.int32:
-                    module.input_spec = TensorSpec(shape=module.input_shape)
-                elif isinstance(module.input_shape,TensorSpec) :
-                    module.input_spec =module.input_shape
-                    module.input_shape=module.input_spec .shape
-        # fix for shape definition
-        if isinstance(module._input_shape, tf.TensorShape):
-            module._input_shape = to_tensor(to_numpy(module._input_shape)).int()
-        if isinstance(module._output_shape, tf.TensorShape):
-            module._output_shape = to_tensor(to_numpy(module._output_shape)).int()
+                module.input_spec = TensorSpec(shape=TensorShape(module._input_shape))
+            # fix for shape definition
+        if not isinstance(module._input_shape, TensorShape):
+            module._input_shape = TensorShape(module._input_shape)
+        if not isinstance(module._output_shape, TensorShape):
+            module._output_shape = TensorShape(module._output_shape)
+
 
         if not hasattr(module, 'batch_index'):
             setattr(module, 'batch_index', 0)
@@ -2872,20 +2857,20 @@ def fix_layer(layer: Layer):
         layer._signature = Signature()
         if layer._input_shape is not None:
             if is_tensor(layer._input_shape):
-                layer._signature.inputs["input"] = TensorSpec(shape=layer._input_shape, name="input")
+                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(layer._input_shape), name="input")
             elif isinstance(layer._input_shape, tuple) and isinstance(layer._input_shape[0], int):
-                layer._signature.inputs["input"] = TensorSpec(shape=to_tensor(layer._input_shape).int(), name="input")
+                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(layer._input_shape), name="input")
             elif isinstance(layer._input_shape, tuple):
                 for i in range(len(layer._input_shape)):
-                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=layer._input_shape[i], name="input_{0}".format(i))
+                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._input_shape[i]), name="input_{0}".format(i))
         if layer._output_shape is not None:
             if is_tensor(layer._output_shape):
-                layer._signature.outputs["output"] = TensorSpec(shape=layer._output_shape, name="output")
+                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(layer._output_shape), name="output")
             elif isinstance(layer._output_shape, tuple) and isinstance(layer._output_shape[0], int):
-                layer._signature.outputs["output"] = TensorSpec(shape=to_tensor(layer._output_shape).int(), name="output")
+                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(layer._output_shape), name="output")
             elif isinstance(layer._output_shape, tuple):
                 for i in range(len(layer._output_shape)):
-                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=layer._output_shape[i], name="output_{0}".format(i))
+                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._output_shape[i]), name="output_{0}".format(i))
         layer.signature = layer._signature
 
     return layer
