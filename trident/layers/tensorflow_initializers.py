@@ -3,10 +3,14 @@ from __future__ import division
 from __future__ import print_function
 import builtins
 import  math
+import warnings
+
+import tensorflow as tf
+from trident.backend.common import TensorShape
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['kaiming_uniform', 'kaiming_normal']
+__all__ = ['kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
 
 def calculate_gain(nonlinearity, param=None):
     r"""Return the recommended gain value for the given nonlinearity function.
@@ -50,18 +54,17 @@ def calculate_gain(nonlinearity, param=None):
         raise ValueError("Unsupported nonlinearity {}".format(nonlinearity))
 
 def _calculate_fan_in_and_fan_out(tensor):
-    dimensions = tensor.ndim
+    dimensions = len(tensor.shape)
     if dimensions < 2:
         raise ValueError("Fan in and fan out can not be computed for tensor with fewer than 2 dimensions")
 
     num_input_fmaps = int_shape(tensor)[-1]
     num_output_fmaps =  int_shape(tensor)[0]
     receptive_field_size = 1
-    if tensor.ndim > 2:
+    if dimensions > 2:
         receptive_field_size = tensor[0][0].numel()
     fan_in = num_input_fmaps * receptive_field_size
     fan_out = num_output_fmaps * receptive_field_size
-
     return fan_in, fan_out
 
 def _calculate_correct_fan(tensor, mode):
@@ -101,12 +104,18 @@ def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
         >>> w = torch.empty(3, 5)
         >>> nn.init.kaiming_uniform_(w, mode='fan_in', nonlinearity='relu')
     """
+    if isinstance(tensor,tf.Module):
+        for weight in tensor.parameters():
+            if weight.trainable == True and weight.name != 'bias':
+                kaiming_uniform(weight, a, mode, nonlinearity)
+
+
     tensor_data = tensor.value()
-    fan = _calculate_correct_fan(tensor_data, mode)
+    fan = to_numpy(_calculate_correct_fan(tensor_data, mode)).mean()
     gain = calculate_gain(nonlinearity, a)
-    std = gain / math.sqrt(fan)
+    std = true_divide(gain ,math.sqrt(fan))
     bound = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
-    return tensor.assign(random_uniform_like(tensor_data,-bound, bound,tensor_data.dtype))
+    tensor.assign(random_uniform_like(tensor_data,-bound, bound,tensor_data.dtype))
 
 
 def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
@@ -136,10 +145,106 @@ def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
         >>> w = torch.empty(3, 5)
         >>> nn.init.kaiming_normal_(w, mode='fan_out', nonlinearity='relu')
     """
+    if isinstance(tensor, tf.Module):
+        for weight in tensor.parameters():
+            if weight.trainable == True and weight.name != 'bias':
+                kaiming_normal(weight, a, mode, nonlinearity)
+
     tensor_data=tensor.value()
-    fan = _calculate_correct_fan(tensor_data, mode)
+    fan = to_numpy(_calculate_correct_fan(tensor_data, mode)).mean()
     gain = calculate_gain(nonlinearity, a)
-    std = gain / math.sqrt(fan)
+    std = true_divide(gain , math.sqrt(fan))
     return tensor.assign(random_normal_like(tensor_data,0, std, tensor_data.dtype))
+
+
+def xavier_uniform(tensor, gain=1.):
+    # type: (Tensor, float) -> Tensor
+    r"""Fills the input `Tensor` with values according to the method
+    described in `Understanding the difficulty of training deep feedforward
+    neural networks` - Glorot, X. & Bengio, Y. (2010), using a uniform
+    distribution. The resulting tensor will have values sampled from
+    :math:`\mathcal{U}(-a, a)` where
+
+    .. math::
+        a = \text{gain} \times \sqrt{\frac{6}{\text{fan\_in} + \text{fan\_out}}}
+
+    Also known as Glorot initialization.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        gain: an optional scaling factor
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.xavier_uniform_(w, gain=nn.init.calculate_gain('relu'))
+    """
+    if isinstance(tensor,tf.Module):
+        for weight in tensor.parameters():
+            if weight.trainable == True and weight.name != 'bias':
+                xavier_uniform(weight, gain)
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
+    a = math.sqrt(3.0) * std  # Calculate uniform bounds from standard deviation
+
+    tensor.assign(random_uniform_like(tensor, -a, a))
+
+def xavier_normal(tensor, gain=1.):
+    # type: (Tensor, float) -> Tensor
+    r"""Fills the input `Tensor` with values according to the method
+    described in `Understanding the difficulty of training deep feedforward
+    neural networks` - Glorot, X. & Bengio, Y. (2010), using a normal
+    distribution. The resulting tensor will have values sampled from
+    :math:`\mathcal{N}(0, \text{std}^2)` where
+
+    .. math::
+        \text{std} = \text{gain} \times \sqrt{\frac{2}{\text{fan\_in} + \text{fan\_out}}}
+
+    Also known as Glorot initialization.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        gain: an optional scaling factor
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.xavier_normal_(w)
+    """
+    if isinstance(tensor,tf.Module):
+        for weight in tensor.parameters():
+            if weight.trainable == True and weight.name != 'bias':
+                xavier_normal(weight, gain)
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    std = gain * math.sqrt(2.0 / float(fan_in + fan_out))
+
+    tensor.assign(random_normal_like(tensor, 0, std))
+
+def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
+    # type: (Tensor, float, float, float, float) -> Tensor
+    r"""Fills the input Tensor with values drawn from a truncated
+    normal distribution. The values are effectively drawn from the
+    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
+    with values outside :math:`[a, b]` redrawn until they are within
+    the bounds. The method used for generating the random values works
+    best when :math:`a \leq \text{mean} \leq b`.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        mean: the mean of the normal distribution
+        std: the standard deviation of the normal distribution
+        a: the minimum cutoff value
+        b: the maximum cutoff value
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.trunc_normal_(w)
+    """
+    if isinstance(tensor,tf.Module):
+        for weight in tensor.parameters():
+            if weight.trainable == True and weight.name != 'bias':
+                weight.assign(tf.random.truncated_normal(weight.shape,mean=0., std=1., a=-2., b=2))
+
+    tensor.assign(tf.random.truncated_normal(tensor.shape,mean=0., std=1., a=-2., b=2))
+
+
 
 
