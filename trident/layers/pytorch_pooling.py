@@ -65,7 +65,7 @@ class _PoolNd(Layer):
         self.count_include_pad = kwargs.get('count_include_pad', False)
         self.name = name
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.get_padding(input_shape)
             self._built = True
@@ -752,16 +752,15 @@ class GlobalAvgPool1d(Layer):
         super(GlobalAvgPool1d, self).__init__(name=name)
         self.keepdims = kwargs.get('keepdim',keepdims)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.keepdims == True:
-                output_shape = input_shape.clone()
-                output_shape[1] = 1
-                self.output_shape = output_shape
+                output_shape = input_shape.dims
+                output_shape[2] = 1
+                self.output_shape =TensorShape(output_shape)
             else:
-                self.output_shape = input_shape[0]
+                self.output_shape = TensorShape(input_shape[:2])
             self._built = True
-
     def forward(self, x):
 
         N,C,W=x.size()
@@ -780,15 +779,15 @@ class GlobalAvgPool2d(Layer):
         super(GlobalAvgPool2d, self).__init__(name=name)
         self.keepdims = kwargs.get('keepdim',keepdims)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.keepdims == True:
-                output_shape = input_shape.clone()
-                output_shape[1] = 1
+                output_shape = input_shape.dims
                 output_shape[2] = 1
-                self.output_shape = output_shape
+                output_shape[3] = 1
+                self.output_shape = TensorShape(output_shape)
             else:
-                self.output_shape = input_shape[0]
+                self.output_shape = TensorShape(input_shape[:2])
             self._built = True
 
     def forward(self, x):

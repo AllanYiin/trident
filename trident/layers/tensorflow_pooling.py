@@ -572,14 +572,15 @@ class GlobalAvgPool1d(Layer):
         super(GlobalAvgPool1d, self).__init__(name=name)
         self.keepdims = kwargs.get('keepdim',keepdims)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.keepdims == True:
-                self._output_shape = to_tensor([1, 1, self.input_filters]).int()
+                output_shape = input_shape.dims
+                output_shape[1] = 1
+                self.output_shape =TensorShape(output_shape)
             else:
-                self._output_shape = to_tensor([self.input_filters]).int()
+                self.output_shape =TensorShape([input_shape[0],input_shape[-1]])
             self._built = True
-
 
     def forward(self, x) :
         x = tf.reduce_mean(x, axis=1, keepdims=self.keepdims)
@@ -590,14 +591,16 @@ class GlobalAvgPool2d(Layer):
         super(GlobalAvgPool2d, self).__init__(name=name)
         self.keepdims = kwargs.get('keepdim',keepdims)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.keepdims == True:
-                self._output_shape = to_tensor([1, 1, self.input_filters]).int()
+                output_shape = input_shape.dims
+                output_shape[1] = 1
+                output_shape[2] = 1
+                self.output_shape = TensorShape(output_shape)
             else:
-                self._output_shape = to_tensor([self.input_filters]).int()
+                self.output_shape =TensorShape([input_shape[0],input_shape[-1]])
             self._built = True
-
 
     def forward(self, x) :
 
