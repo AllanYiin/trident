@@ -2,25 +2,22 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import inspect
+import math
 import numbers
 import copy
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import variables as tf_variables
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
-    format_time, get_terminal_size, snake2camel, camel2snake,Signature
+    format_time, get_terminal_size, snake2camel, camel2snake,Signature,epsilon,TensorShape
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
-from  trident.layers import initializers
+from trident.layers.tensorflow_initializers import *
 
-__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','PixelNorm','EvoNormB0','EvoNormS0','get_normalization']
+
+__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','EvoNormB0','EvoNormS0','get_normalization']
 
 _session = get_session()
-
-
-
-
-
 _epsilon = _session.epsilon
 
 
@@ -122,8 +119,7 @@ class BatchNorm(Layer):
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
-        self.weight=None
-        self.bias=None
+
         self.weight=None # gamma//scale
         self.bias=None # beta/ offset
 
@@ -132,12 +128,14 @@ class BatchNorm(Layer):
 
     def reset_running_stats(self):
         if self.track_running_stats:
-            self.running_mean.assign(tf.zeros(shape=[self.input_filters]))
-            self.running_var.assign(tf.ones(shape=[self.input_filters]))
-            self.num_batches_tracked.assign(0)
+            self.register_buffer("running_mean", zeros(shape=[self.input_filters]))
+            self.register_buffer("running_var", ones(shape=[self.input_filters]))
+            self.register_buffer("num_batches_tracked", to_tensor(0, dtype=tf.int64), persistent=False)
+
+
         if self.affine :
-            self.weight = tf.Variable(tf.ones(shape=[self.input_filters]), trainable=True, name='weight')  # gamma//scale
-            self.bias = tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=True, name='bias')  # beta/ offset
+            self.register_parameter("weight",tf.Variable(tf.ones(shape=[self.input_filters]), trainable=True, name='weight'))  # gamma//scale
+            self.register_parameter("bias",tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=True, name='bias'))  # beta/ offset
 
 
     def assign_moving_average(self, variable, value, momentum, inputs_size):
@@ -148,13 +146,15 @@ class BatchNorm(Layer):
                 update_delta = (variable - tf.cast(value, variable.dtype)) * decay
                 if inputs_size is not None:
                     update_delta = tf.where(inputs_size > 0, update_delta, tf.zeros_like(update_delta))
-                return variable.assign_sub(update_delta, name=scope)
+                variable = tf.math.subtract(variable, update_delta, name=scope)
+                return variable
 
 
-    def build(self, input_shape):
+
+
+    def build(self, input_shape:TensorShape):
         if self._built == False:
-            self.input_filters= to_numpy(input_shape)[self.filter_index]
-
+            self.input_filters= input_shape[self.filter_index]
             ndims = len(input_shape)
 
             # Convert axis to list and resolve negatives
@@ -164,15 +164,15 @@ class BatchNorm(Layer):
                 self.bias=tf.Variable(tf.zeros(shape=[self.input_filters]),trainable=True, name='bias') #beta/ offset
 
             if self.track_running_stats:
-                self.register_buffer('running_mean',tf.Variable(tf.zeros(shape=[self.input_filters]), trainable=False,name='running_mean',synchronization=tf.VariableSynchronization.AUTO,aggregation=tf_variables.VariableAggregation.MEAN))
-                self.register_buffer('running_var',tf.Variable(tf.ones(shape=[self.input_filters]), trainable=False, name='running_var',synchronization=tf.VariableSynchronization.AUTO,aggregation=tf_variables.VariableAggregation.MEAN))
-                self.register_buffer('num_batches_tracked',to_tensor(0,dtype=tf.int64))
-
+                self.register_buffer('running_mean', zeros(shape=[self.input_filters]))
+                self.register_buffer('running_var', ones(shape=[self.input_filters]))
+                self.register_buffer('num_batches_tracked', to_tensor(0, dtype=tf.int64), persistent=False)
 
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x) :
+
         input_shape = x.shape
         ndims= len(x.shape)
         reduction_axes = [i for i in range(len(x.shape)) if i not in self.axis]
@@ -288,7 +288,7 @@ class GroupNorm(Layer):
         self.axis=axis
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             assert  self.input_filters % self.num_groups == 0, 'number of groups {} must divide number of channels {}'.format(self.num_groups,  self.input_filters)
             if self.affine:
@@ -300,8 +300,10 @@ class GroupNorm(Layer):
                 self.register_parameter('bias', None)
 
                 self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+
+    def forward(self, x) :
+
         # Prepare broadcasting shape.
         origin_shape=list(int_shape(x))
         group_shape =list(int_shape(x))
@@ -399,7 +401,8 @@ class InstanceNorm(GroupNorm):
         """
         super().__init__(self, num_groups=1,affine=affine,axis=axis, eps=eps, **kwargs)
 
-    def build(self, input_shape):
+
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.num_groups=self.input_filters
             if self.affine:
@@ -450,7 +453,7 @@ class LayerNorm(Layer):
     .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
 
     """
-    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True,name=None, **kwargs):
+    def __init__(self,  eps=1e-5, affine=True,name=None, **kwargs):
         """
     Args:
         normalized_shape (int or list or torch.Size): input shape from an expected input
@@ -483,21 +486,21 @@ class LayerNorm(Layer):
 
         """
         super().__init__(name=name)
-        if isinstance(normalized_shape, numbers.Integral):
-            normalized_shape = (normalized_shape,)
-        self.normalized_shape = tuple(normalized_shape)
+
         self.eps = eps
-        self.elementwise_affine = elementwise_affine
+        self.affine = affine
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
-            if self.elementwise_affine:
-                self.weight = tf.Variable(tf.ones(shape=self.normalized_shape), name='weight') #gamma//scale
-                self.bias = tf.Variable(tf.zeros(shape=self.normalized_shape), name='bias') #beta/ offset
+            if self.affine:
+                self.weight = tf.Variable(tf.ones(shape=self.input_filters), name='weight') #gamma//scale
+                self.bias = tf.Variable(tf.zeros(shape=self.input_filters), name='bias') #beta/ offset
             self._built=True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+
+    def forward(self, x) :
+
         mean = x.mean(dim=self.axis, keepdim=True).detach()
         std = x.std(dim=self.axis, keepdim=True).detach()
         return self.weight * (x - mean) / (std + self._eps) +self.bias
@@ -507,11 +510,29 @@ LayerNorm2d=LayerNorm
 LayerNorm3d=LayerNorm
 
 
+
+class L2Norm(Layer):
+    def __init__(self,in_sequence=False, axis=-1,name=None, **kwargs):
+        super().__init__(in_sequence=in_sequence,name=name)
+        self.eps=epsilon()
+        self.axis=axis
+
+    def build(self, input_shape:TensorShape):
+        if self._built == False :
+            self._built = True
+    def forward(self, x):
+        x= l2_normalize(x,axis=self.axis,keepdims=True)
+        return x
+
+
+
+
 class PixelNorm(Layer):
     def __init__(self,eps=1e-5, axis=-1, name=None,**kwargs):
         super(PixelNorm, self).__init__(name=name)
         self.eps=eps
         self.axis=axis
+
 
     def forward(self, x):
         return x /sqrt(mean(x ** 2, axis=self.axis, keepdims=True) + self.eps)
@@ -523,10 +544,13 @@ class SpectralNorm(Layer):
        layer: tensorflow keras layers (with kernel attribute)
     """
 
-    def __init__(self, layer, **kwargs):
-        super(SpectralNorm, self).__init__(layer, **kwargs)
+    def __init__(self, module, name='weight', power_iterations=1, in_sequence=False, **kwargs):
+        super(SpectralNorm, self).__init__(in_sequence=in_sequence, name=name)
+        self.module = module
+        self.name = name
+        self.power_iterations = power_iterations
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         """Build `Layer`"""
 
         if not self.layer.built:
@@ -538,18 +562,25 @@ class SpectralNorm(Layer):
 
             self.w = self.layer.kernel
             self.w_shape = self.w.shape.as_list()
-            self.u = self.add_variable(shape=tuple([1, self.w_shape[-1]]),
-                initializer=initializers.TruncatedNormal(stddev=0.02), name='sn_u', trainable=False,
-                dtype=tf.float32)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+            self.u = tf.Variable(zeros(tuple([1, self.w_shape[2]])), trainable=False)
+            self.v =  tf.Variable(zeros(tuple([1, self.w_shape[1]])), trainable=False)
+            kaiming_normal( self.u,a=math.sqrt(5))
+            kaiming_normal(self.v, a=math.sqrt(5))
+
+            self.u.assign(l2_normalize( self.u .value().detach()))
+            self.v.assign(l2_normalize( self.v .value().detach()))
+            self.w_bar = tf.Variable(self.w .value().detach(), requires_grad=False)
+
+    def forward(self, x) :
+
         if self.training == True:
             # Recompute weights for each forward pass
             self._compute_weights()
 
         output = self.layer(x)
         return output
+
 
     def _compute_weights(self):
         """Generate normalized weights.
@@ -577,7 +608,8 @@ class EvoNormB0(Layer):
         self.momentum = momentum
         self.eps = eps
 
-    def build(self, input_shape):
+
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             newshape=np.ones(self.rank+2)
             newshape[-1]=self.input_filters
@@ -613,7 +645,8 @@ class EvoNormS0(Layer):
         self.nonlinear = nonlinear
         self.groups = groups
 
-    def build(self, input_shape):
+
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             newshape = np.ones(self.rank + 2)
             newshape[-1] = self.input_filters

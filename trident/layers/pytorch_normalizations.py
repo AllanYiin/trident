@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
-from trident.backend.common import epsilon, get_function, get_session, enforce_singleton,get_class
+from trident.backend.common import epsilon, get_function, get_session, enforce_singleton,get_class,TensorShape
 from trident.backend.pytorch_backend import Layer,get_device
 from trident.backend.pytorch_ops import *
 
@@ -138,11 +138,11 @@ class BatchNorm(Layer):
             state_dict, prefix, local_metadata, strict,
             missing_keys, unexpected_keys, error_msgs)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.affine:
-                self.weight = Parameter(ones(self.input_filters))
-                self.bias = Parameter(zeros(self.input_filters))
+                self.register_parameter('weight', Parameter(ones(self.input_filters)))
+                self.register_parameter('bias', Parameter(zeros(self.input_filters)))
 
             else:
                 self.register_parameter('weight', None)
@@ -157,12 +157,12 @@ class BatchNorm(Layer):
                 self.register_buffer('running_var', None)
                 self.register_buffer('num_batches_tracked', None)
 
-            self.reset_parameters()
+
             self.to(get_device())
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
 
@@ -278,7 +278,7 @@ class GroupNorm(Layer):
         self.num_groups = num_groups
         self.eps = eps
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             assert  self.input_filters % self.num_groups == 0, 'number of groups {} must divide number of channels {}'.format(self.num_groups,  self.input_filters)
             if self.affine:
@@ -291,8 +291,8 @@ class GroupNorm(Layer):
                 self.register_parameter('bias', None)
 
                 self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= F.group_norm(x, self.num_groups, self.weight, self.bias, self.eps)
@@ -388,7 +388,7 @@ class InstanceNorm(Layer):
         if self.affine :
             init.ones_(self.weight)
             init.zeros_(self.bias)
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.affine:
                 self.weight = Parameter(torch.Tensor(self.input_filters))
@@ -410,8 +410,8 @@ class InstanceNorm(Layer):
             self.reset_running_stats()
             self.to(get_device())
             self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= F.instance_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
@@ -457,7 +457,7 @@ class LayerNorm(Layer):
     .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
 
     """
-    def __init__(self, normalized_shape, eps=1e-5, elementwise_affine=True,in_sequence=False,name=None, **kwargs):
+    def __init__(self,eps=1e-5, elementwise_affine=True,in_sequence=False,name=None, **kwargs):
         """
     Args:
         normalized_shape (int or list or torch.Size): input shape from an expected input
@@ -490,24 +490,21 @@ class LayerNorm(Layer):
 
         """
         super().__init__(in_sequence=in_sequence,name=name)
-        if isinstance(normalized_shape, numbers.Integral):
-            normalized_shape = (normalized_shape,)
-        self.normalized_shape = tuple(normalized_shape)
         self.eps = eps
         self.elementwise_affine = elementwise_affine
 
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
-            self.register_parameter('weight',Parameter(ones((self.normalized_shape))))
-            self.register_parameter('bias', Parameter(zeros((self.normalized_shape))))
+            self.register_parameter('weight',Parameter(ones((self.input_filters))))
+            self.register_parameter('bias', Parameter(zeros((self.input_filters))))
             self._built=True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
-        x= F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
+        x= F.layer_norm(x, int_shape( self.weight), self.weight, self.bias, self.eps)
         if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
         return x
@@ -525,11 +522,11 @@ class L2Norm(Layer):
         self.eps=epsilon()
         self.axis=axis
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         x= l2_normalize(x,axis=self.axis,keepdims=True)
@@ -643,13 +640,13 @@ class SpectralNorm(Layer):
         self.module.register_parameter(self.name + "_u", u)
         self.module.register_parameter(self.name + "_v", v)
         self.module.register_parameter(self.name + "_bar", w_bar)
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if not self._made_params():
                 self._make_params()
             self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         self._update_u_v()
@@ -667,7 +664,7 @@ class EvoNormB0(Layer):
         self.momentum = momentum
         self.eps = eps
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             newshape=np.ones(self.rank+2)
             newshape[1]=self.input_filters
@@ -703,9 +700,9 @@ class EvoNormS0(Layer):
         self.nonlinear = nonlinear
         self.groups = groups
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
-            self.input_filters=input_shape[0].item
+            self.input_filters=input_shape[self.filter_index]
             self.weight = Parameter(ones((1, self.input_filters)+(1,)*self.rank))
             self.bias = Parameter(zeros((1, self.input_filters)+(1,)*self.rank))
             if self.nonlinear:
