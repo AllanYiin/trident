@@ -80,6 +80,7 @@ class Loss(object):
     self.axis=axis
 
   def __call__(self, output: Tensor, target: Tensor,**kwargs):
+      target.to(output.device)
       result = self.forward(output, target, **kwargs)
       return result
 

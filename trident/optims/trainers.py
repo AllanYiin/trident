@@ -413,6 +413,8 @@ class TrainingPlan(object):
             if not is_resume or only_steps == True:
                 max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
                 for item in self.training_items.values():
+                    #sysnc device
+                    item.model.to(get_device())
                     item.training_context['execution_id'] = self.execution_id
                     item.training_context['max_name_length'] = max_name_length
                     for callback in self.callbacks:
@@ -500,7 +502,6 @@ class TrainingPlan(object):
                             # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
                             for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
-
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
 
@@ -545,7 +546,8 @@ class TrainingPlan(object):
 
                             if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
-                                print(' \n', flush=True)
+                                if len(self.training_items)>1:
+                                    print(' \n', flush=True)
 
                             for k, trainitem in self.training_items.items():
                                 for callback in trainitem.training_context['callbacks']:

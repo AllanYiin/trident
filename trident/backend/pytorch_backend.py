@@ -507,7 +507,7 @@ class Layer(nn.Module):
         else:
             raise ValueError('Not valid module')
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -638,19 +638,109 @@ class Layer(nn.Module):
     def device(self, value:str):
         if isinstance(value,str):
             self._device = value
+        elif isinstance(value, device):
+            self._device = value.type
         else:
             print(value)
 
     def cuda(self, device=None):
-        self._device = 'cuda'
+        self.get_root().device ='cuda'
         super().cuda(device=device)
 
     def cpu(self):
-        self.device = 'cpu'
+        self.get_root().device='cpu'
         super().cpu()
 
     def gpu(self, device=None):
-        return self.cuda(device)
+        self.get_root().device = 'cuda'
+        super().cuda(device)
+
+    def to(self, *args, **kwargs):
+        r"""Moves and/or casts the parameters and buffers.
+
+        This can be called as
+
+        .. function:: to(device=None, dtype=None, non_blocking=False)
+
+        .. function:: to(dtype, non_blocking=False)
+
+        .. function:: to(tensor, non_blocking=False)
+
+        .. function:: to(memory_format=torch.channels_last)
+
+        Its signature is similar to :meth:`torch.Tensor.to`, but only accepts
+        floating point desired :attr:`dtype` s. In addition, this method will
+        only cast the floating point parameters and buffers to :attr:`dtype`
+        (if given). The integral parameters and buffers will be moved
+        :attr:`device`, if that is given, but with dtypes unchanged. When
+        :attr:`non_blocking` is set, it tries to convert/move asynchronously
+        with respect to the host if possible, e.g., moving CPU Tensors with
+        pinned memory to CUDA devices.
+
+        See below for examples.
+
+        .. note::
+            This method modifies the module in-place.
+
+        Args:
+            device (:class:`torch.device`): the desired device of the parameters
+                and buffers in this module
+            dtype (:class:`torch.dtype`): the desired floating point type of
+                the floating point parameters and buffers in this module
+            tensor (torch.Tensor): Tensor whose dtype and device are the desired
+                dtype and device for all parameters and buffers in this module
+            memory_format (:class:`torch.memory_format`): the desired memory
+                format for 4D parameters and buffers in this module (keyword
+                only argument)
+
+        Returns:
+            Module: self
+
+        Example::
+
+            >>> linear = nn.Linear(2, 2)
+            >>> linear.weight
+            Parameter containing:
+            tensor([[ 0.1913, -0.3420],
+                    [-0.5113, -0.2325]])
+            >>> linear.to(torch.double)
+            Linear(in_features=2, out_features=2, bias=True)
+            >>> linear.weight
+            Parameter containing:
+            tensor([[ 0.1913, -0.3420],
+                    [-0.5113, -0.2325]], dtype=torch.float64)
+            >>> gpu1 = torch.device("cuda:1")
+            >>> linear.to(gpu1, dtype=torch.half, non_blocking=True)
+            Linear(in_features=2, out_features=2, bias=True)
+            >>> linear.weight
+            Parameter containing:
+            tensor([[ 0.1914, -0.3420],
+                    [-0.5112, -0.2324]], dtype=torch.float16, device='cuda:1')
+            >>> cpu = torch.device("cpu")
+            >>> linear.to(cpu)
+            Linear(in_features=2, out_features=2, bias=True)
+            >>> linear.weight
+            Parameter containing:
+            tensor([[ 0.1914, -0.3420],
+                    [-0.5112, -0.2324]], dtype=torch.float16)
+
+        """
+
+        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
+
+        if dtype is not None:
+            if not dtype.is_floating_point:
+                raise TypeError('nn.Module.to only accepts floating point '
+                                'dtypes, but got desired dtype={}'.format(dtype))
+        if device is not None:
+            self.get_root().device=device.type
+
+        def convert(t):
+            if convert_to_format is not None and t.dim() == 4:
+                return t.to(device, dtype if t.is_floating_point() else None, non_blocking, memory_format=convert_to_format)
+            return t.to(device, dtype if t.is_floating_point() else None, non_blocking)
+
+        return self._apply(convert)
 
     @property
     def built(self):
@@ -679,7 +769,7 @@ class Layer(nn.Module):
 
         if self._built == False or self._input_shape is None or self.input_filters is None:
             self._input_shape = value
-            self.input_filters = self._input_shape.dims[self.filter_index]
+            self.input_filters = self._input_shape[self.filter_index]
             self.build(value)
             self._built = True
             if self.is_root:
@@ -805,17 +895,13 @@ class Layer(nn.Module):
     def _call_impl(self, *input, **kwargs):
         is_all_numpy = True
         is_built=self._built
-        input = list(input)
+
         #only do in the root
         if self.is_root:
-            new_input = []
-            for inp in input:
-                if isinstance(inp, np.ndarray):
-                    inp = to_tensor(inp,device=self.device)
-                else:
-                    is_all_numpy = False
-                new_input.append(inp.to(get_device()))
-            input = new_input
+            if isinstance(input,np.ndarray):
+                to_tensor(input)
+            else:
+                is_all_numpy = False
         for hook in itertools.chain(
                 _global_forward_pre_hooks.values(),
                 self._forward_pre_hooks.values()):
@@ -1033,7 +1119,7 @@ class Sequential(Layer):
                     self.add_module(str(idx), module)
         self.to(self.device)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         """
 
         Args:
@@ -1374,7 +1460,7 @@ class ModuleDict(Layer):
                                      "; 2 is required")
                 self[m[0]] = m[1]
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         """
 
         Args:
