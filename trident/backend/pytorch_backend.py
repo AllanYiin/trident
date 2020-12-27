@@ -638,7 +638,7 @@ class Layer(nn.Module):
     def device(self, value:str):
         if isinstance(value,str):
             self._device = value
-        elif isinstance(value, device):
+        elif isinstance(value, torch.device):
             self._device = value.type
         else:
             print(value)
@@ -910,24 +910,29 @@ class Layer(nn.Module):
                 if not isinstance(result, tuple):
                     result = (result,)
                 input = result
-
         if self._built == False:
             inp = unpack_singleton(input)
             if is_tensor(inp):
                 shp= tensor_to_shape(inp)
-                self.input_filters = shp.dims[self.filter_index]
+                self.input_filters = shp[self.filter_index]
                 self.input_shape =shp
-            elif isinstance(inp, (tuple, list)):
-                self.input_shape=tuple([int_shape(i) for i in inp  if not isinstance(i, (list, tuple))])
+                del inp
+            elif isinstance(input, (tuple, list)):
+                if isinstance(input[0], numbers.Number):
+                    self.input_shape = TensorShape(list(input))
+                else:
+                    self.input_shape = tuple([tensor_to_shape(i.copy().detach()) for i in input if not isinstance(i, (list, tuple))])
+
             else:
+                self.input_shape = TensorShape(list(input))
                 print('input shou be tensor or tuple of tensor')
-                print(inp)
+
             self._built=True
 
         if torch._C._get_tracing_state():
             result = self._slow_forward(*input, **kwargs)
         else:
-            result = self.forward(*input)
+            result = self.forward(*input, **kwargs)
 
             if hasattr(self, 'keep_output') and self.keep_output == True:
                 # make a op
@@ -1201,7 +1206,7 @@ class Sequential(Layer):
         keys = [key for key in keys if not key.isdigit()]
         return keys
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         for module in self._modules.values():
             x = enforce_singleton(x)
             x = module(x)
@@ -1225,7 +1230,7 @@ class ModuleList(Layer):
                 super(MyModule, self).__init__()
                 self.linears = nn.ModuleList([nn.Linear(10, 10) for i in range(10)])
 
-            def forward(self, x):
+            def forward(self, x, **kwargs):
                 # ModuleList can act as an iterable, or be indexed using ints
                 for i, l in enumerate(self.linears):
                     x = self.linears[i // 2](x) + l(x)
@@ -1480,7 +1485,7 @@ class ModuleDict(Layer):
                 module.output_shape = tensor_to_shape(out)
             self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         if self.is_multicasting == True:
             x=enforce_singleton(x)
             results = OrderedDict()

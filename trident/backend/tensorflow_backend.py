@@ -809,13 +809,13 @@ class Layer(tf.Module):
                         if para is None:
                             module._parameters[name] = None
                         else:
-                            module._parameters[name] = tf.Variable(para.numpy(), dtype=dtype)
+                            module._parameters[name].assign(tf.identity(cast(para.value(),dtype)))
                 if module._buffers is not None and len(module._buffers) > 0:
                     for name, buff in module._buffers.items():
                         if buff is None:
                             module._buffers[name] = None
                         else:
-                            module._buffers[name] = to_tensor(buff.numpy(), dtype=dtype)
+                            module._buffers[name] =tf.identity( cast(buff,dtype))
                 module._device = self._device
             except Exception as e:
                 print(e)
@@ -838,19 +838,7 @@ class Layer(tf.Module):
         if tf.test.is_gpu_available:
             self._device = '/gpu:0'
             with tf.device(self._device):
-                for module in self.modules():
-                    try:
-                        module._device = self._device
-                        for name, para in module._parameters.items():
-                            if para is not None:
-                                module._parameters[name].assign(tf.identity(module._parameters[name].value()))
-                        for name, buff in module._buffers.items():
-                            if buff is not None:
-                                module._buffers[name]=tf.identity(module._buffers[name])
-
-                    except Exception as e:
-                        print(e)
-                        PrintException()
+                return self._apply(lambda t: tf.identity(t))
 
         else:
             sys.stderr.write('GPU is not available in this machone./n')
@@ -861,22 +849,10 @@ class Layer(tf.Module):
         Returns:
             Module: self
         """
+        with tf.device('/cpu:0'):
+            return self._apply(lambda t: tf.identity(t))
 
-        self._device = '/cpu:0'
-        context_device = context.context().device_name
-        context_device = "/job:localhost/replica:0/task:0/device:CPU:0"
-        for module in self.modules():
-            try:
-                module._device = self._device
-                for name, para in module._parameters.items():
-                    if para is not None:
-                        module._parameters[name].assign(tf.identity(module._parameters[name].value()))
-                for name, buff in module._buffers.items():
-                    if buff is not None:
-                        module._buffers[name]=tf.identity(module._buffers[name])
-            except Exception as e:
-                print(e)
-                PrintException()
+
 
 
 
@@ -884,36 +860,26 @@ class Layer(tf.Module):
     def _apply(self, fn):
         for module in self.children():
             module._apply(fn)
-        #
-        # def compute_should_use_set_data(tensor, tensor_applied):
-        #     if tensorflow._has_compatible_shallow_copy_type(tensor, tensor_applied):
-        #         # If the new tensor has compatible tensor type as the existing tensor,
-        #         # the current behavior is to change the tensor in-place using `.data =`,
-        #         # and the future behavior is to overwrite the existing tensor. However,
-        #         # changing the current behavior is a BC-breaking change, and we want it
-        #         # to happen in future releases. So for now we introduce the
-        #         # `tensorflow.__future__.get_overwrite_module_params_on_conversion()`
-        #         # global flag to let the user control whether they want the future
-        #         # behavior of overwriting the existing tensor or not.
-        #         return not tensorflow.__future__.get_overwrite_module_params_on_conversion()
-        #     else:
-        #         return False
 
         for key, param in self._parameters.items():
             if param is not None:
                 # Tensors stored in modules are graph leaves, and we don't want to
                 # track autograd history of `param_applied`, so we have to use
-                # `with tf.no_gradient():`
-                param_applied = tf.stop_gradient(fn(param))
-                if int_shape(param_applied)==int_shape(param) and param_applied.dtype==param.dtype:
-                    param.assign(param_applied)
+                # `with torch.no_grad():`
+                param_applied = fn(param)
+                if isinstance(param, tf.Variable) :
+                    self._parameters[key] = Parameter(param_applied, trainable=param.trainable)
                 else:
-                    assert isinstance(param,tf.Variable)
-                    self._parameters[key] = tf.Variable(initial_value=param_applied, trainable=param.trainable)
-
+                    param = param_applied
+                #
                 # if param.grad is not None:
-                #     grad_applied = tf.stop_gradient(fn(param.grad))
-                #     self._parameters[key].grad = grad_applied.requires_grad_(param.grad.requires_grad)
+                #     grad_applied = fn(param.grad)
+                #     should_use_set_data = compute_should_use_set_data(param.grad, grad_applied)
+                #     if should_use_set_data:
+                #         param.grad.data = grad_applied
+                #     else:
+                #         assert param.grad.is_leaf
+                #         self._parameters[key].grad = grad_applied.requires_grad_(param.grad.requires_grad)
 
         for key, buf in self._buffers.items():
             if buf is not None:
@@ -934,7 +900,7 @@ class Layer(tf.Module):
 
         Example::
 
-            >>> @tensorflow.no_grad()
+            >>> @torch.no_grad()
             >>> def init_weights(m):
             >>>     print(m)
             >>>     if type(m) == nn.Linear:
@@ -963,6 +929,7 @@ class Layer(tf.Module):
             module.apply(fn)
         fn(self)
         return self
+
     #
     # def cuda(self: T, device: Optional[Union[int, str]] = None) -> T:
     #     r"""Moves all model parameters and buffers to the GPU.
@@ -982,14 +949,7 @@ class Layer(tf.Module):
     #         return self._apply(lambda t: t)
     #     #return self._apply(lambda t: t.cuda(device))
 
-    # def cpu(self: T) -> T:
-    #     r"""Moves all model parameters and buffers to the CPU.
-    #
-    #     Returns:
-    #         Module: self
-    #     """
-    #     with tf.device('/cpu:0'):
-    #         return self._apply(lambda t: t)
+
 
     def gpu(self, device=None):
         return self.cuda(device)
@@ -1388,9 +1348,7 @@ class Layer(tf.Module):
                 is_all_numpy = False
 
 
-        for hook in itertools.chain(
-                _global_forward_pre_hooks.values(),
-                self._forward_pre_hooks.values()):
+        for hook in itertools.chain( _global_forward_pre_hooks.values(),self._forward_pre_hooks.values()):
             result = hook(self, input)
             if result is not None:
                 if not isinstance(result, tuple):
@@ -1399,15 +1357,21 @@ class Layer(tf.Module):
         if self._built == False:
             inp = unpack_singleton(input)
             if is_tensor(inp):
-                shp= tensor_to_shape(inp)
-                self.input_filters = shp.dims[self.filter_index]
-                self.input_shape =shp
-            elif isinstance(inp, (tuple, list)):
-                self.input_shape=tuple([int_shape(i) for i in inp  if not isinstance(i, (list, tuple))])
+                shp = tensor_to_shape(inp)
+                self.input_filters = shp[self.filter_index]
+                self.input_shape = shp
+                del inp
+            elif isinstance(input, (tuple, list)):
+                if isinstance(input[0], numbers.Number):
+                    self.input_shape = TensorShape(list(input))
+                else:
+                    self.input_shape = tuple([tensor_to_shape(i.copy().detach()) for i in input if not isinstance(i, (list, tuple))])
+
             else:
+                self.input_shape = TensorShape(list(input))
                 print('input shou be tensor or tuple of tensor')
-                print(inp)
-            self._built=True
+
+            self._built = True
 
 
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
@@ -1973,7 +1937,7 @@ class Sequential(Layer):
 
     def build(self, input_shape:TensorShape):
         if self._built == False and len(self._modules) > 0:
-            self.__getitem__(0).input_shape = self.input_shape
+            self.__getitem__(0).input_shape =input_shape
             self._built = True
 
     def add_module(self, name, module):
@@ -2317,9 +2281,9 @@ class ModuleDict(Layer):
 
         """
         if self._built == False and len(self._modules) > 0:
-            self._input_shape=input_shape
+            self._input_shape=TensorShape(input_shape)
             input_shape = tuple(to_numpy(input_shape))
-            dummay_input = random_normal((2,) + input_shape).to(self.device)
+            dummay_input = to_tensor(self._input_shape.get_dummy_tensor()).to(self.device)
 
             for name, module in self.items():
                 out = module(dummay_input)
@@ -2857,20 +2821,20 @@ def fix_layer(layer: Layer):
         layer._signature = Signature()
         if layer._input_shape is not None:
             if is_tensor(layer._input_shape):
-                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(layer._input_shape), name="input")
+                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._input_shape))), name="input")
             elif isinstance(layer._input_shape, tuple) and isinstance(layer._input_shape[0], int):
-                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(layer._input_shape), name="input")
+                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(list(layer._input_shape)), name="input")
             elif isinstance(layer._input_shape, tuple):
                 for i in range(len(layer._input_shape)):
-                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._input_shape[i]), name="input_{0}".format(i))
+                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._input_shape[i]))), name="input_{0}".format(i))
         if layer._output_shape is not None:
             if is_tensor(layer._output_shape):
-                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(layer._output_shape), name="output")
+                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._output_shape))), name="output")
             elif isinstance(layer._output_shape, tuple) and isinstance(layer._output_shape[0], int):
-                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(layer._output_shape), name="output")
+                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(list(layer._output_shape)), name="output")
             elif isinstance(layer._output_shape, tuple):
                 for i in range(len(layer._output_shape)):
-                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._output_shape[i]), name="output_{0}".format(i))
+                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._output_shape[i]))), name="output_{0}".format(i))
         layer.signature = layer._signature
 
     return layer
