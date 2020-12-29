@@ -63,15 +63,19 @@ class TensorSpec(object):
       >>> print(spec.__class__.__name__)
       TensorSpec
       >>> print(spec)
-      TensorSpec(shape=(2, 3, 4), ndim=3)
-
+      TensorSpec(shape=(None, 2, 3, 4), ndim=3)
+      >>> t1=cast(arange(10).reshape(1,2,5),'float16')
+      >>> print(t1.dtype)
+      float16
+      >>> TensorSpec.tensor_to_spec(t1)
+      TensorSpec(dtype=torch.float32, shape=(None, 2, 5), ndim=3)
     """
 
     def __init__(self,
-                 shape=None,
-                 ndim=None,
-                 max_ndim=None,
-                 min_ndim=None,
+                 shape:Union[None,TensorShape]=None,
+                 ndim:Union[None,int]=None,
+                 max_ndim:Union[None,int]=None,
+                 min_ndim:Union[None,int]=None,
                  axes=None,
                  dtype=None,
                  object_type: Optional[ObjectType] = None,
@@ -129,6 +133,10 @@ class TensorSpec(object):
             if max_axis > max_dim:
                 raise ValueError('Axis {} is greater than the maximum allowed value: {}'
                                  .format(max_axis, max_dim))
+    @classmethod
+    def tensor_to_spec(cls, t:Tensor):
+        return cls(shape=tensor_to_shape(t),dtype=t.dtype,name=t.name)
+
 
     @property
     def dtype(self):
@@ -408,6 +416,9 @@ def assert_spec_compatibility(input_spec: TensorSpec, other_spec: TensorSpec):
     # Check shape.
     if input_spec.shape is not None:
         shape = other_spec._shape_tuple
+        is_compatible=TensorShape(input_spec.shape).is_compatible_with(TensorShape(other_spec._shape_tuple))
+        if is_compatible:
+            return is_compatible
         if shape is not None:
             for spec_dim, dim in zip(other_spec._shape_tuple, input_spec._shape_tuple):
                 if spec_dim is not None and dim is not None:
