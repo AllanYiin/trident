@@ -424,12 +424,17 @@ def str2dtype(dtype:(str,torch.dtype)):
     Returns:
         dtype
 
+    >>> str2dtype('float16')
+    torch.float16
+
     """
     if isinstance(dtype, torch.dtype):
         return dtype
     elif isinstance(dtype, str):
         if 'float64' in dtype.lower() or 'double' in dtype.lower():
             return Dtype.float64
+        elif 'float32' in dtype.lower() or 'single' in dtype.lower():
+            return Dtype.float32
         elif 'float16' in dtype.lower() or 'half' in dtype.lower():
             return Dtype.float16
         elif 'float' in dtype.lower():
@@ -446,7 +451,7 @@ def str2dtype(dtype:(str,torch.dtype)):
             return Dtype.int32
         elif 'bool' in dtype.lower():
             return Dtype.bool
-    return None
+    return Dtype.float32
 
 
 
@@ -491,7 +496,7 @@ def cast(x, dtype):
         if dtype == Dtype.float64 or dtype == Dtype.double:
             return x.double()
         elif dtype == Dtype.float16 or dtype == Dtype.half:
-            return x.float()
+            return x.half()
         elif dtype == Dtype.float32:
             return x.float()
         elif dtype == Dtype.int64:
