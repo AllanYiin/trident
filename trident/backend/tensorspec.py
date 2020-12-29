@@ -134,8 +134,8 @@ class TensorSpec(object):
                 raise ValueError('Axis {} is greater than the maximum allowed value: {}'
                                  .format(max_axis, max_dim))
     @classmethod
-    def tensor_to_spec(cls, t:Tensor):
-        return cls(shape=tensor_to_shape(t),dtype=t.dtype,name=t.name)
+    def tensor_to_spec(cls, t:Tensor, object_type:ObjectType=None):
+        return cls(shape=tensor_to_shape(t),dtype=t.dtype,object_type=object_type,name=t.name)
 
 
     @property
