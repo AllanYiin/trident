@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import gc
+import shutil
 import subprocess
 import functools
 import os
@@ -31,7 +32,7 @@ from torch._six import container_abcs
 from torch.nn.parameter import Parameter
 from trident.backend.tensorspec import *
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature,TensorShape
+    PrintException, Signature,TensorShape,split_path,make_dir_if_need,sanitize_path
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
@@ -778,11 +779,10 @@ class Layer(nn.Module):
                 self._signature.inputs = OrderedDict()
                 if isinstance(self._input_shape,TensorShape):
                     self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
-                    self.input_spec = self._signature.inputs['input']
                 elif isinstance(self._input_shape, list):
                     for k in range(len(self._input_shape)):
                         self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
-                self.input_spec = self._signature.inputs.value_list
+                self.input_spec = unpack_singleton(self._signature.inputs.value_list)
 
     @property
     def output_shape(self) :
@@ -875,22 +875,34 @@ class Layer(nn.Module):
         return self.clone()
 
     def save_onnx(self, file_path=''):
-        input_shape = self.input_shape.copy()
-        input_shape.insert(0, 1)
-        x = torch.randn(*input_shape, requires_grad=False)
+        input_shape = self.signature.inputs.value_list[0].shape.dims
+        input_shape[0]=1
+        self.eval()
+        x = cast(torch.randn(*input_shape, requires_grad=False),self.input_spec.dtype)
         torch_out = self(x)
+        folder, filename, ext = split_path(file_path)
+        if filename == '':
+            filenam = self.name
+        ext = '.onnx_'
+        save_path = sanitize_path(os.path.join(folder, filename + ext))
+        make_dir_if_need(save_path)
 
         # Export the model
         torch.onnx.export(self,  # model being run
                           x,  # model input (or a tuple for multiple inputs)
-                          file_path,  # where to save the model (can be a file or file-like object)
+                          save_path,  # where to save the model (can be a file or file-like object)
                           export_params=True,  # store the trained parameter weights inside the model file
-                          opset_version=10,  # the ONNX version to export the model to
+                          opset_version=11,  # the ONNX version to export the model to
                           do_constant_folding=True,  # whether to execute constant folding for optimization
                           input_names=['input'],  # the model's input names
                           output_names=['output'],  # the model's output names
                           dynamic_axes={'input': {0: 'batch_size'},  # variable lenght axes
                                         'output': {0: 'batch_size'}})
+        self.train()
+        shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
+        os.remove(save_path)
+
+
 
     def _call_impl(self, *input, **kwargs):
         is_all_numpy = True

@@ -1005,11 +1005,11 @@ class Layer(tf.Module):
                 self._signature.inputs = OrderedDict()
                 if isinstance(self._input_shape, TensorShape):
                     self._signature.inputs['input'] = TensorSpec(shape=self._input_shape, name='input')
-                    self.input_spec = self._signature.inputs['input']
+
                 elif isinstance(self._input_shape, list):
                     for k in range(len(self._input_shape)):
                         self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
-                self.input_spec = self._signature.inputs.value_list
+                self.input_spec =unpack_singleton( self._signature.inputs.value_list)
 
     @property
     def output_shape(self):
@@ -1355,12 +1355,13 @@ class Layer(tf.Module):
                     result = (result,)
                 input = result
         if self._built == False:
-            inp = unpack_singleton(input)
+            inp = tf.stop_gradient(unpack_singleton(input))
             if is_tensor(inp):
                 shp = tensor_to_shape(inp)
                 self.input_filters = shp[self.filter_index]
                 self.input_shape = shp
-                del inp
+                #dont do it  in tensorflow
+                #del inp
             elif isinstance(input, (tuple, list)):
                 if isinstance(input[0], numbers.Number):
                     self.input_shape = TensorShape(list(input))
@@ -1382,7 +1383,7 @@ class Layer(tf.Module):
                     #make a op
                     self._output_tensor = identity(unpack_singleton(result))
                 if self._output_shape is None or is_built == False:
-                    output = unpack_singleton(result)
+                    output = tf.stop_gradient(unpack_singleton(result))
                     if is_tensor(output):  # one output
                         self._output_shape = tensor_to_shape(output)
                     elif isinstance(output, (list, tuple)):
