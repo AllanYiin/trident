@@ -135,7 +135,7 @@ class TensorSpec(object):
                                  .format(max_axis, max_dim))
     @classmethod
     def tensor_to_spec(cls, t:Tensor, object_type:ObjectType=None,name=None):
-        return cls(shape=tensor_to_shape(t),dtype=t.dtype,object_type=object_type,name=t.name if name is None else name)
+        return cls(shape=tensor_to_shape(t),dtype=t.dtype,object_type=object_type,name=name)
 
 
     @property
