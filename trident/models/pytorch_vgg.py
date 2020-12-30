@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.common import *
 from trident.backend.model import *
@@ -121,22 +122,14 @@ def VGG11(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg11.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name='vgg11'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc1.trainable = True
-            recovery_model.fc2.trainable = True
-            recovery_model.fc3.trainable = True
-        if include_top==False:
-            [recovery_model.remove_at(-1) for i in range(7)]
-            vgg11.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc3', Dense(classes,use_bias=True,activation='softmax'))
-                vgg11.class_names = []
-        vgg11.model=recovery_model
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        vgg11.model = recovery_model
+
+    else:
+        vgg11.model = _make_recovery_model_include_top(vgg11.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        vgg11.model.input_shape = input_shape
+        vgg11.model.to(_device)
     return vgg11
 
 
@@ -159,25 +152,14 @@ def VGG13(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1wx67gmQ8eHWXs2mhJmNl-t-cFNw7dJ7O',dirname,'vgg13.pth')
         recovery_model=load(os.path.join(dirname,'vgg13.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.name = 'vgg13'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc1.trainable = True
-            recovery_model.fc2.trainable = True
-            recovery_model.fc3.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        vgg13.model = recovery_model
 
-        if include_top==False:
-            [recovery_model.remove_at(-1) for i in range(7)]
-            vgg13.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc3', Dense(classes, use_bias=True, activation='softmax'))
-                vgg13.class_names = []
-        vgg13.model=recovery_model
+    else:
+        vgg13.model = _make_recovery_model_include_top(vgg13.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    vgg13.model.input_shape = input_shape
+    vgg13.model.to(_device)
     return vgg13
 
 
@@ -199,22 +181,14 @@ def VGG16(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg16.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg16'
-        recovery_model.eval()
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc1.trainable = True
-            recovery_model.fc2.trainable = True
-            recovery_model.fc3.trainable = True
-        if include_top==False:
-            [recovery_model.remove_at(-1) for i in range(7)]
-            vgg16.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc3', Dense(classes, use_bias=True, activation='softmax'))
-                vgg16.class_names = []
-        recovery_model.to(_device)
-        vgg16.model=recovery_model
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        vgg16.model = recovery_model
+
+    else:
+        vgg16.model = _make_recovery_model_include_top(vgg16.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        vgg16.model.input_shape = input_shape
+        vgg16.model.to(_device)
     return vgg16
 
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)
@@ -235,21 +209,12 @@ def VGG19(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg19.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg19'
-        recovery_model.eval()
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc1.trainable = True
-            recovery_model.fc2.trainable = True
-            recovery_model.fc3.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        vgg19.model = recovery_model
 
-        if include_top==False:
-            [recovery_model.remove_at(-1) for i in range(7)]
-            vgg19.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc3', Dense(classes, use_bias=True, activation='softmax'))
-                vgg19.class_names = []
-        recovery_model.to(_device)
-        vgg19.model=recovery_model
+    else:
+        vgg19.model = _make_recovery_model_include_top(vgg19.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        vgg19.model.input_shape = input_shape
+        vgg19.model.to(_device)
     return vgg19

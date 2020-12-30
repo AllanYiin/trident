@@ -176,14 +176,24 @@ def load_cifar(dataset_name='cifar10'):
         if 'data_batch' in file_path:
             with open(os.path.join(extract_path,file_path), 'rb') as f:
                 entry = pickle.load(f, encoding='latin1')
-                data.extend(np.reshape(entry['data'],(-1,32, 32, 3)))
-                label.extend(entry['labels'])
+                data.append(entry['data'])
+                label.append(entry['labels'])
         elif 'test_batch' in file_path:
             with open(os.path.join(extract_path,file_path), 'rb') as f:
                 entry = pickle.load(f, encoding='latin1')
-                test_data.extend(np.reshape(entry['data'],(-1,32, 32, 3)))
-                test_label.extend(entry['labels'])
+                test_data.append(entry['data'])
+                test_label.append(entry['labels'])
+    data = np.concatenate(data)
+    data = data.reshape((data.shape[0], 3, 32, 32))
+    data = data.transpose(0, 2, 3, 1).astype(np.float32)
 
+    test_data = np.concatenate(test_data)
+    test_data = test_data.reshape((test_data.shape[0], 3, 32, 32))
+    test_data = test_data.transpose(0, 2, 3, 1).astype(np.float32)
+
+    # Prepare labels
+    label = np.concatenate(label)
+    test_label = np.concatenate(test_label)
 
     trainData = Iterator(data=ImageDataset(data,object_type=ObjectType.rgb), label=LabelDataset(label,object_type=ObjectType.classification_label))
     testData = Iterator(data=ImageDataset(test_data,object_type=ObjectType.rgb), label=LabelDataset(test_label,object_type=ObjectType.classification_label))

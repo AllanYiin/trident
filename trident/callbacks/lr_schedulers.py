@@ -10,7 +10,7 @@ import types
 import numpy as np
 
 from trident.backend.common import *
-from trident.backend.load_backend import get_backend
+from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
 
 _session = get_session()

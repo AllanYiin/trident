@@ -2,6 +2,7 @@ import copy
 from  copy import deepcopy
 import math
 import random
+import threading
 from itertools import count
 
 import numpy as np
@@ -32,6 +33,7 @@ class PolicyBase(Model):
     """
     def __init__( self,network:Layer,env:gym.Env,memory_length:int=1000,name=None) -> None:
         self.network = network
+        self.network.to(get_device())
         if name is not None:
             self.network._name=name
 
@@ -39,7 +41,7 @@ class PolicyBase(Model):
         self.env.reset()
         self.observation_space = env.observation_space
         self.action_space = env.action_space
-        super().__init__(inputs=to_tensor(self.get_observation()).repeat_elements(2,0),output=deepcopy(self.network))
+        super().__init__(inputs=to_tensor(self.get_observation()).repeat_elements(2,0).to(get_device()),output=deepcopy(self.network))
         self.setting_network()
 
         self.memory = ReplayBuffer(memory_length)
@@ -207,91 +209,92 @@ class Dqn(PolicyBase):
         Returns:
             object:
         """
-        if batch_size is not None:
-            self.batch_size = batch_size
+        with tf.device(get_device()):
+            if batch_size is not None:
+                self.batch_size = batch_size
 
-        self.steps_done = 0
-        for i_episode in range(num_episodes):
-            # reset enviorment
-            self.env.reset()
-            # clear rewards
-            total_rewards = 0
-            state = self.get_observation()
+            self.steps_done = 0
+            for i_episode in range(num_episodes):
+                # reset enviorment
+                self.env.reset()
+                # clear rewards
+                total_rewards = 0
+                state = self.get_observation()
 
-            # 需要記憶中的案例數大於批次數才開始訓練
-            start_train = (len(self.memory) > self.batch_size)
-            for t in count():
-                # 基於目前狀態產生行動
-                action = self.select_action(state)
-                # 基於行動產生獎賞以及判斷是否結束(此時已經更新至下一個時間點)
-                reward, done = self.get_rewards(action)
-                # 累積獎賞
-                total_rewards += reward
+                # 需要記憶中的案例數大於批次數才開始訓練
+                start_train = (len(self.memory) > self.batch_size)
+                for t in count():
+                    # 基於目前狀態產生行動
+                    action = self.select_action(state)
+                    # 基於行動產生獎賞以及判斷是否結束(此時已經更新至下一個時間點)
+                    reward, done = self.get_rewards(action)
+                    # 累積獎賞
+                    total_rewards += reward
 
-                # 任務完成強制終止(以300為基礎)
-                conplete = (not done and t + 1 >= 300)
+                    # 任務完成強制終止(以300為基礎)
+                    conplete = (not done and t + 1 >= 300)
 
-                if imshow:
-                    # 更新視覺化螢幕
-                    self.env.render()
-                # get next state
-                next_state = self.get_observation()
+                    if imshow:
+                        # 更新視覺化螢幕
+                        self.env.render()
+                    # get next state
+                    next_state = self.get_observation()
 
-                # 將四元組儲存於記憶中，建議要減少「好案例」的儲存比例
-                #if reward<1.0 or (reward>=1.0 and i_episode<50 ) or (reward>=1.0 and i_episode>=50 and random.random()<0.5):
-                self.memory.push(state, action, next_state, reward)
+                    # 將四元組儲存於記憶中，建議要減少「好案例」的儲存比例
+                    #if reward<1.0 or (reward>=1.0 and i_episode<50 ) or (reward>=1.0 and i_episode>=50 and random.random()<0.5):
+                    self.memory.push(state, action, next_state, reward)
 
-                # switch next t
-                state = next_state
+                    # switch next t
+                    state = next_state
 
-                if start_train:
-                    # get batch data from experimental replay
-                    trainData = self.experience_replay(self.batch_size)
-                    # switch model to training mode
-                    self.policy_net.train()
-                    self.train_model(trainData, None,
-                                     current_epoch=i_episode,
-                                     current_batch=t,
-                                     total_epoch=num_episodes,
-                                     total_batch=t + 1 if done or conplete else t + 2,
-                                     is_collect_data=True if done or conplete else False,
-                                     is_print_batch_progress=False,
-                                     is_print_epoch_progress=False,
-                                     log_gradients=False, log_weights=False,
-                                     accumulate_grads=False)
-
-                if done or conplete:
                     if start_train:
+                        # get batch data from experimental replay
+                        self.output_fn=self.experience_replay
+                        # switch model to training mode
+                        self.policy_net.train()
+                        self.train_model(None, None,
+                                         current_epoch=i_episode,
+                                         current_batch=t,
+                                         total_epoch=num_episodes,
+                                         total_batch=t + 1 if done or conplete else t + 2,
+                                         is_collect_data=True if done or conplete else False,
+                                         is_print_batch_progress=False,
+                                         is_print_epoch_progress=False,
+                                         log_gradients=False, log_weights=False,
+                                         accumulate_grads=False)
 
-                        # self.epoch_metric_history.collect('episode_durations',i_episode,float(t))
-                        # 紀錄累積獎賞
-                        self.epoch_metric_history.collect('total_rewards', i_episode, float(total_rewards))
-                        # 紀錄完成比率(以200為基礎)
-                        self.epoch_metric_history.collect('task_complete', i_episode, 1.0 if t + 1 >= 200 else 0.0)
-                        # 定期列印學習進度
-                        if i_episode % print_progess_frequency == 0:
-                            self.print_epoch_progress(print_progess_frequency)
-                        # 定期繪製損失函數以及評估函數對時間的趨勢圖
-                        if i_episode > 0 and (i_episode + 1) % (5 * print_progess_frequency) == 0:
-                            print('epsilon:', self.epsilon)
-                            print('predict_rewards:', self.training_context['train_data']['predict_rewards'][:5])
-                            print('target_rewards:', self.training_context['train_data']['target_rewards'][:5])
-                            print('reward_batch:', self.training_context['train_data']['reward_batch'][:5])
-                            loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,legend=['dqn'], calculate_base='epoch', imshow=imshow)
+                    if done or conplete:
+                        if start_train:
 
-                    break
+                            # self.epoch_metric_history.collect('episode_durations',i_episode,float(t))
+                            # 紀錄累積獎賞
+                            self.epoch_metric_history.collect('total_rewards', i_episode, float(total_rewards))
+                            # 紀錄完成比率(以200為基礎)
+                            self.epoch_metric_history.collect('task_complete', i_episode, 1.0 if t + 1 >= 200 else 0.0)
+                            # 定期列印學習進度
+                            if i_episode % print_progess_frequency == 0:
+                                self.print_epoch_progress(print_progess_frequency)
+                            # 定期繪製損失函數以及評估函數對時間的趨勢圖
+                            if i_episode > 0 and (i_episode + 1) % (5 * print_progess_frequency) == 0:
+                                print('epsilon:', self.epsilon)
+                                print('predict_rewards:', self.training_context['train_data']['predict_rewards'][:5])
+                                print('target_rewards:', self.training_context['train_data']['target_rewards'][:5])
+                                print('reward_batch:', self.training_context['train_data']['reward_batch'][:5])
+                                loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,legend=['dqn'], calculate_base='epoch', imshow=imshow)
 
-            # 定期更新target_net權值
-            if start_train and i_episode % self.target_update == 0:
-                self.target_net.load_state_dict(self.policy_net.state_dict(), strict=True)
-                self.save_model(save_path=self.training_context['save_path'])
+                        break
+
+                # 定期更新target_net權值
+                if start_train and i_episode % self.target_update == 0:
+                    self.target_net.load_state_dict(self.policy_net.state_dict(), strict=True)
+                    self.save_model(save_path=self.training_context['save_path'])
 
 
-        print('Complete')
-        self.env.render()
-        self.env.close()
-        plt.ioff()
-        plt.show()
+            print('Complete')
+            self.env.render()
+            self.env.close()
+            plt.ioff()
+            plt.show()
 
 DqnPolicy=Dqn
 

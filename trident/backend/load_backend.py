@@ -6,7 +6,7 @@ import os
 import random
 from sys import stderr,stdout
 from trident.backend.common import *
-from trident.backend.model import *
+
 
 __all__ = []
 
@@ -40,26 +40,15 @@ if not os.path.exists(_trident_dir):
         pass
 
 
-
-
-
 # Set backend based on TRIDENT_BACKEND flag, if applicable.
 if 'TRIDENT_BACKEND' in os.environ:
     if _session.backend!=os.environ['TRIDENT_BACKEND']:
         _session.backend = os.environ['TRIDENT_BACKEND']
-        write_config(_config_path)
-else:
-    try:
-        import torch
-        os.environ['TRIDENT_BACKEND']='pytorch'
-    except:
-        try:
-            import tensorflow
-            os.environ['TRIDENT_BACKEND'] = 'tensorflow'
-        except:
-            import_or_install('onnxruntime')
+    if 'TRIDENT_WORKING_DIR' in os.environ:
+        _session.working_directory = os.environ['TRIDENT_WORKING_DIR']
+        os.chdir(os.environ['TRIDENT_WORKING_DIR'])
+    write_config(_config_path)
 
-            os.environ['TRIDENT_BACKEND'] = 'onnx'
 
 
 if get_backend()== 'pytorch':
@@ -86,24 +75,26 @@ elif _session.backend == 'tensorflow':
     _session.backend = 'tensorflow'
     _session.image_data_format = 'channels_last'
     _session.image_channel_order = 'rgb'
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+
     import tensorflow as tf
 
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
-        # Restrict TensorFlow to only allocate 1GB * 2 of memory on the first GPU
-        try:
 
+        try:
+            tf.config.experimental.set_memory_growth(gpus[0], True)
             # tf.config.experimental.set_virtual_device_configuration(
             #     gpus[0],
             #     [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 2)])
-            logical_gpus = tf.config.list_logical_devices('GPU')
-            tf.config.experimental.set_memory_growth( gpus[0], True)
-
-            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
             os.environ["CUDA_VISIBLE_DEVICES"] = "0"
             set_session('device', '/gpu:0')
+            tf.config.set_visible_devices(gpus[0], 'GPU')
+
+            logical_gpus = tf.config.list_logical_devices('GPU')
+            print(len(gpus), "Physical GPUs,", len(logical_gpus), "Logical GPUs")
+
         except RuntimeError as e:
             # Virtual devices must be set before GPUs have been initialized
             print(e)

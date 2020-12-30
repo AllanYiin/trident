@@ -345,9 +345,13 @@ class TrainingPlan(object):
                 for inp in v.signature.inputs.key_list:
                     data_feed[inp] = None
 
-            if 'x' in data_feed and 'input' in available_items:
-                data_feed['x'] = 'input'
-                available_items.remove('input')
+            if ( 'x' in data_feed  or  'input' in data_feed ) and 'input' in available_items:
+                if 'x' in data_feed :
+                    data_feed['x'] = 'input'
+                    available_items.remove('input')
+                elif  'input' in data_feed :
+                    data_feed['input'] = 'input'
+                    available_items.remove('input')
 
             data_symbols = iteration_tools.flatten([data_loader.traindata.data.symbol], iterable_types=(list, tuple))
             label_symbols = iteration_tools.flatten([data_loader.traindata.label.symbol], iterable_types=(list, tuple))
@@ -358,7 +362,7 @@ class TrainingPlan(object):
                 unpair_symbols.remove("")
 
             if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
-                if assert_spec_compatibility(trainingitem.signature.inputs.value_list[0], data_loader.traindata.data.element_spec):
+                if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_loader.traindata.data.element_spec.shape):
                     data_feed[trainingitem.signature.inputs.key_list[0]] = data_loader.traindata.data.symbol
                     available_items.remove(data_loader.traindata.data.symbol)
             if len(trainingitem.signature.outputs) == len(label_symbols) == 1:

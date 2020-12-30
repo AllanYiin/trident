@@ -9,7 +9,10 @@ import tempfile
 import warnings
 import copyreg
 from contextlib import closing, contextmanager
-import pickle
+try:
+   import _pickle as pickle
+except:
+   import pickle
 import pathlib
 import inspect
 import tensorflow as tf
@@ -201,7 +204,6 @@ def location_tag(storage):
 
 
 def default_restore_location(storage, location):
-    import torch
     for _, _, fn in _package_registry:
         result = fn(storage, location)
         if result is not None:
@@ -648,7 +650,13 @@ def load(f, map_location=None, pickle_module=pickle, **pickle_load_args):
                 #                   " silence this warning)", UserWarning)
                 #     return jit.load(f)
                 return _load(opened_zipfile, map_location, pickle_module, **pickle_load_args)
-        return _legacy_load(opened_file, map_location, pickle_module, **pickle_load_args)
+        result= _legacy_load(opened_file, map_location, pickle_module, **pickle_load_args)
+        # inp=result.input_shape
+        # for module in result.modules():
+        #     module._input_shape=None
+        #     module._output_shape = None
+        # result.input_shape=inp
+        return result
 
 
 # Register pickling support for layout instances such as
@@ -789,7 +797,7 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
             location = _maybe_decode_ascii(location)
             if root_key not in deserialized_objects:
                 obj = data_type(size)
-                obj._torch_load_uninitialized = True
+                #obj._torch_load_uninitialized = True
                 deserialized_objects[root_key] = restore_location(obj, location)
             storage = deserialized_objects[root_key]
             if view_metadata is not None:
@@ -833,10 +841,10 @@ def _legacy_load(f, map_location, pickle_module, **pickle_load_args):
 
     _sys_info = pickle_module.load(f, **pickle_load_args)
     unpickler = pickle_module.Unpickler(f, **pickle_load_args)
-    # unpickler.persistent_load = persistent_load
+    unpickler.persistent_load = persistent_load
     result = unpickler.load()
 
-    # deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
+    #deserialized_storage_keys = pickle_module.load(f, **pickle_load_args)
 
     # offset = f.tell() if f_should_read_directly else None
     # for key in deserialized_storage_keys:

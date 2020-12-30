@@ -239,9 +239,9 @@ class RFBnet(Layer):
         super(RFBnet, self).__init__(name=name)
         self.base_filters = base_filters
         backbond = tiny_mobile_rfbnet(self.base_filters)
-        self.backbond1 = Sequential(backbond[:8], name='backbond1')
-        self.backbond2 = Sequential(backbond[8:11], name='backbond2')
-        self.backbond3 = Sequential(backbond[11:13], name='backbond3')
+        self.backbond1 = Sequential(*backbond[:8], name='backbond1')
+        self.backbond2 = Sequential(*backbond[8:11], name='backbond2')
+        self.backbond3 = Sequential(*backbond[11:13], name='backbond3')
         self.prob_threshold = prob_threshold
         self.nms_threshold =nms_threshold
         self.variance = (center_variance, size_variance)

@@ -12,8 +12,7 @@ import numbers
 import numpy as np
 
 from trident.data.image_common import check_same_size
-from trident.backend.common import OrderedDict
-from trident.backend.load_backend import get_backend
+from trident.backend.common import OrderedDict,get_backend
 
 __all__ = ['Sampler', 'SequentialSampler', 'RandomSampler', 'BatchSampler']
 

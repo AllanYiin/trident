@@ -174,7 +174,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
-        if model.output_shape[0] > 2:
+        if model.output_shape[model.filter_index] > 2:
             is_label_mask = True
         # if len(data) >= 3:
         for data_key in data.key_list:

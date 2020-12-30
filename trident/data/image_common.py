@@ -130,7 +130,6 @@ def transform_func(func):
     Returns:
 
 
-
     """
     def wrapper(*args, **kwargs):
         argspec = inspect.getfullargspec(func)
@@ -146,7 +145,7 @@ def transform_func(func):
 
     return wrapper
 
-def list_pictures(directory, ext='jpg|jpeg|bmp|png|ppm|jfif'):
+def list_pictures(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
     return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
             re.match(r'([\w]+\.(?:' + ext + '))', f)]
 
@@ -164,12 +163,6 @@ def check_same_size(*images):
     return True
 
 
-def random_augmentation(func):
-    def wrapper(prob=0, *args, **kwargs):
-        if random.random() <= prob:
-            return func(*args, **kwargs)
-
-    return wrapper
 
 
 def add_noise(intensity=0.1):
@@ -630,14 +623,13 @@ def random_crop(h, w):
 def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,shear_range = 0.2,
                      random_flip= 0.15):
     # 把現有的圖片隨機擾亂
-    coverage = 110
-    rotation = np.random.uniform(-rotation_range, rotation_range) if rotation_range!=0 else 0
-    scale = np.random.uniform(1 - zoom_range, 1 + zoom_range)if zoom_range!=0 else 1
-    shear= np.random.uniform( - shear_range,  shear_range)if shear_range!=0 else 0
-    shift_x = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
-    shift_y = np.random.uniform(-shift_range, shift_range)  if shift_range != 0 else 0
-    rr = np.random.random()
     def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
+        rotation = np.random.uniform(-rotation_range, rotation_range) if rotation_range != 0 else 0
+        scale = np.random.uniform(1 - zoom_range, 1 + zoom_range) if zoom_range != 0 else 1
+        shear = np.random.uniform(- shear_range, shear_range) if shear_range != 0 else 0
+        shift_x = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
+        shift_y = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
+        rr = np.random.random()
         results = None
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
@@ -737,14 +729,16 @@ def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,she
                         new_n.append(pts)
                     results[spec] = np.array(new_n)
                 elif im.ndim == 3:
-                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
+
+                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(random.randint(0,255), random.randint(0,255), random.randint(0,255)))  # , borderMode=cv2.BORDER_REPLICATE
                     if rr< random_flip:
                         img_op.flip_width=new_image.shape[1]
                         new_image = new_image[:, ::-1]
                     results[spec] =  new_image
                 elif im.ndim ==2:
                     image=np.concatenate([np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1)],axis=-1)
-                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(255, 255, 255))  # , borderMode=cv2.BORDER_REPLICATE
+
+                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(random.randint(0,255), random.randint(0,255), random.randint(0,255)))  # , borderMode=cv2.BORDER_REPLICATE
                     if np.random.random() < random_flip:
                         new_image = new_image[:, ::-1]
                     new_image=cv2.cvtColor(new_image,cv2.COLOR_RGB2GRAY)
@@ -1125,7 +1119,7 @@ def random_channel_shift(intensity=0.15):
 
 
 def random_erasing(size_range=(0.02,0.3),transparency_range=(0.4,0.8),transparancy_ratio=0.5):
-    def img_op(image):
+    def img_op(image: np.ndarray,**kwargs):
         s_l ,s_h= size_range
         r_1 = 0.3
         r_2 = 1 / 0.3

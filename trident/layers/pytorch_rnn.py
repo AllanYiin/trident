@@ -16,7 +16,7 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 from torch.nn.utils.rnn import PackedSequence
 from trident.backend.pytorch_ops import *
-
+from  trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, get_device
 
 __all__ = ['RNNBase','RNN','LSTM','GRU']
@@ -105,7 +105,7 @@ class RNNBase(Layer):
     def initial_state(self,input) :
         pass
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             for layer in range(self.num_layers):
                 for direction in range(self.num_directions):
@@ -610,7 +610,7 @@ class LSTM(RNNBase):
                 ) -> Tuple[PackedSequence, Tuple[Tensor, Tensor]]:  # noqa: F811
         pass
 
-    def forward(self, x):  # noqa: F811
+    def forward(self, x, **kwargs):  # noqa: F811
         orig_input = x
         self.flatten_parameters()
         # xxx: isinstance check needs to be in conditional for TorchScript to compile

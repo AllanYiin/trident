@@ -143,7 +143,7 @@ class ImageDataProvider(object):
 
     def image_transform(self, img_data):
         if img_data.ndim == 4:
-            return [self.image_transform(im) for im in img_data]
+            return np.asarray([self.image_transform(im) for im in img_data])
         if len(self.image_transform_funcs) == 0:
             return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
@@ -170,6 +170,8 @@ class ImageDataProvider(object):
         return return_list
 
     def reverse_image_transform(self, img_data: np.ndarray):
+        if img_data.ndim == 4:
+            return np.asarray([self.reverse_image_transform(im) for im in img_data])
         if len(self.reverse_image_transform_funcs) == 0:
             return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
@@ -221,6 +223,36 @@ class ImageDataProvider(object):
             self.traindata.label.class_names = self._class_names
         if self.testdata is not None and hasattr(self.testdata.label, 'class_names'):
             self.testdata.label.class_names = self._class_names
+
+    def preview_images(self, key=None,is_concate=True):
+        if not isinstance(self.traindata.data,ImageDataset):
+            return None
+        else:
+            if key is None :
+                data, label = self.next()
+                data = self.reverse_image_transform(data)
+                if is_concate:
+                    data = np.concatenate([img for img in data], axis=1)
+                    return array2image(data)
+                else:
+                    return [array2image(img) for img in data]
+            elif isinstance(key, slice):
+                start = key.start if key.start is not None else 0
+                stop = key.stop
+                results=[]
+                for k in range(start,stop,1):
+                    img= self.reverse_image_transform(self.traindata.data.__getitem__(k))
+                    results.append(img)
+                if is_concate:
+                    results = np.concatenate(results, axis=1)
+                    return array2image(results)
+                else:
+                    return [array2image(img) for img in results]
+            elif isinstance(key, int):
+                img=self.reverse_image_transform(self.traindata.data.__getitem__(key))
+                return array2image(img)
+
+
 
     def _next_index(self):
         return self.__next__()

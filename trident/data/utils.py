@@ -381,6 +381,90 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
 
         return False
 
+#https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=Aa8v7D
+def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None):
+    """Download a Google Drive file from  and place it in root.
+
+    Args:
+        onedrive_path (str): id of file to be downloaded
+        dirname (str): Directory to place downloaded file in
+        filename (str, optional): Name to save the file under. If None, use the id of the file.
+        md5 (str, optional): MD5 checksum of the download. If None, do not check
+    """
+    # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
+    import requests
+    url = "https://docs.google.com/uc?export=download"
+
+    fpath = os.path.join(dirname, filename)
+    isload = False
+    models_md5 = None
+    need_download = True
+    check_internet = None
+    try:
+        if os.path.exists(os.path.join(dirname, 'models_md5.json')) and os.path.isfile(os.path.join(dirname, 'models_md5.json')) and (datetime.datetime.now() - get_file_modified_time(os.path.join(dirname, 'models_md5.json'))).seconds < 24 * 60 * 60:
+            with open(os.path.join(dirname, 'models_md5.json')) as f:
+                models_md5 = json.load(f)
+        else:
+            download_file_from_onedrive("https://1drv.ms/u/s!AsqOV38qroofiZrqNAQvo2CuX_cyWQE?e=Aa8v7D",dirname,'models_md5.json')
+
+            check_internet = True
+            if os.path.exists(os.path.join(dirname, 'models_md5.json')):
+                with open(os.path.join(dirname, 'models_md5.json')) as f:
+                    models_md5 = json.load(f)
+    except Exception as e:
+        print(e)
+        PrintException()
+        check_internet=False
+
+
+    if check_internet == False:
+        if os.path.exists(os.path.join(dirname, filename)):
+            print('internet connect  error,model file is already existing, donnot need download again.')
+            return True
+        else:
+            print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
+            print('***Please check your internet or download  files from following url in another computer, \n and then '
+                'put them into {0}\n {1} '.format( dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
+
+        return False
+    else:
+
+        try:
+            if os.path.exists(os.path.join(dirname, filename)):
+                if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
+                    need_download = False
+                    print('model file is already existing, donnot need download again.')
+                else:
+                    print('Your pretrained model has newer version, will you want to update it?')
+                    ans = input('(Y/N) << ').lower()
+                    if ans in ['yes', 'y']:
+                        os.remove(os.path.join(dirname, filename))
+                    else:
+                        need_download = False
+
+            if need_download:
+                session = requests.Session()
+                response = session.get(url, params={'id': file_id}, stream=True)
+                token = _get_confirm_token(response)
+                if token:
+                    params = {'id': file_id, 'confirm': token}
+                    response = session.get(url, params=params, stream=True)
+                _save_response_content(response, fpath)
+
+                if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
+                    print('model file is downloaded and validated.')
+                else:
+                    print('model file is downloaded but not match md5.')
+        except Exception as e:
+            print(e)
+            print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
+            print('***Please check your internet or download  files from following url in another computer, \n and then '
+                'put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
+            print(e)
+
+        return False
+
+
 
 def _get_confirm_token(response):
     for key, value in response.cookies.items():

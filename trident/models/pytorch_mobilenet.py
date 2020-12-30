@@ -30,7 +30,7 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
-
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 __all__ = ['MobileNet','MobileNetV2']
 
 _session = get_session()
@@ -138,22 +138,12 @@ def MobileNetV2(include_top=True,
         download_model_from_google_drive('1ULenXTjOO5PdT3fHv6N8bPXEfoJAn5yL',dirname,'mobilenet_v2.pth')
         recovery_model=load(os.path.join(dirname,'mobilenet_v2.pth'))
         recovery_model = fix_layer(recovery_model)
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        mob.model = recovery_model
 
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            mob.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                mob.class_names=[]
-        mob.model=recovery_model
+    else:
+        mob.model = _make_recovery_model_include_top(mob.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        mob.model.input_shape = input_shape
+        mob.model.to(_device)
     return mob

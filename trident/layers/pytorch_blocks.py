@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
-from torch.nn.parameter import Parameter
+
 
 from trident.layers.pytorch_activations import get_activation, Identity
 from trident.layers.pytorch_layers import *
@@ -99,7 +99,7 @@ class Conv1d_Block(Layer):
             self.conv = conv
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
@@ -107,8 +107,8 @@ class Conv1d_Block(Layer):
                     self.norm=None
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if hasattr(self,'sequence_rank'):
             setattr(self,'sequence_rank','cna')
         if self.add_noise == True and self.training == True:
@@ -211,7 +211,7 @@ class Conv2d_Block(Layer):
 
         self._name = name
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.conv.input_shape = input_shape
             if self.use_spectral:
@@ -224,8 +224,8 @@ class Conv2d_Block(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if not hasattr(self,'sequence_rank'):
             setattr(self,'sequence_rank','cna')
         if self.add_noise == True and self.training == True:
@@ -292,7 +292,7 @@ class TransConv2d_Block(Layer):
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False or self.conv is None:
             self.conv.input_shape = input_shape
             if self.use_spectral:
@@ -303,8 +303,8 @@ class TransConv2d_Block(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
@@ -377,7 +377,7 @@ class DepthwiseConv2d_Block(Layer):
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False or self.conv is None:
 
             self.conv.input_shape = input_shape
@@ -389,8 +389,8 @@ class DepthwiseConv2d_Block(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if not hasattr(self,'sequence_rank'):
             setattr(self,'sequence_rank','cna')
         if self.add_noise == True and self.training == True:
@@ -472,7 +472,7 @@ class SeparableConv2d_Block(Layer):
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else \
                 self.num_filters
@@ -485,8 +485,8 @@ class SeparableConv2d_Block(Layer):
             self.to(self.device)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
@@ -558,7 +558,7 @@ class GcdConv2d_Block(Layer):
 
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False or self.conv is None:
             self.conv.input_shape = input_shape
             if self.use_spectral:
@@ -568,8 +568,8 @@ class GcdConv2d_Block(Layer):
             self._built = True
             self.to(self.device)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
@@ -674,7 +674,7 @@ class Highway(Layer):
         self.plain = nn.Linear(self.in_out_features, self.in_out_features, bias=bias)
         self.transform = nn.Linear(self.in_out_features, self.in_out_features, bias=bias)
 
-    def forward(self, *x):
+    def forward(self, x, **kwargs):
         """Computes the output of the Highway module.
         Args:
             x (~torch.Tensor): Input variable.
@@ -682,7 +682,7 @@ class Highway(Layer):
             Variable: Output variable. Its array has the same spatial size and
             the same minibatch size as the input array.
         """
-        x = enforce_singleton(x)
+       
         out_plain = self.activate(self.plain(x))
         out_transform = torch.sigmoid(self.transform(x))
         x = out_plain * out_transform + x * (1 - out_transform)
@@ -702,7 +702,7 @@ class Classifier1d(Layer):
         self._name = name
         self.keep_output = keep_output
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False or self.conv1x1 is None:
             if self.classifier_type == 'global_avgpool':
                 if self.input_filters != self.num_classes:
@@ -712,8 +712,8 @@ class Classifier1d(Layer):
                         self.conv1x1.input_shape = input_shape
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         if self.classifier_type == 'dense':
             x = x.view(x.size(0), x.size(1), -1)
             x = torch.mean(x, -1, False)
@@ -722,7 +722,7 @@ class Classifier1d(Layer):
             x = self.dense(x)
 
         elif self.classifier_type == 'global_avgpool':
-            if len(self._input_shape) != 3:
+            if len(self._input_shape) != 4:
                 raise ValueError("GlobalAvgPool2d only accept BCHW shape")
             if self.conv1x1 is not None:
                 x = self.conv1x1(x)
@@ -804,7 +804,7 @@ class ShortCut2d(Layer):
             self.add_module('Identity', Identity())
         self.to(self.device)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.branch_from is not None:
                 for k, v in self.nodes.item_list:
@@ -818,8 +818,8 @@ class ShortCut2d(Layer):
                     raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         current = None
         concate_list = []
 
@@ -915,7 +915,7 @@ class Hourglass(Layer):
         up2 = self.upsample(low3)
         return up1 + up2
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x=self._hour_glass_forward(0, x)
         return x
 
@@ -955,8 +955,8 @@ class ConcateBlock(Layer):
             self.add_module('Identity', Identity())
         self.to(self.device)
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+       
         outs = []
         if 'Identity' in self._modules:
             outs.append(x)
@@ -988,12 +988,12 @@ class SqueezeExcite(Layer):
         self.pool = GlobalAvgPool2d()
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.to(self.device)
             self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         s = self.pool(x)
         s = s.view(s.size(0), s.size(1), 1, 1)
         s = self.activation(self.squeeze(s))

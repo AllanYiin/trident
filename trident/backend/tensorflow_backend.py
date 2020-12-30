@@ -1009,7 +1009,7 @@ class Layer(tf.Module):
                 elif isinstance(self._input_shape, list):
                     for k in range(len(self._input_shape)):
                         self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
-                self.input_spec =unpack_singleton( self._signature.inputs.value_list)
+
 
     @property
     def output_shape(self):
@@ -1360,6 +1360,7 @@ class Layer(tf.Module):
                 shp = tensor_to_shape(inp)
                 self.input_filters = shp[self.filter_index]
                 self.input_shape = shp
+                self.input_spec = TensorSpec.tensor_to_spec(inp)
                 #dont do it  in tensorflow
                 #del inp
             elif isinstance(input, (tuple, list)):

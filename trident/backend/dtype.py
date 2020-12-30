@@ -12,7 +12,7 @@ __all__=[
     "uint8", "ubyte",
     "float16", "half",
     "float32", "single",
-    "float64", "double","long"
+    "float64", "double","long","float",
     "bool_"]
 
 
@@ -39,6 +39,7 @@ if get_backend() == 'pytorch':
     float64 =  torch.float64
     double = torch.float64
     long = torch.int64
+    float= torch.float32
 
 
 elif get_backend() == 'tensorflow':
@@ -63,6 +64,8 @@ elif get_backend() == 'tensorflow':
     float64 = tf.float64
     double = tf.float64
     long=tf.int64
+    float =  tf.float32
+
 else:
     bool_ = np.bool
 
@@ -84,4 +87,5 @@ else:
     float64 = np.float64
     double = np.float64
     long = np.int64
+    float= np.float32
 

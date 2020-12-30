@@ -397,6 +397,8 @@ def str2dtype(dtype):
     if isinstance(dtype, str):
         if 'float64' in dtype.lower() or 'double' in dtype.lower():
             dtype = tf.float64
+        elif 'float32' in dtype.lower() or 'single' in dtype.lower():
+            dtype = tf.float32
         elif 'float16' in dtype.lower() or 'half' in dtype.lower():
             dtype = tf.float16
         elif 'float' in dtype.lower():
@@ -2696,6 +2698,8 @@ def reshape(x: Tensor, shape=None) -> Tensor:
         return x
     elif isinstance(shape, tf.TensorShape):
         return tf.reshape(x, shape.as_list())
+    elif isinstance(shape, TensorShape):
+        return tf.reshape(x, shape.dims)
     elif isinstance(shape, (list, tuple)):
         return tf.reshape(x, to_list(shape))
     else:

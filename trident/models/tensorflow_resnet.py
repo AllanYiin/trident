@@ -12,6 +12,7 @@ from functools import wraps
 from itertools import repeat
 
 import tensorflow as tf
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
@@ -154,36 +155,19 @@ def ResNet50(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
-    input_shape=to_tensor(input_shape)
     resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
-    if pretrained==True:
-        download_model_from_google_drive('1vReSW_l8fldyYQ6ay5HCYFGoMaGbdW2T',dirname,'resnet50_tf.pth')
-        recovery_model=load(os.path.join(dirname,'resnet50_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.eval()
-        recovery_model.to(get_device())
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        resnet50.model = recovery_model
-    if include_top==False:
-        resnet50.model .remove_at(-1)
-        resnet50.model .remove_at(-1)
-        resnet50.model .remove_at(-1)
-    else:
-        if classes!=1000:
-            resnet50.model .remove_at(-1)
-            resnet50.model .remove_at(-1)
-            resnet50.model .add_module('fc', Dense(classes, activation=None, name='fc'))
-            resnet50.model .add_module('softmax', SoftMax(name='softmax'))
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1vReSW_l8fldyYQ6ay5HCYFGoMaGbdW2T',dirname,'resnet50_tf.pth')
+            recovery_model=load(os.path.join(dirname,'resnet50_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            resnet50.model = recovery_model
+        else:
+            resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        resnet50.model .signature=None
-        if resnet50.model .signature != recovery_model._signature:
-            resnet50.model .signature = recovery_model._signature
-        if resnet50.signature!=resnet50.model.signature:
-            resnet50.signature = resnet50.model.signature
-    return resnet50
+        resnet50.model.input_shape = input_shape
+        return resnet50
 
 def ResNet101(include_top=True,
              pretrained=True,
@@ -195,37 +179,18 @@ def ResNet101(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
-    input_shape = to_tensor(input_shape)
     resnet101 =ResNet(bottleneck, [3, 4, 23, 3], input_shape,num_classes=classes,include_top=include_top, use_bias=True,model_name='resnet101')
-    if pretrained==True:
-        download_model_from_google_drive('13QYdFX3CvsNiegi-iUX1PUC0KKKgPNwr',dirname,'resnet101_tf.pth')
-        recovery_model=load(os.path.join(dirname,'resnet101_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.eval()
-        recovery_model.to(get_device())
-
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        resnet101.model = recovery_model
-        if include_top == False:
-            resnet101.model .remove_at(-1)
-            resnet101.model .remove_at(-1)
-            resnet101.model .remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('13QYdFX3CvsNiegi-iUX1PUC0KKKgPNwr',dirname,'resnet101_tf.pth')
+            recovery_model=load(os.path.join(dirname,'resnet101_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            resnet101.model = recovery_model
         else:
-            if classes != 1000:
-                resnet101.model .remove_at(-1)
-                resnet101.model .remove_at(-1)
-                resnet101.model .add_module('fc', Dense(classes, activation=None, name='fc'))
-                resnet101.model .add_module('softmax', SoftMax(name='softmax'))
+            resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        resnet101.model .signature = None
-        if resnet101.model .signature != recovery_model._signature:
-            resnet101.model .signature = recovery_model._signature
-
-        if resnet101.signature != resnet101.model.signature:
-            resnet101.signature = resnet101.model.signature
+        resnet101.model.input_shape = input_shape
         return resnet101
 
 
@@ -239,39 +204,19 @@ def ResNet152(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
-    input_shape = to_tensor(input_shape)
     resnet152 =ResNet(bottleneck, [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
-    if pretrained==True:
-        download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152.pth')
-        recovery_model=load(os.path.join(dirname,'resnet152.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.eval()
-        recovery_model.to(get_device())
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-
-        resnet152.model = recovery_model
-        if include_top == False:
-            resnet152.model .remove_at(-1)
-            resnet152.model .remove_at(-1)
-            resnet152.model .remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152.pth')
+            recovery_model=load(os.path.join(dirname,'resnet152.pth'))
+            recovery_model = fix_layer(recovery_model)
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            resnet152.model = recovery_model
         else:
-            if classes != 1000:
-                resnet152.model .remove_at(-1)
-                resnet152.model .remove_at(-1)
-                resnet152.model .add_module('fc', Dense(classes, activation=None, name='fc'))
-                resnet152.model .add_module('softmax', SoftMax(name='softmax'))
+            resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        resnet152.model .signature = None
-        if resnet152.model .signature != recovery_model._signature:
-            resnet152.model .signature = recovery_model._signature
-
-        if resnet152.signature != resnet152.model.signature:
-            resnet152.signature = resnet152.model.signature
-
-    return resnet152
+        resnet152.model.input_shape = input_shape
+        return resnet152
 
 
 #

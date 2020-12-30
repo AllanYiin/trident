@@ -98,7 +98,7 @@ class Conv1d_Block(Layer):
             self.activation = get_activation(activation)
             self.conv = conv
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             # if self.use_spectral:
             #     self.conv = nn.utils.spectral_norm(self.conv)
@@ -106,8 +106,8 @@ class Conv1d_Block(Layer):
             #         self.norm=None
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x,**kwargs):
         if hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
@@ -182,7 +182,7 @@ class Conv2d_Block(Layer):
         self.activation = get_activation(activation)
         self.droupout = None
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.conv.input_shape = input_shape
             # if self.use_spectral:
@@ -191,8 +191,8 @@ class Conv2d_Block(Layer):
             #     self.norm=None
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
             x += noise
@@ -245,7 +245,7 @@ class TransConv2d_Block(Layer):
         self.activation = get_activation(activation)
         self.droupout = None
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
                                auto_pad=self.auto_pad, activation=None,
@@ -260,8 +260,8 @@ class TransConv2d_Block(Layer):
                 self.conv = conv
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
             x += noise
@@ -310,13 +310,19 @@ class TransConv3d_Block(Layer):
             self.drop = Dropout(dropout_rate)
             self.add(self.drop)
 
-    @property
-    def conv(self):
-        return self._conv
 
-    @conv.setter
-    def conv(self, value):
-        self._conv = value
+    def forward(self, x, **kwargs):
+        if self.training and self.add_noise == True:
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            x += noise
+        x = self._conv(x)
+        if self.norm is not None:
+            x = self.norm(x)
+        if self.activation is not None:
+            x = self.activation(x)
+        if self.training and self.dropout_rate > 0:
+            x = tf.nn.dropout(x, rate=self.dropout_rate)
+        return x
 
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, num_filters={num_filters}, strides={strides}'
@@ -357,7 +363,7 @@ class DepthwiseConv2d_Block1(Layer):
         self.activation = get_activation(activation)
         self.droupout = None
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
                                    auto_pad=self.auto_pad, activation=None,
@@ -371,8 +377,8 @@ class DepthwiseConv2d_Block1(Layer):
                 self.conv = conv
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
             x += noise
@@ -429,7 +435,7 @@ class DepthwiseConv2d_Block(Layer):
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False or self.conv is None:
             conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
                                    strides=self.strides, auto_pad=self.auto_pad, padding=self.padding, padding_mode=self.padding_mode,
@@ -442,8 +448,8 @@ class DepthwiseConv2d_Block(Layer):
 
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
             x += noise
@@ -494,7 +500,7 @@ class SeparableConv2d_Block(Layer):
         self.activation = get_activation(activation)
         self.droupout = None
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
                                    auto_pad=self.auto_pad, activation=None,
@@ -508,8 +514,8 @@ class SeparableConv2d_Block(Layer):
             #         self.norm=None
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+
+    def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
             noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
             x += noise
@@ -574,7 +580,7 @@ def For(what_range, constructor):
     return Sequential(layers)
 
 
-class Classifer1d(tf.keras.Sequential):
+class Classifer1d(Sequential):
     def __init__(self, num_classes=10, is_multilable=False, classifier_type=ClassfierType.dense, name=None, **kwargs):
         super(Classifer1d, self).__init__(name=name)
         self.classifier_type = classifier_type
@@ -644,7 +650,7 @@ class ShortCut2d(Layer):
             self.has_identity = True
             self.add_module('Identity', Identity())
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.branch_from is not None:
                 for k, v in self.nodes.item_list:
@@ -657,8 +663,7 @@ class ShortCut2d(Layer):
                     raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
         current = None
         concate_list = []
 
@@ -741,8 +746,7 @@ class ConcateBlock(Layer):
         if len(self._modules) == 1 and self.has_identity == False:
             self.add_module('Identity', Identity())
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
         outs = []
         if 'Identity' in self._modules:
             outs.append(x)
@@ -773,13 +777,13 @@ class SqueezeExcite(Layer):
         self.pool = GlobalAvgPool2d(keepdim=True)
         self.use_bias = use_bias
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
             self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
             self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         s = self.pool(x)
         s = self.activation(self.squeeze(s))
         s = tf.sigmoid(self.excite(s))

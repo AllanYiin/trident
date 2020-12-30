@@ -8,7 +8,7 @@ import warnings
 import numpy as np
 
 from trident.backend.common import *
-from trident.backend.load_backend import get_backend
+from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase,_valid_when
 from trident.data.image_common import *
 

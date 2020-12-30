@@ -73,13 +73,13 @@ class ASPP(Layer):
 
         self.project =Conv2d_Block( (1,1),num_filters,strides=1,use_bias=False, bias=False,activation='relu',normalization='batch',dilation=1,dropout_rate=0.5)
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False :
             self.add_module('aspp_pooling',ASPPPooling(self.num_filters, to_list(input_shape[:-1])))
             self.to(self.device)
             self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x=self.convs(x)
         x=self.project(x)
         return x
@@ -128,7 +128,7 @@ class _DeeplabV3_plus(Layer):
 
         )
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         low_level_feature=self.backbond1(x)
         high_level_feature = self.backbond2(low_level_feature)
         x=self.aspp(high_level_feature)

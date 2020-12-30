@@ -19,6 +19,16 @@ from trident.backend.common import *
 __all__ = ['text_backend_adaption','reverse_text_backend_adaption']
 
 
+if get_backend()== 'pytorch':
+    from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
+    from trident.backend.pytorch_ops import int_shape
+    from trident.layers.pytorch_layers import Embedding
+    import torch
+elif get_backend()== 'tensorflow':
+    from trident.backend.tensorflow_backend import to_numpy, to_tensor,ObjectType
+    from trident.backend.tensorflow_ops import int_shape
+
+
 def text_backend_adaption(text):
     if  get_backend() == 'tensorflow':
         if text.dtype==np.int64 and text.ndim ==1:
@@ -45,3 +55,28 @@ def reverse_text_backend_adaption(text):
     #     elif text.ndim == 2:
     #         text = argmax(text, -1)
     return text
+
+
+
+# def  char2embedding(embedding:Embedding):
+#     def img_op(sentence:str,**kwargs):
+#         sentence = reverse_image_backend_adaption(image)
+#         norm_mean = mean
+#         norm_std = std
+#         if isinstance(norm_mean, tuple):
+#             norm_mean = list(norm_mean)
+#
+#         if isinstance(norm_std, tuple):
+#             norm_std = list(norm_std)
+#
+#         if isinstance(norm_mean, (float, int)) and isinstance(norm_std, (float, int)) and image.ndim == 3:
+#             return image * float(norm_std) + float(norm_mean)
+#         elif isinstance(norm_mean, list) and isinstance(norm_std, list) and len(norm_mean) == 1 and len(norm_std) == 1:
+#             return image * float(norm_std[0]) + float(norm_mean[0])
+#         elif isinstance(norm_mean, list) and isinstance(norm_std, list) and len(norm_mean) == 3 and len(norm_std) == 3:
+#             norm_mean = np.reshape(np.array(norm_mean), (1, 1, 3))
+#             norm_std = np.reshape(np.array(norm_std), (1, 1, 3))
+#             return image * norm_std + norm_mean
+#         return image
+#
+#     return img_op

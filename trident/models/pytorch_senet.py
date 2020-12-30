@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.common import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, load,get_device
@@ -175,23 +176,13 @@ def SE_ResNet50(include_top=True,
         recovery_model=load(os.path.join(dirname,'se_resnet50.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet50'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            resnet50.class_names = []
-        else:
-            if classes!=1000:
-                resnet50.class_names = []
-                recovery_model.fc= Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        resnet50.model = recovery_model
+    else:
+        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        resnet50.model=recovery_model
+    resnet50.model.input_shape = input_shape
+    resnet50.model.to(_device)
     return resnet50
 
 def SE_ResNet101(include_top=True,
@@ -210,23 +201,13 @@ def SE_ResNet101(include_top=True,
         recovery_model=load(os.path.join(dirname,'se_resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet101'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            resnet101.class_names = []
-        else:
-            if classes != 1000:
-                resnet101.class_names = []
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        resnet101.model = recovery_model
+    else:
+        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        resnet101.model=recovery_model
+    resnet101.model.input_shape = input_shape
+    resnet101.model.to(_device)
     return resnet101
 
 
@@ -246,23 +227,13 @@ def SE_ResNet152(include_top=True,
         recovery_model=load(os.path.join(dirname,'se_resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'se_resnet152'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.fc.trainable = True
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            resnet152.class_names = []
-        else:
-            if classes != 1000:
-                resnet152.class_names=[]
-                recovery_model.fc = Dense(classes, activation=None, name='fc')
-                recovery_model.fc.input_shape=recovery_model.avg_pool.output_shape
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        resnet152.model = recovery_model
+    else:
+        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        resnet152.model=recovery_model
+    resnet152.model.input_shape = input_shape
+    resnet152.model.to(_device)
     return resnet152
 
 

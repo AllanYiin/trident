@@ -161,7 +161,7 @@ class BatchNorm(Layer):
             self.to(get_device())
             self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
@@ -201,6 +201,7 @@ class BatchNorm(Layer):
             self.running_mean if not self.training or self.track_running_stats else None,
             self.running_var if not self.training or self.track_running_stats else None,
             self.weight, self.bias, bn_training, exponential_average_factor, self.eps)
+
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x=x.permute(0, 2, 1)
@@ -291,7 +292,7 @@ class GroupNorm(Layer):
                 self.register_parameter('bias', None)
 
                 self._built = True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
@@ -410,7 +411,7 @@ class InstanceNorm(Layer):
             self.reset_running_stats()
             self.to(get_device())
             self._built = True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
@@ -500,7 +501,7 @@ class LayerNorm(Layer):
             self.register_parameter('weight',Parameter(ones((self.input_filters))))
             self.register_parameter('bias', Parameter(zeros((self.input_filters))))
             self._built=True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
@@ -525,7 +526,7 @@ class L2Norm(Layer):
     def build(self, input_shape:TensorShape):
         if self._built == False :
             self._built = True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
@@ -540,7 +541,7 @@ class PixelNorm(Layer):
     def __init__(self,in_sequence=False,name=None, **kwargs):
         super(PixelNorm, self).__init__(in_sequence=in_sequence,name=name)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = enforce_singleton(x)
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
@@ -645,7 +646,7 @@ class SpectralNorm(Layer):
             if not self._made_params():
                 self._make_params()
             self._built = True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
@@ -676,7 +677,7 @@ class EvoNormB0(Layer):
             self.register_buffer('running_var', ones(newshape))
             self._built=True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         if self.training:
             permute_pattern=np.arange(0,self.rank+2)
             permute_pattern[0]=1
@@ -710,7 +711,7 @@ class EvoNormS0(Layer):
             self.register_buffer('running_var', ones((1, self.input_filters)+(1,)*self.rank))
             self._built=True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         if self.nonlinear:
             num = torch.sigmoid(self.v * x)
             std = group_std(x,self.groups)

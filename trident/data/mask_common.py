@@ -26,7 +26,7 @@ if get_image_backend()=='opencv':
 else:
     from trident.backend.pillow_backend import *
 
-from trident.backend.load_backend import get_backend
+from trident.backend.common import get_backend
 from trident.data.label_common import check_is_onehot,get_onehot
 
 

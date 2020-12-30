@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
@@ -95,7 +96,7 @@ class DenseBlock(Layer):
             layer = DenseLayer(growth_rate,name='denselayer%d' % (i + 1))
             self.add_module('denselayer%d' % (i + 1), layer)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         for name, layer in self.named_children():
             new_features = layer(x)
             x=torch.cat([x,new_features], 1)
@@ -273,7 +274,7 @@ class _DenseNetFcn2(Layer):
         self.last_layer=Conv2d((1, 1), num_filters=self.num_classes, strides=1, activation=None)
         self.softmax=SoftMax()
 
-    def forward(self, *x):
+    def forward(self, x,**kwargs):
         x=enforce_singleton(x)
         skips=[]
         x=self.first_layer(x)
@@ -333,26 +334,13 @@ def DenseNet121(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet121.pth'))
         recovery_model=fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.classifier.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        densenet121.model = recovery_model
+    else:
+        densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            densenet121.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-
-                densenet121.class_names = []
-        densenet121.model=recovery_model
-
-        densenet121.signature = get_signature(densenet121.model.forward)
+    densenet121.model.input_shape = input_shape
+    densenet121.model.to(_device)
     return densenet121
 
 
@@ -394,24 +382,13 @@ def DenseNet161(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet161.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet161'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.classifier.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        densenet161.model = recovery_model
+    else:
+        densenet161.model = _make_recovery_model_include_top(densenet161.model, include_top=include_top, classes=classes, freeze_features=False)
 
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            densenet161.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                densenet161.class_names = []
-        densenet161.model=recovery_model
-        densenet161.signature = get_signature(densenet161.model.forward)
+    densenet161.model.input_shape = input_shape
+    densenet161.model.to(_device)
     return densenet161
 
 
@@ -454,23 +431,12 @@ def DenseNet169(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet169.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.classifier.trainable = True
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            densenet169.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                densenet169.class_names = []
-        densenet169.model=recovery_model
-        densenet169.signature = get_signature(densenet169.model.forward)
+        densenet169 = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        densenet169.model = recovery_model
+    else:
+        densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=False)
+        densenet169.model.input_shape = input_shape
+        densenet169.model.to(_device)
     return densenet169
 
 
@@ -512,22 +478,11 @@ def DenseNet201(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet201.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet201'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable = False
-            recovery_model.classifier.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        densenet201.model = recovery_model
 
-        if include_top==False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            densenet201.class_names = []
-        else:
-            if classes!=1000:
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                densenet201.class_names = []
-        densenet201.model=recovery_model
-        densenet201.signature = get_signature(densenet201.model.forward)
+    else:
+        densenet201.model = _make_recovery_model_include_top(densenet201.model, include_top=include_top, classes=classes, freeze_features=False)
+        densenet201.model.input_shape = input_shape
+    densenet201.model.to(_device)
     return densenet201

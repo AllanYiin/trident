@@ -18,12 +18,7 @@ from tensorflow.python.ops import embedding_ops
 from tensorflow.python.eager import context
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import tensor_shape
-from tensorflow.python.keras import initializers
-from tensorflow.python.keras.engine.input_spec import InputSpec
-from tensorflow.python.keras.layers.convolutional import Conv
-from tensorflow.python.keras.utils import conv_utils
-from tensorflow.python.keras.utils.generic_utils import deserialize_keras_object
-from tensorflow.python.keras.utils.generic_utils import serialize_keras_object
+
 from tensorflow.python.ops import gen_math_ops, image_ops, math_ops
 from tensorflow.python.ops import nn, nn_ops, array_ops
 from tensorflow.python.ops import sparse_ops
@@ -35,7 +30,7 @@ from trident.backend.tensorflow_backend import Layer, Sequential, Parameter,norm
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_activations import get_activation
 from trident.layers.tensorflow_initializers import *
-
+from trident.backend import dtype
 _tf_data_format = 'channels_last'
 
 
@@ -103,7 +98,8 @@ class Dense(Layer):
             self.num_filters = unpack_singleton(num_filters)
         else:
             raise ValueError('output_shape should be integer, list of integer or tuple of integer...')
-        self.weight = None
+        self.register_parameter('weight', None)
+        self.register_parameter('bias', None)
 
         self.use_bias = use_bias
         if kernel_regularizer == 'l2':
@@ -114,12 +110,14 @@ class Dense(Layer):
         self.activation = get_activation(activation)
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             with tf.device(get_device()):
                 with self.name_scope:
-                    if isinstance(input_shape, int):
-                        self.input_filters = input_shape
+                    if len(input_shape.dims) == 1:
+                        self.input_filters = input_shape.dims[0]
+                    else:
+                        self.input_filters = input_shape[self.filter_index]
                     self.weight =Parameter(data=random_normal(shape=(self.input_filters,self.num_filters), mean=0., std=0.2) , name='weight')
                     kaiming_uniform(self.weight, a=math.sqrt(5))
                     if self.use_bias:
@@ -130,7 +128,7 @@ class Dense(Layer):
                 self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         if hasattr(self, 'kernel_regularizer') and self.kernel_regularizer is not None:
             x = tf.matmul(x, self.kernel_regularizer(self.weight))
@@ -180,20 +178,22 @@ class Embedding(Layer):
         self.sparse = sparse
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             with tf.device(get_device()):
                 with self.name_scope:
-                    if isinstance(input_shape, int):
-                        self.input_filters = input_shape
-                        self.weight =Parameter(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
-                        if self.use_bias:
-                            self.bias =Parameter(to_tensor(np.zeros((self.num_filters))), name='bias')
+                    if len(input_shape.dims) == 1:
+                        self.input_filters = input_shape.dims[0]
+                    else:
+                        self.input_filters = input_shape[self.filter_index]
+                    self.weight =Parameter(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
+                    if self.use_bias:
+                        self.bias =Parameter(to_tensor(np.zeros((self.num_filters))), name='bias')
 
-                        self._built = True
+                    self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
         dtype = x.dtype
         if dtype != tf.int32 and dtype !=tf.int64:
             x = math_ops.cast(x,tf.int32)
@@ -212,13 +212,13 @@ class Flatten(Layer):
         self.keep_output = keep_output
 
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
 
             self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = tf.reshape(x, [x.get_shape().as_list()[0], -1])
         return x
@@ -232,7 +232,7 @@ class Concate(Layer):
         self.axis = axis
 
 
-    def forward(self, x) -> tf.Tensor:
+    def forward(self, x, **kwargs) -> tf.Tensor:
         if not isinstance(x, (list, tuple)) or len(x) < 2:
             raise ValueError('A `Concatenate` layer should be called on a list of at least 2 tensor  inputs')
 
@@ -261,13 +261,13 @@ class Add(Layer):
     def __init__(self):
         super(Add, self).__init__()
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.output_shape = input_shape
             self._built = True
 
 
-    def forward(self, x) -> tf.Tensor:
+    def forward(self, x, **kwargs) -> tf.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if isinstance(x, tuple):
@@ -284,13 +284,13 @@ class Subtract(Layer):
     def __init__(self):
         super(Subtract, self).__init__()
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.output_shape = input_shape
             self._built = True
 
 
-    def forward(self, x) -> tf.Tensor:
+    def forward(self, x, **kwargs) -> tf.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if isinstance(x, tuple):
@@ -307,13 +307,13 @@ class Dot(Layer):
     def __init__(self, axis=1):
         super(Dot, self).__init__()
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self.output_shape = input_shape
             self._built = True
 
 
-    def forward(self, x) -> tf.Tensor:
+    def forward(self, x, **kwargs) -> tf.Tensor:
         if not isinstance(x, (list, tuple)):
             raise ValueError('A merge layer should be called on a list of inputs.')
         if isinstance(x, tuple):
@@ -351,7 +351,7 @@ class SoftMax(Layer):
         self.noise_intensity = noise_intensity
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         if not hasattr(self, 'add_noise'):
             self.add_noise = False
@@ -395,7 +395,7 @@ class Scale(Layer):
         else :
             raise ValueError('Only [uniform,channel,elementwise] is valid value for mode ')
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         def remove_from(name:str,*dicts):
             for d in dicts:
                 if name in d:
@@ -447,7 +447,7 @@ class Scale(Layer):
             self._built = True
 
 
-    def forward(self, x) -> Tensor:
+    def forward(self, x, **kwargs) -> Tensor:
 
         x = pow(x*self.scale+self.shift,self.power)
         return x
@@ -556,6 +556,8 @@ class _ConvNd(Layer):
         self.separable = separable
         if self.separable == True:
             self.depthwise = True
+        self.register_parameter('weight', None)
+        self.register_parameter('bias', None)
 
 
 
@@ -563,11 +565,28 @@ class _ConvNd(Layer):
         self.transposed = transposed
         self.use_bias = use_bias
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             with tf.device(get_device()):
                 with self.name_scope:
-                    self.input_filters = to_numpy(input_shape)[self.filter_index]
+                    self.input_filters =input_shape[self.filter_index]
+
+                    if self.auto_pad:
+                        if self.transposed == False:
+                            padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape[1:-1])
+                            self.padding = tuple(padding)
+                        else:
+                            self.padding, self.output_padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape[1:-1],self.transposed)
+                    else:
+                        if self.padding is None:
+                            self.padding = [0] * (2 * self.rank)
+                        elif isinstance(self.padding, int):
+                            self.self.padding = [self.padding] * (2 * self.rank)
+                        elif len(self.padding) == self.rank:
+                            self.padding = list(self.padding) * 2
+                        elif len(self.padding) == 2 * self.rank:
+                            pass
+
                     if self.depthwise or self.separable:
                         if self.depth_multiplier is None:
                             self.depth_multiplier = 1
@@ -585,12 +604,12 @@ class _ConvNd(Layer):
                     if self.depthwise and self.num_filters % self.groups != 0:
                         raise ValueError('out_channels must be divisible by groups')
 
-                    if self.auto_pad:
-                        self.padding = get_static_padding(self.rank, self.kernel_size ,
-                                                           self.strides ,  self.dilation ,
-                                                           tuple(to_list(input_shape)[:-1]))
-                    else:
-                        self.padding = normalize_padding(self.padding, self.rank)
+                    # if self.auto_pad:
+                    #     self.padding = get_static_padding(self.rank, self.kernel_size ,
+                    #                                        self.strides ,  self.dilation ,
+                    #                                        tuple(to_list(input_shape)[:-1]))
+                    # else:
+                    #     self.padding = normalize_padding(self.padding, self.rank)
 
 
 
@@ -607,21 +626,20 @@ class _ConvNd(Layer):
 
                     if self.transposed:
                         # filter_height, filter_width,  out_channels in_channels,
-                        self.weight =Parameter(tf.random.normal(shape=[*self.kernel_size, int(channel_multiplier), int(self.input_filters)], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
+                        self.weight =Parameter(tf.random.normal(shape=[*self.kernel_size, int(channel_multiplier), self.input_filters], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
 
                     else:
 
                         # [filter_height, filter_width, in_channels, out_channels]`
-                        self.weight =Parameter(  tf.random.normal(shape=[*self.kernel_size, int(self.input_filters), int(channel_multiplier)], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
+                        self.weight =Parameter( data=tf.random.normal(shape=[*self.kernel_size, self.input_filters, int(channel_multiplier)], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
 
                         if self.separable:
                             pointwise_kernel_size = (1,) * len(self.kernel_size)
-                            self.pointwise =Parameter(tf.random.normal( shape=[*pointwise_kernel_size, int(self.input_filters * channel_multiplier),int(self.num_filters)], mean=0, stddev=1) * 0.02, trainable=True, name='weight')
+                            self.pointwise =Parameter(data=tf.random.normal( shape=[*pointwise_kernel_size, self.input_filters * channel_multiplier,self.num_filters], mean=0, stddev=1) * 0.02, trainable=True, name='weight')
 
                     if self.use_bias:
-                        self.bias =Parameter(tf.random.normal([int(self.num_filters)]), name='bias')
-                    else:
-                        self.bias=None
+                        self.bias =Parameter(data=tf.random.normal([int(self.num_filters)]), name='bias')
+
 
                 self._built = True
 
@@ -679,12 +697,12 @@ class Conv1d(_ConvNd):
         self.rank=1
 
 
-    def conv1d_forward(self, x):
+    def conv1d_forward(self, x, **kwargs):
         return tf.nn.conv1d(x, filters=self.weight, stride=(1,) + self.strides + (1,), padding='SAME' if self.auto_pad else 'VALID',
                             data_format="NWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv1d_forward(x)
         if self.use_bias:
@@ -837,10 +855,12 @@ class Conv2d(_ConvNd):
         self.rank = 2
 
 
-    def conv2d_forward(self, x):
+    def conv2d_forward(self, x, **kwargs):
         if self.auto_pad == True and len(self.padding) == self.rank + 2:
             x = tf.pad(x, self.padding, mode='CONSTANT')
         else:
+            if len(self.padding)==4:
+                self.padding=((self.padding[0],self.padding[1]),(self.padding[2],self.padding[3]))
             padlist = list(self.padding)
             padlist.insert(0, (0, 0))
             padlist.append((0, 0))
@@ -851,7 +871,7 @@ class Conv2d(_ConvNd):
                             data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv2d_forward(x)
         if self.use_bias:
@@ -893,12 +913,12 @@ class Conv3d(_ConvNd):
         self.rank = 3
 
 
-    def conv3d_forward(self, x):
+    def conv3d_forward(self, x, **kwargs):
         return tf.nn.conv3d(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding='VALID',
                             data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv3d_forward(x)
         if self.use_bias:
@@ -941,7 +961,7 @@ class TransConv1d(_ConvNd):
         self.rank = 1
 
 
-    def conv1d_forward(self, x):
+    def conv1d_forward(self, x, **kwargs):
         in_shape = x.get_shape().as_list()
         in_shape[1] *= self.strides[0]
         in_shape[-1] = self.num_filters
@@ -951,7 +971,7 @@ class TransConv1d(_ConvNd):
                                       name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv1d_forward(x)
         if self.use_bias:
@@ -1010,7 +1030,7 @@ class TransConv2d(_ConvNd):
         self.rank=2
 
 
-    def conv2d_forward(self, x):
+    def conv2d_forward(self, x, **kwargs):
         in_shape = to_list(int_shape(x))
         in_shape[1] *= self.strides[0]
         in_shape[2] *= self.strides[1]
@@ -1020,7 +1040,7 @@ class TransConv2d(_ConvNd):
                                       name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv2d_forward(x)
         if self.use_bias:
@@ -1078,7 +1098,7 @@ class TransConv3d(_ConvNd):
         self.rank=3
 
 
-    def conv3d_forward(self, x):
+    def conv3d_forward(self, x, **kwargs):
         in_shape = x.get_shape().as_list()
         in_shape[1] *= self.strides[0]
         in_shape[2] *= self.strides[1]
@@ -1089,7 +1109,7 @@ class TransConv3d(_ConvNd):
                                       name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv3d_forward(x)
         if self.use_bias:
@@ -1137,12 +1157,12 @@ class DepthwiseConv1d(_ConvNd):
         self.rank=1
 
 
-    def conv1d_forward(self, x):
+    def conv1d_forward(self, x, **kwargs):
         return tf.nn.convolution(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding=self.padding,
                                  data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv1d_forward(x)
         if self.use_bias:
@@ -1182,7 +1202,7 @@ class DepthwiseConv2d(_ConvNd):
         self.rank=2
 
 
-    def conv2d_forward(self, x):
+    def conv2d_forward(self, x, **kwargs):
         if self.auto_pad == True and len(self.padding) == self.rank + 2:
             x = tf.pad(x, self.padding, mode='CONSTANT')
         else:
@@ -1195,7 +1215,7 @@ class DepthwiseConv2d(_ConvNd):
         return tf.nn.depthwise_conv2d(x,filter=self.weight, strides=(1,) + self.strides + (1,), padding='VALID', data_format="NHWC", dilations= self.dilation, name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv2d_forward(x)
         if self.use_bias:
@@ -1228,12 +1248,12 @@ class DepthwiseConv3d(_ConvNd):
         self.rank=3
 
 
-    def conv3d_forward(self, x):
+    def conv3d_forward(self, x, **kwargs):
         return tf.nn.convolution(x, filters=self.weight, strides=(1,) + self.strides + (1,), padding='VALID',
                                  data_format="NHWC", dilations=(1,) + self.dilation + (1,), name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv3d_forward(x)
         if self.use_bias:
@@ -1274,7 +1294,7 @@ class SeparableConv2d(_ConvNd):
         self.rank=2
 
 
-    def conv2d_forward(self, x):
+    def conv2d_forward(self, x, **kwargs):
         if self.auto_pad == True and len(self.padding) == self.rank + 2:
             x = tf.pad(x, self.padding, mode='CONSTANT')
         else:
@@ -1289,7 +1309,7 @@ class SeparableConv2d(_ConvNd):
                                       dilations=(1,) + self.dilation + (1,), name=self._name)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = self.conv2d_forward(x)
         if self.use_bias:
@@ -1321,7 +1341,7 @@ class GatedConv2d(Conv2d):
         self.norm = norm
 
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x = super().forward(x)
         if self.strides==(2,2):
             x = x[:, 1::2, 1::2,:]
@@ -1356,7 +1376,7 @@ class Upsampling2d(Layer):
         self.keep_output = keep_output
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         new_shape =list(int_shape(x)[1:])
 
@@ -1395,12 +1415,12 @@ class Lambda(Layer):
         super(Lambda, self).__init__(name=name)
         self.function = function
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
         return self.function(*x)
 
     def extra_repr(self):
@@ -1412,12 +1432,12 @@ class Reshape(Layer):
         super(Reshape, self).__init__(name=name)
         self.target_shape = target_shape
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = tf.reshape(x, tf.constant((x.get_shape()[0], *self.target_shape), dtype=tf.int32))
         return x
@@ -1433,12 +1453,12 @@ class Dropout(Layer):
         self.dropout_rate = dropout_rate
         self.keep_output = keep_output
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         if self.training:
             x = tf.nn.dropout(x, self.dropout_rate)
@@ -1452,12 +1472,12 @@ class Noise(Layer):
     def __init__(self, stddev=0.1, name=None):
         super(Noise, self).__init__(stddev=stddev, name=name)
         self.stddev=stddev
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         if self.training:
             noise = random_normal_like(x,mean=mean(x),std=self.stddev)
@@ -1475,15 +1495,15 @@ class SingleImageLayer(Layer):
             self.origin_image = to_tensor(image)
             self.input_shape = image.shape[1:]
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             with tf.device(get_device()):
                 self.weight =Parameter(to_tensor(self.origin_image.clone()), name='weight')
-                self.input_filters = to_numpy(input_shape)[self.filter_index]
+                self.input_filters =input_shape[self.filter_index]
                 self._built = True
 
     @tf.function
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return expand_dims(self.weight, 0)
 
     def extra_repr(self):

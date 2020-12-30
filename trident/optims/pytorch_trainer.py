@@ -716,8 +716,8 @@ class Model(ModelBase):
                                 available_fields.remove('input')
                             elif len(self._model.signature.inputs.key_list) == 1:
                                 for item in available_fields:
-                                    data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
-                                    if 'target' not in item and 'output' != item and data_shape == inshapes[0]:
+                                    data_shape = train_data[item].shape if len(train_data[item].shape) > 2 else TensorShape([None])
+                                    if 'target' not in item and 'output' != item and data_shape == inshapes[0].shape:
                                         data_feed[arg] = item
                                         available_fields.remove(item)
                                         break
@@ -746,9 +746,9 @@ class Model(ModelBase):
                                     data_feed[arg] = available_fields[0]
                                     available_fields.remove(available_fields[0])
                                 elif len(available_fields) > 0:
-                                    target_shape = outshapes[i]
+                                    target_shape = outshapes
                                     for item in available_fields:
-                                        data_shape = list(train_data[item].shape[1:]) if len(train_data[item].shape) > 1 else []
+                                        data_shape = list(train_data[item].shape) if len(train_data[item].shape) > 1 else [None]
                                         if target_shape == data_shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
@@ -964,9 +964,9 @@ class Model(ModelBase):
 
             import_or_install('torch.onnx')
             self._model.eval()
-            new_shape = list(self.inputs.value_list[0]._shape_tuple)
+            new_shape = self.signature.inputs.value_list[0].shape.dims
             new_shape[0] = 1
-            dummy_input = torch.randn(*new_shape, device=get_device(), requires_grad=True)
+            dummy_input =cast(torch.randn(*new_shape, device=get_device(), requires_grad=True),dtype=self.model.input_spec.dtype)
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -976,26 +976,26 @@ class Model(ModelBase):
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
 
-            self._model.to(get_device())
-            outputs = self._model(dummy_input)
-            if dynamic_axes is None:
-                dynamic_axes = {self.inputs.key_list[0]: {0: 'batch_size'},  # variable lenght axes
-                                self.outputs.key_list[0]: {0: 'batch_size'}}
-
+            # self._model.to(get_device())
+            # outputs = self._model(dummy_input)
             # if dynamic_axes is None:
-            #     dynamic_axes = {}
-            #     for inp in self.inputs.key_list:
-            #         dynamic_axes[inp] = {0: 'batch_size'}
-            #     for out in output_names:
-            #         dynamic_axes[out] = {0: 'batch_size'}
+            #     dynamic_axes = {self.inputs.key_list[0]: {0: 'batch_size'},  # variable lenght axes
+            #                     self.outputs.key_list[0]: {0: 'batch_size'}}
+
+            dynamic_axes = {}
+            if dynamic_axes is None:
+                for inp in self.signature.inputs.key_list:
+                    dynamic_axes[inp] = {0: 'batch_size'}
+                for out in self.signature.outputs.key_list:
+                    dynamic_axes[out] = {0: 'batch_size'}
             torch.onnx.export(self._model,  # model being run
                               dummy_input,  # model input (or a tuple for multiple inputs)
                               save_path,  # where to save the model (can be a file or file-like object)
                               export_params=True,  # store the trained parameter weights inside the model file
                               opset_version=11,  # the ONNX version to export the model to
                               do_constant_folding=True,  # whether to execute constant folding for optimization
-                              input_names=self.inputs.key_list,  # the model's input names
-                              output_names=self.outputs.key_list,  # the model's output names
+                              input_names=self.signature.inputs.key_list,  # the model's input names
+                              output_names=self.signature.outputs.key_list,  # the model's output names
                               dynamic_axes=dynamic_axes)
             self._model.train()
             shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))

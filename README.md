@@ -4,7 +4,7 @@
 
 | version| pytorch| tensorflow |
 |-------------|-------------|---------------|
-| [![version](https://img.shields.io/static/v1?label=&message=0.6.3&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | ![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge)| ![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge) |
+| [![version](https://img.shields.io/static/v1?label=&message=0.7.0&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | ![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge)| ![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge) |
 
 **Trident** is a deep learning dynamic calculation graph api based on PyTorch and TensorFlow (pure Eager mode, no Keras dependency). Through Trident, not only you can use the same develope experient (more than 99% of the same code) within PyTorch and Tensorflow, it is designed for simplify deep learning developers routine work,it's functions not only cover computing vision, natural language understanding and reinforcement learning, but also including more simpler network structure declaration, more powerful but easier training process control, intuitive data access and  data augmentation.
 
@@ -26,6 +26,16 @@
 - 豐富的內建視覺化、評估函數以及內部訊息，可供插入至訓練計畫中。
 - 訓練計畫(Training Plan) 可以如同堆積木般彈性設計你想要的訓練流程，同時使用fluent style語法讓整體代碼易讀更容易管理。
 - 提供最新的優化器( Ranger,Lars, RangerLars, AdaBelief...)以及優化技巧(gradient centralization)。
+
+## New Release version 0.7.0 
+![Alt text](images/tensorboard.png)
+
+- Tensorboard support.
+- New optimizer: AdaBelief, DiffGrad
+- Initializers support.
+
+
+
 
 ## How To Use
 

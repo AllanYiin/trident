@@ -388,7 +388,7 @@ class Layer(nn.Module):
     # Trick mypy into not applying contravariance rules to inputs by defining
     # forward as a value, rather than a function.  See also
     # https://github.com/python/mypy/issues/8795
-    def _forward_unimplemented(self, *input: Any) -> None:
+    def _forward_unimplemented(self, *input: Any,**kwargs) -> None:
         raise NotImplementedError
 
     r"""Defines the computation performed at every call.
@@ -733,8 +733,8 @@ class Layer(nn.Module):
             if not dtype.is_floating_point:
                 raise TypeError('nn.Module.to only accepts floating point '
                                 'dtypes, but got desired dtype={}'.format(dtype))
-        if device is not None:
-            self.get_root().device=device.type
+        # if device is not None:
+        #     self.get_root().device=device.type
 
         def convert(t):
             if convert_to_format is not None and t.dim() == 4:
@@ -782,7 +782,7 @@ class Layer(nn.Module):
                 elif isinstance(self._input_shape, list):
                     for k in range(len(self._input_shape)):
                         self._signature.inputs['input_{0}'.format(k)] = TensorSpec(shape=self._input_shape[k], name='input_{0}'.format(k))
-                self.input_spec = unpack_singleton(self._signature.inputs.value_list)
+
 
     @property
     def output_shape(self) :
@@ -928,6 +928,7 @@ class Layer(nn.Module):
                 shp= tensor_to_shape(inp)
                 self.input_filters = shp[self.filter_index]
                 self.input_shape =shp
+                self.input_spec=TensorSpec.tensor_to_spec(inp)
                 del inp
             elif isinstance(input, (tuple, list)):
                 if isinstance(input[0], numbers.Number):

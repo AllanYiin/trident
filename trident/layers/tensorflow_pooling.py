@@ -114,7 +114,7 @@ class MaxPool1d(_PoolNd):
         self.return_indices = kwargs.get('return_indices', False)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         return tf.nn.max_pool1d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NWC", name=None)
@@ -193,7 +193,7 @@ class MaxPool2d(_PoolNd):
         self.return_indices = kwargs.get('return_indices', False)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         return tf.nn.max_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NHWC", name=None)
@@ -273,8 +273,8 @@ class MaxPool3d(_PoolNd):
         self.return_indices = kwargs.get('return_indices', False)
 
 
-    def forward(self, input):
-        return tf.nn.max_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+    def forward(self, x,**kwargs):
+        return tf.nn.max_pool3d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NDHWC", name=None)
 
 
@@ -406,8 +406,8 @@ class AvgPool1d(_PoolNd):
         # 'count_include_pad', False)
 
 
-    def forward(self, input):
-        return tf.nn.avg_pool1d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+    def forward(self, x,**kwargs):
+        return tf.nn.avg_pool1d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NWC", name=None)
 
 
@@ -478,7 +478,7 @@ class AvgPool2d(_PoolNd):
         self.divisor_override = kwargs.get('divisor_override', None)
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
 
         return tf.nn.avg_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
@@ -556,8 +556,8 @@ class AvgPool3d(_PoolNd):
         self.divisor_override = kwargs.get('divisor_override', None)
 
 
-    def forward(self, input):
-        return tf.nn.avg_pool3d(input, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
+    def forward(self, x,**kwargs):
+        return tf.nn.avg_pool3d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
                                 data_format="NDHWC", name=None)
 
     def __setstate__(self, d):
@@ -582,7 +582,7 @@ class GlobalAvgPool1d(Layer):
                 self.output_shape =TensorShape([input_shape[0],input_shape[-1]])
             self._built = True
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
         x = tf.reduce_mean(x, axis=1, keepdims=self.keepdims)
         return x
 
@@ -602,7 +602,7 @@ class GlobalAvgPool2d(Layer):
                 self.output_shape =TensorShape([input_shape[0],input_shape[-1]])
             self._built = True
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         x = tf.reduce_mean(x, [1, 2], keepdims=self.keepdims)
         return x

@@ -84,7 +84,7 @@ class BatchNorm(Layer):
         https://arxiv.org/abs/1502.03167
 
     """
-    def __init__(self, momentum=0.1, affine=True, track_running_stats=True, axis=-1,renorm=False,eps=1e-5,name=None, **kwargs):
+    def __init__(self, momentum=0.1, affine=True, track_running_stats=True, axis=-1,renorm=False,eps=1e-8,name=None, **kwargs):
         """
          Args:
          eps: a value added to the denominator for numerical stability.
@@ -120,8 +120,8 @@ class BatchNorm(Layer):
         self.affine = affine
         self.track_running_stats = track_running_stats
 
-        self.weight=None # gamma//scale
-        self.bias=None # beta/ offset
+        self.register_parameter("weight",None) # gamma//scale
+        self.register_parameter("bias",None) # beta/ offset
 
         self.renorm=renorm
 
@@ -139,53 +139,67 @@ class BatchNorm(Layer):
 
 
     def assign_moving_average(self, variable, value, momentum, inputs_size):
-            with tf.name_scope('AssignMovingAvg') as scope:
-                decay = to_tensor(1.0 - momentum)
-                if decay.dtype != variable.dtype.base_dtype:
-                    decay = tf.cast(decay, variable.dtype.base_dtype)
-                update_delta = (variable - tf.cast(value, variable.dtype)) * decay
-                if inputs_size is not None:
-                    update_delta = tf.where(inputs_size > 0, update_delta, tf.zeros_like(update_delta))
-                variable = tf.math.subtract(variable, update_delta, name=scope)
-                return variable
-
-
-
+        with tf.name_scope('AssignMovingAvg') as scope:
+            decay = to_tensor(1.0 - momentum,device=self.get_root().device,dtype=variable.dtype.base_dtype)
+            update_delta = (variable - tf.cast(value, variable.dtype)) * decay
+            if inputs_size is not None:
+                update_delta = where(inputs_size > 0, update_delta, zeros_like(update_delta))
+            variable = tf.math.subtract(variable, update_delta, name=scope)
+            return variable
 
     def build(self, input_shape:TensorShape):
         if self._built == False:
             self.input_filters= input_shape[self.filter_index]
             ndims = len(input_shape)
-
             # Convert axis to list and resolve negatives
+            if isinstance(self.axis, int):
+                self.axis = [self.axis]
+            elif isinstance(self.axis, tuple):
+                self.axis = list(self.axis)
+            for idx, x in enumerate(self.axis):
+                if x < 0:
+                    self.axis[idx] = ndims + x
+
+                # Validate axes
+            for x in self.axis:
+                if x < 0 or x >= ndims:
+                    raise ValueError('Invalid axis: %d' % x)
+            if len(self.axis) != len(set(self.axis)):
+                raise ValueError('Duplicate axis: {}'.format(tuple(self.axis)))
+            param_shape = [input_shape[dim] for dim in self.axis]
 
             if self.affine:
-                self.weight=tf.Variable(tf.ones(shape=[self.input_filters]),trainable=True, name='weight') #gamma//scale
-                self.bias=tf.Variable(tf.zeros(shape=[self.input_filters]),trainable=True, name='bias') #beta/ offset
+                self.weight=tf.Variable(tf.ones(shape=param_shape),trainable=True, name='weight') #gamma//scale
+                self.bias=tf.Variable(tf.zeros(shape=param_shape),trainable=True, name='bias') #beta/ offset
 
             if self.track_running_stats:
-                self.register_buffer('running_mean', zeros(shape=[self.input_filters]))
-                self.register_buffer('running_var', ones(shape=[self.input_filters]))
+                self.register_buffer('running_mean', zeros(shape=param_shape))
+                self.register_buffer('running_var', ones(shape=param_shape))
                 self.register_buffer('num_batches_tracked', to_tensor(0, dtype=tf.int64), persistent=False)
 
             self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         input_shape = x.shape
-        ndims= len(x.shape)
-        reduction_axes = [i for i in range(len(x.shape)) if i not in self.axis]
+        ndims = len(input_shape)
+        reduction_axes = [i for i in range(ndims) if i not in self.axis]
+        # Broadcasting only necessary for norm when the axis is not just
+        # the last dimension
         broadcast_shape = [1] * ndims
-        broadcast_shape[self.axis[0]] = input_shape.dims[self.axis[0]].value
+        for dim in self.axis:
+            broadcast_shape[dim] = input_shape.dims[dim].value
+
         def _broadcast(v):
-            if v is not None and len(v.shape) != ndims and reduction_axes != list(range(ndims - 1)):
-                return tf.reshape(v, broadcast_shape)
+            if (v is not None and len(v.shape) != ndims and self.axis != [ndims - 1]):
+                return reshape(v, broadcast_shape)
             return v
 
         scale, offset = _broadcast(self.weight), _broadcast(self.bias)
 
-        mean, variance = tf.nn.moments(x, axes=reduction_axes, keepdims=True)
+        mean, variance = moments(x, axis=reduction_axes, keepdims=True)
+
         running_mean = self.running_mean
         running_var = self.running_var
 
@@ -195,7 +209,7 @@ class BatchNorm(Layer):
         new_mean, new_variance = mean, variance
         def _do_update(var, value):
             """Compute the updates for mean and variance."""
-            return self.assign_moving_average(var, value, self.momentum, self.input_shape.prod())
+            return self.assign_moving_average(var, value, self.momentum, self.input_shape[0])
 
         def mean_update():
             """Update the moving variance."""
@@ -209,18 +223,7 @@ class BatchNorm(Layer):
         def variance_update():
             """Update the moving variance."""
 
-            def true_branch_renorm():
-                # We apply epsilon as part of the moving_stddev to mirror the training
-                # code path.
-                running_stddev = _do_update(sqrt(self.running_var), sqrt(new_variance + self.epsilon))
-                self.running_var.assign(tf.nn.relu(running_stddev * running_stddev - self.epsilon), name='AssignNewValue')
-                return self.running_var
-
-            if self.renorm:
-                true_branch = true_branch_renorm
-            else:
-                true_branch = lambda: _do_update(self.running_var, new_variance)
-
+            true_branch = lambda: _do_update(self.running_var, new_variance)
             false_branch = lambda: self.running_var
             if self.training:
                 return true_branch
@@ -231,6 +234,9 @@ class BatchNorm(Layer):
         variance_update()
 
         return tf.nn.batch_normalization(x, self.running_mean, self.running_var, offset,scale, self.eps)
+
+
+
     def extra_repr(self):
         return '{input_filters}, eps={eps}, momentum={momentum}, affine={affine}, ' \
                'track_running_stats={track_running_stats}'.format(**self.__dict__)
@@ -302,7 +308,7 @@ class GroupNorm(Layer):
                 self._built = True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         # Prepare broadcasting shape.
         origin_shape=list(int_shape(x))
@@ -499,7 +505,7 @@ class LayerNorm(Layer):
             self._built=True
 
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         mean = x.mean(dim=self.axis, keepdim=True).detach()
         std = x.std(dim=self.axis, keepdim=True).detach()
@@ -520,7 +526,7 @@ class L2Norm(Layer):
     def build(self, input_shape:TensorShape):
         if self._built == False :
             self._built = True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         x= l2_normalize(x,axis=self.axis,keepdims=True)
         return x
 
@@ -534,7 +540,7 @@ class PixelNorm(Layer):
         self.axis=axis
 
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return x /sqrt(mean(x ** 2, axis=self.axis, keepdims=True) + self.eps)
 
 
@@ -572,7 +578,7 @@ class SpectralNorm(Layer):
             self.v.assign(l2_normalize( self.v .value().detach()))
             self.w_bar = tf.Variable(self.w .value().detach(), requires_grad=False)
 
-    def forward(self, x) :
+    def forward(self, x, **kwargs) :
 
         if self.training == True:
             # Recompute weights for each forward pass
@@ -621,7 +627,7 @@ class EvoNormB0(Layer):
             self.register_buffer('running_var', ones(newshape))
             self._built=True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         if self.training:
             permute_pattern=np.arange(0,self.rank+2)
             permute_pattern[0]=1
@@ -658,7 +664,7 @@ class EvoNormS0(Layer):
             self.register_buffer('running_var', ones(newshape))
             self._built=True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         if self.nonlinear:
             num = sigmoid(self.v * x)
             std = group_std(x,self.groups)

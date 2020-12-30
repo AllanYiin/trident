@@ -58,7 +58,7 @@ def numel(x: np.ndarray):
         (int) Number of elements
 
     """
-    return x.size()
+    return x.size
 
 
 def int_shape(x:np.ndarray):

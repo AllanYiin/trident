@@ -7,6 +7,8 @@ import os
 from copy import deepcopy
 import builtins
 import tensorflow as tf
+from trident.models.pretrained_utils import _make_recovery_model_include_top
+
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
@@ -208,26 +210,18 @@ def EfficientNetB0(include_top=True,
     else:
         input_shape=(224, 224,3)
     effb0 = EfficientNet(1.0, 1.0, default_size=input_shape, dropout_rate= 0.2, model_name='efficientnet-b0',include_top=include_top, num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1pO4wRWY6N4e7U_7E2H-NhBPEF4MlR4ru',dirname,'efficientnet-b0_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b0_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.input_shape=input_shape
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    new_fc = Dense(classes, activation=None, name='fc')
-                    new_fc.input_shape=recovery_model.fc.input_shape
-                    recovery_model.fc=new_fc
-            effb0.model=recovery_model
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1pO4wRWY6N4e7U_7E2H-NhBPEF4MlR4ru',dirname,'efficientnet-b0_tf.pth')
+            recovery_model=load(os.path.join(dirname,'efficientnet-b0_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
 
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb0.model = recovery_model
+        else:
+            effb0.model = _make_recovery_model_include_top(effb0.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb0.model.input_shape = input_shape
     return effb0
 
 
@@ -242,26 +236,19 @@ def EfficientNetB1(include_top=True,
     else:
         input_shape=(240, 240,3)
     effb1 =EfficientNet(1.0, 1.1, default_size=input_shape, dropout_rate= 0.2, model_name='efficientnet-b1',include_top=include_top,num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1zCWDn4lwHCn4exAnGfBSPh9YHYTGdIYt',dirname,'efficientnet-b1_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b1_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
-        recovery_model.eval()
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb1.model = recovery_model
-        if include_top == False:
-            effb1.model.remove_at(-1)
-            effb1.model.remove_at(-1)
-            effb1.model.remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1zCWDn4lwHCn4exAnGfBSPh9YHYTGdIYt', dirname, 'efficientnet-b1_tf.pth')
+            recovery_model = load(os.path.join(dirname, 'efficientnet-b1_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb1.model = recovery_model
         else:
-            if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                effb1.model.fc = new_fc
-        return effb1
+            effb1.model = _make_recovery_model_include_top(effb1.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb1.model.input_shape = input_shape
+    return effb1
 
 
 def EfficientNetB2(include_top=True,
@@ -275,25 +262,19 @@ def EfficientNetB2(include_top=True,
     else:
         input_shape=(260, 260,3)
     effb2 =EfficientNet(1.1, 1.2, default_size=input_shape, dropout_rate= 0.3, model_name='efficientnet-b2',include_top=include_top,num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1YQgy7PTgj8VereQfaxKJCZshIZK_uqtI',dirname,'efficientnet-b2_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b2_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb2.model = recovery_model
-        if include_top == False:
-            effb2.model.remove_at(-1)
-            effb2.model.remove_at(-1)
-            effb2.model.remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1YQgy7PTgj8VereQfaxKJCZshIZK_uqtI', dirname, 'efficientnet-b2_tf.pth')
+            recovery_model = load(os.path.join(dirname, 'efficientnet-b2_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb2.model = recovery_model
         else:
-            if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                effb2.model.fc = new_fc
-        return effb2
+            effb2.model = _make_recovery_model_include_top(effb2.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb2.model.input_shape = input_shape
+    return effb2
 
 
 def EfficientNetB3(include_top=True,
@@ -307,25 +288,19 @@ def EfficientNetB3(include_top=True,
     else:
         input_shape=(300, 300,3)
     effb3 =EfficientNet(1.2, 1.4, default_size=input_shape, dropout_rate=0.3, model_name='efficientnet-b3',include_top=include_top,num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1LgG4bsYnkY-uj6sLqbebRP0va3gDEkgS',dirname,'efficientnet-b3_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b3_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb3.model = recovery_model
-        if include_top == False:
-            effb3.model.remove_at(-1)
-            effb3.model.remove_at(-1)
-            effb3.model.remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1LgG4bsYnkY-uj6sLqbebRP0va3gDEkgS', dirname, 'efficientnet-b3_tf.pth')
+            recovery_model = load(os.path.join(dirname, 'efficientnet-b3_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb3.model = recovery_model
         else:
-            if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                effb3.model.fc = new_fc
-        return effb3
+            effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb3.model.input_shape = input_shape
+    return effb3
 
 
 def EfficientNetB4(include_top=True,
@@ -339,25 +314,19 @@ def EfficientNetB4(include_top=True,
     else:
         input_shape=(380, 380,3)
     effb4 =EfficientNet(1.4, 1.8, 380, 0.4, model_name='efficientnet-b4', include_top=include_top, num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1eOUvMemIysmAa0ePdGKz01NO1EYWI2Dp',dirname,'efficientnet-b4_tf.pth')
-        recovery_model=load(sanitize_path(os.path.join(dirname,'efficientnet-b4_tf.pth')))
-        recovery_model=fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb4.model = recovery_model
-        if include_top == False:
-            effb4.model.remove_at(-1)
-            effb4.model.remove_at(-1)
-            effb4.model.remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1eOUvMemIysmAa0ePdGKz01NO1EYWI2Dp', dirname, 'efficientnet-b4_tf.pth')
+            recovery_model = load(sanitize_path(os.path.join(dirname, 'efficientnet-b4_tf.pth')))
+            recovery_model = fix_layer(recovery_model)
+
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb4.model = recovery_model
         else:
-            if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                effb4.model.fc = new_fc
-        return effb4
+            effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb4.model.input_shape = input_shape
+    return effb4
 
 
 def EfficientNetB5(include_top=True,
@@ -384,25 +353,20 @@ def EfficientNetB5(include_top=True,
     else:
         input_shape=(456,456,3)
     effb5 =EfficientNet(1.6, 2.2, default_size=input_shape, dropout_rate= 0.4, model_name='efficientnet-b5',include_top=include_top,num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1o_JQkIFUP1_-9AkiTs-x8q7gyDMyqiJz',dirname,'efficientnet-b5_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b5_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb5.model = recovery_model
-        if include_top == False:
-            effb5.model.remove_at(-1)
-            effb5.model.remove_at(-1)
-            effb5.model.remove_at(-1)
+    with tf.device(get_device()):
+        if pretrained == True:
+            download_model_from_google_drive('1o_JQkIFUP1_-9AkiTs-x8q7gyDMyqiJz', dirname, 'efficientnet-b5_tf.pth')
+            recovery_model = load(os.path.join(dirname, 'efficientnet-b5_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb5.model = recovery_model
         else:
-            if classes != 1000:
-                new_fc = Dense(classes, activation=None, name='fc')
-                effb5.model.fc = new_fc
-        return effb5
+            effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb5.model.input_shape = input_shape
+    return effb5
+
 
 
 def EfficientNetB6(include_top=True,
@@ -416,24 +380,18 @@ def EfficientNetB6(include_top=True,
     else:
         input_shape=(528, 528,3)
     effb6 =EfficientNet(1.8, 2.6, default_size=input_shape, dropout_rate= 0.5, model_name='efficientnet-b6',include_top=include_top,num_classes=classes)
-    if pretrained==True:
-        download_model_from_google_drive('1-dUqwaLzv2V7m8w4jkvFBlHTCsZq54JY',dirname,'efficientnet-b6_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b6_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
-        with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb6.model = recovery_model
-    if include_top == False:
-        effb6.model.remove_at(-1)
-        effb6.model.remove_at(-1)
-        effb6.model.remove_at(-1)
-    else:
-        if classes != 1000:
-            new_fc = Dense(classes, activation=None, name='fc')
-            effb6.model.fc = new_fc
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1-dUqwaLzv2V7m8w4jkvFBlHTCsZq54JY', dirname, 'efficientnet-b6_tf.pth')
+            recovery_model = load(os.path.join(dirname, 'efficientnet-b6_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb6.model = recovery_model
+        else:
+            effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
+
+        effb6.model.input_shape = input_shape
     return effb6
 
 
@@ -450,21 +408,16 @@ def EfficientNetB7(include_top=True,
         input_shape=(600, 600,3)
     effb7 =EfficientNet(2.0, 3.1, default_size=input_shape, dropout_rate=0.5, model_name='efficientnet-b7',include_top=include_top,num_classes=classes)
     if pretrained==True:
-        download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz',dirname,'efficientnet-b7_tf.pth')
-        recovery_model=load(os.path.join(dirname,'efficientnet-b7_tf.pth'))
-        recovery_model=fix_layer(recovery_model)
-        recovery_model.input_shape = input_shape
         with tf.device(get_device()):
-            if freeze_features:
-                recovery_model.trainable = False
-                recovery_model.fc.trainable = True
-        effb7.model=recovery_model
-    if include_top==False:
-        effb7.model.remove_at(-1)
-        effb7.model.remove_at(-1)
-        effb7.model.remove_at(-1)
-    else:
-        if classes!=1000:
-            new_fc = Dense(classes, activation=None, name='fc')
-            effb7.model.fc=new_fc
-    return effb7
+            if pretrained == True:
+                download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz', dirname, 'efficientnet-b7_tf.pth')
+                recovery_model = load(os.path.join(dirname, 'efficientnet-b7_tf.pth'))
+                recovery_model = fix_layer(recovery_model)
+
+                recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+                effb7.model = recovery_model
+            else:
+                effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
+
+            effb7.model.input_shape = input_shape
+        return effb7

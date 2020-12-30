@@ -41,11 +41,11 @@ except ImportError:
 
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
-    from trident.backend.pytorch_ops import int_shape, str2dtype, tensor_to_shape
+    from trident.backend.pytorch_ops import int_shape, str2dtype, tensor_to_shape,expand_dims,cast
     import torch
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import to_numpy, to_tensor, ObjectType
-    from trident.backend.tensorflow_ops import int_shape,str2dtype,tensor_to_shape
+    from trident.backend.tensorflow_ops import int_shape,str2dtype,tensor_to_shape,expand_dims,cast
 
 __all__ = ['Dataset','ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
            'NumpyDataset', 'RandomNoiseDataset']
@@ -235,7 +235,7 @@ class NumpyDataset(Dataset):
                 data = np.expand_dims(data, -1)
             self.__add__(data)
             self.dtype = np.float32
-            self._element_spec = TensorSpec(shape=to_tensor(int_shape(self.list[0])).to('int'), dtype=np.float32, name=self.symbol, object_type=self.object_type)
+            self._element_spec = TensorSpec(shape=TensorShape(self.list), dtype=np.float32, name=self.symbol, object_type=self.object_type)
 
         elif data is None:
             pass
@@ -328,6 +328,8 @@ class ImageDataset(Dataset):
 
         return None
 
+
+
     def data_transform(self, img_data):
         if len(self.transform_funcs) == 0:
             return image_backend_adaption(img_data)
@@ -395,7 +397,7 @@ class MaskDataset(Dataset):
         self._idx2lab = {}
         if class_names is not None:
             self.class_names = class_names
-        self._element_spec = TensorSpec(shape=to_tensor(int_shape(self[0])).to('int'), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=TensorShape(self[0]), name=self.symbol, object_type=self.object_type, is_spatial=True)
 
     def __getitem__(self, index: int):
         img = self.list[index]  # self.pop(index)
@@ -504,9 +506,9 @@ class LabelDataset(Dataset):
 
         shp=None
         if isinstance(self.list[0],numbers.Number):
-            shp=to_tensor([0]).to(str2dtype('int'))
+            shp=TensorShape([0])
         else:
-            shp = to_tensor(int_shape(self.list[0])).to('int')
+            shp = TensorShape(self.list)
         self._element_spec = TensorSpec(shape=shp, name=self.symbol, object_type=self.object_type,dtype=self.dtype)
 
     def binding_class_names(self, class_names=None, language=None):
@@ -544,7 +546,7 @@ class BboxDataset(Dataset):
                  symbol="bbox", name=None, **kwargs):
         super().__init__(symbol=symbol, object_type=object_type, name=name, **kwargs)
         self.__add__(kwargs.get('data', boxes))
-        self._element_spec = TensorSpec(shape=to_tensor(int_shape(self.list[0])).to('int'), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=TensorShape(self.list), name=self.symbol, object_type=self.object_type, is_spatial=True)
         self.is_pair_process = False
         self.is_spatial = True
         self.dtype = np.int64
@@ -602,7 +604,7 @@ class LandmarkDataset(Dataset):
         self.__add__(landmarks)
         self.dtype = np.float32
         self.image_size = image_size
-        self._element_spec = TensorSpec(shape=to_tensor(int_shape(self[0])).to('int'), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=TensorShape(self.list), name=self.symbol, object_type=self.object_type, is_spatial=True)
         self.is_pair_process = False
         self.is_spatial = True
         self.transform_funcs = []
@@ -640,7 +642,7 @@ class RandomNoiseDataset(Dataset):
         self.dtype = np.float32
         self.shape = shape
         self.random_mode = random_mode
-        self._element_spec = TensorSpec(shape=to_tensor(shape).to('int'), name=self.symbol, object_type=self.object_type)
+        self._element_spec = TensorSpec(shape=TensorShape(shape), name=self.symbol, object_type=self.object_type)
 
     def __getitem__(self, index: int):
         if self.random_mode == 'normal':
@@ -839,7 +841,7 @@ class TextSequenceDataset(Dataset):
 
 
 class Iterator(object):
-    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, minibatch_size=8,mode='tuple',is_shuffe=True,buffer_size=10,workers=2,**kwargs):
+    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, minibatch_size=8,mode='tuple',is_shuffe=True,buffer_size=None,workers=2,**kwargs):
         self.is_pair_process = False
         self.signature = None
         self._data = None
@@ -897,12 +899,7 @@ class Iterator(object):
             ds = datasets[k]
             if len(ds) > 0:
                 dataitem = ds[k]
-                shp = None
-                if isinstance(dataitem, numbers.Number):
-                    shp = to_tensor([0]).to('int')
-                else:
-                    shp=tensor_to_shape(dataitem,need_exclude_batch_axis=False)
-                ds.element_spec = TensorSpec(shape=shp, name=ds.symbol, object_type=ds.object_type)
+                ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem,0),object_type=ds.object_type,name=ds.symbol)
                 self.data_template[ds.element_spec] = None
                 self.signature.outputs[ds.symbol]=ds.element_spec
 
@@ -912,6 +909,8 @@ class Iterator(object):
         self.paired_transform_funcs = []
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False,mode=self.mode)
         self._sample_iter = iter(self.batch_sampler)
+        if buffer_size is None:
+            buffer_size=2*minibatch_size
         self.buffer_size = buffer_size
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)
         self.sample_filter = None
@@ -979,6 +978,8 @@ class Iterator(object):
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False,mode=self.mode)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
+        self.buffer_size =2*value
+        self.out_queue = Queue.Queue(maxsize=self.buffer_size)
 
     def update_signature(self, arg_names):
 
@@ -994,7 +995,7 @@ class Iterator(object):
                 for i in range(len(arg_names)):
                     arg = arg_names[i]
                     data = iterdata[i]
-                    self.signature.outputs[arg] =   TensorSpec(shape=tensor_to_shape(data),dtype=data.dtype,object_type=self.datasets_dict.value_list[i].object_type,name=arg)
+                    self.signature.outputs[arg] =   TensorSpec(shape=TensorShape((None,)+tuple(tensor_to_shape(data).dims)),dtype=data.dtype,object_type=self.datasets_dict.value_list[i].object_type,name=arg)
                     ds= self.datasets_dict.value_list[i]
                     new_dict[arg]=ds
                 self.datasets_dict=None
@@ -1050,12 +1051,7 @@ class Iterator(object):
             ds = self.datasets_dict.value_list[k]
             if len(ds) > 0:
                 dataitem =dataitems.value_list[k]
-                shp = None
-                if isinstance(dataitem, numbers.Number):
-                    shp = to_tensor([0]).to('int')
-                else:
-                    shp = to_tensor(unpack_singleton(dataitem).shape).to('int')
-                ds.element_spec = TensorSpec(shape=shp, name=ds.symbol, object_type=ds.object_type)
+                ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem,0),object_type=ds.object_type,name=ds.symbol)
                 data_template[ds.element_spec] = None
                 self.signature.outputs[ds.symbol] = ds.element_spec
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False,mode=self.mode)
@@ -1126,14 +1122,13 @@ class Iterator(object):
     def next(self):
         if self.out_queue.qsize() == 0:
             in_data = self._sample_iter.__next__()
-            self.out_queue.put(in_data, False)
+            self.out_queue.put(in_data)
 
-        out_data = self.out_queue.get(False)
+        out_data = self.out_queue.get(True)
 
-        if self.out_queue.qsize() <= self.buffer_size* 2:
-            for i in range(self.buffer_size//2):
-                in_data = self._sample_iter.__next__()
-                self.out_queue.put(in_data, False)
+        while self.out_queue.full():
+            in_data = self._sample_iter.__next__()
+            self.out_queue.put(in_data)
 
         return out_data
 

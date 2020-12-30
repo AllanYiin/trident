@@ -9,8 +9,6 @@ if is_in_ipython():
     from IPython import display
 
 
-from tkinter import *
-
 if not is_in_colab:
     import matplotlib
 
@@ -58,7 +56,7 @@ def generate_palette(num_classes):
     return colors
 
 
-def plot_bbox(x, img, color=None, label=None, line_thickness=None):
+def plot_bbox(x, img, color=None, label=None, line_thickness=None,**kwargs):
     img_shape = (img.height, img.width, 3)
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     # img = array2image(img)
@@ -76,11 +74,12 @@ def plot_bbox(x, img, color=None, label=None, line_thickness=None):
         draw.rectangle(((x[0], x[1] - size[1] - 2 * (offset[1] + 1)), (x[0] + 2 * (size[0] + offset[0] + 1), x[1])), fill=color,
                        width=2)
         draw.text((x[0] + 2, x[1] - size[1] - offset[1] - 1), u'{0}'.format(label), fill=fontcolor, font=font)
+
     # rgb_image = image2array(img)
     return img
 
 
-def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
+def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
     make_dir_if_need(save_path)
     row = len(imgs)
     suffix = get_time_suffix()
@@ -99,6 +98,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
                 plt.imshow(img, interpolation="nearest", animated=True)
                 plt.ioff()
                 plt.gcf().show()
+        return plt
     else:
         fig = plt.gcf()
         #fig.set_size_inches(len(imgs) * 2, row * 2)
@@ -121,16 +121,15 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False):
             else:
                 plt.ioff()
                 plt.show(block=False)
+        return fig
 
 
 def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max_iteration=None,
-                      save_path=None, imshow=False):
+                      save_path=None, imshow=False, **kwargs):
     fig = plt.gcf()
     fig.set_size_inches(18, 8)
     plt.clf()
     plt.ion()  # is not None:
-
-
 
     plt.subplot(2, 2, 1)
     if losses.__class__.__name__=='HistoryBase':
@@ -183,6 +182,7 @@ def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max
 
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
+
     if imshow == True:
         if is_in_ipython():
             plt.ioff()
@@ -191,6 +191,8 @@ def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max
             plt.ioff()
             plt.draw()
             plt.show(block=False)
+
+    return fig
 
 
 def polygon_under_graph(xlist, ylist):
@@ -208,7 +210,7 @@ default_bins.extend(np.arange(-0.0002, 0.0002, 0.00002).tolist())
 default_bins = sorted(list(set(default_bins)))
 
 
-def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, title=''):
+def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, title='',**kwargs):
     global default_bins
     from mpl_toolkits.mplot3d import Axes3D
     if bins is None:
@@ -250,10 +252,11 @@ def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, ti
     ax.set_ylim(0, int(max(new_zs)))
     ax.set_zlim(0, int(max_frequency * 1.1))
     plt.title(title + ' Gradients Histogram')
+    return plt.figure()
 
 
 def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=(18, 8), inteval=1, title='', save_path=None,
-                    imshow=False):
+                    imshow=False, enable_tensorboard=False,**kwargs):
     global default_bins
     from mpl_toolkits.mplot3d import Axes3D
     if bins is None:
@@ -346,20 +349,23 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
         else:
             plt.ioff()
             plt.show(block=False)
+    return fig
 
 
-def plot_centerloss(plt, feat, labels, num_class=10, title=''):
+def plot_centerloss(plt, feat, labels, num_class=10, title='', enable_tensorboard=False,**kwargs):
     c = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#990000', '#999900', '#009900', '#009999']
+    fig= plt.figure()
     for i in range(num_class):
         plt.plot(feat[labels == i, 0], feat[labels == i, 1], '.', c=c[i])
     plt.legend(range(num_class), loc='upper right')
     plt.xlim(xmin=feat[:, 0].min(), xmax=feat[:, 0].max())
     plt.ylim(ymin=feat[:, 1].min(), ymax=feat[:, 1].max())
     plt.title(title + ' center loss')
+    return fig
 
 
 def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, title="Confusion matrix", fname=None,
-                          noshow=False ):
+                          noshow=False , enable_tensorboard=False,**kwargs):
     """Render the confusion matrix and return matplotlib's figure with it.
     Normalization can be applied by setting `normalize=True`.
     """
@@ -368,7 +374,7 @@ def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, ti
     if normalize:
         cm = cm.astype(np.float32) / cm.sum(axis=1)[:, np.newaxis]
 
-    f = plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize)
     plt.title(title)
     plt.imshow(cm, interpolation="nearest", cmap=cmap)
 
@@ -396,8 +402,7 @@ def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, ti
     if not noshow:
         plt.show()
 
-    return f
-
+    return fig
 
 
 

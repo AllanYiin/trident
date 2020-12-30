@@ -9,16 +9,18 @@ import builtins
 import numpy as np
 import os
 from trident.backend.common import *
-from trident.backend.load_backend import get_backend
+from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
 from trident.data.image_common import *
 from trident.misc.ipython_utils import is_in_colab
 if get_backend()=='pytorch':
     import torch.nn as nn
+    from trident.backend.pytorch_backend import get_device
     from trident.backend.pytorch_ops import to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape
     from trident.optims.pytorch_losses import CrossEntropyLoss
 elif get_backend()=='tensorflow':
     import tensorflow as tf
+    from trident.backend.tensorflow_backend import get_device
     from trident.backend.tensorflow_ops import  to_numpy,to_tensor,arange,shuffle,cast,clip,sqrt,int_shape,concate,zeros_like,ones_like
     from trident.optims.tensorflow_losses import CrossEntropyLoss
 
@@ -82,17 +84,18 @@ class MixupCallback(RegularizationCallbacksBase):
                 training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         elif get_backend()=='tensorflow':
-            x1 = tf.gather(x, index,axis=0)
-            y1 = tf.gather(y, index,axis=0)
-            mixed_x = lam * x + (1 - lam) * x1
-            pred = model(to_tensor(mixed_x, requires_grad=True))
-            y_a, y_b = y, y1
+            with tf.device(get_device()):
+                x1 = tf.gather(x, index,axis=0)
+                y1 = tf.gather(y, index,axis=0)
+                mixed_x = lam * x + (1 - lam) * x1
+                pred = model(to_tensor(mixed_x, requires_grad=True))
+                y_a, y_b = y, y1
 
-            this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
+                this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred,y_b)
 
-            training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
-            if training_context['is_collect_data']:
-                training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+                training_context['current_loss'] = training_context['current_loss'] + this_loss *self.loss_weight
+                if training_context['is_collect_data']:
+                    training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         if training_context['current_batch']==0:
             for item in mixed_x:
@@ -193,25 +196,25 @@ class CutMixCallback(RegularizationCallbacksBase):
                 training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         elif get_backend() == 'tensorflow':
-
-            y1 = tf.gather(y,index,axis=0)
-            x1= tf.gather(x,index,axis=0)
-            y_a, y_b = y, y1
-            bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
-            filter=np.zeros(int_shape(x))
-            filter[:, bbx1:bbx2, bby1:bby2, :] =1
-            filter=to_tensor(x)
-            x=x*(1-filter)+x1*filter
-            #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
-            # adjust lambda to exactly match pixel ratio
-            lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
-            pred = model(to_tensor(x, requires_grad=True))
-            loss1=self.loss_criterion(pred, y_a)
-            loss2=self.loss_criterion(pred, y_b)
-            this_loss = lam *loss1  + (1 - lam) * loss2
-            training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-            if training_context['is_collect_data']:
-                training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+            with tf.device(get_device()):
+                y1 = tf.gather(y,index,axis=0)
+                x1= tf.gather(x,index,axis=0)
+                y_a, y_b = y, y1
+                bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
+                filter=np.zeros(int_shape(x))
+                filter[:, bbx1:bbx2, bby1:bby2, :] =1
+                filter=to_tensor(x)
+                x=x*(1-filter)+x1*filter
+                #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
+                # adjust lambda to exactly match pixel ratio
+                lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
+                pred = model(to_tensor(x, requires_grad=True))
+                loss1=self.loss_criterion(pred, y_a)
+                loss2=self.loss_criterion(pred, y_b)
+                this_loss = lam *loss1  + (1 - lam) * loss2
+                training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+                if training_context['is_collect_data']:
+                    training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         if training_context['current_batch'] == 0:
             if self.save_path is None and not is_in_colab():

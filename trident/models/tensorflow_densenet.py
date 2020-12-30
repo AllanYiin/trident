@@ -15,6 +15,8 @@ from itertools import repeat
 import numpy as np
 
 import tensorflow as tf
+from trident.models.pretrained_utils import _make_recovery_model_include_top
+
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer,get_device
@@ -90,7 +92,7 @@ class DenseBlock(Layer):
             layer = DenseLayer(growth_rate,name='denselayer%d' % (i + 1))
             self.add_module('denselayer%d' % (i + 1), layer)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         for name, layer in self.named_children():
             new_features = layer(x)
             x=concate([x,new_features], -1)
@@ -296,12 +298,14 @@ class _DenseNetFcn2(Layer):
 def DenseNet121(include_top=True,
              pretrained=True,
              input_shape=(224,224,3),
+             freeze_features=False,
              classes=1000,
              **kwargs):
     """
     Constructor the image classicication model with DenseNet121 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -324,32 +328,20 @@ def DenseNet121(include_top=True,
         input_shape=tuple(input_shape)
 
     densenet121 =DenseNet([6, 12, 24, 16],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet121')
-    if pretrained==True:
-        download_model_from_google_drive('1XZvwockMwLJAZjUKbDt687-pssz58GP9',dirname,'densenet121_tf.pth')
-        recovery_model=load(os.path.join(dirname,'densenet121_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.name = 'densenet121'
-        recovery_model.eval()
-        with tf.device(get_device()):
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    recovery_model.remove_at(-1)
-                    recovery_model.remove_at(-1)
-                    recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
-                    densenet121.class_names = []
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1XZvwockMwLJAZjUKbDt687-pssz58GP9',dirname,'densenet121_tf.pth')
+            recovery_model=load(os.path.join(dirname,'densenet121_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+            recovery_model._name = 'densenet169'
 
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            densenet121.model = recovery_model
 
-        recovery_model.signature = Signature(name='DenseNetFcn')
-        if is_tensor(recovery_model._input_shape):
-            recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
-        if is_tensor(recovery_model._output_shape):
-            recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
-        densenet121.model = recovery_model
-    return densenet121
+        else:
+            densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=False)
+            densenet121.model.input_shape = input_shape
+        return densenet121
 
 
 def DenseNet161(include_top=True,
@@ -414,12 +406,14 @@ def DenseNet161(include_top=True,
 def DenseNet169(include_top=True,
              pretrained=True,
              input_shape=(224,224,3),
+             freeze_features=False,
              classes=1000,
              **kwargs):
     """
     Constructor the image classicication model with DenseNet169 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -441,43 +435,34 @@ def DenseNet169(include_top=True,
         input_shape=tuple(input_shape)
 
     densenet169 =DenseNet([6, 12, 32, 32],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet169')
-    if pretrained==True:
-        download_model_from_google_drive('1tfLRxX4EipkIc23MF5xZR23rYdxk3AZ9',dirname,'densenet169_tf.pth')
-        recovery_model=load(os.path.join(dirname,'densenet169_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.name = 'densenet169'
-        recovery_model.eval()
-        with tf.device(get_device()):
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    recovery_model.remove_at(-1)
-                    recovery_model.remove_at(-1)
-                    recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
-        recovery_model.signature = Signature(name='DenseNetFcn')
-        if is_tensor(recovery_model._input_shape):
-            recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
-        if is_tensor(recovery_model._output_shape):
-            recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1tfLRxX4EipkIc23MF5xZR23rYdxk3AZ9',dirname,'densenet169_tf.pth')
+            recovery_model=load(os.path.join(dirname,'densenet169_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+            recovery_model._name = 'densenet169'
 
-        densenet169.model=recovery_model
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            densenet169.model = recovery_model
 
-    return densenet169
+        else:
+            densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=False)
+            densenet169.model.input_shape = input_shape
+        return densenet169
 
 
 
 def DenseNet201(include_top=True,
              pretrained=True,
              input_shape=(224,224,3),
+             freeze_features=False,
              classes=1000,
              **kwargs):
     """
     Constructor the image classicication model with DenseNet201 as backbond
 
     Args:
+        freeze_features ():
         include_top ():
         pretrained (bool): If True, returns a model pre-trained on ImageNet.
         input_shape (tuple or list): the default input image size in CHW order (C, H, W)
@@ -499,27 +484,17 @@ def DenseNet201(include_top=True,
         input_shape=tuple(input_shape)
 
     densenet201 =DenseNet([6, 12, 48, 32],32,64, include_top=include_top, pretrained=True,input_shape=input_shape, num_classes=classes,name='densenet201')
-    if pretrained==True:
-        download_model_from_google_drive('1dJfgus11jXVoCLWfZqTgZ6jKKtrB70om',dirname,'densenet201_tf.pth')
-        recovery_model=load(os.path.join(dirname,'densenet201_tf.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model._name = 'densenet201'
-        recovery_model.eval()
-        with tf.device(get_device()):
-            if include_top==False:
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-            else:
-                if classes!=1000:
-                    recovery_model.remove_at(-1)
-                    recovery_model.remove_at(-1)
-                    recovery_model.add_module('classifier', Dense(classes, activation=None, name='classifier'))
-                    recovery_model.add_module('softmax', SoftMax(name='softmax'))
-        recovery_model.signature = Signature(name='DenseNetFcn')
-        if is_tensor(recovery_model._input_shape):
-            recovery_model.signature.inputs['input'] = TensorSpec(shape=recovery_model._input_shape, name='input')
-        if is_tensor(recovery_model._output_shape):
-            recovery_model.signature.outputs['output'] = TensorSpec(shape=recovery_model._output_shape, name='output')
+    with tf.device(get_device()):
+        if pretrained==True:
+            download_model_from_google_drive('1dJfgus11jXVoCLWfZqTgZ6jKKtrB70om',dirname,'densenet201_tf.pth')
+            recovery_model=load(os.path.join(dirname,'densenet201_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
+            recovery_model._name = 'densenet201'
 
-        densenet201.model=recovery_model
-    return densenet201
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            densenet201.model = recovery_model
+
+        else:
+            densenet201.model = _make_recovery_model_include_top(densenet201.model, include_top=include_top, classes=classes, freeze_features=False)
+            densenet201.model.input_shape = input_shape
+        return densenet201

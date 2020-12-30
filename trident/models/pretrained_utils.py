@@ -52,12 +52,21 @@ elif _backend == 'tensorflow':
 def _make_recovery_model_include_top(recovery_model:Layer,include_top=True, classes=1000, freeze_features=False):
     if freeze_features==True:
         recovery_model.trainable=False
-        while len(recovery_model[-1]._parameters) == 0 or isinstance(recovery_model[-1], Dense) and len(recovery_model[-1].output_shape) >= 2:
-            if  len(recovery_model[-1]._parameters) >0:
-                recovery_model[-1].trainable=True
+        idx=-1
+        while (len(recovery_model[idx]._parameters) == 0 or isinstance(recovery_model[idx], Dense))and len(recovery_model[idx].output_shape) >= 2:
+            layer=recovery_model[idx]
+            if layer.output_shape.rank>2:
+                break
+            if  len(recovery_model[idx]._parameters) >0:
+                recovery_model[idx].trainable=True
+            idx-=1
 
     if include_top==False:
+
         while  len(recovery_model[-1]._parameters)==0 or isinstance(recovery_model[-1],Dense) and len(recovery_model[-1].output_shape)>=2:
+            layer = recovery_model[-1]
+            if layer.output_shape.rank > 2:
+                break
             recovery_model.remove_at(-1)
         recovery_model.class_names = []
     else:
@@ -71,9 +80,6 @@ def _make_recovery_model_include_top(recovery_model:Layer,include_top=True, clas
                     break
                 else:
                     recovery_model.remove_at(-1)
-
-            modules=list(recovery_model.modules()).reverse()
-
             recovery_model.class_names = []
     return recovery_model
 

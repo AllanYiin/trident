@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.common import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device,load
@@ -229,26 +230,13 @@ def ResNet18(include_top=True,
         download_model_from_google_drive(model_urls['resnet18'], dirname, 'resnet18.pth')
         recovery_model = load(os.path.join(dirname, 'resnet18.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
-        recovery_model.name = 'resnet18'
-        recovery_model.eval()
-        recovery_model.to(_device)
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet18.model = recovery_model
-    if include_top == False:
-        resnet18.model.remove_at(-1)
-        resnet18.model.remove_at(-1)
-        resnet18.model.remove_at(-1)
-        resnet18.class_names = []
     else:
-        if classes != 1000:
-            resnet18.class_names = []
-            resnet18.model.remove_at(-1)
-            resnet18.model.remove_at(-1)
-            resnet18.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-            resnet18.model.add_module('softmax', SoftMax())
+        resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=False)
 
+    resnet18.model.input_shape = input_shape
+    resnet18.model.to(_device)
     return resnet18
 
 def ResNet50(include_top=True,
@@ -266,25 +254,14 @@ def ResNet50(include_top=True,
         download_model_from_google_drive(model_urls['resnet50'],dirname,'resnet50.pth')
         recovery_model=load(os.path.join(dirname,'resnet50.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
-        recovery_model.name = 'resnet50'
-        recovery_model.eval()
-        recovery_model.to(_device)
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet50.model = recovery_model
-    if include_top == False:
-        resnet50.model.remove_at(-1)
-        resnet50.model.remove_at(-1)
-        resnet50.model.remove_at(-1)
-        resnet50.class_names = []
     else:
-        if classes != 1000:
-            resnet50.class_names = []
-            resnet50.model.remove_at(-1)
-            resnet50.model.remove_at(-1)
-            resnet50.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-            resnet50.model.add_module('softmax', SoftMax())
+        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    resnet50.model.input_shape = input_shape
+    resnet50.model.to(_device)
+
     return resnet50
 
 def ResNet101(include_top=True,
@@ -302,26 +279,13 @@ def ResNet101(include_top=True,
         download_model_from_google_drive(model_urls['resnet101'],dirname,'resnet101.pth')
         recovery_model=load(os.path.join(dirname,'resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable=True
-        recovery_model.name = 'resnet101'
-        recovery_model.eval()
-        recovery_model.to(_device)
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet101.model = recovery_model
-    if include_top == False:
-        resnet101.model.remove_at(-1)
-        resnet101.model.remove_at(-1)
-        resnet101.model.remove_at(-1)
-        resnet101.class_names = []
     else:
-        if classes != 1000:
-            resnet101.class_names = []
-            resnet101.model.remove_at(-1)
-            resnet101.model.remove_at(-1)
-            resnet101.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-            resnet101.model.add_module('softmax', SoftMax())
+        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=False)
 
+    resnet101.model.input_shape = input_shape
+    resnet101.model.to(_device)
     return resnet101
 
 
@@ -340,25 +304,13 @@ def ResNet152(include_top=True,
         download_model_from_google_drive(model_urls['resnet152'],dirname,'resnet152.pth')
         recovery_model=load(os.path.join(dirname,'resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
-        recovery_model.name = 'resnet152'
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if include_top == False:
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            recovery_model.remove_at(-1)
-            resnet152.class_names = []
-        else:
-            if classes != 1000:
-                resnet152.class_names=[]
-                recovery_model.remove_at(-1)
-                recovery_model.remove_at(-1)
-                recovery_model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                recovery_model.add_module('softmax', SoftMax())
-        resnet152.model=recovery_model
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        resnet152.model = recovery_model
+    else:
+        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    resnet152.model.input_shape = input_shape
+    resnet152.model.to(_device)
     return resnet152
 
 

@@ -1183,7 +1183,7 @@ class Ranger(Optimizer):
                     p_data.add_( exp_avg,alpha=-step_size * group['lr'])
 
                 if any_abnormal_number(p_data):
-                    sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                    sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
                     p_data.copy_(where(is_abnormal_number(p_data),p.data,p_data))
 
 
@@ -1202,6 +1202,7 @@ class Ranger(Optimizer):
 
 
         return loss
+
 
 
 class RangerLars(Optimizer):
@@ -1892,7 +1893,7 @@ class DiffGrad(Optimizer):
                     # Exponential moving average of squared gradient values
                     state['exp_avg_sq'] = torch.zeros_like(p.data)
                     # Previous gradient
-                    state['previous_grad'] = torch.zeros_like(p.data)
+                    state['previous_grad'] =  torch.zeros_like(p.data)
 
                 exp_avg, exp_avg_sq, previous_grad = state['exp_avg'], state['exp_avg_sq'], state['previous_grad']
                 beta1, beta2 = group['betas']
@@ -1901,41 +1902,34 @@ class DiffGrad(Optimizer):
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
 
                 state['step'] += 1
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
 
                 if group['weight_decay'] != 0:
                     grad.add_(group['weight_decay'], p.data)
 
                 # Decay the first and second moment running average coefficient
-
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
                 denom = exp_avg_sq.sqrt().add_(group['eps'])
 
-                bias_correction1 = 1 - beta1 ** state['step']
-                bias_correction2 = 1 - beta2 ** state['step']
-
-
-
-                step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
-                G_grad = exp_avg / denom
-
-                if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(G_grad.size())) > 1:
-                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
-
-
                 # compute diffgrad coefficient (dfc)
-                diff = abs(previous_grad - G_grad)
-                dfc = 1. / (1. + exp(-diff))
+
+                diff = abs(previous_grad - grad)
+                dfc = 1. / (1. + torch.exp(-diff))
+                state['previous_grad'] = grad  # used in paper but has the bug that previous grad is overwritten with grad and diff becomes always zero. Fixed in the next line.
 
                 # update momentum with dfc
                 exp_avg1 = exp_avg * dfc
-                state['previous_grad'] = G_grad
 
-                p.data.add_(G_grad,alpha=-step_size)
+                step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
+
+                p.data.add_(true_divide( exp_avg1, denom),alpha=-step_size)
 
         return loss
+
+
 
 
 def get_optimizer(optimizer_name):

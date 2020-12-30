@@ -14,10 +14,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.modules.activation as af
-from torch.nn.parameter import Parameter
 
-from trident.backend.common import get_function, get_class, camel2snake,snake2camel, enforce_singleton
-from trident.backend.pytorch_backend import Layer
+from trident.backend.common import get_function, get_class, camel2snake,snake2camel, enforce_singleton,TensorShape
+from trident.backend.pytorch_backend import Layer,Parameter
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu', 'PRelu', 'Swish',
@@ -39,7 +38,7 @@ class Identity(Layer):
         super(Identity, self).__init__(name=name)
         self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return x
 
 
@@ -65,7 +64,7 @@ class Relu(Layer):
         super(Relu, self).__init__(name=name)
         self._built = True
 
-    def forward(self, *x):
+    def forward(self, x, **kwargs):
         """
         Args:
         x: Input tensor.
@@ -73,7 +72,7 @@ class Relu(Layer):
         Returns: output tensor
 
         """
-        x = enforce_singleton(x)
+        
         return relu(x)
 
 
@@ -99,8 +98,8 @@ class Relu6(Layer):
         super(Relu6, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return relu6(x)
 
 
@@ -125,8 +124,8 @@ class LeakyRelu(Layer):
         self.alpha = alpha
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return leaky_relu(x, self.alpha)
 
     def extra_repr(self):
@@ -153,8 +152,8 @@ class LeakyRelu6(Layer):
         super(LeakyRelu6, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return leaky_relu6(x)
 
     def extra_repr(self):
@@ -174,8 +173,8 @@ class SmoothRelu(Layer):
         super(SmoothRelu, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return smooth_relu(x)
 
 
@@ -204,15 +203,15 @@ class PRelu(Layer):
         self.init = init
         self.weight = None
 
-    def build(self, input_shape):
+    def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.num_parameters is None:
                 self.num_parameters = self.input_filters
             self.weight = Parameter(ones((self.num_parameters)) * self.init)
             self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         pos = relu(x)
         reshape_shape =[1]*len(x.shape)
         reshape_shape[1] =self.num_parameters
@@ -233,7 +232,7 @@ class Sigmoid(Layer):
         super(Sigmoid, self).__init__()
         self._built = True
 
-    def forward(self, *x):
+    def forward(self, x, **kwargs):
         """
         Args:
         x: Input tensor.
@@ -241,7 +240,7 @@ class Sigmoid(Layer):
         Returns: output tensor
 
         """
-        x = enforce_singleton(x)
+        
         return sigmoid(x)
 
 
@@ -257,8 +256,8 @@ class Tanh(Layer):
         super(Tanh, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return tanh(x)
 
 
@@ -283,8 +282,8 @@ class Swish(Layer):
         super(Swish, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return swish(x)
 
 
@@ -306,8 +305,8 @@ class HardSigmoid(Layer):
         self.inplace = inplace
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return hard_sigmoid(x)
 
 
@@ -336,8 +335,8 @@ class HardSwish(Layer):
         super(HardSwish, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return hard_swish(x)
 
 
@@ -352,8 +351,8 @@ class HardTanh(Layer):
         super(HardTanh, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return hard_tanh(x)
 
 
@@ -384,8 +383,8 @@ class Selu(Layer):
         super(Selu, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return selu(x)
 
 
@@ -402,8 +401,8 @@ class Elu(Layer):
         super(Elu, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return elu(x)
 
 
@@ -412,8 +411,8 @@ class LecunTanh(Layer):
         super(LecunTanh, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return hard_swish(x)
 
 
@@ -421,8 +420,8 @@ class SoftSign(Layer):
     def __init__(self, name=None):
         super(SoftSign, self).__init__()
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return soft_sign(x)
 
 
@@ -431,8 +430,8 @@ class SoftPlus(Layer):
         super(SoftPlus, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return soft_plus(x)
 
 
@@ -441,8 +440,8 @@ class Logit(Layer):
         super(Logit, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return logit(x)
 
 
@@ -466,8 +465,8 @@ class LogLog(Layer):
         super(LogLog, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return log_log(x)
 
 
@@ -492,8 +491,8 @@ class Mish(Layer):
         super().__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return mish(x)
 
 
@@ -518,8 +517,8 @@ class HardMish(Layer):
     def __init__(self,name=None):
         super(HardMish, self).__init__(name=name)
         self._built = True
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return hard_mish(x)
 
 class Softmax(Layer):
@@ -540,8 +539,8 @@ class Softmax(Layer):
         self.axis=axis
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return softmax(x,axis=self.axis)
 
 
@@ -550,8 +549,8 @@ class LogSoftmax(Layer):
         super(LogSoftmax, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return log_softmax(x)
 
 
@@ -579,8 +578,8 @@ class Gelu(Layer):
         super(Gelu, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return gelu(x)
 
 
@@ -593,8 +592,8 @@ class GptGelu(Layer):
         super(GptGelu, self).__init__()
         self._built = True
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         return gpt_gelu(x)
 
 
@@ -613,8 +612,8 @@ class SIREN(Layer):
         self._built = True
         self.w0=Parameter(data=to_tensor(w0,requires_grad=True))
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x, **kwargs):
+        
         x=sin(self.w0*x)
         return x
 

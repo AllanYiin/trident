@@ -47,6 +47,7 @@ __all__ = ['get_session','set_session','get_session_value','get_backend','get_im
 # workarounds is necessary
 import six
 
+
 _int = builtins.int
 _float = builtins.float
 _bool = builtins.bool
@@ -415,19 +416,32 @@ class DeviceType(object):
     index: _int  # THPDevice_index
 
 
-class Device(object):
-    '''
-    Describes device type and device id
-    syntax: device_type:device_id(optional)
-    example: 'CPU', 'CUDA', 'CUDA:1'
-    '''
+# class Device(object):
+#     '''
+#     Describes device type and device id
+#     syntax: device_type:device_id(optional)
+#     example: 'CPU', 'CUDA', 'CUDA:1'
+#     '''
+#
+#     def __init__(self, device):  # type: (Text) -> None
+#         options = device.split(':')
+#         self.type = getattr(DeviceType, options[0])
+#         self.device_id = 0
+#         if len(options) > 1:
+#             self.device_id = int(options[1])
+#
+class device:
+    type: str  # THPDevice_type
+    index: int  # THPDevice_index
 
-    def __init__(self, device):  # type: (Text) -> None
-        options = device.split(':')
-        self.type = getattr(DeviceType, options[0])
-        self.device_id = 0
-        if len(options) > 1:
-            self.device_id = int(options[1])
+    # THPDevice_pynew
+    @overload
+    def __init__(self, device: Union[int, str]) -> None: ...
+
+    @overload
+    def __init__(self, type: str, index: int) -> None: ...
+
+    def __reduce__(self) -> Tuple[Any, ...]: ...  # THPDevice_reduce
 
 
 class TensorShape(object):
@@ -442,8 +456,13 @@ class TensorShape(object):
         64
         >>> print(a[1:3])
         (128, 64)
-        >>> b=TensorShape((128, 64, 65))
+        >>> b=TensorShape([2,128, 64, 64])
         >>> b.is_compatible_with(a[1:3])
+        True
+        >>> c=TensorShape([None,128, 64, 64])
+        >>> b.is_compatible_with(c)
+        True
+        >>> c.is_compatible_with(b)
         True
     """
 
@@ -458,7 +477,14 @@ class TensorShape(object):
             self._dims = [d for d in dims]
         elif dims is None:
             self._dims = None
-
+        elif 'tensor' in dims.__class__.__name__.lower():
+            if hasattr(dims,'cpu'):
+                dims.cpu()
+            if hasattr(dims, 'detach'):
+                dims.detach()
+            if hasattr(dims, 'numpy'):
+                dims=dims.numpy()
+            self._dims = [d for d in dims]
         elif isinstance(dims,TensorShape):
             self._dims = dims.dims
         else:
@@ -567,11 +593,11 @@ class TensorShape(object):
           ValueError: If `key` is a slice and `self` is completely unknown and
             the step is set.
         """
-        if self.dims is not None:
+        if self._dims is not None:
           if isinstance(key, slice):
-            return TensorShape(self.dims[key])
+            return TensorShape(self._dims[key])
           else:
-            return self.dims[key]
+            return self._dims[key]
         else:
           if isinstance(key, slice):
             start = key.start if key.start is not None else 0
@@ -644,12 +670,12 @@ class TensorShape(object):
         Returns:
           True iff `self` is compatible with `other`.
         """
-        other = as_shape(other)
+        other = TensorShape(other)
         if self.dims is not None and other.dims is not None:
           if self.rank != other.rank:
             return False
           for x_dim, y_dim in zip(self.dims, other.dims):
-            if x_dim!=y_dim:
+            if x_dim!=y_dim and (x_dim is not None and y_dim is not None):
               return False
         return True
 

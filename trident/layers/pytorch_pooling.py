@@ -124,7 +124,7 @@ class MaxPool1d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         return F.max_pool1d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
                             self.return_indices)
@@ -224,7 +224,7 @@ class MaxPool2d(_PoolNd):
 
         self.padding = (int(pad_h // 2), int(pad_w // 2))
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         # self.get_padding(x.size()[1:])
         # if self.padding[0] > 0 or self.padding[1] > 0:
@@ -308,8 +308,8 @@ class MaxPool3d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
 
-    def forward(self, input):
-        return F.max_pool3d(input, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
+    def forward(self, x,**kwargs):
+        return F.max_pool3d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
                             self.return_indices)
 
 
@@ -566,8 +566,8 @@ class AvgPool1d(_PoolNd):
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.count_include_pad = kwargs.get('count_include_pad', False)
 
-    def forward(self, input):
-        return F.avg_pool1d(input, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad)
+    def forward(self, x,**kwargs):
+        return F.avg_pool1d(x, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad)
 
 
 class AvgPool2d(_PoolNd):
@@ -655,7 +655,7 @@ class AvgPool2d(_PoolNd):
 
         self.padding = (int(pad_h // 2), int(pad_w // 2))
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return F.avg_pool2d(x, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad,
                             self.divisor_override)
 
@@ -729,7 +729,7 @@ class AvgPool3d(_PoolNd):
         self.count_include_pad = kwargs.get('count_include_pad', False)
         self.divisor_override = kwargs.get('divisor_override', None)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         return F.avg_pool3d(x, self.kernel_size, self.strides, self.padding, self.ceil_mode, self.count_include_pad,
                             self.divisor_override)
@@ -761,7 +761,7 @@ class GlobalAvgPool1d(Layer):
             else:
                 self.output_shape = TensorShape(input_shape[:2])
             self._built = True
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         N,C,W=x.size()
         x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdims)
@@ -790,7 +790,7 @@ class GlobalAvgPool2d(Layer):
                 self.output_shape = TensorShape(input_shape[:2])
             self._built = True
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         N,C,H,W=x.size()
         x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdims)
@@ -804,7 +804,7 @@ class AdaptiveAvgPool2d(Layer):
         self.output_size = _pair(output_size)
         self.name = name
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
 
         return F.adaptive_avg_pool2d(x, self.output_size)
 

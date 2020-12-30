@@ -7,8 +7,14 @@ import random
 
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
-
+from trident.backend.common import *
+from trident.backend.tensorspec import TensorSpec, assert_input_compatibility, ObjectType
 from trident.data.image_common import image_backend_adaption,object_type_inference
+
+if get_backend() == 'pytorch':
+    from trident.backend.pytorch_ops import *
+elif get_backend() == 'tensorflow':
+    from trident.backend.tensorflow_ops import *
 
 __all__ = ['PreprocessPolicy', 'PreprocessPolicyItem']
 
@@ -42,7 +48,7 @@ class PreprocessPolicy(object):
         if isinstance(img, np.ndarray):
             spec = kwargs.get("spec")
             if spec is None:
-                spec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                spec = TensorSpec(shape=to_tensor(img.shape), object_type=object_type_inference(img))
 
 
         for i in range(len(self.policies)):

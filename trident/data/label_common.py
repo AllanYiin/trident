@@ -19,13 +19,13 @@ __all__ = ['label_backend_adaptive','get_onehot','check_is_onehot']
 
 
 if get_backend()== 'pytorch':
-    from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
+    from trident.backend.pytorch_backend import to_numpy, to_tensor
     from trident.backend.pytorch_ops import int_shape
     import torch
 elif get_backend()== 'tensorflow':
-    from trident.backend.tensorflow_backend import to_numpy, to_tensor,ObjectType
+    from trident.backend.tensorflow_backend import to_numpy, to_tensor
     from trident.backend.tensorflow_ops import int_shape
-
+from trident.backend.tensorspec import *
 
 def get_onehot(idx,len):
     if idx>=len:

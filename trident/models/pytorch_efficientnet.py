@@ -20,6 +20,7 @@ from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 from trident.backend.common import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device, load
 from trident.data.image_common import *
@@ -235,25 +236,13 @@ def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, inpu
     if pretrained == True:
         download_model_from_google_drive('1bxnoDerzoNfiZZLft4ocD3DAgx4v6aTN', dirname, 'efficientnet-b0.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b0.pth')))
-        recovery_model.input_shape = input_shape
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
-        recovery_model.to(_device)
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb0.model = recovery_model
-    if include_top == False:
-        effb0.model .remove_at(-1)
-        effb0.model .remove_at(-1)
-        effb0.model .remove_at(-1)
-        effb0.model .remove_at(-1)
-        effb0.class_names = []
     else:
-        if classes != 1000:
-            effb0.model .remove_at(-1)
-            effb0.model .remove_at(-1)
-            effb0.model .add_module('fc', Dense(classes, activation=None, name='fc'))
-            effb0.model .add_module('softmax', SoftMax())
-            effb0.class_names = []
+        effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb0.model .input_shape = input_shape
+    effb0.model .to(_device)
     return effb0
 
 
@@ -266,27 +255,13 @@ def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1F3BtnAjmDz4G9RS9Q0hqU_K7WWXCni1G', dirname, 'efficientnet-b1.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b1.pth')))
-        recovery_model.input_shape = input_shape
-        recovery_model.eval()
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
-            recovery_model.to(_device)
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb1.model = recovery_model
-    if include_top == False:
-        effb1.model.remove_at(-1)
-        effb1.model.remove_at(-1)
-        effb1.model.remove_at(-1)
-        effb1.model.remove_at(-1)
-        effb1.class_names = []
     else:
-        if classes != 1000:
-            effb1.model.remove_at(-1)
-            effb1.model.remove_at(-1)
-            effb1.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-            effb1.model.add_module('softmax', SoftMax())
-            effb1.class_names = []
+        effb1.model = _make_recovery_model_include_top( effb1.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb1.model .input_shape = input_shape
+    effb1.model .to(_device)
     return effb1
 
 
@@ -299,26 +274,14 @@ def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1PjqhB7WJasF_hqOwYtSBNSXSGBY-cRLU', dirname, 'efficientnet-b2.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b2.pth')))
-        recovery_model.input_shape = input_shape
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb2.model = recovery_model
-        if include_top == False:
-            effb2.model.remove_at(-1)
-            effb2.model.remove_at(-1)
-            effb2.model.remove_at(-1)
-            effb2.model.remove_at(-1)
-            effb2.class_names = []
-        else:
-            if classes != 1000:
-                effb2.model.remove_at(-1)
-                effb2.model.remove_at(-1)
-                effb2.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                effb2.model.add_module('softmax', SoftMax())
-                effb2.class_names = []
-        return effb2
+    else:
+        effb2.model = _make_recovery_model_include_top( effb2.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb2.model .input_shape = input_shape
+    effb2.model .to(_device)
+    return effb2
 
 
 def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 300, 300), classes=1000, **kwargs):
@@ -330,26 +293,14 @@ def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, inpu
     if pretrained == True:
         download_model_from_google_drive('11tMxdYdFfaEREwnESO4cwjtcoEB42zB_', dirname, 'efficientnet-b3.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b3.pth')))
-        recovery_model.input_shape = input_shape
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb3.model = recovery_model
-        if include_top == False:
-            effb3.model.remove_at(-1)
-            effb3.model.remove_at(-1)
-            effb3.model.remove_at(-1)
-            effb3.model.remove_at(-1)
-            effb3.class_names = []
-        else:
-            if classes != 1000:
-                effb3.model.remove_at(-1)
-                effb3.model.remove_at(-1)
-                effb3.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                effb3.model.add_module('softmax', SoftMax())
-                effb3.class_names = []
-        return effb3
+    else:
+        effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb3.model.input_shape = input_shape
+    effb3.model.to(_device)
+    return effb3
 
 
 def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 380, 380), classes=1000, **kwargs):
@@ -361,26 +312,14 @@ def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1X4ZOBR_ETRHZJeffJHvCmWTTy9_aW8SP', dirname, 'efficientnet-b4.pth')
         recovery_model =fix_layer( load(sanitize_path(os.path.join(dirname, 'efficientnet-b4.pth'))))
-        recovery_model.input_shape = input_shape
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb4.model = recovery_model
-        if include_top == False:
-            effb4.model.remove_at(-1)
-            effb4.model.remove_at(-1)
-            effb4.model.remove_at(-1)
-            effb4.model.remove_at(-1)
-            effb4.class_names = []
-        else:
-            if classes != 1000:
-                effb4.model.remove_at(-1)
-                effb4.model.remove_at(-1)
-                effb4.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                effb4.model.add_module('softmax', SoftMax())
-                effb4.class_names = []
-        return effb4
+    else:
+        effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb4.model.input_shape = input_shape
+    effb4.model.to(_device)
+    return effb4
 
 
 def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 456, 456), classes=1000, **kwargs):
@@ -392,26 +331,14 @@ def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('17iTD12G9oW3jYAui84MKtdY4gjd9vpgG', dirname, 'efficientnet-b5.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b5.pth')))
-        recovery_model.input_shape = input_shape
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb5.model = recovery_model
-        if include_top == False:
-            effb5.model.remove_at(-1)
-            effb5.model.remove_at(-1)
-            effb5.model.remove_at(-1)
-            effb5.model.remove_at(-1)
-            effb5.class_names = []
-        else:
-            if classes != 1000:
-                effb5.model.remove_at(-1)
-                effb5.model.remove_at(-1)
-                effb5.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                effb5.model.add_module('softmax', SoftMax())
-                effb5.class_names = []
-        return effb5
+    else:
+        effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb5.model.input_shape = input_shape
+    effb5.model.to(_device)
+    return effb5
 
 
 def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 528, 528), classes=1000, **kwargs):
@@ -423,27 +350,15 @@ def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1XJrKmcmMObN_nnjP2Z-YH_BQ3img58qF', dirname, 'efficientnet-b6.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b6.pth')))
-        recovery_model.input_shape = input_shape
-        recovery_model.to(_device)
-
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb6.model = recovery_model
-        if include_top == False:
-            effb6.model.remove_at(-1)
-            effb6.model.remove_at(-1)
-            effb6.model.remove_at(-1)
-            effb6.model.remove_at(-1)
-            effb6.class_names = []
-        else:
-            if classes != 1000:
-                effb6.model.remove_at(-1)
-                effb6.model.remove_at(-1)
-                effb6.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                effb6.model.add_module('softmax', SoftMax())
-                effb6.class_names = []
-        return effb6
+    else:
+        effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb6.model.input_shape = input_shape
+    effb6.model.to(_device)
+    return effb6
+
 
 
 def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 600, 600), classes=1000, **kwargs):
@@ -455,23 +370,11 @@ def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1M2DfvsNPRCWSo_CeXnUCQOR46rvOrhLl', dirname, 'efficientnet-b7.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b7.pth')))
-        recovery_model.input_shape = input_shape
-        recovery_model.to(_device)
-        if freeze_features:
-            recovery_model.trainable=False
-            recovery_model.fc.trainable = True
+        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb7.model = recovery_model
-        if include_top == False:
-            effb7.model.remove_at(-1)
-            effb7.model.remove_at(-1)
-            effb7.model.remove_at(-1)
-            effb7.model.remove_at(-1)
-            effb7.class_names = []
-        else:
-            if classes != 1000:
-                effb7.model.remove_at(-1)
-                effb7.model.remove_at(-1)
-                effb7.model.add_module('fc', Dense(classes, activation=None, name='fc'))
-                effb7.model.add_module('softmax', SoftMax())
-                effb7.class_names = []
-        return effb7
+    else:
+        effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
+
+    effb7.model.input_shape = input_shape
+    effb7.model.to(_device)
+    return effb7

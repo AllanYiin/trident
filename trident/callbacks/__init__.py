@@ -5,7 +5,7 @@ from __future__ import print_function
 
 
 from trident.callbacks.callback_base import *
-from trident.callbacks.lr_schedulers import AdjustLRCallbackBase,ReduceLROnPlateau,reduce_lr_on_plateau,lambda_lr,LambdaLR,RandomCosineLR,random_cosine_lr,CosineLR,cosine_lr
+from trident.callbacks.lr_schedulers import AdjustLRCallback,ReduceLROnPlateau,reduce_lr_on_plateau,lambda_lr,LambdaLR,RandomCosineLR,random_cosine_lr,CosineLR,cosine_lr
 # from trident.callbacks.saving_strategies import *
 from trident.callbacks.visualization_callbacks import *
 #

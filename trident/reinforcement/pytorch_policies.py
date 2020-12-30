@@ -32,6 +32,7 @@ class PolicyBase(Model):
     """
 
     def __init__(self, network: Layer, env: gym.Env, memory_length: int = 1000, name=None) -> None:
+        super().__init__()
         self.network = network
         if name is not None:
             self.network._name=name
@@ -39,15 +40,14 @@ class PolicyBase(Model):
         self.env.reset()
         self.observation_space = env.observation_space
         self.action_space = env.action_space
-        super().__init__(inputs=to_tensor(self.get_observation()).repeat_elements(2,0),output=deepcopy(network))
-        self.setting_network()
-
        # self.agent_id = self.uuid
         self.memory = ReplayBuffer(memory_length)
         self.name = name
+        self.setting_network()
 
     def setting_network(self):
-        pass
+        super()._initial_graph(input_shape=int_shape(self.get_observation())[1:],output=deepcopy(self.network))
+
     def get_observation(self):
         return self.data_preprocess(self.env.render('rgb_array'))
 
