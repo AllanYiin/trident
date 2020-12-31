@@ -5,6 +5,8 @@ from __future__ import print_function
 import functools
 import numpy as np
 import tensorflow as tf
+from trident.backend.tensorflow_backend import Parameter
+
 from trident.backend.common import get_session,epsilon
 from trident.backend.tensorflow_ops import *
 
@@ -24,12 +26,23 @@ def  max_norm(model,max_value=3, axis=0):
         axis (int):axis along which to calculate weight norms.
 
     """
-    for name,w in  model.named_parameters():
-        if 'bias' not in name  and w.trainable:
-            w_data=w.value().detach()
-            norms = sqrt(reduce_sum(square(w_data), axis=axis, keepdims=True))
-            desired = clip(norms, 0, max_value)
-            w.assign(w_data * (desired / (epsilon() + norms)))
+
+    for module in model.children():
+        for key, param in module._parameters.items():
+            if param is not None  and param.trainable==True  and key!="bias":
+                # Tensors stored in modules are graph leaves, and we don't want to
+                # track autograd history of `param_applied`, so we have to use
+                w_data = param.value().detach()
+                reduce_axis = list(range(len(w_data.shape)))
+                reduce_axis.remove(reduce_axis[-1])
+                norms = sqrt(reduce_sum(square(w_data), axis=reduce_axis, keepdims=True))
+                desired = clip(norms, 0, max_value)
+                param_applied =w_data * (desired / (epsilon() + norms))
+                if isinstance(param, tf.Variable):
+                    module._parameters[key] = Parameter(param_applied, trainable=param.trainable)
+                else:
+                    param = param_applied
+
 
 def  non_neg_norm(model):
     """
@@ -38,10 +51,18 @@ def  non_neg_norm(model):
         model : the model contains  weights need to setting the constraints.
 
     """
-    for name,w in  model.named_parameters():
-        if 'bias' not in name and w.trainable:
-            w_data=w.value().detach()
-            w.assign(w_data * tf.cast(greater_equal(w, 0.), tf.float32))
+
+    for module in model.children():
+        for key, param in module._parameters.items():
+            if param is not None  and param.trainable==True and key!="bias":
+                # Tensors stored in modules are graph leaves, and we don't want to
+                # track autograd history of `param_applied`, so we have to use
+                w_data = param.value().detach()
+                param_applied =w_data * tf.cast(greater_equal(param, 0.), tf.float32)
+                if isinstance(param, tf.Variable):
+                    module._parameters[key] = Parameter(param_applied, trainable=param.trainable)
+                else:
+                    param = param_applied
 
 def  unit_norm(model,axis=0):
     """
@@ -51,12 +72,22 @@ def  unit_norm(model,axis=0):
         model : the model contains  weights need to setting the constraints.
 
     """
-    for name,w in  model.named_parameters():
-        if 'bias' not in name  and w.trainable:
-            w_data = w.value().detach()
-            w.assign(w_data/ (epsilon() +sqrt(reduce_sum(square(w_data),axis=axis,keepdims=True))))
 
-def  min_max_norm(model,min_value=0.0, max_value=1.0, rate=3.0, axis=0):
+    for module in model.children():
+        for key, param in module._parameters.items():
+            if param is not None and param.trainable==True:
+                # Tensors stored in modules are graph leaves, and we don't want to
+                # track autograd history of `param_applied`, so we have to use
+                w_data = param.value().detach()
+                reduce_axis = list(range(len(w_data.shape)))
+                reduce_axis.remove(reduce_axis[-1])
+                param_applied =w_data/ (epsilon() +sqrt(reduce_sum(square(w_data),axis=reduce_axis,keepdims=True)))
+                if isinstance(param, tf.Variable):
+                    module._parameters[key] = Parameter(param_applied, trainable=param.trainable)
+                else:
+                    param = param_applied
+
+def  min_max_norm(model,min_value=0.0, max_value=1.0, rate=1.0, axis=0):
     """
     MinMaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have the norm between a lower bound and an upper bound.
@@ -69,14 +100,22 @@ def  min_max_norm(model,min_value=0.0, max_value=1.0, rate=3.0, axis=0):
         axis (int): axis along which to calculate weight norms
     """
 
+    for module in model.children():
+        for key, param in module._parameters.items():
+            if param is not None  and param.trainable==True and key!="bias":
 
-
-    for name,w in  model.named_parameters():
-        if 'bias' not in name  and w.trainable:
-            w_data = w.value().detach()
-            norms = sqrt(reduce_sum(square(w_data), axis=axis, keepdims=True))
-            desired = (rate * clip(norms, min_value, max_value) + (1 - rate) * norms)
-            w.assign(w_data * (desired / (epsilon() + norms)))
+                # Tensors stored in modules are graph leaves, and we don't want to
+                # track autograd history of `param_applied`, so we have to use
+                w_data = param.value().detach()
+                reduce_axis=list(range(len(w_data.shape)))
+                reduce_axis.remove(reduce_axis[-1])
+                norms = sqrt(reduce_sum(square(w_data), axis=reduce_axis, keepdims=True))
+                desired = (rate * clip(norms, min_value, max_value) + (1 - rate) * norms)
+                param_applied =w_data * (desired / (epsilon() + norms))
+                if isinstance(param, tf.Variable):
+                    module._parameters[key] = Parameter(param_applied, trainable=param.trainable)
+                else:
+                    param = param_applied
 
 
 
