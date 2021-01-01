@@ -695,7 +695,7 @@ class Model(ModelBase):
                                 available_fields.remove('input')
                             elif len(self._model.signature.inputs.key_list) == 1:
                                 for item in available_fields:
-                                    data_shape = train_data[item].shape if len(train_data[item].shape) > 2 else TensorShape([None])
+                                    data_shape = tensor_to_shape(train_data[item])
                                     if 'target' not in item and 'output' != item and data_shape == inshapes[0].shape:
                                         data_feed[arg] = item
                                         available_fields.remove(item)
@@ -727,12 +727,12 @@ class Model(ModelBase):
                                 elif len(available_fields) > 0:
                                     target_shape = outshapes
                                     for item in available_fields:
-                                        data_shape = list(train_data[item].shape) if len(train_data[item].shape) > 1 else [None]
+                                        data_shape = tensor_to_shape(train_data[item])
                                         if target_shape == data_shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
                                         elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                                train_data[item].dtype)) and target_shape[:-1] == data_shape:
+                                                train_data[item].dtype)) and target_shape== data_shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
                                         else:
@@ -800,11 +800,11 @@ class Model(ModelBase):
                 callback.on_optimization_step_start(self.training_context)
 
             if self.training_context['stop_update'] == 0:
-                self.optimizer.step(self.optimizer.grads_and_vars)
+                self.optimizer.step(self.training_context['grads_and_vars'])
 
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
-                    self.optimizer.step(self.optimizer.grads_and_vars)
+                    self.optimizer.step(self.training_context['grads_and_vars'])
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
@@ -1053,7 +1053,7 @@ class Model(ModelBase):
                             PrintException()
                             if isinstance(self._model, Layer) and any_abnormal_number(self._model):
                                 for para in self._model.parameters():
-                                    if any_abnormal_number(para):
+                                    if para is not None and any_abnormal_number(para):
                                         para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
 
                     # write output in to data
@@ -1122,8 +1122,10 @@ class Model(ModelBase):
                                 self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
                 vars = grad_tape.watched_variables()
-                grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
+                grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
                 # grads = tuple([where(is_nan(grad), zeros_like(grad), grad) for grad in grads])
+
+                self.training_context['grads_and_vars']= zip(grads, vars);
                 self.optimizer.grads_and_vars = zip(grads, vars)
                 # self.training_context['grads'] = grads
                 # self.training_context['vars'] = vars
