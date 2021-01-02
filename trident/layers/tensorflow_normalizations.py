@@ -677,8 +677,10 @@ class EvoNormS0(Layer):
 def get_normalization(fn_name):
     if fn_name is None:
         return None
-    elif isinstance(fn_name,Layer) and 'Norm' in fn_name.__class__.__name__:
+    elif isinstance(fn_name, Layer) and 'Norm' in fn_name.__class__.__name__:
         return fn_name
+    elif inspect.isclass(fn_name) and fn_name.__class__.__name__ == type:
+        return fn_name()
     elif inspect.isclass(fn_name):
         return fn_name
     elif isinstance(fn_name, str):

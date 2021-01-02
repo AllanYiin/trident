@@ -103,7 +103,8 @@ class BatchNorm(Layer):
 
         """
 
-        super().__init__(in_sequence=in_sequence,name=name)
+        super().__init__(name=name)
+        self.in_sequence=in_sequence
         self.eps = eps
         self.momentum = momentum
         self.affine = affine
@@ -274,7 +275,8 @@ class GroupNorm(Layer):
             (2, 64, 128, 128)
 
         """
-        super().__init__(in_sequence=in_sequence,name=name)
+        super().__init__(name=name)
+        self.in_sequence=in_sequence
         self.affine=affine
         self.num_groups = num_groups
         self.eps = eps
@@ -374,7 +376,8 @@ class InstanceNorm(Layer):
             (2, 64, 128, 128)
 
         """
-        super().__init__(in_sequence=in_sequence,name=name)
+        super().__init__(name=name)
+        self.in_sequence=in_sequence
         self.eps = _epsilon
         self.momentum = momentum
         self.affine = affine
@@ -490,7 +493,8 @@ class LayerNorm(Layer):
         >>> output = m(input)
 
         """
-        super().__init__(in_sequence=in_sequence,name=name)
+        super().__init__(name=name)
+        self.in_sequence=in_sequence
         self.eps = eps
         self.elementwise_affine = elementwise_affine
 
@@ -519,7 +523,8 @@ LayerNorm3d=LayerNorm
 
 class L2Norm(Layer):
     def __init__(self,in_sequence=False, axis=1,name=None, **kwargs):
-        super().__init__(in_sequence=in_sequence,name=name)
+        super().__init__(name=name)
+        self.in_sequence=in_sequence
         self.eps=epsilon()
         self.axis=axis
 
@@ -725,8 +730,11 @@ def get_normalization(fn_name):
         return None
     elif isinstance(fn_name,Layer) and 'Norm' in fn_name.__class__.__name__:
         return fn_name
+    elif inspect.isclass(fn_name) and fn_name.__class__.__name__==type:
+        return fn_name()
     elif inspect.isclass(fn_name):
         return fn_name
+
     elif isinstance(fn_name, str):
         if fn_name.lower().strip() in ['instance_norm','instance','in','i']:
             return InstanceNorm()
