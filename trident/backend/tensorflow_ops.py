@@ -19,6 +19,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
 from tensorflow.python.ops import math_ops
+from trident.backend import dtype as Dtype
 
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
 
@@ -590,15 +591,16 @@ def any_abnormal_number(x):
 
 
 ############################
-## compare operation
+## comparison  operation
 ###########################
 @numpy_compatible
-def less(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='less'):
+def less(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less'):
     """Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
         name(str):op name
 
     Returns:
@@ -615,13 +617,14 @@ def less(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='less'):
     return tf.cast(tf.less(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='equal'):
+def equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='equal'):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
         name(str):op name
     Returns:
         :Result is 1 if values are equal 0 otherwise
@@ -633,16 +636,17 @@ def equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='equal'):
         <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
-    return tf.cast(tf.equal(left, right,name=name), tf.float32,name='cast')
+    return tf.cast(tf.equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def greater(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='greater'):
+def greater(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater'):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
         name(str):op name
 
     Returns:
@@ -655,15 +659,16 @@ def greater(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='greater
         <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
-    return tf.cast(tf.greater(left, right,name=name), tf.float32,name='cast')
+    return tf.cast(tf.greater(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
-def greater_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='greater_equal'):
+def greater_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater_equal'):
     """Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
         name(str):op name
 
     Returns:
@@ -676,15 +681,16 @@ def greater_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='g
         <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
-    return tf.cast(tf.greater_equal(left, right,name=name), tf.float32,name='cast')
+    return tf.cast(tf.greater_equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def not_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='not_equal'):
+def not_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='not_equal'):
     """Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
         name(str):op name
 
     Returns:
@@ -697,15 +703,16 @@ def not_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='not_e
         <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
-    return tf.cast(tf.not_equal(left, right,name=name), tf.float32,name='cast')
+    return tf.cast(tf.not_equal(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
-def less_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='less_equal'):
+def less_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less_equal'):
     """Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
         name(str):op name
 
     Returns:
@@ -718,7 +725,7 @@ def less_equal(left: Tensor, right:(Tensor,np.ndarray,numbers.Number),name='less
         <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
 
     """
-    return tf.cast(tf.less_equal(left, right,name=name), tf.float32,name='cast')
+    return tf.cast(tf.less_equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
 def argmax(x: Tensor, axis=-1,name='argmax') -> Tensor:

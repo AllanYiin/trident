@@ -642,17 +642,18 @@ def any_abnormal_number(x):
 
 
 ############################
-## compare operation
+## comparison  operation
 ###########################
 
 @numpy_compatible
-def less(left: Tensor, right: (Tensor, np.ndarray, float, int)):
+def less(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
     Returns:
         Result is 1 if left < right else 0.
 
@@ -663,20 +664,18 @@ def less(left: Tensor, right: (Tensor, np.ndarray, float, int)):
        tensor([1., 0., 0.])
 
     """
-    if isinstance(right,numbers.Integral):
-        right=to_tensor(builtins.float(right))
-    if isinstance(right, np.ndarray):
-        right = to_tensor(right)
+    right = to_tensor(right)
     return cast(left.lt(right),left.dtype)
 
 
 @numpy_compatible
-def equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
+def equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
     Returns:
         :Result is 1 if values are equal 0 otherwise
 
@@ -699,12 +698,13 @@ def equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
 
 
 @numpy_compatible
-def greater(left: Tensor, right: (Tensor, np.ndarray, float, int)):
+def greater(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
     Returns:
         :Result is 1 if left > right else 0.
 
@@ -723,13 +723,14 @@ def greater(left: Tensor, right: (Tensor, np.ndarray, float, int)):
 
 
 @numpy_compatible
-def greater_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
+def greater_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
     Returns:
         :Result is 1 if left >= right else 0
 
@@ -748,13 +749,14 @@ def greater_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
 
 
 @numpy_compatible
-def not_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
+def not_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
     Returns:
         :Result is 1 if left != right else 0.
 
@@ -773,13 +775,14 @@ def not_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
 
 
 @numpy_compatible
-def less_equal(left: Tensor, right: (Tensor, np.ndarray, float, int)):
+def less_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
         left: left side tensor
         right: right side tensor
+        dtype (dtype): output tensor dtype.
 
     Returns:
         Result is 1 if left <= right else 0.
