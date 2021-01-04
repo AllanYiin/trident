@@ -58,7 +58,7 @@ def _set_device(device='cpu'):
         print(e)
 
 __all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
-           'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
+           'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
@@ -639,6 +639,59 @@ def any_abnormal_number(x):
 
     """
     return any_nan(x) |any_inf(x)
+
+
+
+############################
+## logical  operation
+###########################
+
+
+def logical_and(left, right):
+    """Element-wise `logical and: x && y`.
+    Args:
+        left (Tensor): input boolean tensor
+        right (Tensor): input boolean tensor
+
+    Returns:
+        A Tensor of type bool with the same size as that of left or right.
+
+    """
+    return torch.logical_and(left, right)
+
+
+def logical_not(x:Tensor):
+    """Element-wise `logical not: ~x`
+    Args:
+        x (Tensor): input boolean tensor
+    Returns:
+        A Tensor of type bool with the same size as that of x .
+    """
+    return torch.logical_not(x)
+
+
+def logical_or(left, right):
+    """Element-wise `logical or: x || y`.
+    Args:
+        left (Tensor): input boolean tensor
+        right (Tensor): input boolean tensor
+    Returns:
+        A Tensor of type bool with the same size as that of x .
+    """
+    return torch.logical_or(left, right)
+
+
+def logical_xor(left, right):
+    """Element-wise `logical xor: x ^ y`.
+    Args:
+        left (Tensor): input boolean tensor
+        right (Tensor): input boolean tensor
+
+    Returns:
+        A Tensor of type bool with the same size as that of x .
+    """
+    return torch.logical_xor(left, right)
+
 
 
 ############################
@@ -4184,6 +4237,10 @@ _FUN_NAMES = [
     ('any_nan', any_nan),
     ('any_inf', any_inf),
     ('any_abnormal_number', any_abnormal_number),
+    ('logical_and', logical_and),
+    ('logical_or', logical_or),
+    ('logical_xor', logical_xor),
+    ('logical_not', logical_not),
     ('less', less),
     ('greater', greater),
     ('greater_equal', greater_equal),

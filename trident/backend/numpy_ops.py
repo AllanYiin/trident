@@ -252,6 +252,61 @@ def any_abnormal_number(x):
     return any_nan(x) or any_inf(x)
 
 
+
+
+
+############################
+## logical  operation
+###########################
+
+
+def logical_and(left, right):
+    """Element-wise `logical and: x && y`.
+    Args:
+        left (Tensor): input boolean tensor
+        right (Tensor): input boolean tensor
+
+    Returns:
+        A Tensor of type bool with the same size as that of left or right.
+
+    """
+    return np.logical_and(left, right)
+
+
+def logical_not(x:np.ndarray):
+    """Element-wise `logical not: ~x`
+    Args:
+        x (Tensor): input boolean tensor
+    Returns:
+        A Tensor of type bool with the same size as that of x .
+    """
+    return np.logical_not(x)
+
+
+def logical_or(left, right):
+    """Element-wise `logical or: x || y`.
+    Args:
+        left (Tensor): input boolean tensor
+        right (Tensor): input boolean tensor
+    Returns:
+        A Tensor of type bool with the same size as that of x .
+    """
+    return np.logical_or(left, right)
+
+
+def logical_xor(left, right):
+    """Element-wise `logical xor: x ^ y`.
+    Args:
+        left (Tensor): input boolean tensor
+        right (Tensor): input boolean tensor
+
+    Returns:
+        A Tensor of type bool with the same size as that of x .
+    """
+    return np.logical_xor(left, right)
+
+
+
 ############################
 ## compare operation
 ###########################
