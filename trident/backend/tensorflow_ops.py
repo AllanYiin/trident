@@ -5,7 +5,7 @@ import builtins
 import numbers
 from enum import Enum
 from functools import wraps
-from typing import List, Optional,Tuple
+from typing import List, Optional, Tuple, Union
 from types import MethodType
 import random
 import numpy as np
@@ -23,7 +23,7 @@ from trident.backend import dtype as Dtype
 
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
 
-__all__ = ['Tensor','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -110,6 +110,9 @@ def numpy_compatible(func):
             return y
 
     return wrapper
+
+def is_gpu_available():
+    return tf.test.is_gpu_available()
 
 
 def _get_device():
@@ -646,7 +649,7 @@ def logical_xor(left, right, name='logical_xor'):
 ## comparison  operation
 ###########################
 @numpy_compatible
-def less(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less'):
+def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less'):
     """Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
@@ -669,7 +672,7 @@ def less(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=
     return tf.cast(tf.less(left, right,name=name), tf.float32,name='cast')
 
 @numpy_compatible
-def equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='equal'):
+def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='equal'):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
 
@@ -691,7 +694,7 @@ def equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype
     return tf.cast(tf.equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def greater(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater'):
+def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater'):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
 
@@ -714,7 +717,7 @@ def greater(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dty
     return tf.cast(tf.greater(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
-def greater_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater_equal'):
+def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater_equal'):
     """Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
@@ -736,7 +739,7 @@ def greater_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Numbe
     return tf.cast(tf.greater_equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def not_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='not_equal'):
+def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='not_equal'):
     """Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
@@ -758,7 +761,7 @@ def not_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],d
     return tf.cast(tf.not_equal(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
-def less_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less_equal'):
+def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less_equal'):
     """Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
@@ -1747,7 +1750,7 @@ def element_cosine_distance(v1: Tensor, v2:[Tensor,numbers.Number], axis=-1):
     return distance
 
 @numpy_compatible
-def where(flag, value_if_true, value_if_false, name='where'):
+def where(flag, value_if_true=None, value_if_false=None, name='where'):
     """
     return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
     If ``flag`` != 0 ``value_if_true`` is returned, otherwise ``value_if_false``.
@@ -1768,7 +1771,11 @@ def where(flag, value_if_true, value_if_false, name='where'):
     array([0.0000e+00, 9.0000e-01, 8.0000e-01, 0.0000e+00, 0.0000e+00],
           dtype=float32)>
     """
-    return tf.where(flag, value_if_true, value_if_false,name=name)
+
+    if value_if_true is None and value_if_false is None:
+        return tf.where(flag)
+    else:
+        return tf.where(flag, value_if_true, value_if_false)
 
 
 ############################

@@ -9,7 +9,7 @@ from distutils.version import Version, LooseVersion
 from collections import Sized, Iterable
 from enum import Enum
 from functools import wraps
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Union
 import gc
 import numpy as np
 import torch
@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from trident.backend.common import TensorShape
+
 from trident.backend import dtype as Dtype
 from trident.backend.common import *
 
@@ -26,6 +26,8 @@ pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
 
 
+def is_gpu_available():
+    return torch.cuda.is_available()
 
 def _get_device():
     """get current device
@@ -57,7 +59,7 @@ def _set_device(device='cpu'):
     except Exception as e:
         print(e)
 
-__all__ = ['Tensor','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -143,7 +145,6 @@ def numpy_compatible(func):
             return y
 
     return wrapper
-
 
 
 ############################
@@ -699,7 +700,7 @@ def logical_xor(left, right):
 ###########################
 
 @numpy_compatible
-def less(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
@@ -722,7 +723,7 @@ def less(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=
 
 
 @numpy_compatible
-def equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
@@ -751,7 +752,7 @@ def equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype
 
 
 @numpy_compatible
-def greater(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
@@ -776,7 +777,7 @@ def greater(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dty
 
 
 @numpy_compatible
-def greater_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
@@ -802,7 +803,7 @@ def greater_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Numbe
 
 
 @numpy_compatible
-def not_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
@@ -828,7 +829,7 @@ def not_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],d
 
 
 @numpy_compatible
-def less_equal(left: Tensor, right: Optional[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
     """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
@@ -884,7 +885,9 @@ def argsort(x: Tensor, axis=1, descending=True) -> Tensor:
 
 @numpy_compatible
 def topk(x: Tensor, k=1) -> Tensor:
-    return torch.topk(x, k=k,dim=1, largest=True,sorted=True)
+    axis=1 if len(x.size())>1 else 0
+    _,idx=torch.topk(x, k=k,dim=axis, largest=True,sorted=True)
+    return idx
 
 
 
@@ -1712,7 +1715,7 @@ def element_cosine_distance(v1, v2, axis=-1):
     return cos
 
 @numpy_compatible
-def where(flag, value_if_true, value_if_false):
+def where(flag, value_if_true=None, value_if_false=None):
     """
     return either ``value_if_true`` or ``value_if_false`` based on the value of ``flag``.
     If ``flag`` != 0 ``value_if_true`` is returned, otherwise ``value_if_false``.
@@ -1730,7 +1733,10 @@ def where(flag, value_if_true, value_if_false):
     >>> where(x>0.5, x, zeros_like(x))
     tensor([0.0000, 0.9000, 0.8000, 0.0000, 0.0000])
     """
-    return torch.where(flag, value_if_true, value_if_false)
+    if value_if_true is None and value_if_false is None:
+        return torch.where(flag)
+    else:
+        return torch.where(flag, value_if_true, value_if_false)
 
 
 ############################
