@@ -15,12 +15,14 @@ import re
 import shlex
 import struct
 import gc
+import numbers
 import subprocess
 import sys
 import threading
 import time
 import traceback
 import types
+import warnings
 from enum import Enum
 from inspect import signature
 from pydoc import locate
@@ -30,7 +32,7 @@ from typing import Union, Tuple, Any, overload,NewType,Text
 
 import numpy as np
 
-__all__ = ['get_session','set_session','get_session_value','get_backend','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
+__all__ = ['get_session','set_session','get_session_value','is_autocast_enabled','set_autocast_enabled','get_backend','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
            'check_keys','make_sure', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException','TensorShape', 'unpack_singleton', 'enforce_singleton',
@@ -224,6 +226,7 @@ def _initialize_session():
     _SESSION.plateform = get_plateform()
     _SESSION.numpy_print_format = '{0:.4e}'
     _SESSION.amp_available=False
+    _SESSION.is_autocast_enabled=False
     _config_path = os.path.expanduser(os.path.join(_SESSION.trident_dir, 'trident.json'))
     if os.path.exists(_config_path):
         _config = {}
@@ -316,6 +319,13 @@ def get_device():
     else:
 
         _SESSION.device
+
+def is_autocast_enabled():
+    return get_session_value('is_autocast_enabled')
+
+def set_autocast_enabled(enabled:bool):
+    set_session('is_autocast_enabled',enabled)
+
 
 def _is_c_contiguous(data):
     while isinstance(data, list):
@@ -473,18 +483,19 @@ class TensorShape(object):
         Raises:
           TypeError: If dims cannot be converted to a list of dimensions.
         """
-        if isinstance(dims, (tuple, list)):  # Most common case.
-            self._dims = [d for d in dims]
-        elif dims is None:
+
+        if dims is None:
             self._dims = None
         elif 'tensor' in dims.__class__.__name__.lower():
             if hasattr(dims,'cpu'):
                 dims.cpu()
             if hasattr(dims, 'detach'):
-                dims.detach()
+                dims.detach().numpy()
             if hasattr(dims, 'numpy'):
-                dims=dims.numpy()
+                dims=[d for d in dims]
             self._dims = [d for d in dims]
+        elif isinstance(dims, (tuple, list)):  # Most common case.
+            self._dims = [d if isinstance(d, numbers.Integral) else None if d is None else d.item() if hasattr(d,"item") else d.numpy() for d in dims]
         elif isinstance(dims,TensorShape):
             self._dims = dims.dims
         else:
@@ -679,10 +690,15 @@ class TensorShape(object):
               return False
         return True
 
+
     def get_dummy_tensor(self):
         shape=self._dims
-        shape[0]=2
+        if shape[0] is None:
+            shape[0]=2
+        else:
+            shape=(2,)+shape
         return np.random.standard_normal(shape)
+
 
 
 def as_shape(shape):
@@ -691,6 +707,10 @@ def as_shape(shape):
         return shape
     else:
         return TensorShape(shape)
+
+
+
+
 
 
 
