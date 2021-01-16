@@ -2,16 +2,12 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-from trident.misc.ipython_utils import is_in_ipython, is_in_colab
+import gc
+import time
 
-if is_in_ipython():
-    from IPython import display
-if not is_in_colab:
-    import matplotlib
-    matplotlib.use('TkAgg' if not is_in_ipython() and not is_in_colab() else 'NbAgg' )
-else:
-    import matplotlib
+import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import os
 import sys
 
@@ -37,7 +33,7 @@ def read_image(im_path:str):
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
            #fix opencv cannot open image if  there is double byte character...
-            img=plt.imread(im_path)
+            img=mpimg.imread(im_path).astype(np.float32).copy()
             if img.max()<=1:
                 img=img*255
             return img
@@ -54,7 +50,7 @@ def read_image(im_path:str):
 def read_mask(im_path:str):
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
-            img=plt.imread(im_path,2)
+            img=mpimg.imread(im_path,2)
             return img
         else:
             if not os.path.exists(im_path):
@@ -86,14 +82,23 @@ def image2array(img):
 
 
     """
+    arr=None
     if isinstance(img,str):
-        if os.path.exists(img) and img.split('.')[-1] in ('jpg','jpeg','png','bmp','tiff'):
-            img=plt.imread(img)[::-1]
+        if os.path.exists(img) and img.split('.')[-1] in 'jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'.split('|'):
+            arr=mpimg.imread(img).copy()[::-1]
+            if arr.max()<=1:
+                arr*=255.0
+            # Clear the current axes.
+            plt.cla()
+            # Clear the current figure.
+            plt.clf()
+            #Closes all the figure windows.
+            plt.close('all')
+            return arr
         else:
             return None
-    arr=None
-    if isinstance(img, np.ndarray):
-        arr=img
+
+    if isinstance(arr, np.ndarray):
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:
@@ -154,7 +159,7 @@ def mask2array(img):
     arr = None
     if isinstance(img, str):
         if os.path.exists(img) and img.split('.')[-1] in ('jpg', 'jepg', 'png', 'bmp', 'tiff'):
-            arr = plt.imread(img,2)
+            arr = mpimg.imread(img,2)
         else:
             return None
     arr=np.squeeze(arr)
