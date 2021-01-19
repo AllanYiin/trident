@@ -5,10 +5,13 @@ from __future__ import print_function
 
 import pickle
 import io
+import re
+import struct
+from xml.etree import ElementTree
 import numpy as np
 import copy
-
-from trident.data.image_common import list_pictures
+import cv2
+from trident.data.image_common import list_images, image2array, array2image
 from trident.data.data_provider import *
 from trident.data.dataset import *
 from trident.data.mask_common import *
@@ -394,7 +397,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
             dataset.binding_class_names(class_names)
 
         else:
-            imgs = glob.glob(base_folder + '/*.*g')
+            imgs = list_images(base_folder)
             imagedata = ImageDataset(imgs, object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
             traindata = Iterator(data=imagedata)
             dataset = DataProvider(dataset_name, traindata=traindata)
@@ -484,6 +487,7 @@ def load_lfw(format='aligned_face', is_paired=False):
 
     tar_file_path = os.path.join(dirname, 'lfw.tgz')
     if format=='aligned_face':
+        tar_file_path = os.path.join(dirname, 'lfw-crop.tar')
         download_file_from_google_drive('1sVbU8NHC7kzDkqByTtPiib9_EY23eeW7', dirname, 'lfw-crop.tar')
     elif format=='raw':
         download_file('http://vis-www.cs.umass.edu/lfw/lfw.tgz', dirname, 'lfw.tgz')
@@ -493,9 +497,9 @@ def load_lfw(format='aligned_face', is_paired=False):
 
     # if only_face_area:
     #     if only_aligned_face:
-    tar_file_path = os.path.join(dirname, 'lfw.tgz')
+
     extract_archive(tar_file_path, dirname, archive_format='tar')
-    extract_path = os.path.join(dirname,'lfw-crop' if format=='aligned_face' else 'lfw')
+
     # if _backend=='tensorflow':
     #     import trident.models.tensorflow_mtcnn as mtcnn
     # else:
@@ -552,7 +556,7 @@ def load_lfw(format='aligned_face', is_paired=False):
     #         sys.stdout.flush()
     #
     #
-    data_provider = load_folder_images(dataset_name, os.path.join(dirname, 'lfw-crop'))
+    data_provider = load_folder_images(dataset_name,os.path.join(dirname,'lfw-crop' if format=='aligned_face' else 'lfw-deepfunneled'))
 
     if is_paired:
         storage=OrderedDict()
@@ -683,13 +687,13 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'horse2zebra.tar')
         extract_path = os.path.join(dirname, 'horse2zebra')
         extract_archive(tar_file_path, dirname, archive_format='tar')
-        trainA = ImageDataset(list_pictures(os.path.join(dirname, 'trainA')), object_type=ObjectType.rgb,
+        trainA = ImageDataset(list_images(os.path.join(dirname, 'trainA')), object_type=ObjectType.rgb,
                               get_image_mode=GetImageMode.processed)
-        trainB = ImageDataset(list_pictures(os.path.join(dirname, 'trainB')), object_type=ObjectType.rgb,
+        trainB = ImageDataset(list_images(os.path.join(dirname, 'trainB')), object_type=ObjectType.rgb,
                               get_image_mode=GetImageMode.processed)
-        testA = ImageDataset(list_pictures(os.path.join(dirname, 'testA')), object_type=ObjectType.rgb,
+        testA = ImageDataset(list_images(os.path.join(dirname, 'testA')), object_type=ObjectType.rgb,
                              get_image_mode=GetImageMode.processed)
-        testB = ImageDataset(list_pictures(os.path.join(dirname, 'testB')), object_type=ObjectType.rgb,
+        testB = ImageDataset(list_images(os.path.join(dirname, 'testB')), object_type=ObjectType.rgb,
                              get_image_mode=GetImageMode.processed)
         train_iter = Iterator(data=trainA, unpair=trainB)
         test_iter = Iterator(data=testA, unpair=testB)
@@ -781,37 +785,84 @@ def load_examples_data(dataset_name):
         return data_provider
 
     elif dataset_name == 'examples_facelandmarks':
-        download_file_from_google_drive('1aJhxN9IqsxuayhRTm-gmxk6PiLe5wm9X', dirname, 'beauty.tar')
-        tar_file_path = os.path.join(dirname, 'beauty.tar')
+        download_file_from_google_drive('1GtswQBAHPa_bXaB4tW2uOOQ8Lxfz2L5B', dirname, 'ibug_300W.tar')
+        tar_file_path = os.path.join(dirname, 'ibug_300W.tar')
         extract_archive(tar_file_path, dirname, archive_format='tar')
-        # 讀取圖片數據
-        images_dict = {}
-        with open(os.path.join(dirname, 'images_dict.pkl'), 'rb') as fp:
-            images_dict = pickle.load(fp)
+        root_dir=os.path.join(dirname, 'ibug_300W_large_face_landmark_dataset')
+        image_paths = {}
+        landmarks = {}
+        crops = {}
 
-        f = open(os.path.join(dirname, 'All_Ratings.txt'), encoding='utf-8-sig').readlines()
-        imgs = []
-        landmarks = []
-        ratings = []
-        for row in f:
-            data = row.strip().split('\t')
-            if 'images\\' + data[0] in images_dict:
-                img = images_dict['images\\' + data[0]][0]
-                img = img.transpose([2, 0, 1])[::-1].transpose([1, 2, 0])
-                imgs.append(img)
-                landmark = images_dict['images\\' + data[0]][1].astype(np.float32)
-                landmarks.append(landmark)
-                rating = np.zeros(2)
-                if 'm' in data[0]:
-                    rating[0] = 1
-                if 'w' in data[0]:
-                    rating[1] = 1
-                ratings.append(rating)
-        print('{0} faces loaded...'.format(len(imgs)))
-        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb, symbol='faces')
-        landmarkdata = LandmarkDataset(landmarks=landmarks, object_type=ObjectType.landmarks, symbol='target_landmarks')
-        labeldata = LabelDataset(data=ratings, object_type=ObjectType.classification_label, symbol='target_label')
-        data_provider = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=Dataset.zip(landmarkdata, labeldata)))
+        for mode in ['train','test']:
+            make_dir_if_need(os.path.join(dirname, 'crops',mode))
+            tree = ElementTree.parse(os.path.join(root_dir, 'labels_ibug_300W_{0}.xml'.format(mode)))
+            root = tree.getroot()
+            image_paths[mode]=[]
+            landmarks[mode] = []
+            crops[mode] = []
+            n=0
+            offset=5
+            for j in tqdm(range(len(root[2]))):
+                try:
+                    filename=root[2][j]
+                    landmark = []
+                    for num in range(68):
+                        x_coordinate = int(filename[0][num].attrib['x'])
+                        y_coordinate = int(filename[0][num].attrib['y'])
+                        landmark.append([x_coordinate, y_coordinate])
+                    landmark=np.asarray(landmark)
+
+                    crop = filename[0].attrib
+                    for k in crop.keys():
+                        crop[k] = int(crop[k]) if isinstance(crop[k], str) else crop[k]
+                    for k in crop.keys():
+                        if k=='top' and int(landmark[:,1].min())<int(crop[k]):
+                            crop[k] = int( landmark[:,1].min())
+                            crop[ 'height']+=crop[k]-int(landmark[:,1].min())
+                        elif k=='left' and int(landmark[:,0].min())<int(crop[k]):
+                            crop[k] = int( landmark[:,0].min())
+                            crop['width']+= crop[k] - int(landmark[:, 0].min())
+                        elif k == 'width' and int(landmark[:, 0].max()-landmark[:, 0].min()) > int(crop[k]):
+                            crop[k] = int(landmark[:, 0].max()-landmark[:, 0].min())
+                        elif k == 'height' and int(landmark[:, 1].max()-landmark[:, 1].min()) > int(crop[k]):
+                            crop[k] = int(landmark[:, 1].max()-landmark[:, 1].min())
+
+                    crop['left']-=offset
+                    crop['top'] -= offset
+                    crop['width'] += 2*offset
+                    crop['height'] += 2*offset
+
+
+                    landmark[:,0]-=crop['left']
+                    landmark[:, 1] -= crop['top']
+
+
+                    im=image2array(os.path.join(root_dir, filename.attrib['file']))
+                    if im.ndim==2:
+                        im=cv2.cvtColor(im,cv2.COLOR_GRAY2RGB)
+                    im=im[crop['top']:min(crop['top']+crop['height'],im.shape[0]),crop['left']:min(crop['left']+crop['width'],im.shape[1]),:]
+                    if max(im.shape[:2])/max(min(im.shape[:2]),0)<=5:
+                        if not os.path.exists(os.path.join(dirname, 'crops',mode,'{0}.png'.format(n))) :
+                            array2image(im).save(os.path.join(dirname, 'crops',mode,'{0}.png'.format(n)))
+                        image_paths[mode].append(os.path.join(dirname, 'crops',mode,'{0}.png'.format(n)))
+                        crops[mode].append(crop)
+                        landmarks[mode].append(landmark)
+                    del im
+                    n+=1
+                    if n%100==0:
+                        gc.collect()
+                except Exception as e:
+                   pass
+
+
+
+        print('ibug 300w train dataset: images: {0} landmarks:{1} \n'.format(len(image_paths['train']),len(landmarks['train'])))
+        print('ibug 300w test dataset: images: {0} landmarks:{1} \n'.format(len(image_paths['test']), len(landmarks['test'])))
+        imdata=ImageDataset(images=image_paths['train'],symbol='faces')
+        landmarkdata = LandmarkDataset(landmarks=landmarks['train'], symbol='landmarks')
+        imtestdata = ImageDataset(images=image_paths['test'], symbol='faces')
+        landmarktestdata = LandmarkDataset(landmarks=landmarks['test'], symbol='landmarks')
+        data_provider=DataProvider(traindata=Iterator(data=imdata,label=landmarkdata),testdata=Iterator(data=imtestdata,label=landmarktestdata))
         return data_provider
 
     elif dataset_name == 'examples_antisproofing':
