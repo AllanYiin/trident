@@ -6,6 +6,8 @@ import os
 import threading
 
 from trident.data.image_common import *
+from trident.data.transform import *
+from trident.data.vision_transforms import *
 from trident.data.utils import *
 from trident.data.samplers import *
 from trident.data.dataset import *
