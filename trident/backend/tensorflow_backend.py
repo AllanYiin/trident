@@ -572,7 +572,6 @@ class Layer(tf.Module):
                 mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
 
-
         # elif inspect.isfunction(module) or callable(module):
         #     module.__name__ = name
         #     self._modules[name] = module
@@ -867,7 +866,7 @@ class Layer(tf.Module):
                 # track autograd history of `param_applied`, so we have to use
                 # `with torch.no_grad():`
                 param_applied = fn(param)
-                if isinstance(param, tf.Variable) :
+                if isinstance(param, tf.Variable):
                     self._parameters[key] = Parameter(param_applied, trainable=param.trainable)
                 else:
                     param = param_applied
@@ -1338,16 +1337,18 @@ class Layer(tf.Module):
     @tf.Module.with_name_scope
     def __call__(self, *input, **kwargs):
         # Maintains info about the `Layer.call` stack.
-        is_all_numpy = True
+        is_all_numpy = False
         is_built=self._built
-        is_all_numpy=True
+
         if self.is_root:
-            if isinstance(input,np.ndarray):
-                to_tensor(input)
+            if isinstance(input,(tuple)):
+                is_all_numpy = all([isinstance(inp, np.ndarray) for inp in input])
+                input=tuple([to_tensor(inp, device=get_device()) for inp in input])
             else:
-                is_all_numpy = False
-
-
+                if isinstance(input, np.ndarray):
+                    is_all_numpy = True
+                input = to_tensor(input, device=get_device())
+                input = (input,)
         for hook in itertools.chain( _global_forward_pre_hooks.values(),self._forward_pre_hooks.values()):
             result = hook(self, input)
             if result is not None:
@@ -2425,7 +2426,7 @@ def calculate_flops(gen: Layer):
     return np.array(param_nums).sum()
 
 
-def summary(model, input_size, batch_size=-1):
+def summary(model, input_size, batch_size=None):
     def register_hook(module):
         def hook(module, input, output):
 
@@ -2738,11 +2739,22 @@ def fix_layer(layer: Layer):
         layer._uid_prefixs = {}
     reset_name(layer, layer._uid_prefixs)
 
-    if layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
-        layer._input_shape =TensorShape(layer._input_shape)
+    if layer._input_shape is not None and isinstance(layer._input_shape, tuple):
+        layer._input_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._input_shape)])
+    elif layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
+        layer._input_shape = TensorShape(to_numpy(layer._input_shape))
+    elif layer._input_shape is not None and isinstance(layer._input_shape, TensorShape) and is_tensor(layer._input_shape.dims[0]):
+        layer._input_shape = TensorShape([d.item() for d in layer._input_shape.dims])
 
-    if layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
-        layer._output_shape =TensorShape(layer._output_shape)
+    if layer._output_shape is not None and isinstance(layer._output_shape, tuple):
+        layer._output_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._output_shape)])
+    elif layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
+        layer._output_shape = TensorShape(layer._output_shape)
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], torch.Size) and len(
+            layer._output_shape.dims[0]) == 1:
+        layer._output_shape = TensorShape([d[0] for d in layer._output_shape.dims])
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], torch.Size):
+        layer._output_shape = tuple([TensorShape(to_numpy(d)) for d in layer._output_shape.dims])
 
     if not (hasattr(layer, 'get_toot')):
         setattr(layer, 'get_root', MethodType(get_root, layer))
@@ -2788,9 +2800,9 @@ def fix_layer(layer: Layer):
                 module.input_spec = TensorSpec(shape=TensorShape(module._input_shape))
             # fix for shape definition
         if not isinstance(module._input_shape, TensorShape):
-            module._input_shape = TensorShape(module._input_shape)
+            module._input_shape = TensorShape(to_numpy(module._input_shape))
         if not isinstance(module._output_shape, TensorShape):
-            module._output_shape = TensorShape(module._output_shape)
+            module._output_shape = TensorShape(to_numpy(module._output_shape))
 
 
         if not hasattr(module, 'batch_index'):
@@ -2819,7 +2831,7 @@ def fix_layer(layer: Layer):
             if not hasattr(module, 'use_spectral'):
                 module.use_spectral = False
 
-    if layer.is_root == True and not hasattr(layer, 'signature'):
+    if layer.is_root == True and (hasattr(layer, 'signature') or  layer._signature  is None or (is_tensor( layer._signature.inputs[0].shape))):
         layer._signature = Signature()
         if layer._input_shape is not None:
             if is_tensor(layer._input_shape):
