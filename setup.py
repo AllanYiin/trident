@@ -1,5 +1,7 @@
 from setuptools import setup, find_packages, Extension
 
+
+
 from pkg_resources import get_distribution, DistributionNotFound
 import subprocess
 import distutils.command.clean
@@ -20,7 +22,7 @@ PACKAGES = find_packages(exclude=EXCLUDE_FROM_PACKAGES)
 
 
 setup(name=NAME,
-      version='0.7.0',
+      version='0.7.1',
       description='Make pytorch and tensorflow two become one.',
       # long_description=long_description,
       # long_description_content_type="text/markdown",
@@ -30,19 +32,22 @@ setup(name=NAME,
       author_email= 'allanyiin.ai@gamil.com',
       download_url= 'https://test.pypi.org/project/tridentx',
       license='MIT',
-      install_requires=['numpy>=1.19.3',
+      install_requires=['numpy>=1.18',
                         'scikit-image >= 0.15',
                         'pillow >= 4.1.1',
                         'scipy>=1.2',
                         'six>=1.13.0',
-                        'matplotlib',
+                        'matplotlib>=3.0.2',
+                        'tensorboard>=1.15',
+                        'opencv-python',
                         'setuptools',
                         'tqdm',
                         'pyyaml',
                         'h5py',
+                        'dill',
                         'requests'],
       extras_require={
-          'visualize': ['pydot>=1.2.4','tensorboard>=1.15'],
+          'visualize': ['pydot>=1.2.4',],
           'tests': ['pytest',
                     'pytest-pep8',
                     'pytest-xdist',

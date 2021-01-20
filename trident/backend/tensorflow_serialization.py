@@ -9,10 +9,12 @@ import tempfile
 import warnings
 import copyreg
 from contextlib import closing, contextmanager
+
 try:
    import _pickle as pickle
 except:
    import pickle
+import dill
 import pathlib
 import inspect
 import tensorflow as tf
@@ -364,7 +366,7 @@ def _check_dill_version(pickle_module):
                              ))
 
 
-def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, is_compressed=False):
+def save(obj, f, pickle_module=dill, pickle_protocol=DEFAULT_PROTOCOL, is_compressed=False):
     """Saves an object to a disk file.
 
     See also: :ref:`recommend-saving-models`
