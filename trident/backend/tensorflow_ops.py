@@ -1,4 +1,5 @@
 """trident tensorflow basic operation."""
+import collections
 from copy import deepcopy
 import math
 import builtins
@@ -272,25 +273,32 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         dtype=float32)>
 
     """
-    if device is None:
-        device=_get_device()
-
-    if isinstance(dtype, str):
-        dtype = str2dtype(dtype)
-    elif isinstance(x, np.ndarray) and (x.dtype==np.int64 or x.dtype==np.int32):
-        dtype = tf.int64
-    elif isinstance(x, (tuple, list)) and all([isinstance(item, numbers.Integral)  for item in x]):
-        dtype = str2dtype('int')
-        x=to_numpy(x)
-    elif isinstance(x, (tuple, list)) and all([isinstance(item, numbers.Number)  for item in x]):
-        x=to_numpy(x)
+    input_dtype = dtype
+    if dtype is None and isinstance(x, numbers.Integral):
+        dtype = Dtype.int64
+    elif dtype is None and isinstance(x, collections.Iterable) and all([isinstance(item, numbers.Integral) for item in x]):
+        dtype = Dtype.int64
     elif dtype is None:
-        if is_tensor(x):
-            dtype = x.dtype
+        dtype = Dtype.float32
+    elif isinstance(dtype, str):
+        dtype = str2dtype(dtype)
+    if device is None:
+        device = _get_device()
+
+    if isinstance(x, Tensor):
+        if x is not None :
+            if input_dtype is None:
+                dtype = x.dtype
+            else:
+                x = x.type(dtype)
+            with tf.device(device):
+                return tf.identity(x)
         else:
-            dtype = tf.float32
-    with tf.device(device):
-        return tf.convert_to_tensor(x, dtype=dtype,)
+            return None
+
+    else:
+        with tf.device(device):
+            return tf.convert_to_tensor(x, dtype=dtype)
 
 
 
