@@ -2,6 +2,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import sys
+
+from trident.backend.opencv_backend import array2image
+
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 import math
 
@@ -43,7 +46,7 @@ from PIL import ImageFont
 import colorsys
 import itertools
 import numpy as np
-from trident.backend.common import get_time_suffix, make_dir_if_need
+from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton
 from trident.data.image_common import *
 
 __all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram', 'generate_palette', 'plot_bbox', 'plot_3d_histogram', 'plot_centerloss']
@@ -81,9 +84,15 @@ def plot_bbox(x, img, color=None, label=None, line_thickness=None,**kwargs):
 
 def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
     make_dir_if_need(save_path)
-    row = len(imgs)
+    distinct_row=set([ len(ims) for ims in imgs])
+    if len(distinct_row)>1:
+        raise ValueError('imgs should have same length, but got {0}'.format(distinct_row))
+    else:
+        distinct_row=unpack_singleton(distinct_row)
+    if 1<=row<distinct_row:
+        distinct_row=row
     suffix = get_time_suffix()
-    if len(imgs) == 1 and row == 1:
+    if len(imgs) == 1 and distinct_row == 1:
         img = array2image(imgs[0][0])
         filename = save_path.format(suffix)
         img.save(filename)
@@ -105,8 +114,8 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
         plt.clf()
         plt.ion()  # is not None:
 
-        for m in range(row * len(imgs)):
-            plt.subplot(row, len(imgs), m + 1)
+        for m in range(distinct_row * len(imgs)):
+            plt.subplot(distinct_row, len(imgs), m + 1)
             img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
             plt.imshow(img, interpolation="nearest", animated=True)
             plt.axis("off")
@@ -156,6 +165,7 @@ def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max
     plt.subplot(2, 2, 2)
     if  metrics.__class__.__name__=='HistoryBase':
         for k, v in metrics.items():
+
             steps, values = metrics.get_series(k)
             plt.plot(steps, values)
         plt.legend(list(metrics.keys()), loc='upper left')
