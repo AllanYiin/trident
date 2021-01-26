@@ -546,7 +546,7 @@ class BboxDataset(Dataset):
                  symbol="bbox", name=None, **kwargs):
         super().__init__(symbol=symbol, object_type=object_type, name=name, **kwargs)
         self.__add__(kwargs.get('data', boxes))
-        self._element_spec = TensorSpec(shape=TensorShape(self.list), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=TensorShape([None,5]), name=self.symbol, object_type=self.object_type, is_spatial=True)
         self.is_pair_process = False
         self.is_spatial = True
         self.dtype = np.int64
@@ -604,14 +604,14 @@ class LandmarkDataset(Dataset):
         self.__add__(landmarks)
         self.dtype = np.float32
         self.image_size = image_size
-        self._element_spec = TensorSpec(shape=TensorShape(self.list), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=tensor_to_shape(np.array(self.list)), name=self.symbol, object_type=self.object_type, is_spatial=True)
         self.is_pair_process = False
         self.is_spatial = True
         self.transform_funcs = []
 
     def __getitem__(self, index: int):
         self._current_idx = index
-        landmarks = self.list[index].astype(np.float32)
+        landmarks = np.asarray(self.list[index]).astype(np.float32)
         if (landmarks > 1).any() and (self.image_size is None):
             return np.array(landmarks).astype(np.float32)
         elif (landmarks > 1).any():
