@@ -18,6 +18,7 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+from trident.backend.opencv_backend import array2image, image2array
 
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
 from trident.optims.trainers import TrainingPlan
@@ -404,7 +405,7 @@ class Model(ModelBase):
                     argnames = get_signature(self._losses[alias].forward, alias)
                 else:
                     argnames = get_signature(self._losses[alias].__call__, alias)
-        elif inspect.isclass(loss) and inspect._is_type(loss):  # The loss is a class but not initialized yet.
+        elif inspect.isclass(loss) and  loss.__class__.__name__=="type":  # The loss is a class but not initialized yet.
             alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -484,7 +485,7 @@ class Model(ModelBase):
             else:
                 self._metrics[alias] = partial(metric_fn, **kwargs)
             argnames = get_signature(metric_fn, alias)
-        elif inspect.isclass(metric) and inspect._is_type(metric):
+        elif inspect.isclass(metric) and metric.__class__.__name__=="type":
             alias = metric.__class__.__name__ if len(alias) == 0 else alias
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
@@ -676,7 +677,7 @@ class Model(ModelBase):
             for k in self.training_context['losses'].key_list:
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
-            print(temp)
+            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp])+' }')
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -1057,7 +1058,7 @@ class Model(ModelBase):
     def summary(self):
         # self.rebinding_input_output(self._model.input_shape)
 
-        summary(self._model, [TensorShape(item.shape) for item in self.inputs.value_list])
+        summary(self._model, [item.shape if isinstance(item.shape,TensorShape) else TensorShape(to_numpy(item.shape)) for item in self.inputs.value_list])
         return self
 
     def predict(self, input):

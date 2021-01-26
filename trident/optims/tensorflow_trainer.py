@@ -19,6 +19,7 @@ from tensorflow.python.eager import context, tape, function
 from tensorflow.python.eager import forwardprop
 from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.ops.losses import util as tf_losses_utils
+from trident.backend.opencv_backend import array2image, image2array
 
 from trident import __version__
 from trident.backend.common import *
@@ -356,7 +357,7 @@ class Model(ModelBase):
                     argnames = get_signature(self._losses[alias].forward, alias)
                 else:
                     argnames = get_signature(self._losses[alias].__call__, alias)
-        elif inspect.isclass(loss) and inspect._is_type(loss):
+        elif inspect.isclass(loss) and  loss.__class__.__name__=="type":
             alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -435,7 +436,7 @@ class Model(ModelBase):
             else:
                 self._metrics[alias] = partial(metric_fn, **kwargs)
             argnames = get_signature(metric_fn, alias)
-        elif inspect.isclass(metric) and inspect._is_type(metric):
+        elif inspect.isclass(metric) and metric.__class__.__name__=="type":
             alias = metric.__class__.__name__ if len(alias) == 0 else alias
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
@@ -627,7 +628,7 @@ class Model(ModelBase):
         elif self.warmup > 0 and self.training_context['current_epoch'] == self.warmup:
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = self.base_lr
-        gc.collect()
+
 
     def do_on_epoch_end(self):
         self.training_context['time_epoch_end'] = time.time()
@@ -658,7 +659,7 @@ class Model(ModelBase):
             for k in self.training_context['losses'].key_list:
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
-            print(temp)
+            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp])+' }')
 
     def do_on_data_received(self, train_data, test_data):
         if train_data is None and test_data is None:

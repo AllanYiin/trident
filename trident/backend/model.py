@@ -17,8 +17,10 @@ import json
 from typing import List, Callable
 
 import numpy as np
-from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session,get_backend, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need,Signature
+from trident.backend.opencv_backend import array2image
+
+from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, get_backend, \
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need, Signature, adaptive_format
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
 from trident.callbacks import LambdaCallback, UnfreezeModelCallback
@@ -653,12 +655,8 @@ class ModelBase(object):
                     tmp_steps,tmp_values=self.training_context['tmp_metrics'].get_series(k)
                     metric_value = np.array(tmp_values).mean()
                     self.training_context['tmp_metrics'][k]=[]
-                format_string='.3%'
-                if metric_value > 3:
-                    format_string = '.3f'
-                elif metric_value< 1e-3:
-                    format_string = '.3e'
-                metric_strings.append('{0}: {1:<8{2}}'.format(k, metric_value, format_string))
+
+                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value)))
 
         loss_steps,loss_values=self.batch_loss_history.get_series('total_losses')
         loss_value=float(np.array(loss_values[-1*print_batch_progress_frequency:]).mean())
@@ -667,7 +665,7 @@ class ModelBase(object):
         step_time = progress_end - progress_start
         self.training_context['time_batch_progress'] = progress_end
         progress_bar(step_time,self.training_context['current_batch'], self.training_context['total_batch'],
-                 'Loss: {0:<8.5f}| {1} | learning rate: {2:<10.3e}| epoch: {3}'.format(loss_value, ','.join(metric_strings), self.training_context['current_lr'],
+                 'Loss: {0}| {1} | learning rate: {2:<10.3e}| epoch: {3}'.format(adaptive_format(loss_value), ','.join(metric_strings), self.training_context['current_lr'],
                      self.training_context['current_epoch']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
     def print_epoch_progress(self, print_epoch_progress_frequency):
@@ -712,6 +710,7 @@ class ModelBase(object):
             self.training_context['current_lr'] = self.optimizer.lr
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
+            self.training_context['is_out_sample_evaluation']=is_out_sample_evaluation
 
 
 
@@ -901,9 +900,9 @@ class ModelBase(object):
 
                 for k, v in self._metrics.items():
                     collect_history =getattr(v,'collect_history') if  hasattr(v,'collect_history') else True
-                    if not collect_history == False:
+                    if collect_history == True:
                         self.training_context['metrics'].regist(k)
-                        self.training_context['tmp_metrics'].regist(k)
+                    self.training_context['tmp_metrics'].regist(k)
 
                     this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
                     self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
@@ -955,12 +954,7 @@ class ModelBase(object):
                         metric_value= test_values[-1]
                         history_metric_value=np.array(test_values).mean()
 
-                        format_string = '.3%'
-                        if history_metric_value > 3:
-                            format_string = '.3f'
-                        elif history_metric_value < 1e-3:
-                            format_string = '.3e'
-                        verbose.append('{0}: {1:<8{2}}'.format(k, metric_value, format_string))
+                        verbose.append('{0}: {1}'.format(k, adaptive_format(metric_value)))
                     print(self.training_context['model_name'] + ': out-of-sample evaluation: ',','.join(verbose))
             self.training_context['steps'] += 1
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
@@ -1049,6 +1043,7 @@ class ModelBase(object):
             set_device('cuda')
         elif self._model is not None and isinstance(self._model, Tensor):
             self._model.cuda()
+
     def gpu(self):
         self.cuda()
 
