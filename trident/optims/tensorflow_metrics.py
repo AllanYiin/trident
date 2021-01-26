@@ -14,10 +14,29 @@ from trident.backend.tensorflow_ops import *
 __all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 
+def flatten_check(output, target):
+    "Check that `out` and `targ` have the same number of elements and flatten them."
+    if ndim(output) > 2 and ndim(output) == ndim(target) + 1:
+        shp = int_shape(output)
+        output = output.reshape((shp[0], -1, shp[-1]))
+        target = cast(target.reshape((shp[0], -1)), 'int64')
+        return output, target
+    elif ndim(output) > 2 and ndim(output) == ndim(target):
+        shp = int_shape(output)
+        output = output.reshape((shp[0], -1, shp[-1]))
+        if ndim(target) > 2:
+            target = target.reshape((shp[0], -1, shp[-1]))
+        return output, target
+    elif ndim(output) == 2 and ndim(output) == ndim(target):
+        return output, target
+    else:
+        raise ValueError('output and target have diffent elements.')
+
 def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
+
     input_tensor = output.copy().detach()
     target_tensor = target.copy().detach()
 
@@ -59,13 +78,15 @@ def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
 
 
 def pixel_accuracy(output, target):
+    output, target=flatten_check(output, target)
     input_tensor = output.copy().detach()
     target_tensor = target.copy().detach()
     if input_tensor.dtype!=tf.int64 :
         input_tensor=argmax(input_tensor,axis=-1).squeeze()
-    return equal(input_tensor,target_tensor).mean()
+    return equal(cast(input_tensor,'float32'),cast(target_tensor,'float32')).mean()
 
 def alpha_pixel_accuracy(output, alpha):
+    output, target = flatten_check(output, target)
     output_tensor = to_numpy(output)
     alpha_tensor =  to_numpy(alpha)
 
@@ -86,6 +107,7 @@ def alpha_pixel_accuracy(output, alpha):
 
 
 def iou(output, target):
+    output, target = flatten_check(output, target)
     input_tensor = output.copy().detach()
     target_tensor = target.copy().detach()
     if input_tensor.dtype != tf.int64:
