@@ -22,7 +22,10 @@ from copy import copy
 from functools import update_wrapper, partial
 from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Mapping, TypeVar
 import typing
-import dill
+try:
+   import _pickle as pickle
+except:
+   import pickle
 from itertools import islice
 from distutils.version import Version, LooseVersion
 import torch.nn as nn
@@ -137,7 +140,7 @@ def save(obj, f, is_compressed=False):
     Returns:
 
     """
-    torch.save(obj, f,  pickle_module=dill, _use_new_zipfile_serialization=is_compressed)
+    torch.save(obj, f,  pickle_module=pickle, _use_new_zipfile_serialization=is_compressed)
     return True
 
 
@@ -641,10 +644,13 @@ class Layer(nn.Module):
     def device(self, value:str):
         if isinstance(value,str):
             self._device = value
+            self.to(value)
         elif isinstance(value, torch.device):
             self._device = value.type
+            self.to(value)
         else:
             print(value)
+            self.to(value)
 
     def cuda(self, device=None):
         self.get_root().device ='cuda'
@@ -735,8 +741,8 @@ class Layer(nn.Module):
             if not dtype.is_floating_point:
                 raise TypeError('nn.Module.to only accepts floating point '
                                 'dtypes, but got desired dtype={}'.format(dtype))
-        # if device is not None:
-        #     self.get_root().device=device.type
+        if device is not None and self.get_root()._device!=device.type:
+             self.get_root()._device=device.type
 
         def convert(t):
             if convert_to_format is not None and t.dim() == 4:
@@ -1877,11 +1883,12 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
         try:
             arg_map = OrderedDict()
             if isinstance(fn, Layer):
+                _device=fn.get_root().device
                 for arg in fn.signature.inputs.key_list:
                     if arg in data_feed:
-                        arg_map[arg] = to_tensor(data[data_feed[arg]]).to(get_device())
+                        arg_map[arg] = to_tensor(data[data_feed[arg]]).to(_device)
                     elif arg in data:
-                        arg_map[arg] = to_tensor(data[arg]).to(get_device())
+                        arg_map[arg] = to_tensor(data[arg]).to(_device)
                     else:
                         raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
                 # print('arg_map',arg_map.key_list)

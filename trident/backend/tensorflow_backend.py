@@ -834,8 +834,9 @@ class Layer(tf.Module):
         Returns:
             Module: self
         """
+
         if tf.test.is_gpu_available:
-            self._device = '/gpu:0'
+            self.get_root()._device = '/gpu:0'
             with tf.device(self._device):
                 return self._apply(lambda t: tf.identity(t))
 
@@ -849,6 +850,7 @@ class Layer(tf.Module):
             Module: self
         """
         with tf.device('/cpu:0'):
+            self.get_root()._device = '/cpu:0'
             return self._apply(lambda t: tf.identity(t))
 
 
@@ -953,10 +955,6 @@ class Layer(tf.Module):
     def gpu(self, device=None):
         return self.cuda(device)
 
-
-
-
-
     @property
     def device(self):
         return self._device
@@ -965,8 +963,10 @@ class Layer(tf.Module):
     def device(self, value):
         if isinstance(value, str):
             self._device = value
+            self.to(value)
         elif isinstance(value, tf.device):
             self._device = value.__str__()
+            self.to( self._device)
         else:
             print(value)
 
@@ -2530,7 +2530,8 @@ def summary(model, input_size, batch_size=None):
         total_params += summary[layer]["nb_params"]
         flops += float(summary[layer]["flops"][0])
         macc += float(summary[layer]["macc"][0])
-        total_output += np.prod(to_numpy(summary[layer]["output_shape"]))
+
+        total_output += np.prod(to_numpy(list(summary[layer]["output_shape"])[1:]))
         if "trainable" in summary[layer]:
             if summary[layer]["trainable"] == True:
                 trainable_params += summary[layer]["nb_params"]
@@ -2741,20 +2742,22 @@ def fix_layer(layer: Layer):
 
     if layer._input_shape is not None and isinstance(layer._input_shape, tuple):
         layer._input_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._input_shape)])
+    elif layer._input_shape is not None and isinstance(layer._input_shape, tf.TensorShape) :
+        layer._input_shape = TensorShape(layer._input_shape.tolist())
     elif layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
         layer._input_shape = TensorShape(to_numpy(layer._input_shape))
-    elif layer._input_shape is not None and isinstance(layer._input_shape, TensorShape) and is_tensor(layer._input_shape.dims[0]):
-        layer._input_shape = TensorShape([d.item() for d in layer._input_shape.dims])
+
 
     if layer._output_shape is not None and isinstance(layer._output_shape, tuple):
         layer._output_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._output_shape)])
+    elif layer._output_shape is not None and isinstance(layer._output_shape, tf.TensorShape) :
+        layer._output_shape =TensorShape(layer._output_shape.tolist())
     elif layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
         layer._output_shape = TensorShape(layer._output_shape)
-    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], torch.Size) and len(
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], tf.TensorShape) and len(
             layer._output_shape.dims[0]) == 1:
         layer._output_shape = TensorShape([d[0] for d in layer._output_shape.dims])
-    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], torch.Size):
-        layer._output_shape = tuple([TensorShape(to_numpy(d)) for d in layer._output_shape.dims])
+
 
     if not (hasattr(layer, 'get_toot')):
         setattr(layer, 'get_root', MethodType(get_root, layer))
