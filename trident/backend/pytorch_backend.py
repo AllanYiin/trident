@@ -92,7 +92,7 @@ def set_device(device='cpu'):
             for i in range(len(gcitems)):
                 obj = gcitems[i]
                 try:
-                    if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                    if is_tensor(obj) or hasattr(obj, 'data'):
                         obj.to(device)
                     elif isinstance(obj, nn.Module):
                         obj.to(device)
@@ -418,6 +418,7 @@ class Layer(nn.Module):
             for name, node in self._nodes.item_list:
                 if node.is_root == True:
                     return node
+            return self
 
     # def forward(self, *input,**kwargs):
     #     r"""Defines the computation performed at every call.

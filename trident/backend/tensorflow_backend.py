@@ -504,7 +504,7 @@ class Layer(tf.Module):
             for name, node in self._nodes.item_list:
                 if node.is_root == True:
                     return node
-
+            return self
     @property
     def name(self):
         """Name of the layer (string), set in the constructor."""
@@ -2426,7 +2426,7 @@ def calculate_flops(gen: Layer):
     return np.array(param_nums).sum()
 
 
-def summary(model, input_size, batch_size=None):
+def summary(model, input_size, batch_size=1):
     def register_hook(module):
         def hook(module, input, output):
 
@@ -2531,6 +2531,7 @@ def summary(model, input_size, batch_size=None):
         flops += float(summary[layer]["flops"][0])
         macc += float(summary[layer]["macc"][0])
 
+
         total_output += np.prod(to_numpy(list(summary[layer]["output_shape"])[1:]))
         if "trainable" in summary[layer]:
             if summary[layer]["trainable"] == True:
@@ -2540,7 +2541,8 @@ def summary(model, input_size, batch_size=None):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size =  np.asarray([np.abs(np.prod(to_numpy(shp.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for shp in input_size]).sum()
+
+    total_input_size =  np.array([np.prod(np.array(shp.dims[1:]) * 1 * 4. / (1024 ** 2.)) for shp in input_size]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
