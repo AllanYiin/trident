@@ -659,7 +659,7 @@ class Model(ModelBase):
             for k in self.training_context['losses'].key_list:
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
-            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp])+' }')
+            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp.items()])+' }')
 
     def do_on_data_received(self, train_data, test_data):
         if train_data is None and test_data is None:
