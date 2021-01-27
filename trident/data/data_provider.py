@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import copy
 import itertools
 import locale
 import os
@@ -17,6 +18,7 @@ try:
 except ImportError:
     from six.moves.urllib.request import urlretrieve
 from trident.backend.common import *
+from trident.backend.opencv_backend import *
 from trident.data.text_common import *
 from trident.data.image_common import *
 from trident.data.label_common import *
@@ -131,14 +133,14 @@ class ImageDataProvider(object):
     def image_transform_funcs(self, value):
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
-            self.traindata.data.transform_funcs = self._image_transform_funcs
+            self.traindata.data.transform_funcs =copy.deepcopy(value)
             if len(self.traindata.unpair) > 0:
-                self.traindata.unpair.transform_funcs = self._image_transform_funcs
+                self.traindata.unpair.transform_funcs =copy.deepcopy(value)
             self.traindata.update_data_template()
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
-            self.testdata.data.transform_funcs = self._image_transform_funcs
+            self.testdata.data.transform_funcs =copy.deepcopy(value)
             if len(self.testdata.unpair) > 0:
-                self.testdata.unpair.transform_funcs = self._image_transform_funcs
+                self.testdata.unpair.transform_funcs = copy.deepcopy(value)
             self.testdata.update_data_template()
 
     def image_transform(self, img_data):
@@ -205,11 +207,13 @@ class ImageDataProvider(object):
         self._paired_transform_funcs = value
 
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
-            self.traindata.paired_transform_funcs = self._paired_transform_funcs
+            self.traindata.paired_transform_funcs =copy.deepcopy(value)
+
+
             self.traindata.update_data_template()
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
-            self.testdata.paired_transform_funcs = self._paired_transform_funcs
+            self.testdata.paired_transform_funcs =copy.deepcopy(value)
             self.testdata.update_data_template()
 
     @property
@@ -232,7 +236,7 @@ class ImageDataProvider(object):
                 data, label = self.next()
                 data = self.reverse_image_transform(data)
                 if is_concate:
-                    data = np.concatenate([img for img in data], axis=1)
+                    data = np.concatenate([img for img in data], axis=-2)
                     return array2image(data)
                 else:
                     return [array2image(img) for img in data]
@@ -244,7 +248,7 @@ class ImageDataProvider(object):
                     img= self.reverse_image_transform(self.traindata.data.__getitem__(k))
                     results.append(img)
                 if is_concate:
-                    results = np.concatenate(results, axis=1)
+                    results = np.concatenate(results, axis=-2)
                     return array2image(results)
                 else:
                     return [array2image(img) for img in results]
@@ -534,10 +538,10 @@ class TextSequenceDataProvider(object):
         self._paired_transform_funcs = value
 
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
-            self.traindata.paired_transform_funcs = self._paired_transform_funcs
+            self.traindata.paired_transform_funcs = value
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
-            self.testdata.paired_transform_funcs = self._paired_transform_funcs
+            self.testdata.paired_transform_funcs = value
 
     def _next_index(self):
         return self.__next__()
