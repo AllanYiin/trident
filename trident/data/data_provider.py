@@ -236,7 +236,7 @@ class ImageDataProvider(object):
                 data, label = self.next()
                 data = self.reverse_image_transform(data)
                 if is_concate:
-                    data = np.concatenate([img for img in data], axis=-2)
+                    data = np.concatenate([img for img in data], axis=-1 if data[0].ndim==2 or (data[0].ndim==3 and data[0].shape[0] in [1.3,4]) else -2)
                     return array2image(data)
                 else:
                     return [array2image(img) for img in data]
@@ -248,7 +248,7 @@ class ImageDataProvider(object):
                     img= self.reverse_image_transform(self.traindata.data.__getitem__(k))
                     results.append(img)
                 if is_concate:
-                    results = np.concatenate(results, axis=-2)
+                    results = np.concatenate(results, axis=-1 if results[0].ndim==2 or (results[0].ndim==3 and results[0].shape[0] in [1.3,4]) else -2)
                     return array2image(results)
                 else:
                     return [array2image(img) for img in results]
