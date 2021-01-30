@@ -2,8 +2,10 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import builtins
+import copy
 import inspect
 import math
+import numbers
 from collections import OrderedDict
 from functools import partial, wraps, update_wrapper
 from itertools import islice
@@ -33,7 +35,7 @@ from trident.backend import dtype
 __all__ = ['Dense', 'Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot', 'Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
            'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape', 'Permute',
-           'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer']
+           'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer','Aggregation']
 
 _session = get_session()
 
@@ -120,8 +122,7 @@ class Dense(Layer):
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(self.num_filters))
                 init.zeros_(self.bias)  # self._parameters['bias']=self.bias
-            else:
-                self.register_parameter('bias',None)
+
             self.to(self.device)
             self._built = True
 
@@ -502,7 +503,7 @@ class Scale(Layer):
 
         if mode == 'uniform' and (numel(self._scale) != 1.0 or numel(self._shift) != 1.0 or numel(self._power) != 1):
             raise ValueError('Scale/ Shift/ Power should float, 0d Tensor or One element Tensor whem mode=uniform')
-        if mode in ['uniform', 'channel', 'elementwise']:
+        if mode in ['uniform','constant', 'channel', 'elementwise']:
             self.mode = mode
         else:
             raise ValueError('Only [uniform,channel,elementwise] is valid value for mode ')
@@ -515,54 +516,82 @@ class Scale(Layer):
 
         if self._built == False:
             if self.mode == 'uniform':
-                self.scale = Parameter(self._scale.clone(), requires_grad=True)
-                self.shift = Parameter(self._shift.clone(), requires_grad=True)
-                self.power = Parameter(self._power.clone(), requires_grad=True)
+                self.scale = Parameter(ones((1)).to(self.get_root().device) * self._scale, trainable=True)
+                self.shift = Parameter(ones((1)).to(self.get_root().device) * self._shift, trainable=True)
+                self.power = Parameter(ones((1)).to(self.get_root().device) * self._power, trainable=True)
+            elif self.mode == 'constant':
+                self.scale = ones((1)).to(self.get_root().device) * self._scale
+                self.shift = ones((1)).to(self.get_root().device)  * self._shift
+                self.power = ones((1)).to(self.get_root().device) *  self._power
             elif self.mode == 'channel':
-                new_shape = [1] * (len(input_shape) + 1)
-                new_shape[self.filter_index] = self.input_filters
-                if ndim(self._scale) == 1 and numel(self._scale) in [1, self.input_filters]:
-                    if numel(self._scale) == 1:
-                        self._scale = repeat_elements(self._scale, self.input_filters, 0)
-                    self._scale = reshape(self._scale, new_shape)
-                if ndim(self._shift) == 1 and numel(self._shift) in [1, self.input_filters]:
-                    if numel(self._shift) == 1:
-                        self._shift = repeat_elements(self._shift, self.input_filters, 0)
-                    self._shift = reshape(self._shift, new_shape)
-                if ndim(self._power) == 1 and numel(self._power) in [1, self.input_filters]:
-                    if numel(self._power) == 1:
-                        self._power = repeat_elements(self._power, self.input_filters, 0)
-                    self._power = reshape(self._power, new_shape)
-
-                self.scale = Parameter(self._scale.clone(), requires_grad=True)
-                self.shift = Parameter(self._shift.clone(), requires_grad=True)
-                self.power = Parameter(self._power.clone(), requires_grad=True)
+                new_shape=[1,]*(input_shape.rank)
+                new_shape[self.filter_index]=self.input_filters
+                new_shape=tuple(new_shape[1:])
+                self.scale = Parameter(ones(new_shape).to(self.get_root().device)*self._scale,trainable=True)
+                self.shift = Parameter(ones(new_shape).to(self.get_root().device)*self._shift,trainable=True)
+                self.power = Parameter(ones(new_shape).to(self.get_root().device)*self._power,trainable=True)
             elif self.mode == 'elementwise':
-                if ndim(self._scale) == 1 and numel(self._scale) == 1:
-                    self._scale = ones(input_shape) * self._scale
-                if ndim(self._shift) == 1 and numel(self._shift) == 1:
-                    self._shift = ones(input_shape) * self._shift
-                if ndim(self._power) == 1 and numel(self._power) == 1:
-                    self._power = ones(input_shape) * self._power
-
-                if int_shape(self._scale) == input_shape:
-                    self._scale = self._scale.expand_dims(0, 1)
-                if int_shape(self._shift) == input_shape:
-                    self._shift = self._shift.expand_dims(0, 1)
-                if int_shape(self._power) == input_shape:
-                    self._power = self._power.expand_dims(0, 1)
-                self.scale = Parameter(self._scale.clone(), requires_grad=True)
-                self.shift = Parameter(self._shift.clone(), requires_grad=True)
-                self.power = Parameter(self._power.clone(), requires_grad=True)
+                new_shape = input_shape.dims[1:]
+                self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
+                self.shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
+                self.power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
             remove_from('_scale', self.__dict__, self._buffers)
             remove_from('_shift', self.__dict__, self._buffers)
             remove_from('_power', self.__dict__, self._buffers)
             self._built = True
 
     def forward(self, x, **kwargs) -> torch.Tensor:
+        self.scale=self.scale.to(x.device)
+        self.shift=self.shift.to(x.device)
+        self.power=self.power.to(x.device)
         x = pow(x * self.scale + self.shift, self.power)
         return x
 
+
+class Aggregation(Layer):
+    """Flatten layer to flatten a tensor after convolution."""
+
+    def __init__(self, mode='mean', axis=1, keepdims=True,keep_output: bool = False, name: Optional[str] = None):
+        super(Aggregation, self).__init__(name=name, keep_output=keep_output)
+        valid_mode=['mean','sum','max','min','first','last' ]
+        if mode in valid_mode:
+            self.mode=mode
+        else:
+            raise  ValueError('{0} is not valid mode. please use one of {1}'.format(mode,valid_mode))
+        self.axis=unpack_singleton(axis)
+        if mode in ['first','last' ] and isinstance(self.axis,(list,tuple)):
+            raise ValueError('{0} only can reduction along one axis.'.format(mode))
+
+        self.keepdims=keepdims
+
+    def build(self, input_shape:TensorShape):
+        if self._built == False:
+            dims = input_shape.dims
+            if self.keepdims==True:
+                dims[self.axis]=1
+            else:
+                dims.pop(self.axis)
+            self.output_shape = TensorShape(dims)
+            self._built = True
+
+    def forward(self, x, **kwargs) -> torch.Tensor:
+        if self.mode=='mean':
+            x=reduce_mean(x,axis=self.axis,keepdims=self.keepdims)
+        elif self.mode == 'sum':
+            x = reduce_sum(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode=='max':
+            x = reduce_max(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode=='min':
+            x = reduce_min(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode == 'first':
+            x = x.select(dim=self.axis,index=0)
+            if self.keepdims:
+                x=expand_dims(x,axis=self.axis)
+        elif self.mode == 'last':
+            x = x.select(dim=self.axis, index=-1)
+            if self.keepdims:
+                x = expand_dims(x, axis=self.axis)
+        return x
 
 _gcd = gcd
 _get_divisors = get_divisors
@@ -753,8 +782,7 @@ class _ConvNd(Layer):
         if hasattr(self, '_input_shape') and self._input_shape is not None:
             s += ', input_shape={0}, input_filter={1}'.format(to_numpy(self._input_shape).tolist(), self.input_filters)
         if hasattr(self, '_output_shape') and self._output_shape is not None:
-            s += ', output_shape={0}'.format(self._output_shape if isinstance(self._output_shape, (
-                list, tuple)) else self._output_shape.clone().tolist())
+            s += ', output_shape={0}'.format(self._output_shape._dims if isinstance(self._output_shape, TensorShape) else self._output_shape)
         #     if self.bias is None:
         #         s += ', use_bias=False'
         return s.format(**self.__dict__)
@@ -1999,18 +2027,13 @@ class GcdConv2d(_ConvNd):
 
 
 class Lambda(Layer):
-    def __init__(self, function, name=None):
-        """
-        Applies a lambda function on forward()
-        Args:
-            function (fn): the lambda function
-        """
-        super(Lambda, self).__init__(name=name)
-        self.function = function
-
-    def forward(self, x, **kwargs):
-        return self.function(x)
-
+    def __init__(self, lambd):
+        super(Lambda, self).__init__()
+        self.lambd = lambd
+    def apply_lambd(self, x):
+        return self.lambd(x)
+    def forward(self, x):
+        return self.apply_lambd(x)
 
 class Reshape(Layer):
     def __init__(self, target_shape, name=None):
@@ -2211,7 +2234,7 @@ class Upsampling2d(Layer):
         return info
 
 
-from torch.nn.modules import Dropout
+
 
 
 class Dropout(Layer):

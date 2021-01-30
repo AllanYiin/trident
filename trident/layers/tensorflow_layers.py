@@ -401,56 +401,95 @@ class Scale(Layer):
                 if name in d:
                     del d[name]
         if self._built == False:
-            if self.mode =='uniform':
-                self.scale=tf.Variable(self._scale.copy(),trainable=True)
-                self.shift =Parameter(self._shift.copy(), trainable=True)
-                self.power =Parameter(self._power.copy(), trainable=True)
-            elif self.mode =='channel':
-                new_shape = [1] * (len(input_shape) + 1)
-                new_shape[self.filter_index] = self.input_filters
-                if ndim(self._scale) == 1 and numel(self._scale) in [1, self.input_filters]:
-                    if numel(self._scale) == 1:
-                        self._scale = repeat_elements(self._scale, self.input_filters, 0)
-                    self._scale = reshape(self._scale, new_shape)
-                if ndim(self._shift) == 1 and numel(self._shift) in [1, self.input_filters]:
-                    if numel(self._shift) == 1:
-                        self._shift = repeat_elements(self._shift, self.input_filters, 0)
-                    self._shift = reshape(self._shift, new_shape)
-                if ndim(self._power) == 1 and numel(self._power) in [1, self.input_filters]:
-                    if numel(self._power) == 1:
-                        self._power = repeat_elements(self._power, self.input_filters, 0)
-                    self._power = reshape(self._power, new_shape)
-
-                self.scale =Parameter(data=self._scale.copy(), trainable=True)
-                self.shift =Parameter(data=self._shift.copy(), trainable=True)
-                self.power =Parameter(data=self._power.copy(), trainable=True)
+            if self.mode == 'uniform':
+                self.scale = Parameter(ones((1)).to(self.get_root().device) * self._scale, trainable=True)
+                self.shift = Parameter(ones((1)).to(self.get_root().device) * self._shift, trainable=True)
+                self.power = Parameter(ones((1)).to(self.get_root().device) * self._power, trainable=True)
+            elif self.mode == 'constant':
+                self.scale = ones((1)).to(self.get_root().device) * self._scale
+                self.shift = ones((1)).to(self.get_root().device)  * self._shift
+                self.power = ones((1)).to(self.get_root().device) *  self._power
+            elif self.mode == 'channel':
+                new_shape=[1,]*(input_shape.rank)
+                new_shape[self.filter_index]=self.input_filters
+                new_shape=tuple(new_shape[1:])
+                self.scale = Parameter(ones(new_shape).to(self.get_root().device)*self._scale,trainable=True)
+                self.shift = Parameter(ones(new_shape).to(self.get_root().device)*self._shift,trainable=True)
+                self.power = Parameter(ones(new_shape).to(self.get_root().device)*self._power,trainable=True)
             elif self.mode == 'elementwise':
-                if ndim(self._scale) == 1 and numel(self._scale) ==1:
-                    self._scale=ones(input_shape)*self._scale
-                if ndim(self._shift) == 1 and numel(self._shift) ==1:
-                    self._shift=ones(input_shape)*self._shift
-                if ndim(self._power) == 1 and numel(self._power) ==1:
-                    self._power=ones(input_shape)*self._power
-
-                if int_shape(self._scale) ==input_shape:
-                    self._scale=self._scale.expand_dims(0,1)
-                if int_shape(self._shift) ==input_shape:
-                    self._shift=self._shift.expand_dims(0,1)
-                if int_shape(self._power) ==input_shape:
-                    self._power=self._power.expand_dims(0,1)
-                self.scale =Parameter(self._scale.copy(), trainable=True)
-                self.shift =Parameter(self._shift.copy(), trainable=True)
-                self.power =Parameter(self._power.copy(), trainable=True)
+                new_shape = input_shape.dims[1:]
+                self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
+                self.shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
+                self.power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
             remove_from('_scale',self.__dict__, self._buffers)
             remove_from('_shift',self.__dict__, self._buffers)
             remove_from('_power',self.__dict__, self._buffers)
             self._built = True
 
 
-    def forward(self, x, **kwargs) -> Tensor:
-
-        x = pow(x*self.scale+self.shift,self.power)
+    def forward(self, x, **kwargs) -> tf.Tensor:
+        self.scale=self.scale.to(x.device)
+        self.shift=self.shift.to(x.device)
+        self.power=self.power.to(x.device)
+        x = pow(x * self.scale + self.shift, self.power)
         return x
+
+
+class Aggregation(Layer):
+    """Flatten layer to flatten a tensor after convolution."""
+
+    def __init__(self, mode='mean', axis=-1, keepdims=True, keep_output: bool = False, name: Optional[str] = None):
+        super(Aggregation, self).__init__(name=name, keep_output=keep_output)
+        valid_mode = ['mean', 'sum', 'max', 'min', 'first', 'last']
+        if mode in valid_mode:
+            self.mode = mode
+        else:
+            raise ValueError('{0} is not valid mode. please use one of {1}'.format(mode, valid_mode))
+        self.axis = unpack_singleton(axis)
+        if mode in ['first', 'last'] and isinstance(self.axis, (list, tuple)):
+            raise ValueError('{0} only can reduction along one axis.'.format(mode))
+
+        self.keepdims = keepdims
+
+    def build(self, input_shape: TensorShape):
+        if self._built == False:
+            dims = input_shape.dims
+            if self.keepdims == True:
+                dims[self.axis] = 1
+            else:
+                dims.pop(self.axis)
+            self.output_shape = TensorShape(dims)
+            self._built = True
+
+    def forward(self, x, **kwargs) -> Tensor:
+        if self.mode == 'mean':
+            x = tf.math.reduce_mean(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode == 'sum':
+            x =  tf.math.reduce_sum(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode == 'max':
+            x =  tf.math.reduce_max(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode == 'min':
+            x =  tf.math.reduce_min(x, axis=self.axis, keepdims=self.keepdims)
+        elif self.mode == 'first':
+            begin=[0]*x.ndim()
+            size=[-1]*x.ndim()
+            size[self.axis]=1
+
+            x = tf.slice(x,begin,size)
+            if self.keepdims:
+                x = expand_dims(x, axis=self.axis)
+        elif self.mode == 'last':
+            shp=int_shape(x)
+            begin = [0] * x.ndim()
+            size = [-1] * x.ndim()
+            begin[self.axis] =shp[self.axis] -1
+            size[self.axis] = 1
+
+            x = tf.slice(x, begin, size)
+            if self.keepdims:
+                x = expand_dims(x, axis=self.axis)
+        return x
+
 
 
 # def get_static_padding(rank,input_shape,kernal_shape,strides,dilations):
@@ -576,7 +615,7 @@ class _ConvNd(Layer):
                             padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape[1:-1])
                             self.padding = tuple(padding)
                         else:
-                            self.padding, self.output_padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape[1:-1],self.transposed)
+                            self.padding= get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape[1:-1])
                     else:
                         if self.padding is None:
                             self.padding = [0] * (2 * self.rank)
