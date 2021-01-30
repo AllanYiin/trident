@@ -78,10 +78,14 @@ class PolicyBase(Model):
     @preprocess_flow.setter
     def preprocess_flow(self, value):
         self._preprocess_flow = value
-        if isinstance(self.input_spec, TensorSpec):
-            self.input_spec = None
+        objecttype = None
+        if isinstance(self.model.input_spec, TensorSpec):
+            objecttype = self.model.input_spec.object_type
         super()._initial_graph(inputs=to_tensor(self.get_observation()).repeat_elements(2, 0), output=deepcopy(self.network))
         self.setting_network()
+        if objecttype is not None:
+            self.inputs.value_list[0].object_type = objecttype
+            self.model.input_spec.object_type = objecttype
         self.env.reset()
 
     def data_preprocess(self, img_data):
