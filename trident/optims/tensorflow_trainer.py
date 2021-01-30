@@ -41,7 +41,7 @@ from trident.optims.tensorflow_regularizers import *
 
 # from tensorflow.python.framework.ops import EagerTensor
 
-__all__ = ['Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageSegmentationModel', 'LanguageModel']
+__all__ = ['Model', 'ImageClassificationModel','ImageRegressionModel', 'ImageDetectionModel', 'ImageSegmentationModel', 'LanguageModel']
 _session = get_session()
 _backend = get_backend()
 working_directory = _session.working_directory
@@ -1485,6 +1485,36 @@ class ImageClassificationModel(Model):
                 return answer
         else:
             raise ValueError('the model is not built yet.')
+
+
+class ImageRegressionModel(Model):
+    def __init__(self, inputs=None, input_shape=None, output=None):
+        super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
+
+
+    def infer_single_image(self, img):
+        if self._model.built:
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
+                    img = func(img)
+            img = image_backend_adaption(img)
+            if isinstance( self._model,Layer):
+                inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
+                result = self._model(inp)
+                result = to_numpy(result)[0]
+                return result
+            else:
+
+                raise ValueError('the model is not layer.')
+
+        else:
+            raise ValueError('the model is not built yet.')
+
 
 
 class ImageDetectionModel(Model):

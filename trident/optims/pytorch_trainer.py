@@ -43,7 +43,7 @@ from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBa
 from trident.data.image_common import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 
-__all__ = ['Model', 'ImageClassificationModel', 'ImageDetectionModel', 'ImageGenerationModel',
+__all__ = ['Model', 'ImageClassificationModel','ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel', 'FaceRecognitionModel']
 _session = get_session()
 working_directory = _session.working_directory
@@ -685,8 +685,7 @@ class Model(ModelBase):
         # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or self.training_context['current_batch'] + self.training_context[
-            'current_epoch'] == 0:
+        if self.training_context['steps'] == 0 and ('data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or None in self.training_context['data_feed'].value_list) :
             try:
 
                 data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
@@ -778,21 +777,12 @@ class Model(ModelBase):
             data_feed = self.training_context['data_feed']
             input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-
-                if item in input_list:
-                    # only model 's input argments
-                    train_data[item] = to_tensor(train_data[item].copy())  # .cpu()
-                    if 'float' in str(train_data[item].dtype):
-                        train_data[item].require_grads = True
-                elif item in self.targets.key_list or data_feed:
-                    train_data[item] = to_tensor(train_data[item].copy())  # .cpu()
-                else:
-                    train_data[item] = to_tensor(train_data[item].copy())  # .cpu()
+                train_data[item]=to_tensor(train_data[item],device=get_device())
+                if  item in input_list and  'float' in str(train_data[item].dtype):
+                    train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    test_data[item] = to_tensor(test_data[item].copy())  # .cpu()
-
-                    # check target
+                    test_data[item] = to_tensor(test_data[item],device=get_device())  # .cpu()
 
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
@@ -965,9 +955,8 @@ class Model(ModelBase):
 
             import_or_install('torch.onnx')
             self._model.eval()
-            new_shape = self.signature.inputs.value_list[0].shape.dims
-            new_shape[0] = 1
-            dummy_input =cast(torch.randn(*new_shape, device=get_device(), requires_grad=True),dtype=self.model.input_spec.dtype)
+
+            dummy_input =to_tensor( self.signature.inputs.value_list[0].shape.get_dummy_tensor()).to(get_device())
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -1279,6 +1268,34 @@ class ImageClassificationModel(Model):
                 # idx=int(np.argmax(result,-1)[0])
 
                 return answer
+        else:
+            raise ValueError('the model is not built yet.')
+
+class ImageRegressionModel(Model):
+    def __init__(self, inputs=None, input_shape=None, output=None):
+        super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
+
+
+    def infer_single_image(self, img):
+        if self._model.built:
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
+                    img = func(img)
+            img = image_backend_adaption(img)
+            if isinstance(self._model, Layer):
+                inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
+                result = self._model(inp)
+                result = to_numpy(result)[0]
+                return result
+            else:
+
+                raise ValueError('the model is not layer.')
+
         else:
             raise ValueError('the model is not built yet.')
 
