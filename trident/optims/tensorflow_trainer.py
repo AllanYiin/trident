@@ -134,6 +134,7 @@ class Model(ModelBase):
             # output.cpu()
             if output.built and hasattr(output, '_output_shape') and output._output_shape is not None:
                 self._model = output
+                self._model.input_spec = self.inputs.value_list[0]
                 self.signature = None
                 if self.signature is not None and hasattr(self.signature, "outputs"):
                     self._outputs = OrderedDict()
@@ -162,6 +163,7 @@ class Model(ModelBase):
                     out = output(dummay_input)
 
                 self._model = output
+                self._model.input_spec = self.inputs.value_list[0]
                 if isinstance(out, Tensor):
                     self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
                     self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
