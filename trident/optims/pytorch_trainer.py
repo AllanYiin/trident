@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 import numbers
+import builtins
 import copy
 import gc
 import inspect
@@ -44,7 +45,7 @@ from trident.data.image_common import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 
 __all__ = ['Model', 'ImageClassificationModel','ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
-           'ImageSegmentationModel', 'FaceRecognitionModel']
+           'ImageSegmentationModel','FaceLandmarkModel', 'FaceRecognitionModel']
 _session = get_session()
 working_directory = _session.working_directory
 _, term_width = get_terminal_size()
@@ -1282,19 +1283,25 @@ class ImageRegressionModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type=ObjectType.rgb
             img = image2array(img)
+            img_shp=img.shape
+
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            rescale_scale=1.0
             for func in self.preprocess_flow:
                 if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img)
+                    img = func(img,spec=self._model.input_spec)
+                    if func.__qualname__ == 'resize.<locals>.img_op':
+                        rescale_scale = func.scale
             img = image_backend_adaption(img)
             if isinstance(self._model, Layer):
                 inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
                 result = self._model(inp)
-                result = to_numpy(result)[0]
-                return result
+                result = to_numpy(result)
+                return result.astype(np.int32)
             else:
 
                 raise ValueError('the model is not layer.')
@@ -1322,13 +1329,17 @@ class ImageDetectionModel(Model):
         if self._model.built:
             self._model.to(self.device)
             self._model.eval()
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            rescale_scale=1
             for func in self.preprocess_flow:
-                if inspect.isfunction(func):
-                    img = func(img)
+                if inspect.isfunction(func) and func is not image_backend_adaption:
+                    img = func(img,spec=self._model.input_spec)
+                    if func.__qualname__ == 'resize.<locals>.img_op':
+                        rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -1372,6 +1383,8 @@ class ImageGenerationModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1390,6 +1403,41 @@ class ImageGenerationModel(Model):
             result = array2image(result)
             return result
 
+class FaceLandmarkModel(Model):
+    def __init__(self, inputs=None, input_shape=None, output=None):
+        super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
+
+
+    def infer_single_image(self, img):
+        if self._model.built:
+            self._model.eval()
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type=ObjectType.rgb
+            img = image2array(img)
+            img_shp=img.shape
+
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+            rescale_scale=1.0
+            for func in self.preprocess_flow:
+                if inspect.isfunction(func) and func is not image_backend_adaption:
+                    img = func(img,spec=self._model.input_spec)
+                    if func.__qualname__ == 'resize.<locals>.img_op':
+                        rescale_scale = func.scale
+            img = image_backend_adaption(img)
+            if isinstance(self._model, Layer):
+                inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
+                result = self._model(inp)
+                result = to_numpy(result)/ rescale_scale
+                result[:,:, 0::2] =clip(result[:,:, 0::2] ,0,img_shp[1])
+                result[:,:, 1::2] =clip(result[:,:, 1::2],0,img_shp[0])
+                return result.astype(np.int32)
+            else:
+
+                raise ValueError('the model is not layer.')
+
+        else:
+            raise ValueError('the model is not built yet.')
 
 class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
@@ -1431,6 +1479,8 @@ class FaceRecognitionModel(Model):
 
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
