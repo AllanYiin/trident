@@ -654,16 +654,19 @@ class Layer(nn.Module):
             self.to(value)
 
     def cuda(self, device=None):
-        self.get_root().device ='cuda'
-        super().cuda(device=device)
+        if self.get_root().device != 'cuda':
+            self.get_root().device ='cuda'
+            super().cuda(device=device)
 
     def cpu(self):
-        self.get_root().device='cpu'
-        super().cpu()
+        if self.get_root().device!='cpu':
+            self.get_root().device='cpu'
+            super().cpu()
 
     def gpu(self, device=None):
-        self.get_root().device = 'cuda'
-        super().cuda(device)
+        if self.get_root().device != 'cuda':
+            self.get_root().device = 'cuda'
+            super().cuda(device)
 
     def to(self, *args, **kwargs):
         r"""Moves and/or casts the parameters and buffers.

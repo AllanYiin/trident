@@ -836,9 +836,10 @@ class Layer(tf.Module):
         """
 
         if tf.test.is_gpu_available:
-            self.get_root()._device = '/gpu:0'
-            with tf.device(self._device):
-                return self._apply(lambda t: tf.identity(t))
+            if self.get_root()._device != '/gpu:0':
+                self.get_root()._device = '/gpu:0'
+                with tf.device(self._device):
+                    return self._apply(lambda t: tf.identity(t))
 
         else:
             sys.stderr.write('GPU is not available in this machone./n')
@@ -849,14 +850,34 @@ class Layer(tf.Module):
         Returns:
             Module: self
         """
-        with tf.device('/cpu:0'):
-            self.get_root()._device = '/cpu:0'
-            return self._apply(lambda t: tf.identity(t))
+        if self.get_root()._device != '/cpu:0':
+            with tf.device('/cpu:0'):
+                self.get_root()._device = '/cpu:0'
+                return self._apply(lambda t: tf.identity(t))
 
+    def gpu(self: T, device: Optional[Union[int, str]] = None) -> T:
+        r"""Moves all model parameters and buffers to the GPU.
 
+        This also makes associated parameters and buffers different objects. So
+        it should be called before constructing optimizer if the module will
+        live on GPU while being optimized.
 
+        Args:
+            device (int, optional): if specified, all parameters will be
+                copied to that device
 
+        Returns:
+            Module: self
+        """
 
+        if tf.test.is_gpu_available:
+            if self.get_root()._device != '/gpu:0':
+                self.get_root()._device = '/gpu:0'
+                with tf.device(self._device):
+                    return self._apply(lambda t: tf.identity(t))
+
+        else:
+            sys.stderr.write('GPU is not available in this machone./n')
 
     def _apply(self, fn):
         for module in self.children():
