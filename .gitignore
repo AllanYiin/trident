@@ -247,7 +247,7 @@ docs/zh-cn/
 
 
 trident.png
-!/sphinx_docs/
+sphinx_docs/
 .idea/markdown-navigator.xml
 .idea/markdown-navigator/
 .idea/vagrant.xml
@@ -282,3 +282,9 @@ trident/layers/pytorch_necks.py
 trident/models/pytorch_xception.py
 trident/optims/amp/autocast_mode.py
 trident/optims/amp/grad_scaler.py
+tests/data/transform_results/random_adjust_brightness1.png
+tests/data/transform_results/random_adjust_contrast.png
+tests/data/transform_results/random_adjust_hue.png
+tests/data/transform_results/random_adjust_saturation.png
+tests/data/transform_results/random_color_jitter.png
+tests/data/transform_results/random_lighting.png
