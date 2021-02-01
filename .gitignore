@@ -14,6 +14,7 @@ build/lib
 develop-eggs/
 dist/
 downloads/
+tools/*
 experiments/*
 examples/*
 datav3/*
@@ -21,6 +22,7 @@ internal_tool/*
 eggs/
 .eggs/
 lib/
+tools/
 lib64/
 parts/
 sdist/
@@ -245,3 +247,38 @@ docs/zh-cn/
 
 
 trident.png
+!/sphinx_docs/
+.idea/markdown-navigator.xml
+.idea/markdown-navigator/
+.idea/vagrant.xml
+.travis/
+build/bdist.win-amd64/
+docs/zh-tw/advanced/
+docs/zh-tw/callbacks/
+docs/zh-tw/custom/
+docs/zh-tw/data/
+docs/zh-tw/layers/
+docs/zh-tw/models/
+docs/zh-tw/ops/
+docs/zh-tw/optims/
+sphinx_docs/source/Models/
+tests/backend/
+tests/data/cat.jpg
+tests/data/image_common_test.py
+tests/data/image_io_test.py
+tests/data/pillow_image_test.py
+tests/data/testresults/
+tests/data/transform_results/random_affine.png
+tests/data/transform_results/random_center_crop.png
+tests/data/transform_results/random_crop.png
+tests/data/transform_results/random_rescale_crop.png
+tests/data/vision_transform_test.py
+tests/pytorch_tests/
+tests/tensorflow_tests/
+trident/backend/graph_tools.py
+trident/backend/onnx_ops.py
+trident/layers/pytorch_heads.py
+trident/layers/pytorch_necks.py
+trident/models/pytorch_xception.py
+trident/optims/amp/autocast_mode.py
+trident/optims/amp/grad_scaler.py
