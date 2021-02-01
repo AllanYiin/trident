@@ -10,6 +10,7 @@ import random
 import re
 import builtins
 import time
+import warnings
 from collections import Counter
 from itertools import repeat
 from functools import partial
@@ -29,8 +30,7 @@ from skimage.morphology import square
 from trident.backend.common import *
 from trident.backend.tensorspec import TensorSpec, assert_input_compatibility, ObjectType
 
-__all__ = ['transform_func','read_image', 'read_mask', 'save_image', 'save_mask', 'image2array', 'array2image', 'mask2array',
-           'array2mask', 'list_pictures', 'normalize', 'unnormalize', 'channel_reverse', 'blur', 'random_blur',
+__all__ = [ 'list_pictures','list_images','check_same_size', 'normalize', 'unnormalize', 'channel_reverse', 'blur', 'random_blur',
            'random_crop', 'resize', 'rescale', 'downsample_then_upsample', 'add_noise', 'gray_scale', 'to_rgb',
            'to_bgr', 'auto_level', 'random_invert_color', 'image_backend_adaption', 'reverse_image_backend_adaption',
            'random_adjust_hue', 'random_channel_shift', 'random_cutout', 'random_rescale_crop', 'random_center_crop',
@@ -46,19 +46,10 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 
 
-if get_image_backend() == 'opencv':
-    from trident.backend.opencv_backend import *
-else:
-    from trident.backend.pillow_backend import *
+from trident.backend.opencv_backend import *
 
-read_image = read_image
-read_mask = read_mask
-save_image = save_image
-save_mask = save_mask
-image2array = image2array
-array2image = array2image
-mask2array = mask2array
-array2mask = array2mask
+
+
 
 def distict_color_count(img):
     """Count for distinct colors in input image
@@ -145,23 +136,38 @@ def transform_func(func):
 
     return wrapper
 
+
 def list_pictures(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
+    r"""Deprecated; see :func:`~list_images`."""
+    warnings.warn(
+        "This function will be removed in next major version, please use \"list_images\" instead",
+        FutureWarning)
+    return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
+            re.match(r'([\w]+\.(?:' + ext + '))', f)]
+
+def list_images(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
     return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
             re.match(r'([\w]+\.(?:' + ext + '))', f)]
 
 
+
 def check_same_size(*images):
     result = True
-    height, width = images[0].shape[:2]
+    base_shape =None
+    if isinstance(images[0],numbers.Number):
+        base_shape=0
+    elif  isinstance(images[0],np.ndarray):
+        base_shape = TensorShape(images[0].shape)
     # check same isze
     for img in images:
-        hh, ww = images[0].shape[:2]
-        if hh == height and ww == width:
+        if base_shape==0 and isinstance(img, numbers.Number):
+            pass
+        elif   isinstance(img,np.ndarray) and base_shape== TensorShape(img.shape):
             pass
         else:
+            print(img.shape)
             result = False
     return True
-
 
 
 
@@ -192,12 +198,16 @@ def normalize(mean, std):
             norm_std = np.expand_dims(norm_std, 0)
             norm_std = np.expand_dims(norm_std, 0)
         if image.ndim == 3:
-            if int_shape(image)==(224,224,224):
-                print('')
-            return (image - norm_mean) / norm_std
+            image.flags.writeable = True
+            image-=norm_mean
+            image/=norm_std
+            return image
         elif image.ndim == 2:
             if isinstance(norm_mean, numbers.Number) and isinstance(norm_std,numbers.Number):
-                return (image - norm_mean) / norm_std
+                image.flags.writeable = True
+                image -= norm_mean
+                image /= norm_std
+                return image
         return image
 
     img_op.mean = mean
@@ -217,13 +227,22 @@ def unnormalize(mean, std):
             norm_std = list(norm_std)
 
         if isinstance(norm_mean, (float, int)) and isinstance(norm_std, (float, int)) and image.ndim == 3:
-            return image * float(norm_std) + float(norm_mean)
+            image.flags.writeable = True
+            image*= float(norm_std)
+            image+= float(norm_mean)
+            return image
         elif isinstance(norm_mean, list) and isinstance(norm_std, list) and len(norm_mean) == 1 and len(norm_std) == 1:
-            return image * float(norm_std[0]) + float(norm_mean[0])
+            image.flags.writeable = True
+            image *= float(norm_std[0])
+            image += float(norm_mean[0])
+            return image
         elif isinstance(norm_mean, list) and isinstance(norm_std, list) and len(norm_mean) == 3 and len(norm_std) == 3:
             norm_mean = np.reshape(np.array(norm_mean), (1, 1, 3))
             norm_std = np.reshape(np.array(norm_std), (1, 1, 3))
-            return image * norm_std + norm_mean
+            image.flags.writeable = True
+            image *= norm_std
+            image += norm_mean
+            return image
         return image
 
     return img_op
@@ -245,7 +264,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
             imspec=kwargs.get("spec")
             if imspec is None:
 
-                imspec=TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec=TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec]=image
         elif isinstance(image,dict):
@@ -298,9 +317,12 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                             im=np.concatenate([im,class_info],axis=-1)
                         results[spec] = im
                     elif spec.object_type in [ObjectType.landmarks]  :  # landmark [:,2]
-                        im[:, :2]=im[:, :2]*img_op.scale
-                        im[:, 0::2] += img_op.pad_left
-                        im[:, 1::2] += img_op.pad_top
+                        if im[30,:].max()<1:
+                            pass
+                        else:
+                            im[:, :2]=im[:, :2]*img_op.scale
+                            im[:, 0::2] += img_op.pad_left
+                            im[:, 1::2] += img_op.pad_top
                         results[spec] = im
                     # elif spec.object_type in [ObjectType.color_mask]:  # landmark [:,2]
                     #     new_im = np.zeros((size[0], size[1],3),dtype=np.int64)
@@ -350,6 +372,7 @@ def resize(size, keep_aspect=True, order=1, align_corner=True):
                                 new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left, :] = im
 
                         results[spec] = new_im
+                        del im
             if isinstance(image, np.ndarray):
                 return results.value_list[0]
             elif isinstance(image, OrderedDict):
@@ -381,7 +404,7 @@ def rescale(scale, order=1):
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
             if imspec is None:
-                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
 
             results = OrderedDict()
             results[imspec] = image
@@ -441,7 +464,7 @@ def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
             if imspec is None:
-                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec] = image
         elif isinstance(image, dict):
@@ -465,7 +488,7 @@ def random_center_crop(h,w, scale=(0.8, 1.2)):
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
             if imspec is None:
-                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec] = image
         elif isinstance(image, dict):
@@ -551,7 +574,7 @@ def random_crop(h, w):
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
             if imspec is None:
-                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec] = image
         elif isinstance(image, dict):
@@ -634,7 +657,7 @@ def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,she
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
             if imspec is None:
-                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec] = image
         elif isinstance(image, dict):
@@ -722,10 +745,20 @@ def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,she
                         results[spec] = im
                 elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
                     new_n=[]
+
                     for i in range(len(im)):
+                        is_normalized=False
+                        if im[30,:].max()<=1:
+                            is_normalized=True
+                            im[:,1] *= float(height)
+                            im[:, 0] *= float(width)
                         pts = []
                         pts.append(np.squeeze(np.array(mat_img[0]))[0] * im[i][0] + np.squeeze(np.array(mat_img[0]))[1] * im[i][1] + np.squeeze(np.array(mat_img[0]))[2])
                         pts.append(np.squeeze(np.array(mat_img[1]))[0] * im[i][0] + np.squeeze(np.array(mat_img[1]))[1] * im[i][1] + np.squeeze(np.array(mat_img[1]))[2])
+                        pts=np.asarray(pts)
+                        if is_normalized:
+                            pts[1] /=float(height)
+                            pts[0] /=float(width)
                         new_n.append(pts)
                     results[spec] = np.array(new_n)
                 elif im.ndim == 3:
@@ -759,7 +792,7 @@ def horizontal_flip():
         if isinstance(image, np.ndarray):
             imspec = kwargs.get("spec")
             if imspec is None:
-                imspec = TensorSpec(shape=to_tensor(image.shape), object_type=object_type_inference(image))
+                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
             results = OrderedDict()
             results[imspec] = image
         elif isinstance(image, dict):
