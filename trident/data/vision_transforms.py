@@ -1,3 +1,4 @@
+import builtins
 import math
 import numbers
 import random
@@ -20,7 +21,9 @@ if get_backend() == 'pytorch':
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 
-__all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomTransform']
+__all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomTransform','RandomTransformAffine',
+           'AdjustBrightness','AdjustContrast','AdjustSaturation','AddNoise','AdjustHue','RandomAdjustHue','RandomAdjustBrightness','RandomAdjustContrast','RandomAdjustSaturation',
+           'Normalize','Unnormalize','CLAHE','Lighting']
 
 class Resize(VisionTransform):
     r"""
@@ -49,8 +52,6 @@ class Resize(VisionTransform):
         self._shape_info = self._get_shape(image)
         h, w, th, tw,pad_vert,pad_horz = self._shape_info
 
-        if h == th and w == tw:
-            return image
         if self.keep_aspect == False:
             return cv2.resize(image, (tw,th), self.interpolation)
         else:
@@ -105,9 +106,9 @@ class Resize(VisionTransform):
         if self.keep_aspect==False:
             return h, w,  eh, ew,0,0
         else:
-            scale = min(eh / h, ew / w)
-            th =  int( h*scale)
-            tw=  int( w*scale)
+            scale = min(float(eh) / h, float(ew) / w)
+            th =  int(builtins.round(h*scale,0))
+            tw=  int( builtins.round(w*scale,0))
             pad_vert = eh - th
             pad_horz = ew-tw
             return h,w,th,tw,pad_vert,pad_horz
@@ -423,7 +424,7 @@ class RandomCrop(VisionTransform):
         offset_y1 = random.choice(range(eh - h)) if eh > h else 0
         return h,w,eh, ew,offset_x,offset_y,offset_x1,offset_y1
 
-class RandomTransform(VisionTransform):
+class RandomTransformAffine(VisionTransform):
     r"""Apply Random affine transformation to the input PIL image.
     degrees (Union[int, float, sequence]): Range of the rotation degrees.
             If degrees is a number, the range will be (-degrees, degrees).
@@ -468,10 +469,9 @@ class RandomTransform(VisionTransform):
         image=unpack_singleton(image)
         self._shape_info = self._get_shape(image)
         mat_img, height, width,is_flip = self._shape_info
-        self.output_size=(height, width)
+
         image=np.clip(image.astype(np.float32),0,255)[:,:,:3]
-        image= cv2.warpAffine(image.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,
-                                   borderValue=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))  # , borderMode=cv2.BORDER_REPLICATE
+        image= cv2.warpAffine(image.copy(), mat_img,dsize= (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))  # , borderMode=cv2.BORDER_REPLICATE
         if is_flip:
             return image[:,::-1]
         else:
@@ -490,6 +490,7 @@ class RandomTransform(VisionTransform):
         return coords_result
 
     def _apply_mask(self, mask,spec:TensorSpec):
+        mask = unpack_singleton(mask)
         mat_img, height, width,is_flip = self._shape_info
         mask =cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(0,0,0))  # , borderMode=cv2.BORDER_REPLICATE
         if is_flip:
@@ -568,3 +569,510 @@ class RandomTransform(VisionTransform):
         matrix[5] += center[1]
         rr=np.random.random()
         return np.array(matrix).reshape((2,3)),h, w,rr< self.random_flip
+
+RandomTransform=RandomTransformAffine
+
+
+
+class Normalize(VisionTransform):
+    r"""
+    Normalize the input data with mean and standard deviation.
+    Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels,
+    this transform will normalize each channel of the input data.
+    ``output[channel] = (input[channel] - mean[channel]) / std[channel]``
+    :param mean: sequence of means for each channel.
+    :param std: sequence of standard deviations for each channel.
+
+    """
+
+    def __init__(self, mean=0.0, std=1.0,name='normalize',**kwargs):
+        super().__init__(name)
+        self.mean = mean
+        self.std=std
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        image = image.astype(np.float32)
+        norm_mean=self,mean
+        norm_std=self.std
+        if isinstance(self.mean, numbers.Number) and image.ndim == 3:
+            norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
+            norm_mean = np.expand_dims(norm_mean, 0)
+            norm_mean = np.expand_dims(norm_mean, 0)
+        if isinstance(self.std, numbers.Number) and image.ndim == 3:
+            norm_std = np.array([self.std, self.std, self.std]).astype(np.float32)
+            norm_std = np.expand_dims(norm_std, 0)
+            norm_std = np.expand_dims(norm_std, 0)
+        if image.ndim == 3:
+            image -= norm_mean
+            image /= norm_std
+            return image
+        elif image.ndim == 2:
+            if isinstance(norm_mean, numbers.Number) and isinstance(norm_std, numbers.Number):
+                image -= norm_mean
+                image /=norm_std
+                return image
+        return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class Unnormalize(VisionTransform):
+    r"""
+    Normalize the input data with mean and standard deviation.
+    Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels,
+    this transform will normalize each channel of the input data.
+    ``output[channel] = (input[channel] - mean[channel]) / std[channel]``
+    :param mean: sequence of means for each channel.
+    :param std: sequence of standard deviations for each channel.
+
+    """
+
+    def __init__(self, mean=0.0, std=1.0,name='normalize',**kwargs):
+        super().__init__(name)
+        self.mean = mean
+        self.std=std
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        image = image.astype(np.float32)
+        norm_mean=self,mean
+        norm_std=self.std
+        if isinstance(self.mean, numbers.Number) and image.ndim == 3:
+            norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
+            norm_mean = np.expand_dims(norm_mean, 0)
+            norm_mean = np.expand_dims(norm_mean, 0)
+        if isinstance(self.std, numbers.Number) and image.ndim == 3:
+            norm_std = np.array([self.std, self.std, self.std]).astype(np.float32)
+            norm_std = np.expand_dims(norm_std, 0)
+            norm_std = np.expand_dims(norm_std, 0)
+        if image.ndim == 3:
+            image *= norm_std
+            image += norm_mean
+
+            return image
+        elif image.ndim == 2:
+            if isinstance(norm_mean, numbers.Number) and isinstance(norm_std, numbers.Number):
+                image *= norm_std
+                image += norm_mean
+                return image
+        return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class AddNoise(VisionTransform):
+    r"""
+    Normalize the input data with mean and standard deviation.
+    Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels,
+    this transform will normalize each channel of the input data.
+    ``output[channel] = (input[channel] - mean[channel]) / std[channel]``
+    :param mean: sequence of means for each channel.
+    :param std: sequence of standard deviations for each channel.
+
+    """
+
+    def __init__(self, intensity=0.1,name='add_noise',**kwargs):
+        super().__init__(name)
+        self.intensity = intensity
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        rr = random.randint(0, 10)
+        orig_min = image.min()
+        orig_max = image.max()
+        noise = np.random.standard_normal(image.shape) * (self.intensity * (orig_max - orig_min))
+        if rr % 2 == 0:
+            noise = np.random.uniform(-1, 1, image.shape) * (self.intensity * (orig_max - orig_min))
+        image = np.clip(image + noise, orig_min, orig_max)
+        return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class AdjustBrightness(VisionTransform):
+    r"""
+    Adjust brightness of the input data.
+    :param value: how much to adjust the brightness. Can be any
+        non negative number. 0 gives the original image.
+
+    """
+
+    def __init__(self, value=0,name='adjust_brightness',**kwargs):
+        super().__init__(name)
+        if value < 0:
+            raise ValueError("brightness value should be non-negative")
+        self.value = value
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.value == 0:
+            return image
+
+        dtype = image.dtype
+        image = image.astype(np.float32)
+        alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
+        image = image * alpha
+        return image.clip(0, 255).astype(dtype)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class AdjustContrast(VisionTransform):
+    r"""
+       Adjust contrast of the input data.
+       :param value: how much to adjust the contrast. Can be any
+           non negative number. 0 gives the original image.
+
+       """
+
+    def __init__(self, value=0,name='adjust_contrast',**kwargs):
+        super().__init__(name)
+        if value < 0:
+            raise ValueError("contrast value should be non-negative")
+        self.value = value
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.value == 0:
+            return image
+
+        dtype = image.dtype
+        image = image.astype(np.float32)
+        alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
+        image = image * alpha +cv2.cvtColor(image,cv2.COLOR_RGB2GRAY).mean() * (1 - alpha)
+        return image.clip(0, 255).astype(dtype)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class AdjustSaturation(VisionTransform):
+    r"""
+    Adjust saturation of the input data.
+    :param value: how much to adjust the saturation. Can be any
+        non negative number. 0 gives the original image.
+    :param order: the same with :class:`VisionTransform`.
+    """
+    def __init__(self, value=0, name='adjust_saturation', **kwargs):
+        super().__init__(name)
+        if value < 0:
+            raise ValueError("contrast value should be non-negative")
+        self.value = value
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.value == 0:
+            return image
+
+        dtype = image.dtype
+        image = image.astype(np.float32)
+        alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
+        image = image * alpha + np.expand_dims(cv2.cvtColor(image,cv2.COLOR_RGB2GRAY),-1) * (1 - alpha)
+        return image.clip(0, 255).astype(dtype)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class AdjustHue(VisionTransform):
+    r"""
+       Adjust hue of the input data.
+       :param value: how much to adjust the hue. Can be any number
+           between 0 and 0.5, 0 gives the original image.
+
+    """
+
+    def __init__(self, value=0,name='adjust_hue',**kwargs):
+        super().__init__(name)
+        if value < 0 or value > 0.5:
+            raise ValueError("hue value should be in [0.0, 0.5]")
+        self.value = value
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        rr = random.randint(0, 10)
+        orig_min = image.min()
+        orig_max = image.max()
+        noise = np.random.standard_normal(image.shape) * (self.intensity * (orig_max - orig_min))
+        if rr % 2 == 0:
+            noise = np.random.uniform(-1, 1, image.shape) * (self.intensity * (orig_max - orig_min))
+        image = np.clip(image + noise, orig_min, orig_max)
+        return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class RandomAdjustBrightness(VisionTransform):
+    r"""
+    Adjust brightness of the input data.
+    :param value: how much to adjust the brightness. Can be any
+        non negative number. 0 gives the original image.
+
+    """
+
+    def __init__(self, value_range=(0.0, 1.0),name='random_adjust_brightness',**kwargs):
+        super().__init__(name)
+        self.value_range=value_range
+        self.value = 0
+        self.rn=random.randint(0,10)
+
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.rn%5>0:
+            if self.value == 0:
+                return image
+
+            dtype = image.dtype
+            image = image.astype(np.float32)
+            alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
+            image = image * alpha
+            return image.clip(0, 255).astype(dtype)
+        else:
+            return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+    def set_random(self):
+        self.value=np.random.choice(np.abs(np.random.standard_normal(1000)))
+
+class RandomAdjustContrast(VisionTransform):
+    r"""
+       Adjust contrast of the input data.
+       :param value: how much to adjust the contrast. Can be any
+           non negative number. 0 gives the original image.
+
+       """
+
+    def __init__(self, value_range=(0,1),name='random_adjust_contrast',**kwargs):
+        super().__init__(name)
+        self.value_range = value_range
+        self.value = 0
+        self.rn = random.randint(0, 10)
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.rn % 5 > 0:
+            if self.value == 0:
+                return image
+
+            dtype = image.dtype
+            image = image.astype(np.float32)
+            alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
+            image = image * alpha +cv2.cvtColor(image,cv2.COLOR_RGB2GRAY).mean() * (1 - alpha)
+            return image.clip(0, 255).astype(dtype)
+        else:
+            return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+    def set_random(self):
+        self.value=np.random.choice(np.abs(np.random.standard_normal(1000)))
+
+
+class RandomAdjustSaturation(VisionTransform):
+    r"""
+    Adjust saturation of the input data.
+    :param value: how much to adjust the saturation. Can be any
+        non negative number. 0 gives the original image.
+    :param order: the same with :class:`VisionTransform`.
+    """
+    def __init__(self, value_range=(0,1), name='random_adjust_saturation', **kwargs):
+        super().__init__(name)
+        self.value_range = value_range
+        self.value = 0
+        self.rn = random.randint(0, 10)
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.rn % 5 > 0:
+            if self.value == 0:
+                return image
+
+            dtype = image.dtype
+            image = image.astype(np.float32)
+            alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
+            image = image * alpha + np.expand_dims(cv2.cvtColor(image,cv2.COLOR_RGB2GRAY),-1) * (1 - alpha)
+            return image.clip(0, 255).astype(dtype)
+        else:
+            return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+    def set_random(self):
+        self.value=np.random.choice(np.abs(np.random.standard_normal(1000)))
+
+
+class RandomAdjustHue(VisionTransform):
+    r"""
+       Adjust hue of the input data.
+       :param value: how much to adjust the hue. Can be any number
+           between 0 and 0.5, 0 gives the original image.
+
+    """
+
+    def __init__(self, value_range=(0,0.5),name='random_adjust_hue',**kwargs):
+        super().__init__(name)
+        self.value_range = value_range
+        self.value = 0
+        self.rn = random.randint(0, 10)
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.rn % 5 > 0:
+            if self.value == 0:
+                return image
+
+            dtype = image.dtype
+            image = image.astype(np.uint8)
+            hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV_FULL)
+            h, s, v = cv2.split(hsv_image)
+
+            alpha = np.random.uniform(-self.value, self.value)
+            h = h.astype(np.uint8)
+            # uint8 addition take cares of rotation across boundaries
+            with np.errstate(over="ignore"):
+                h += np.uint8(alpha * 255)
+            hsv_image = cv2.merge([h, s, v])
+            return cv2.cvtColor(hsv_image, cv2.COLOR_HSV2RGB_FULL).astype(dtype)
+        else:
+            return image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+    def set_random(self):
+        self.value=np.random.choice(np.random.uniform(0.0,0.5,1000))
+
+
+
+class Lighting(VisionTransform):
+
+
+    def __init__(self, scale=0,name='lighting',**kwargs):
+        super().__init__(name)
+        if scale < 0:
+            raise ValueError("lighting scale should be non-negative")
+        self.scale = scale
+        self.eigvec = np.array(
+            [
+                [-0.5836, -0.6948, 0.4203],
+                [-0.5808, -0.0045, -0.8140],
+                [-0.5675, 0.7192, 0.4009],
+            ]
+        )  # reverse the first dimension for BGR
+        self.eigval = np.array([0.2175, 0.0188, 0.0045])
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.scale == 0:
+            return image
+
+        dtype = image.dtype
+        image = image.astype(np.float32)
+        alpha = np.random.normal(scale=self.scale, size=3)
+        image = image + self.eigvec.dot(alpha * self.eigval)
+        return image.clip(0, 255).astype(dtype)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class CLAHE(VisionTransform):
+
+
+    def __init__(self, clipLimit=5,gridsize=8,name='clahe',**kwargs):
+        super().__init__(name)
+        self.gridsize=gridsize
+        self.clipLimit=clipLimit
+
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+        lab_planes = cv2.split(lab)
+        clahe = cv2.createCLAHE(clipLimit=self.clipLimit, tileGridSize=(self.gridsize, self.gridsize))
+        lab_planes[0] = clahe.apply(lab_planes[0])
+        lab = cv2.merge(lab_planes)
+        return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
