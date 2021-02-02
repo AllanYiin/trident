@@ -39,8 +39,8 @@ __all__ = ['get_session','set_session','get_session_value','is_autocast_enabled'
            'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature',
            'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
 
-           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode',
-          'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map']
+           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode','adaptive_format',
+          'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map','dtype']
 
 
 # In some cases, these basic types are shadowed by corresponding
@@ -176,6 +176,7 @@ def _get_trident_dir():
             print(e)
 
     return _trident_dir
+
 def get_trident_dir():
     """Method for access trident_dir attribute in session
 
@@ -394,6 +395,23 @@ def snake2camel(string1):
     else:
         return ''.join(x.capitalize() or '_' for x in string1.split('_'))
 
+def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None):
+    format_string= '.3f'
+    if (prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2:
+        format_string ='.3%'
+    elif  (prev_value is None or prev_value==num) and builtins.abs(num)<1e-3:
+        format_string = '.3e'
+    elif prev_value is  not None and builtins.abs(prev_value)>0 and builtins.abs(num) < 1e-3:
+        diff=builtins.min(builtins.max(3,-1*math.log10(builtins.abs(builtins.abs(prev_value)-builtins.abs(num)))),8)
+        format_string = '.{0}e'.format(diff)
+    elif prev_value is not None:
+        diff=builtins.abs(prev_value-num)
+        if  1e-3 < diff < 1.2:
+            format_string = '.3%'
+        elif diff <= 1e-3:
+            format_string = '.3e'
+    return '{0:{1}}'.format(num, format_string)
+
 
 
 def PrintException():
@@ -426,6 +444,79 @@ class DeviceType(object):
     index: _int  # THPDevice_index
 
 
+class dtype:
+    if get_backend() == 'pytorch':
+        import torch
+        # type definition
+        bool = torch.bool
+
+        int8 = torch.int8
+        byte = torch.int8
+        int16 = torch.int16
+        short = torch.int16
+        int32 = torch.int32
+        intc = torch.int32
+        int64 = torch.int64
+        intp = torch.int64
+
+        uint8 = torch.uint8
+        ubyte = torch.uint8
+        float16 = torch.float16
+        half = torch.float16
+        float32 = torch.float32
+        single = torch.float32
+        float64 = torch.float64
+        double = torch.float64
+        long = torch.int64
+        float = torch.float32
+
+
+    elif get_backend() == 'tensorflow':
+        import tensorflow as tf
+        bool = tf.bool
+
+        int8 = tf.int8
+        byte = tf.int8
+        int16 = tf.int16
+        short = tf.int16
+        int32 = tf.int32
+        intc = tf.int32
+        int64 = tf.int64
+        intp = tf.int64
+
+        uint8 = tf.uint8
+        ubyte = tf.uint8
+        float16 = tf.float16
+        half = tf.float16
+        float32 = tf.float32
+        single = tf.float32
+        float64 = tf.float64
+        double = tf.float64
+        long = tf.int64
+        float = tf.float32
+
+    else:
+        bool = np.bool
+
+        int8 = np.int8
+        byte = np.int8
+        int16 = np.int16
+        short = np.int16
+        int32 = np.int32
+        intc = np.int32
+        int64 = np.int64
+        intp = np.int64
+
+        uint8 = np.uint8
+        ubyte = np.uint8
+        float16 = np.float16
+        half = np.float16
+        float32 = np.float32
+        single = np.float32
+        float64 = np.float64
+        double = np.float64
+        long = np.int64
+        float = np.float32
 # class Device(object):
 #     '''
 #     Describes device type and device id
@@ -692,11 +783,11 @@ class TensorShape(object):
 
 
     def get_dummy_tensor(self):
-        shape=self._dims
+        shape=[d for d in self._dims]
         if shape[0] is None:
             shape[0]=2
         else:
-            shape=(2,)+shape
+            shape=[2,]+shape
         return np.random.standard_normal(shape)
 
 
@@ -984,7 +1075,7 @@ def check_keys(model, pretrained_state_dict):
     print('Unused checkpoint keys:{}'.format(len(unused_pretrained_keys)))
     print('\n\t'.join(unused_pretrained_keys))
     print('Used keys:{}'.format(len(used_pretrained_keys)))
-    print('\n\t'.join(used_pretrained_keys))
+    #print('\n\t'.join(used_pretrained_keys))
 
     assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
     return True
