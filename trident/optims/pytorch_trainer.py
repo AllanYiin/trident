@@ -19,6 +19,10 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+from trident.data.transform import Transform
+
+from trident.data.vision_transforms import Unnormalize
+
 from trident.backend.opencv_backend import array2image, image2array
 
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
@@ -431,6 +435,7 @@ class Model(ModelBase):
                 argnames = get_signature(self._losses[alias].forward, alias)
             else:
                 argnames = get_signature(self._losses[alias], alias)
+            self._losses[alias].signature = argnames
         elif inspect.isfunction(loss):
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -441,6 +446,7 @@ class Model(ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
             argnames = get_signature(loss, alias)
+            self._losses[alias].signature = argnames
 
         # create signature
         if hasattr(self._losses[alias], 'signature') and self._losses[alias].signature is not None:
@@ -1076,8 +1082,8 @@ class Model(ModelBase):
         return_list.append(reverse_image_backend_adaption)
         for i in range(len(self._preprocess_flow)):
             fn = self._preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
+                return_list.append(Unnormalize(fn.mean, fn.std))
         return_list.append(array2image)
         return return_list
 
@@ -1243,6 +1249,8 @@ class ImageClassificationModel(Model):
         else:
             return self._lab2idx[label]
 
+
+
     def infer_single_image(self, img, topk=1):
         if self._model.built:
             self._model.eval()
@@ -1251,7 +1259,7 @@ class ImageClassificationModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
                     img = func(img)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
@@ -1279,7 +1287,6 @@ class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
 
-
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
@@ -1292,9 +1299,9 @@ class ImageRegressionModel(Model):
                 img = img[:, :, :3]
             rescale_scale=1.0
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
                     img = func(img,spec=self._model.input_spec)
-                    if func.__qualname__ == 'resize.<locals>.img_op':
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             if isinstance(self._model, Layer):
@@ -1306,8 +1313,6 @@ class ImageRegressionModel(Model):
 
                 raise ValueError('the model is not layer.')
 
-        else:
-            raise ValueError('the model is not built yet.')
 
 
 class ImageDetectionModel(Model):
@@ -1315,15 +1320,6 @@ class ImageDetectionModel(Model):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
         self.detection_threshould = 0.5
-
-    @property
-    def reverse_preprocess_flow(self):
-        return_list = []
-        for i in range(len(self.preprocess_flow)):
-            fn = self.preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
-        return return_list
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
@@ -1336,9 +1332,9 @@ class ImageDetectionModel(Model):
                 img = img[:, :, :3]
             rescale_scale=1
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
                     img = func(img,spec=self._model.input_spec)
-                    if func.__qualname__ == 'resize.<locals>.img_op':
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
@@ -1371,15 +1367,6 @@ class ImageGenerationModel(Model):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
 
-    @property
-    def reverse_preprocess_flow(self):
-        return_list = []
-        for i in range(len(self.preprocess_flow)):
-            fn = self.preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
-        return return_list
-
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
@@ -1388,10 +1375,12 @@ class ImageGenerationModel(Model):
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            rescale_scale=1.0
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                        rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
             result = self._model(inp)
@@ -1407,7 +1396,6 @@ class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
 
-
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
@@ -1419,10 +1407,12 @@ class FaceLandmarkModel(Model):
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1.0
+            img_shape=int_shape(img)
+
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img,spec=self._model.input_spec)
-                    if func.__qualname__ == 'resize.<locals>.img_op':
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             if isinstance(self._model, Layer):
@@ -1449,17 +1439,6 @@ class FaceRecognitionModel(Model):
         self._idx2lab = {}
         self._lab2idx = {}
 
-    @property
-    def reverse_preprocess_flow(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
-        for i in range(len(self.preprocess_flow)):
-            fn = self.preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
-        return_list.append(array2image)
-        return return_list
-
     def get_embedded(self, img_path):
         def norm(x):
             b = np.sqrt(np.sum(np.square(x)))
@@ -1484,10 +1463,12 @@ class FaceRecognitionModel(Model):
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            rescale_scale=1.0
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                        rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
             result = self._model(inp)[0]

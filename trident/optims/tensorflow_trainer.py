@@ -380,6 +380,7 @@ class Model(ModelBase):
                 argnames = get_signature(self._losses[alias].forward, alias)
             else:
                 argnames = get_signature(self._losses[alias], alias)
+            self._losses[alias].signature = argnames
         elif inspect.isfunction(loss):
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -390,6 +391,7 @@ class Model(ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
             argnames = get_signature(loss, alias)
+            self._losses[alias].signature = argnames
 
         # create signature
         if hasattr(self._losses[alias], 'signature') and self._losses[alias].signature is not None:
