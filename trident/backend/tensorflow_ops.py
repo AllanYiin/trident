@@ -20,7 +20,7 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
 from tensorflow.python.ops import math_ops
-from trident.backend import dtype as Dtype
+from trident.backend.common import dtype as Dtype
 
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
 
@@ -33,7 +33,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy'
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu',
+           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_crossentropy']
@@ -399,40 +399,38 @@ def is_sparse(x):
 
 
 
-def str2dtype(dtype):
+def str2dtype(dtype_str):
     """string to dtype
     Args:
-        dtype ():
+        dtype_str ():
     """
-    if isinstance(dtype, tf.DType):
-        return dtype
-    if isinstance(dtype, str):
-        if 'float64' in dtype.lower() or 'double' in dtype.lower():
-            dtype = tf.float64
-        elif 'float32' in dtype.lower() or 'single' in dtype.lower():
-            dtype = tf.float32
-        elif 'float16' in dtype.lower() or 'half' in dtype.lower():
-            dtype = tf.float16
-        elif 'float' in dtype.lower():
-            dtype = tf.float32
-        elif 'int64' in dtype.lower() or 'long' in dtype.lower():
-            dtype = tf.int64
-        elif 'int16' in dtype.lower() or 'short' in dtype.lower():
-            dtype = tf.int16
-        elif 'uint8' in dtype.lower() or 'byte' in dtype.lower():
-            dtype = tf.uint8
-        elif 'int8' in dtype.lower() or 'char' in dtype.lower():
-            dtype = tf.int8
-        elif 'int32' in dtype.lower() or 'int' in dtype.lower():
-            dtype = tf.int32
-        elif 'bool' in dtype.lower():
-            dtype = tf.bool
-    if dtype is None:
-        return tf.float32
-    return dtype
+    if isinstance(dtype_str, tf.DType):
+        return dtype_str
+    if isinstance(dtype_str, str):
+        if 'float64' in dtype_str.lower() or 'double' in dtype_str.lower():
+            return tf.float64
+        elif 'float32' in dtype_str.lower() or 'single' in dtype_str.lower():
+            return tf.float32
+        elif 'float16' in dtype_str.lower() or 'half' in dtype_str.lower():
+            return tf.float16
+        elif 'float' in dtype_str.lower():
+            return tf.float32
+        elif 'int64' in dtype_str.lower() or 'long' in dtype_str.lower():
+            return tf.int64
+        elif 'int16' in dtype_str.lower() or 'short' in dtype_str.lower():
+            return tf.int16
+        elif 'uint8' in dtype_str.lower() or 'byte' in dtype_str.lower():
+            return tf.uint8
+        elif 'int8' in dtype_str.lower() or 'char' in dtype_str.lower():
+            return tf.int8
+        elif 'int32' in dtype_str.lower() or 'int' in dtype_str.lower():
+            return tf.int32
+        elif 'bool' in dtype_str.lower():
+            return tf.bool
+    return tf.float32
 
 @numpy_compatible
-def cast(x, dtype):
+def cast(x, cast_dtype):
     """Casts a tensor to a new type.
 
     The operation casts `x` (in case of `Tensor`) or `x.values`
@@ -449,7 +447,7 @@ def cast(x, dtype):
 
     Args:
         x: A `Tensor` or `SparseTensor` or `IndexedSlices` of numeric type.
-        dtype: The destination type. The list of supported dtypes and string is the same as
+        cast_dtype: The destination type. The list of supported dtypes and string is the same as
         `x`.
 
 
@@ -466,9 +464,9 @@ def cast(x, dtype):
         TypeError: If `x` cannot be cast to the `dtype`.
 
     """
-    dtype=str2dtype(dtype)
-    if isinstance(dtype, tf.DType):
-        return tf.cast(x, dtype)
+    cast_dtype=str2dtype(cast_dtype)
+    if isinstance(cast_dtype, tf.DType):
+        return tf.cast(x, cast_dtype)
     else:
         return x
 
@@ -3233,6 +3231,22 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=None):
     else:
         return t
 
+@numpy_compatible
+def reverse(x, axis):
+  """Reverse a tensor along the specified axes.
+
+  Arguments:
+      x: Tensor to reverse.
+      axis: Integer or iterable of integers.
+          Axes to reverse.
+
+  Returns:
+      A tensor.
+  """
+  if isinstance(axis, int):
+    axis = [axis]
+  return array_ops.reverse(x, axis)
+
 
 ############################
 ## tensor manipulation
@@ -3901,6 +3915,7 @@ _FUN_NAMES = [
     ('arange', arange),
     ('make_onehot', make_onehot),
     ('meshgrid', meshgrid),
+    ('reverse',reverse),
     ('reshape', reshape),
     ('permute', permute),
     ('transpose', transpose),

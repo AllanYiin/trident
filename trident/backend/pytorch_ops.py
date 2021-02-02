@@ -18,12 +18,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-from trident.backend import dtype as Dtype
+from trident.backend.common import dtype as Dtype
 from trident.backend.common import *
 
 version = torch.__version__
 pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
+
 
 
 def is_gpu_available():
@@ -68,7 +69,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu',
+           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial' ,'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
@@ -205,7 +206,7 @@ def is_tensor_like(x):
         False
 
     """
-    return torch.is_tensor(to_tensor(x))
+    return is_tensor(x) or isinstance(x,np.ndarray)
 
 
 def to_numpy(*x) -> np.ndarray:
@@ -279,7 +280,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
-    elif dtype is None and isinstance(x, collections.Iterable) and all([isinstance(item, numbers.Integral) for item in x]):
+    elif dtype is None and not is_tensor(x) and isinstance(x, collections.Iterable) and all([isinstance(item, numbers.Integral) for item in x]):
         dtype = Dtype.int64
     elif dtype is None:
         dtype = Dtype.float32
@@ -386,10 +387,11 @@ def int_shape(x: Tensor):
 
 
 
-def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True)->TensorShape:
+def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->TensorShape:
     """Get tensor shape information ten convert to TensorShape
 
     Args:
+        is_singleton ():
         x (Tensor):
         need_exclude_batch_axis (bool):
 
@@ -401,8 +403,10 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True)->TensorShape:
         TensorShape([None, 64, 32, 32])
 
     """
-    if need_exclude_batch_axis:
+    if need_exclude_batch_axis and is_singleton==False:
         return TensorShape((None,)+int_shape(x)[1:])
+    elif need_exclude_batch_axis and is_singleton==True:
+        return TensorShape((None,)+int_shape(x))
     else:
         return TensorShape(int_shape(x))
 
@@ -419,11 +423,11 @@ def is_sparse(x):
     return is_tensor(x) and 'sparse' in str(type(x))
 
 
-def str2dtype(dtype:(str,torch.dtype)):
+def str2dtype(dtype_str:(str,torch.dtype)):
     """ Mapping string to dtype
 
     Args:
-        dtype (str): dtype representation string
+        dtype_str (str): dtype representation string
 
     Returns:
         dtype
@@ -432,29 +436,29 @@ def str2dtype(dtype:(str,torch.dtype)):
     torch.float16
 
     """
-    if isinstance(dtype, torch.dtype):
-        return dtype
-    elif isinstance(dtype, str):
-        if 'float64' in dtype.lower() or 'double' in dtype.lower():
+    if isinstance(dtype_str, torch.dtype):
+        return dtype_str
+    elif isinstance(dtype_str, str):
+        if 'float64' in dtype_str.lower() or 'double' in dtype_str.lower():
             return Dtype.float64
-        elif 'float32' in dtype.lower() or 'single' in dtype.lower():
+        elif 'float32' in dtype_str.lower() or 'single' in dtype_str.lower():
             return Dtype.float32
-        elif 'float16' in dtype.lower() or 'half' in dtype.lower():
+        elif 'float16' in dtype_str.lower() or 'half' in dtype_str.lower():
             return Dtype.float16
-        elif 'float' in dtype.lower():
+        elif 'float' in dtype_str.lower():
             return Dtype.float32
-        elif 'int64' in dtype.lower() or 'long' in dtype.lower():
+        elif 'int64' in dtype_str.lower() or 'long' in dtype_str.lower():
             return Dtype.int64
-        elif 'int16' in dtype.lower() or 'short' in dtype.lower():
+        elif 'int16' in dtype_str.lower() or 'short' in dtype_str.lower():
             return Dtype.int16
-        elif 'uint8' in dtype.lower() or 'byte' in dtype.lower():
+        elif 'uint8' in dtype_str.lower() or 'byte' in dtype_str.lower():
             return Dtype.uint8
-        elif 'int8' in dtype.lower() or 'char' in dtype.lower():
+        elif 'int8' in dtype_str.lower() or 'char' in dtype_str.lower():
             return Dtype.int8
-        elif 'int32' in dtype.lower() or 'int' in dtype.lower():
+        elif 'int32' in dtype_str.lower() or 'int' in dtype_str.lower():
             return Dtype.int32
-        elif 'bool' in dtype.lower():
-            return Dtype.bool_
+        elif 'bool' in dtype_str.lower():
+            return Dtype.bool
     return Dtype.float32
 
 
@@ -462,7 +466,7 @@ def str2dtype(dtype:(str,torch.dtype)):
 
 
 
-def cast(x, dtype):
+def cast(x, cast_dtype:(str,torch.dtype)):
     """Casts a tensor to a new type.
 
     The operation casts `x` (in case of `Tensor`) or `x.values`
@@ -479,7 +483,7 @@ def cast(x, dtype):
 
     Args:
         x: A `Tensor` or `SparseTensor` or `IndexedSlices` of numeric type.
-        dtype: The destination type. The list of supported dtypes and string is the same as
+        cast_dtype: The destination type. The list of supported dtypes and string is the same as
         `x`.
 
     Returns:
@@ -495,28 +499,28 @@ def cast(x, dtype):
         TypeError: If `x` cannot be cast to the `dtype`.
 
     """
-    dtype = str2dtype(dtype)
-    if isinstance(dtype, torch.dtype):
-        if dtype == Dtype.float64 or dtype == Dtype.double:
+    cast_dtype = str2dtype(cast_dtype)
+    if isinstance(cast_dtype, torch.dtype):
+        if cast_dtype == Dtype.float64 or cast_dtype == Dtype.double:
             return x.double()
-        elif dtype == Dtype.float16 or dtype == Dtype.half:
+        elif cast_dtype == Dtype.float16 or cast_dtype == Dtype.half:
             return x.half()
-        elif dtype == Dtype.float32:
+        elif cast_dtype == Dtype.float32:
             return x.float()
-        elif dtype == Dtype.int64:
+        elif cast_dtype == Dtype.int64:
             return x.long()
-        elif dtype == Dtype.int32:
+        elif cast_dtype == Dtype.int32:
             return x.int()
-        elif dtype == Dtype.int16:
+        elif cast_dtype == Dtype.int16:
             return x.short()
-        elif dtype == Dtype.int8:
+        elif cast_dtype == Dtype.int8:
             return x.char()
-        elif dtype == Dtype.uint8:
+        elif cast_dtype == Dtype.uint8:
             return x.byte()
-        elif dtype == Dtype.bool_:
+        elif cast_dtype == Dtype.bool:
             return x.bool()
         else:
-            return x.float()
+            return x
 
 def to(x, *args,**kwargs):
     if len(kwargs)==0 and all([isinstance(arg,str) for arg in args]):
@@ -1739,7 +1743,7 @@ def where(flag, value_if_true=None, value_if_false=None):
     if value_if_true is None and value_if_false is None:
         return torch.where(flag)
     else:
-        return torch.where(flag, value_if_true, value_if_false)
+        return torch.where(flag.byte(), value_if_true, value_if_false)
 
 
 ############################
@@ -3248,7 +3252,21 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     grid = torch.stack([grid_y, grid_x], -1).to(get_session_value('device'))
     return grid
 
+@numpy_compatible
+def reverse(x, axis):
+  """Reverse a tensor along the specified axes.
 
+  Arguments:
+      x: Tensor to reverse.
+      axis: Integer or iterable of integers.
+          Axes to reverse.
+
+  Returns:
+      A tensor.
+  """
+  if isinstance(axis, int):
+    axis = [axis]
+  return  torch.flip(x,dims=axis)
 ############################
 ## tensor manipulation
 ###########################
@@ -4336,6 +4354,7 @@ _FUN_NAMES = [
     ('arange', arange),
     ('make_onehot', make_onehot),
     ('meshgrid', meshgrid),
+    ('reverse', reverse),
     ('reshape', reshape),
     ('permute', permute),
     ('transpose', transpose),
