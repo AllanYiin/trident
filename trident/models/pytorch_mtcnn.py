@@ -22,11 +22,12 @@ from matplotlib.collections import PolyCollection
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.backend.opencv_backend import image2array
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine, load,get_device
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, Combine, load,get_device,fix_layer
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import clip_boxes_to_image, nms
 from trident.data.image_common import *
@@ -38,7 +39,7 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.optims.pytorch_trainer import ImageDetectionModel
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['Pnet','Rnet','Onet','Mtcnn']
 
 _session = get_session()
@@ -66,10 +67,11 @@ def p_net():
     PRelu(num_parameters=1),
     Conv2d((3,3),32,strides=1,auto_pad=False,use_bias=True,name='conv3'),
     PRelu(num_parameters=1),
-    Combine(
-        Conv2d((1,1),1,strides=1,auto_pad=False,use_bias=True,activation='sigmoid',name='conv4_1'),
-        Conv2d((1,1),4,strides=1,auto_pad=False,use_bias=True,name='conv4_2'),
-        Conv2d((1,1),10,strides=1,auto_pad=False,use_bias=True,name='conv4_3')),name='pnet')
+    ModuleDict(
+        {'conv4_1':Conv2d((1,1),1,strides=1,auto_pad=False,use_bias=True,activation='sigmoid',name='conv4_1'),
+        'conv4_2' :Conv2d((1,1),4,strides=1,auto_pad=False,use_bias=True,name='conv4_2'),
+        'conv4_3':Conv2d((1,1),10,strides=1,auto_pad=False,use_bias=True,name='conv4_3')},is_multicasting = True)
+        ,name='pnet')
 
 
 
@@ -86,10 +88,10 @@ def r_net():
     Flatten(),
     Dense(128,activation=None,use_bias=True,name='conv4'),
     PRelu(num_parameters=1),
-    Combine(
-        Dense(1,activation='sigmoid',use_bias=True,name='conv5_1'),
-        Dense(4,activation=None,use_bias=True,name='conv5_2'),
-        Dense(10,activation=None,use_bias=True,name='conv5_3'))
+    ModuleDict({
+        'conv5_1' :Dense(1,activation='sigmoid',use_bias=True,name='conv5_1'),
+        'conv5_2':Dense(4,activation=None,use_bias=True,name='conv5_2'),
+        'conv5_3':Dense(10,activation=None,use_bias=True,name='conv5_3')},is_multicasting = True)
     ,name='rnet')
 
 
@@ -110,28 +112,30 @@ def o_net():
     Flatten(),
     Dense(256,activation=None,use_bias=True,name='conv5'),
     PRelu(num_parameters=1),
-    Combine(
-        Dense(1,activation='sigmoid',use_bias=True,name='conv6_1'),
-        Dense(4,activation=None,use_bias=True,name='conv6_2'),
-        Dense(10,activation=None,use_bias=True,name='conv6_3')),name='onet')
+    ModuleDict({
+        'conv6_1':Dense(1,activation='sigmoid',use_bias=True,name='conv6_1'),
+        'conv6_2':Dense(4,activation=None,use_bias=True,name='conv6_2'),
+        'conv6_3':Dense(10,activation=None,use_bias=True,name='conv6_3')},is_multicasting = True)
+    ,name='onet')
 
 
 
 def Pnet(pretrained=True,
              input_shape=(3,12,12),
+             freeze_features=False,
              **kwargs):
-    if input_shape is not None and len(input_shape)==3:
-        input_shape=tuple(input_shape)
+    if input_shape is not None and len(input_shape) == 3:
+        input_shape = tuple(input_shape)
     else:
-        input_shape=(3,12,12)
-    pnet =ImageDetectionModel(input_shape=(3,12,12),output=p_net())
-    pnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
-    if pretrained==True:
-        download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX',dirname,'pnet.pth')
-        recovery_model=load(os.path.join(dirname,'pnet.pth'))
-        recovery_model = fix_layer(recovery_model)
-        recovery_model.to(_device)
-        pnet.model=recovery_model
+        input_shape = (3, 224, 224)
+    pnet = ImageDetectionModel(input_shape=(3,12,12),output=p_net())
+    if pretrained == True:
+        download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX', dirname, 'pnet.pth')
+        recovery_model = fix_layer(load(os.path.join(dirname, 'pnet.pth')))
+        pnet.model = recovery_model
+
+    pnet.model.input_shape = input_shape
+    pnet.model.to(_device)
     return pnet
 
 
@@ -143,7 +147,7 @@ def Rnet(pretrained=True,
     else:
         input_shape=(3,24,24)
     rnet =ImageDetectionModel(input_shape=(3,24,24),output=r_net())
-    rnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
+    rnet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1CH7z133_KrcWMx9zXAblMCV8luiQ3wph',dirname,'rnet.pth')
         recovery_model=load(os.path.join(dirname,'rnet.pth'))
@@ -160,7 +164,7 @@ def Onet(pretrained=True,
     else:
         input_shape=(3,48,48)
     onet =ImageDetectionModel(input_shape=(3,48,48),output=o_net())
-    onet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
+    onet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1a1dAlSzJOAfIz77Ic38JMQJYWDG_b7-_',dirname,'onet.pth')
         recovery_model=load(os.path.join(dirname,'onet.pth'))
@@ -172,7 +176,7 @@ def Onet(pretrained=True,
 
 
 class DetectorHead(Layer):
-    def __init__(self, cellsize=12,threshould=0.5, min_size=10,**kwargs):
+    def __init__(self, cellsize=12,threshould=0.5, min_size=5,**kwargs):
         super(DetectorHead, self).__init__(**kwargs)
         self.cellsize=cellsize
         self.threshould=threshould
@@ -280,7 +284,7 @@ def calibrate_box(bboxes, offsets):
 #
 #         self.signature = get_signature(self._model.forward)
 #         #data preprocess
-#         self.preprocess_flow =[normalize(0,255)]
+#         self.preprocess_flow =[Normalize(0,255)]
 #         self.nms_threshould = [0.9, 0.9, 0.3]
 #         self.detection_threshould = [0.5, 0.6, 0.9]
 #
@@ -450,7 +454,7 @@ def calibrate_box(bboxes, offsets):
 #                         box = boxes[k]
 #                         crop_img = img.copy()[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
 #                         if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
-#                             new_arr[k] = resize((24, 24))(crop_img).transpose([2, 0, 1]) / 255.0
+#                             new_arr[k] = Resize((24, 24))(crop_img).transpose([2, 0, 1]) / 255.0
 #                         # else:
 #                         #     print(box)
 #                     new_arr = to_tensor(new_arr)
@@ -498,7 +502,7 @@ def calibrate_box(bboxes, offsets):
 #                         box=boxes[k]
 #                         crop_img=img.copy()[int(box[1]):int(box[3]),int(box[0]):int(box[2]),:]
 #                         if crop_img.shape[0]>0 and crop_img.shape[1]>0:
-#                             new_arr[k]=resize((48,48))(crop_img).transpose([2,0,1])/255.0
+#                             new_arr[k]=Resize((48,48))(crop_img).transpose([2,0,1])/255.0
 #                         # else:
 #                         #     print(box)
 #
@@ -546,10 +550,11 @@ class mtcnn(ModuleList):
         super().__init__(name)
         self.nms_threshould = [0.9, 0.9, 0.3]
         self.detection_threshould = [0.5, 0.6, 0.9]
+        self.min_size=10
 
-        self.add_module('pnet',Pnet(pretrained=pretrained))
-        self.add_module('rnet', Rnet(pretrained=pretrained))
-        self.add_module('onet', Onet(pretrained=pretrained))
+        self.add_module('pnet',Pnet(pretrained=pretrained).model)
+        self.add_module('rnet', Rnet(pretrained=pretrained).model)
+        self.add_module('onet', Onet(pretrained=pretrained).model)
         self.add_module('pnet_detector', DetectorHead(cellsize=12, threshould=0.5, min_size=self.min_size))
 
 
@@ -600,7 +605,7 @@ class mtcnn(ModuleList):
                     box = boxes[k]
                     crop_img = x.copy()[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
                     if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
-                        new_arr[k] = resize((24, 24))(crop_img / 255.0).transpose([2, 0, 1])
+                        new_arr[k] = Resize((24, 24))(crop_img / 255.0).transpose([2, 0, 1])
                     # else:
                     #     print(box)
                 new_arr = to_tensor(new_arr)
@@ -643,7 +648,7 @@ class mtcnn(ModuleList):
                     box = boxes[k]
                     crop_img = x.copy()[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
                     if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
-                        new_arr[k] = resize((48, 48))(crop_img / 255.0).transpose([2, 0, 1])
+                        new_arr[k] = Resize((48, 48))(crop_img / 255.0).transpose([2, 0, 1])
                     # else:
                     #     print(box)
 
@@ -673,7 +678,7 @@ class mtcnn(ModuleList):
 class Mtcnn(ImageDetectionModel):
     def __init__(self, pretrained=True, min_size=10, **kwargs):
         model=mtcnn(pretrained=pretrained)
-        super(Mtcnn, self).__init__(input_shape=(12, 12,3), output=model)
+        super(Mtcnn, self).__init__(input_shape=(3,12, 12), output=model)
         self.min_size = min_size
         self.signature=get_signature(self.model.forward)
         self.preprocess_flow =[normalize(0,255)]

@@ -31,7 +31,7 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['se_bottleneck', 'SE_ResNet','SE_ResNet50','SE_ResNet101','SE_ResNet152']
 
 _session = get_session()
@@ -154,7 +154,7 @@ def SE_ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bi
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names=labels
-    model.preprocess_flow=[resize((input_shape[1],input_shape[2]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+    model.preprocess_flow=[Resize((input_shape[1],input_shape[2]),keep_aspect=True),Normalize(0,255),Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
     #model.summary()
     return model
 

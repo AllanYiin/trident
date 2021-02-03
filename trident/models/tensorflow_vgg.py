@@ -26,7 +26,7 @@ from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization
 from trident.layers.tensorflow_pooling import *
 from trident.optims.tensorflow_trainer import ImageClassificationModel
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['VGG19','VGG11','VGG13','VGG16']
 
 _session = get_session()
@@ -90,8 +90,8 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(224,224,3),include_top=Tr
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names = labels
-    model.preprocess_flow = [resize((input_shape[0], input_shape[1]), keep_aspect=True),to_bgr(),
-                             normalize([103.939, 116.779, 123.68], [1, 1, 1])]
+    model.preprocess_flow = [Resize((input_shape[0], input_shape[1]), keep_aspect=True),to_bgr(),
+                             Normalize([103.939, 116.779, 123.68], [1, 1, 1])]
 
 
     # model.summary()

@@ -11,6 +11,8 @@ import numpy as np
 import math
 from itertools import product as product
 import cv2
+from trident.backend.opencv_backend import image2array
+
 from trident.data.dataset import BboxDataset
 from trident.backend.common import *
 from trident.backend.tensorspec import *
@@ -26,7 +28,8 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.optims.pytorch_losses import *
-
+from trident.data.transform import  *
+from trident.data.vision_transforms import Resize,Normalize
 image_size = [640, 480]
 cfg = {'min_sizes': [[10, 16, 24], [32, 48], [64, 96], [128, 192, 256]], 'steps': [8, 16, 32, 64],
        'variance': [0.1, 0.2], 'clip': False, }
@@ -36,7 +39,7 @@ __all__ = ['Ssd', 'encode', 'decode', 'SsdBboxDataset', 'SsdBboxDatasetV2', 'Ssd
 
 
 def intersect(box_a, box_b):
-    """ We resize both tensors to [A,B,2] without new malloc:
+    """ We Resize both tensors to [A,B,2] without new malloc:
     [A,2] -> [A,1,2] -> [A,B,2]
     [B,2] -> [1,B,2] -> [A,B,2]
     Then we compute the area of intersect between box_a and box_b.
@@ -844,16 +847,20 @@ class SsdDetectionModel(ImageDetectionModel):
             try:
                 self._model.to(self.device)
                 self._model.eval()
+                if self._model.input_spec.object_type is None:
+                    self._model.input_spec.object_type = ObjectType.rgb
                 img = image2array(img)
                 if img.shape[-1] == 4:
                     img = img[:, :, :3]
                 img_orig = img.copy()
-
+                rescale_scale=1
                 for func in self.preprocess_flow:
-                    if inspect.isfunction(func):
-                        img = func(img)
-                        if func.__qualname__ == 'resize.<locals>.img_op':
-                            scale = func.scale
+                    if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                        img = func(img,spec=self._model.input_spec)
+                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
+                            rescale_scale = func.scale
+                    else:
+                        print(func)
 
                 img = image_backend_adaption(img)
                 inp = to_tensor(np.expand_dims(img, 0)).to(
@@ -878,9 +885,9 @@ class SsdDetectionModel(ImageDetectionModel):
                     if len(boxes) > 1:
                         box_probs, keep = self.hard_nms(box_probs, iou_threshold=self.iou_threshold, top_k=-1, )
                     boxes = box_probs[:, :4]
-                    boxes[:, 0::2] *= 640
-                    boxes[:, 1::2] *= 480
-                    boxes[:, :4] /= scale
+                    boxes[:, 0::2] *= self._model.input_spec.shape.dims[-1]
+                    boxes[:, 1::2] *= self._model.input_spec.shape.dims[-2]
+                    boxes[:, :4] /= rescale_scale
 
                     # boxes = boxes * (1 / scale[0])
                     return img_orig, to_numpy(boxes), to_numpy(box_probs[:, 4]).astype(np.int32),to_numpy(box_probs[:, 5])

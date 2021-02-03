@@ -29,7 +29,7 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, BatchNorm2d
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['DeeplabV3_plus','DeeplabV3']
 
 _session = get_session()

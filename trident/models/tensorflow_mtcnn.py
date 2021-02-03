@@ -17,6 +17,8 @@ from matplotlib.collections import PolyCollection
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import  image_ops
+from trident.backend.opencv_backend import image2array
+
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
@@ -31,7 +33,7 @@ from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization
 from trident.layers.tensorflow_pooling import *
 from trident.optims.tensorflow_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 
 __all__ = ['Pnet','Rnet','Onet','Mtcnn']
 
@@ -119,7 +121,7 @@ def Pnet(pretrained=True,
     else:
         input_shape=(3,12,12)
     pnet =ImageDetectionModel(input_shape=(3,12,12),output=p_net())
-    pnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
+    pnet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX',dirname,'pnet.pth')
         recovery_model=load(os.path.join(dirname,'pnet.pth'))
@@ -136,7 +138,7 @@ def Rnet(pretrained=True,
     else:
         input_shape=(3,24,24)
     rnet =ImageDetectionModel(input_shape=(3,24,24),output=r_net())
-    rnet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
+    rnet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1CH7z133_KrcWMx9zXAblMCV8luiQ3wph',dirname,'rnet.pth')
         recovery_model=load(os.path.join(dirname,'rnet.pth'))
@@ -152,7 +154,7 @@ def Onet(pretrained=True,
     else:
         input_shape=(3,48,48)
     onet =ImageDetectionModel(input_shape=(3,48,48),output=o_net())
-    onet.preprocess_flow = [normalize(0, 255), image_backend_adaption]
+    onet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
     if pretrained==True:
         download_model_from_google_drive('1a1dAlSzJOAfIz77Ic38JMQJYWDG_b7-_',dirname,'onet.pth')
         recovery_model=load(os.path.join(dirname,'onet.pth'))
@@ -267,7 +269,7 @@ class Mtcnn(ImageDetectionModel):
         super(Mtcnn, self).__init__(input_shape=(3,224,224),output=pnet)
         self.pnet=pnet
         self._model=pnet
-        self.preprocess_flow =[normalize(0,255)]
+        self.preprocess_flow =[Normalize(0,255)]
         self.nms_threshould = [0.9, 0.9, 0.3]
         self.detection_threshould = [0.5, 0.6, 0.9]
         pnet.add_module('pnet_detector', DetectorHead(cellsize=12, threshould=0.5, min_size=self.min_size))
@@ -358,7 +360,7 @@ class Mtcnn(ImageDetectionModel):
                         box = boxes[k]
                         crop_img = img.copy()[int(box[1]):int(box[3]), int(box[0]):int(box[2]), :]
                         if crop_img.shape[0] > 0 and crop_img.shape[1] > 0:
-                            new_arr[k] = resize((24, 24))(crop_img / 255.0).transpose([2, 0, 1])
+                            new_arr[k] = Resize((24, 24))(crop_img / 255.0).transpose([2, 0, 1])
                         # else:
                         #     print(box)
                     new_arr = to_tensor(new_arr)
@@ -403,7 +405,7 @@ class Mtcnn(ImageDetectionModel):
                         box=boxes[k]
                         crop_img=img.copy()[int(box[1]):int(box[3]),int(box[0]):int(box[2]),:]
                         if crop_img.shape[0]>0 and crop_img.shape[1]>0:
-                            new_arr[k]=resize((48,48))(crop_img/255.0).transpose([2,0,1])
+                            new_arr[k]=Resize((48,48))(crop_img/255.0).transpose([2,0,1])
                         # else:
                         #     print(box)
 

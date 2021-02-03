@@ -25,7 +25,7 @@ from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization, BatchNorm2d
 from trident.layers.tensorflow_pooling import *
 from trident.optims.tensorflow_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['DeeplabV3_plus','DeeplabV3']
 
 _session = get_session()
@@ -133,7 +133,7 @@ class _DeeplabV3_plus(Layer):
         high_level_feature = self.backbond2(low_level_feature)
         x=self.aspp(high_level_feature)
         new_shape =list(int_shape(x)[1:])
-        x=image_ops.resize_images_v2(x, [new_shape[1]*4,new_shape[0]*4], method=image_ops.ResizeMethod.BILINEAR)
+        x=Resize_images_v2(x, [new_shape[1]*4,new_shape[0]*4], method=image_ops.ResizeMethod.BILINEAR)
         low_level_feature=self.low_level_conv(low_level_feature)
         x=concate([x,low_level_feature],axis=-1)
         x=self.decoder(x)

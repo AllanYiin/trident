@@ -31,6 +31,7 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.models.pretrained_utils import _make_recovery_model_include_top
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['MobileNet','MobileNetV2']
 
 _session = get_session()
@@ -115,8 +116,8 @@ def MobileNet( input_shape=(3, 224, 224), classes=1000, use_bias=False, width_mu
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names = labels
-    model.preprocess_flow = [resize((224, 224), keep_aspect=True), normalize(0, 255),
-                             normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+    model.preprocess_flow = [Resize((224, 224), keep_aspect=True), Normalize(0, 255),
+                             Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
     # model.summary()
     return model
 

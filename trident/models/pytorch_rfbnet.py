@@ -36,7 +36,7 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.models.pytorch_ssd import *
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['RfbNet', 'generate_priors']
 
 _session = get_session()
@@ -129,7 +129,7 @@ def generate_priors(feature_map_list, shrinkage_list, image_size, min_boxes, cla
                     h = min_box / image_size[1]
                     priors.append([x_center, y_center, w, h])
     print("priors nums:{}".format(len(priors)))
-    priors = to_tensor(priors)  # .view(-1, 4)
+    priors = to_tensor(priors).to(get_device())  # .view(-1, 4)
     if clamp:
         torch.clamp(priors, 0.0, 1.0, out=priors)
     return priors
@@ -248,7 +248,7 @@ class RFBnet(Layer):
 
         self.num_classes = num_classes
         self.num_regressors = num_regressors
-        self.priors = []
+        self.register_buffer("priors", None)
         self.define_img_size(640)
 
         self.extra = Sequential(Conv2d((1, 1), num_filters=64, strides=1, activation='relu', use_bias=True),
@@ -301,7 +301,7 @@ class RFBnet(Layer):
             for k in range(0, len(feature_map_w_h_list[i])):
                 item_list.append(image_size[i] / feature_map_w_h_list[i][k])
             shrinkage_list.append(item_list)
-        self.priors = generate_priors(feature_map_w_h_list, shrinkage_list, image_size, min_boxes)
+        self.register_buffer("priors",generate_priors(feature_map_w_h_list, shrinkage_list, image_size, min_boxes))
 
     def compute_header(self, i, x):
         confidence = self.classification_headers[i](x)
@@ -425,8 +425,8 @@ class RFBnet(Layer):
         pad = np.abs(box1 - box)
         return box[0], pad[0]
 
-    def forward(self, *x):
-        x = enforce_singleton(x)
+    def forward(self, x):
+        self.priors.to(self.device)
         confidences = []
         locations = []
 
@@ -475,12 +475,15 @@ def RfbNet(include_top=True,
     rfbnet.palette[0] = (128, 255, 128)
     rfbnet.palette[1] = (128, 255, 128)
     rfbnet.preprocess_flow = [
-        resize((480, 640), True),
-        normalize(127.5, 127.5)
+        Resize((480, 640), True),
+        Normalize(127.5, 127.5)
     ]
     if pretrained == True:
         download_model_from_google_drive('1T_0VYOHaxoyuG1fAxY-6g0C7pfXiujns', dirname, 'version-RFB-640.pth')
         recovery_model = load(os.path.join(dirname, 'version-RFB-640.pth'))
+        priors=recovery_model.priors.clone()
+        recovery_model.__delattr__("priors")
+        recovery_model.register_buffer("priors",priors)
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'rfb640'
         recovery_model.eval()

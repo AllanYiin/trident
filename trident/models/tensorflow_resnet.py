@@ -25,7 +25,7 @@ from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization, BatchNorm
 from trident.layers.tensorflow_pooling import GlobalAvgPool2d, MaxPool2d
 from trident.optims.tensorflow_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['basic_block','bottleneck', 'ResNet','ResNet50','ResNet101','ResNet152']
 
 _session = get_session()
@@ -129,7 +129,7 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=F
         labels = [l.rstrip() for l in f]
         model.class_names=labels
         input_np_shape=to_numpy(input_shape)
-    model.preprocess_flow=[resize((input_np_shape[0],input_np_shape[1]),keep_aspect=True), to_bgr(), normalize([103.939, 116.779, 123.68], [1, 1, 1])]
+    model.preprocess_flow=[Resize((input_np_shape[0],input_np_shape[1]),keep_aspect=True), to_bgr(), Normalize([103.939, 116.779, 123.68], [1, 1, 1])]
     #model.summary()
     return model
 

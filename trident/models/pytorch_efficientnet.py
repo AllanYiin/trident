@@ -19,6 +19,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.data.vision_transforms import Resize,Normalize
 
 from trident.models.pretrained_utils import _make_recovery_model_include_top
 from trident.backend.common import *
@@ -36,7 +37,7 @@ __all__ = ['efficient_block', 'EfficientNet', 'EfficientNetB0', 'EfficientNetB1'
            'EfficientNetB4', 'EfficientNetB5', 'EfficientNetB6', 'EfficientNetB7']
 
 _session = get_session()
-_device =get_device()
+
 
 _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
@@ -219,8 +220,8 @@ def EfficientNet(width_coefficient, depth_coefficient, default_size, dropout_rat
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names = labels
-    model.preprocess_flow = [resize((default_size[2], default_size[1]), keep_aspect=True), normalize(0, 255),
-                             normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+    model.preprocess_flow = [Resize((default_size[2], default_size[1]), keep_aspect=True), Normalize(0, 255),
+                             Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
 
     # model.summary()
     return model
@@ -242,7 +243,7 @@ def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, inpu
         effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb0.model .input_shape = input_shape
-    effb0.model .to(_device)
+    effb0.model .to(get_device())
     return effb0
 
 
@@ -261,7 +262,7 @@ def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,inpu
         effb1.model = _make_recovery_model_include_top( effb1.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb1.model .input_shape = input_shape
-    effb1.model .to(_device)
+    effb1.model .to(get_device())
     return effb1
 
 
@@ -280,7 +281,7 @@ def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,inpu
         effb2.model = _make_recovery_model_include_top( effb2.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb2.model .input_shape = input_shape
-    effb2.model .to(_device)
+    effb2.model .to(get_device())
     return effb2
 
 
@@ -299,7 +300,7 @@ def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, inpu
         effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb3.model.input_shape = input_shape
-    effb3.model.to(_device)
+    effb3.model.to(get_device())
     return effb3
 
 
@@ -318,7 +319,7 @@ def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,inpu
         effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb4.model.input_shape = input_shape
-    effb4.model.to(_device)
+    effb4.model.to(get_device())
     return effb4
 
 
@@ -337,7 +338,7 @@ def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,inpu
         effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb5.model.input_shape = input_shape
-    effb5.model.to(_device)
+    effb5.model.to(get_device())
     return effb5
 
 
@@ -356,7 +357,7 @@ def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,inpu
         effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb6.model.input_shape = input_shape
-    effb6.model.to(_device)
+    effb6.model.to(get_device())
     return effb6
 
 
@@ -376,5 +377,5 @@ def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,inpu
         effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
 
     effb7.model.input_shape = input_shape
-    effb7.model.to(_device)
+    effb7.model.to(get_device())
     return effb7

@@ -32,7 +32,7 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import ImageClassificationModel
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['VGG19','VGG11','VGG13','VGG16']
 
 _session = get_session()
@@ -97,8 +97,8 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names = labels
-    model.preprocess_flow = [resize((input_shape[2], input_shape[1]), keep_aspect=True), normalize(0, 255),
-                             normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
+    model.preprocess_flow = [Resize((input_shape[2], input_shape[1]), keep_aspect=True), Normalize(0, 255),
+                             Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
     # model.summary()
 
     return model

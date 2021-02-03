@@ -2,7 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-
+import time
 import inspect
 import math
 import os
@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.backend.opencv_backend import image2array, array2image
 
 from trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, Sequential, get_device
@@ -34,7 +35,7 @@ from trident.layers.pytorch_normalizations import get_normalization, BatchNorm2d
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.misc.visualization_utils import generate_palette,plot_bbox
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = [ 'yolo4_body', 'YoloDetectionModel', 'DarknetConv2D', 'DarknetConv2D_BN_Mish',
            'DarknetConv2D_BN_Leaky', 'YoloLayer']
 
@@ -230,7 +231,7 @@ class YoloLayer(Layer):
 
     def compute_grid_offsets(self, grid_size):
 
-        self.register_buffer('grid', meshgrid(grid_size,grid_size,requires_grad=False).view((1, 1, grid_size, grid_size, 2)).float().detach())
+        self.register_buffer('grid', meshgrid(grid_size,grid_size).view((1, 1, grid_size, grid_size, 2)).float().detach())
         #self.grid=meshgrid(grid_size,grid_size,requires_grad=False).view((1, 1, grid_size, grid_size, 2)).float().detach()
 
         # Calculate offsets for each grid
@@ -279,7 +280,7 @@ class YoloLayer(Layer):
 class YoloDetectionModel(ImageDetectionModel):
     def __init__(self, inputs=None, input_shape=None,output=None):
         super(YoloDetectionModel, self).__init__(inputs, input_shape,output)
-        self.preprocess_flow = [resize((input_shape[-2], input_shape[-1]), True), normalize(0, 255)]
+        self.preprocess_flow = [Resize((input_shape[-2], input_shape[-1]), True), Normalize(0, 255)]
         self.detection_threshold = 0.7
         self.iou_threshold = 0.3
         self.class_names = None
@@ -432,7 +433,7 @@ class YoloDetectionModel(ImageDetectionModel):
                 for func in self.preprocess_flow:
                     if inspect.isfunction(func):
                         img = func(img)
-                        if func.__qualname__ == 'resize.<locals>.img_op':
+                        if func.__qualname__ == 'Resize.<locals>.img_op':
                             scale = func.scale
 
                 img = image_backend_adaption(img)
@@ -528,101 +529,5 @@ def darknet_body():
         resblock_body(1024, 4)
     )
 
-def yolo4_body(num_classes=80,image_size=608):
-    anchors1 = to_tensor(np.array([12, 16, 19, 36, 40, 28]).reshape(-1, 2),requires_grad=False)
-    anchors2 = to_tensor(np.array([36, 75, 76, 55, 72, 146]).reshape(-1, 2),requires_grad=False)
-    anchors3 = to_tensor(np.array([142, 110, 192, 243, 459, 401]).reshape(-1, 2),requires_grad=False)
-    num_anchors=len(anchors1)
-    """Create YOLO_V4 model CNN body in Keras."""
-    return Sequential(
-            DarknetConv2D_BN_Mish((3, 3), 32,name='first_layer'),
-            resblock_body(64, 1, all_narrow=False,name='block64'),
-            resblock_body(128, 2,name='block128'),
-            resblock_body(256, 8,name='block256'),
-            ShortCut2d(
-                {
-                    1:Sequential(
-                        resblock_body(512, 8,name='block512'),
-                        ShortCut2d(
-                            {
-                                1:Sequential(
-                                    resblock_body(1024, 4, name='block1024'),
-                                    DarknetConv2D_BN_Leaky( (1,1), 512,name='pre_maxpool1'),
-                                    DarknetConv2D_BN_Leaky( (3, 3),1024,name='pre_maxpool2'),
-                                    DarknetConv2D_BN_Leaky((1,1),512,name='pre_maxpool3'),
-                                    ShortCut2d(
-                                        MaxPool2d((13,13),strides=(1,1),auto_pad=True),
-                                        MaxPool2d((9,9), strides=(1, 1), auto_pad=True),
-                                        MaxPool2d((5,5), strides=(1, 1), auto_pad=True),
-                                        Identity(),
-                                        mode='concate'
-                                    ),
-                                    DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_1'),
-                                    DarknetConv2D_BN_Leaky((3, 3), 1024,name='pre_y19_2'),
-                                    DarknetConv2D_BN_Leaky((1, 1), 512,name='y_19',keep_output=True),
-                                    DarknetConv2D_BN_Leaky((1, 1),256,name='pre_y19_upsample'),
-                                    Upsampling2d(scale_factor=2,name='y19_upsample'),
-                                ),
-                                0:DarknetConv2D_BN_Leaky((1, 1), 256)
-                            },mode='concate'),
-                        DarknetConv2D_BN_Leaky((1, 1),256,name='pre_y38_1'),
-                        DarknetConv2D_BN_Leaky((3, 3),512,name='pre_y38_2'),
-                        DarknetConv2D_BN_Leaky((1, 1),256,name='pre_y38_3'),
-                        DarknetConv2D_BN_Leaky((3, 3),512,name='pre_y38_4'),
-                        DarknetConv2D_BN_Leaky((1, 1),256,name='y_38',keep_output=True),
-                        DarknetConv2D_BN_Leaky((1, 1),128,name='pre_y_38_upsample'),
-                        Upsampling2d(scale_factor=2,name='y_38_upsample'),
-                    ),
-                    0:DarknetConv2D_BN_Leaky((1, 1), 128)
-                },
-                mode='concate'),
-            DarknetConv2D_BN_Leaky((1, 1), 128,name='pre_y76_concate1'),
-            DarknetConv2D_BN_Leaky((3, 3), 256,name='pre_y76_concate2'),
-            DarknetConv2D_BN_Leaky((1, 1), 128,name='pre_y76_concate3'),
-            DarknetConv2D_BN_Leaky((3, 3), 256,name='pre_y76_concate4'),
-            DarknetConv2D_BN_Leaky((1, 1), 128,name='pre_y76_concate5'),
-            ShortCut2d(
-                #y76_output
-                Sequential(
-                    DarknetConv2D_BN_Leaky( (3, 3),256,name='pre_y76_output'),
-                    DarknetConv2D( (1, 1),num_anchors * (num_classes + 5),use_bias=True,name='y76_output'),
-                    YoloLayer(anchors=anchors1,num_classes=num_classes,grid_size=76, img_dim=image_size),
-                name='y76_output'),
-                # y38_output
-                Sequential(
-                    ShortCut2d(
-                        DarknetConv2D_BN_Leaky((3, 3), 256, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)),name='y76_downsample'),
-                        branch_from='y_38',mode='concate'),
-                    DarknetConv2D_BN_Leaky((1, 1), 256,name='pre_y38_concate1'),
-                    DarknetConv2D_BN_Leaky((3, 3), 512,name='pre_y38_concate2'),
-                    DarknetConv2D_BN_Leaky((1, 1), 256,name='pre_y38_concate3'),
-                    DarknetConv2D_BN_Leaky((3, 3), 512,name='pre_y38_concate4'),
-                    DarknetConv2D_BN_Leaky((1, 1), 256,name='pre_y38_concate5'),
-                    ShortCut2d(
-                        Sequential(
-                            DarknetConv2D_BN_Leaky((3, 3), 512, name='pre_y38_output'),
-                            DarknetConv2D((1, 1), num_anchors * (num_classes + 5), use_bias=True, name='y38_output'),
-                            YoloLayer(anchors=anchors2, num_classes=num_classes,grid_size=38,  img_dim=image_size),
-                            name='y38_output'),
-
-                        Sequential(
-                            ShortCut2d(
-                                DarknetConv2D_BN_Leaky((3, 3), 512, strides=(2, 2), auto_pad=False, padding=((1, 0), (1, 0)),name='y38_downsample'),
-                                branch_from='y_19', mode='concate'),
-                            DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_concate1'),
-                            DarknetConv2D_BN_Leaky((3, 3), 1024,name='pre_y19_concate2'),
-                            DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_concate3'),
-                            DarknetConv2D_BN_Leaky((3, 3), 1024,name='pre_y19_concate4'),
-                            DarknetConv2D_BN_Leaky((1, 1), 512,name='pre_y19_concate5'),
-                            Sequential(
-                                DarknetConv2D_BN_Leaky((3, 3),1024,name='pre_y19_output'),
-                                DarknetConv2D((1, 1), num_anchors * (num_classes + 5),use_bias=True,name='y19_output'),
-                                YoloLayer(anchors=anchors3,num_classes=num_classes,grid_size=19, img_dim=image_size),
-                            name='y19_output')),
-
-                        mode='concate')
-                )
-                ,mode = 'concate')
-    )
 
 

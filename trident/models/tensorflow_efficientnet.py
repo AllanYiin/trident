@@ -19,7 +19,7 @@ from trident.layers.tensorflow_blocks import *
 from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_pooling import GlobalAvgPool2d
 from trident.optims.tensorflow_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 
 __all__ = ['efficient_block','EfficientNet','EfficientNetB0','EfficientNetB1','EfficientNetB2','EfficientNetB3','EfficientNetB4','EfficientNetB5','EfficientNetB6','EfficientNetB7']
 
@@ -195,7 +195,7 @@ def EfficientNet(width_coefficient,
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names=labels
-    model.preprocess_flow=[resize((default_size[0],default_size[1]),keep_aspect=True),normalize(0,255),normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
+    model.preprocess_flow=[Resize((default_size[0],default_size[1]),keep_aspect=True),Normalize(0,255),Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
     return model
 
 
@@ -407,17 +407,16 @@ def EfficientNetB7(include_top=True,
     else:
         input_shape=(600, 600,3)
     effb7 =EfficientNet(2.0, 3.1, default_size=input_shape, dropout_rate=0.5, model_name='efficientnet-b7',include_top=include_top,num_classes=classes)
-    if pretrained==True:
-        with tf.device(get_device()):
-            if pretrained == True:
-                download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz', dirname, 'efficientnet-b7_tf.pth')
-                recovery_model = load(os.path.join(dirname, 'efficientnet-b7_tf.pth'))
-                recovery_model = fix_layer(recovery_model)
+    with tf.device(get_device()):
+        if pretrained == True:
+            download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz', dirname, 'efficientnet-b7_tf.pth')
+            recovery_model = load(os.path.join(dirname, 'efficientnet-b7_tf.pth'))
+            recovery_model = fix_layer(recovery_model)
 
-                recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
-                effb7.model = recovery_model
-            else:
-                effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
+            recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+            effb7.model = recovery_model
+        else:
+            effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
 
-            effb7.model.input_shape = input_shape
-        return effb7
+        effb7.model.input_shape = input_shape
+    return effb7

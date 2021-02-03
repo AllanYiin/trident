@@ -26,7 +26,7 @@ from trident.layers.tensorflow_layers import *
 from trident.layers.tensorflow_normalizations import get_normalization
 from trident.layers.tensorflow_pooling import *
 from trident.optims.tensorflow_trainer import *
-
+from trident.data.vision_transforms import Resize,Normalize
 __all__ = ['MobileNet','MobileNetV2']
 
 _session = get_session()
@@ -111,7 +111,7 @@ def MobileNet( input_shape=(224, 224,3), classes=1000, use_bias=False, width_mul
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]
         model.class_names = labels
-    model.preprocess_flow = [resize((224, 224), keep_aspect=True), normalize(127.5, 127.5)]
+    model.preprocess_flow = [Resize((224, 224), keep_aspect=True), Normalize(127.5, 127.5)]
     # model.summary()
     return model
 
