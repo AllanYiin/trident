@@ -2,6 +2,7 @@ import builtins
 import math
 import numbers
 import random
+import inspect
 from functools import wraps
 from typing import Sequence, Tuple, Dict, Union, Optional
 import collections
@@ -23,35 +24,91 @@ from trident.data.transform import VisionTransform
 
 __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomTransform','RandomTransformAffine',
            'AdjustBrightness','AdjustContrast','AdjustSaturation','AddNoise','AdjustHue','RandomAdjustHue','RandomAdjustBrightness','RandomAdjustContrast','RandomAdjustSaturation',
-           'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip']
+           'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip','RandomMirror','AdjustGamma','RandomBlur','RandomAdjustGamma','Blur']
 
 
+
+
+def randomize_with_validate(valid_range=None,no_change_value=None,**kwargs):
+    def randomize_wrapper(cls):
+        class Wrapper:
+            def __init__(self, **kwargs):
+                self.valid_range = None
+                self.no_change_value = None
+                if isinstance(valid_range,(tuple,list)) and len(valid_range)==2 and all([isinstance(t,numbers.Number) for t in valid_range]):
+                    self.valid_range=valid_range
+                if isinstance(no_change_value,numbers.Number):
+                    self.no_change_value=float(no_change_value)
+
+                rangs= dict([(k.replace( '_range',''),random.uniform(*v))   for k,v in kwargs.items() if  isinstance(v,tuple) and len(v)==2 ])
+                other_rangs = dict([(k, v) for k, v in kwargs.items() if not( isinstance(v,tuple) and len(v)==2)])
+
+
+                self.kwargs=kwargs
+
+                argspec = inspect.getfullargspec( cls.__init__)
+                _args=argspec.args
+                _args.remove('self')
+                _args.remove('name')
+
+                for k,v in self.kwargs.items():
+                    if k in _args:
+                        _args.remove(k)
+                self._args=_args
+                if len(rangs.values())==0  and self.valid_range is not None:
+                    if len(_args)==0 and  len(self.kwargs)==0:
+                        self.wrap = cls()
+                    else:
+                        self.wrap = cls(random.uniform(*self.valid_range),**other_rangs)
+                else:
+
+                    self.wrap = cls(*list(rangs.values()),**other_rangs)
+                self.rn=0
+
+            def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray]):
+                rangs,other_rangs=self.set_random()
+                if len(rangs)>0 and len(self.kwargs)>0:
+                    for k,v in rangs:
+                        setattr(self.wrap,k,v)
+                else:
+                    if len(self._args) > 0:
+                        setattr(self.wrap,self._args[0],random.uniform(*self.valid_range))
+
+                if self.rn % 5 > 0:
+                    return self.wrap(inputs)
+                else:
+                    return inputs
+
+            def set_random(self):
+                self.rn = random.randint(0, 10)
+                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
+                other_rangs = dict([(k, v) for k, v in kwargs.items() if not (isinstance(v, tuple) and len(v) == 2)])
+                return rangs,other_rangs
+
+        Wrapper.__name__ =  cls.__name__
+        return Wrapper
+    return randomize_wrapper
 
 
 def randomize(cls):
     class Wrapper:
         def __init__(self, **kwargs):
-            rangs= dict([(k.replace( '_range',''),random.uniform(*v))  for k,v in kwargs.items() if  isinstance(v,tuple) and len(v)==2])
             self.kwargs=kwargs
-            self.wrap = cls(*list(rangs.values()))
+            self.wrap = cls()
             self.rn=0
-
         def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray]):
-            rangs=self.set_random()
-            for k,v in rangs:
-                setattr(self.wrap,k,v)
             if self.rn % 5 > 0:
                 return self.wrap(inputs)
             else:
                 return inputs
 
-
         def set_random(self):
             self.rn = random.randint(0, 10)
-            return  [(k.replace('_range', ''), random.uniform(*v)) for k, v in self.kwargs.items() if isinstance(v, tuple) and len(v) == 2]
 
-
+    Wrapper.__name__ =  cls.__name__
     return Wrapper
+
+
 
 class Resize(VisionTransform):
     r"""
@@ -68,10 +125,12 @@ class Resize(VisionTransform):
 
     def __init__(self, output_size,keep_aspect=True, align_corner=True, interpolation=cv2.INTER_LINEAR,name='resize',**kwargs):
         super().__init__(name)
+        self.is_spatial=True
         self.output_size = output_size
         self.keep_aspect=keep_aspect
         self.align_corner=align_corner
         self.interpolation = interpolation
+        self.scale=1
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
@@ -134,12 +193,14 @@ class Resize(VisionTransform):
         if self.keep_aspect==False:
             return h, w,  eh, ew,0,0
         else:
-            scale = min(float(eh) / h, float(ew) / w)
-            th =  int(builtins.round(h*scale,0))
-            tw=  int( builtins.round(w*scale,0))
+            self.scale = min(float(eh) / h, float(ew) / w)
+            th =  int(builtins.round(h*self.scale,0))
+            tw=  int( builtins.round(w*self.scale,0))
             pad_vert = eh - th
             pad_horz = ew-tw
             return h,w,th,tw,pad_vert,pad_horz
+
+
 
 class ShortestEdgeResize(VisionTransform):
     def __init__(
@@ -152,6 +213,7 @@ class ShortestEdgeResize(VisionTransform):
         order=None
     ):
         super().__init__(order)
+        self.is_spatial = True
         if sample_style not in ("range", "choice"):
             raise NotImplementedError(
                 "{} is unsupported sample style".format(sample_style)
@@ -223,6 +285,7 @@ class Rescale(VisionTransform):
 
     def __init__(self, scale, interpolation=cv2.INTER_LINEAR,name='rescale',**kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.scale = scale
         self.output_size = None
         self.interpolation = interpolation
@@ -259,6 +322,7 @@ class RandomRescaleCrop(VisionTransform):
 
     def __init__(self, output_size,scale_range=(0.1, 3.0),ratio_range=(3.0 / 4, 4.0 / 3), interpolation=cv2.INTER_LINEAR,name='random_rescale_crop',**kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.output_size = output_size
         self.scale_range=scale_range
         self.ratio_range=ratio_range
@@ -335,8 +399,9 @@ class RandomCenterCrop(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size,scale_range=(0.1, 0.99), interpolation=cv2.INTER_LINEAR,name='random_center_crop',**kwargs):
+    def __init__(self, output_size,scale_range=(0.8, 1.2), interpolation=cv2.INTER_LINEAR,name='random_center_crop',**kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.output_size = output_size
         self.scale_range=scale_range
         self.interpolation = interpolation
@@ -346,9 +411,9 @@ class RandomCenterCrop(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         self._shape_info = self._get_shape(image)
-        x, y,th,tw,eh, ew= self._shape_info
+        x, y, th, tw, eh, ew = self._shape_info
 
-        crop_image= image[y: y + th, x: x + tw]
+        crop_image = image[y: y + th, x: x + tw]
         return cv2.resize(crop_image, (ew, eh), self.interpolation)
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -367,19 +432,17 @@ class RandomCenterCrop(VisionTransform):
 
 
     def _get_shape(self, image):
-        current_scale=np.random.uniform(*self.scale_range)
+        current_scale = np.random.uniform(*self.scale_range)
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
 
-
-
         h, w, _ = image.shape
-        th, tw = int(h * current_scale), int(w * current_scale)
-        assert th <= h and tw <= w, "output size is bigger than image size"
+        th, tw = builtins.min(int(h * current_scale),eh), builtins.min(int(w * current_scale),ew)
+
         x = int(round((w - tw) / 2.0))
         y = int(round((h - th) / 2.0))
-        return x, y,th,tw,eh, ew
+        return x, y, th, tw, eh, ew
 
 
 class RandomCrop(VisionTransform):
@@ -393,6 +456,7 @@ class RandomCrop(VisionTransform):
 
     def __init__(self, output_size,name='random_crop',**kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.output_size = output_size
 
 
@@ -482,6 +546,7 @@ class RandomTransformAffine(VisionTransform):
 
     def __init__(self, rotation_range=15,zoom_range=0.02, shift_range=0.02,  shear_range= 0.2,random_flip= 0.15, interpolation=cv2.INTER_LINEAR,name='resize',**kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.output_size =None
         self.rotation_range = rotation_range
         self.shift_range=shift_range
@@ -602,11 +667,9 @@ RandomTransform=RandomTransformAffine
 
 
 class HorizontalFlip(VisionTransform):
-
-
     def __init__(self,name='horizontal_flip',**kwargs):
         super().__init__(name)
-
+        self.is_spatial = True
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
@@ -628,9 +691,12 @@ class HorizontalFlip(VisionTransform):
         return mask[:, ::-1]
 
     def _get_shape(self, image):
-        h, w, c = image.shape
-        return h, w
+        height, width, _ = image.shape
+        return height, width
 
+@randomize
+class RandomMirror(HorizontalFlip):
+    pass
 
 class Normalize(VisionTransform):
     r"""
@@ -653,7 +719,7 @@ class Normalize(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         image = image.astype(np.float32)
-        norm_mean=self,mean
+        norm_mean=self.mean
         norm_std=self.std
         if isinstance(self.mean, numbers.Number) and image.ndim == 3:
             norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
@@ -701,7 +767,7 @@ class Unnormalize(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         image = image.astype(np.float32)
-        norm_mean=self,mean
+        norm_mean=self.mean
         norm_std=self.std
         if isinstance(self.mean, numbers.Number) and image.ndim == 3:
             norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
@@ -766,13 +832,14 @@ class AddNoise(VisionTransform):
 
 
 class AdjustBrightness(VisionTransform):
-    r"""
-    Adjust brightness of the input data.
-    :param value: how much to adjust the brightness. Can be any
-        non negative number. 0 gives the original image.
-
+    """Adjust brightness of an Image.
+        Args:
+            value (float):  How much to adjust the brightness. Can be
+                any non negative number. 0 gives a black image, 1 gives the
+                original image while 2 increases the brightness by a factor of 2.
+        Returns:
+            np.ndarray: Brightness adjusted image.
     """
-
     def __init__(self, value=0,name='adjust_brightness',**kwargs):
         super().__init__(name)
         if value < 0:
@@ -786,12 +853,10 @@ class AdjustBrightness(VisionTransform):
     def _apply_image(self, image,spec:TensorSpec):
         if self.value == 0:
             return image
-
-        dtype = image.dtype
         image = image.astype(np.float32)
         alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
         image = image * alpha
-        return image.clip(0, 255).astype(dtype)
+        return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -800,12 +865,14 @@ class AdjustBrightness(VisionTransform):
         return mask
 
 class AdjustContrast(VisionTransform):
-    r"""
-       Adjust contrast of the input data.
-       :param value: how much to adjust the contrast. Can be any
-           non negative number. 0 gives the original image.
-
-       """
+    """Adjust contrast of an Image.
+    Args:
+        value (float): How much to adjust the contrast. Can be any
+            non negative number. 0 gives a solid gray image, 1 gives the
+            original image while 2 increases the contrast by a factor of 2.
+    Returns:
+        np.ndarray: Contrast adjusted image.
+    """
 
     def __init__(self, value=0,name='adjust_contrast',**kwargs):
         super().__init__(name)
@@ -820,25 +887,28 @@ class AdjustContrast(VisionTransform):
     def _apply_image(self, image,spec:TensorSpec):
         if self.value == 0:
             return image
-
-        dtype = image.dtype
         image = image.astype(np.float32)
-        image=np.clip(128 + self.value * (image -  128), 0, 255)
-        print(image.max(),image.mean(),image.min())
-        return image
+        mean = round(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).mean())
+        image = (1 -  self.value) * mean +  self.value * image
+        return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
 
-    def _apply_mask(self, mask,spec:TensorSpec):
+    def _apply_mask(self,mask,spec:TensorSpec):
         return mask
 
 class AdjustSaturation(VisionTransform):
     r"""
     Adjust saturation of the input data.
-    :param value: how much to adjust the saturation. Can be any
-        non negative number. 0 gives the original image.
-    :param order: the same with :class:`VisionTransform`.
+    Args:
+        value (float):  How much to adjust the saturation. 0 will
+            give a gray image, 1 will give the original image while
+            2 will enhance the saturation by a factor of 2.
+
+    Returns:
+        output image array
+
     """
     def __init__(self, value=0, name='adjust_saturation', **kwargs):
         super().__init__(name)
@@ -855,9 +925,9 @@ class AdjustSaturation(VisionTransform):
 
         dtype = image.dtype
         image = image.astype(np.float32)
-        alpha = np.random.uniform(max(0, 1 - self.value), 1 + self.value)
-        image = image * alpha + np.expand_dims(cv2.cvtColor(image,cv2.COLOR_RGB2GRAY),-1) * (1 - alpha)
-        return image.clip(0, 255).astype(dtype)
+        degenerate = cv2.cvtColor(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
+        image = (1 - self.value) * degenerate + self.value * image
+        return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -875,7 +945,7 @@ class AdjustHue(VisionTransform):
 
     def __init__(self, value=0,name='adjust_hue',**kwargs):
         super().__init__(name)
-        if value < 0 or value > 0.5:
+        if value < -0.5 or value > 0.5:
             raise ValueError("hue value should be in [0.0, 0.5]")
         self.value = value
 
@@ -886,19 +956,46 @@ class AdjustHue(VisionTransform):
     def _apply_image(self, image,spec:TensorSpec):
         if self.value == 0:
             return image
-
-        dtype = image.dtype
         image = image.astype(np.uint8)
-        hsv_image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV_FULL)
-        h, s, v = cv2.split(hsv_image)
+        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV_FULL)
+        hsv[..., 0] += np.uint8(self.value * 255)
+        image = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB_FULL)
+        return image.clip(0, 255).astype(np.float32)
 
-        alpha = np.random.uniform(-self.value, self.value)
-        h = h.astype(np.uint8)
-        # uint8 addition take cares of rotation across boundaries
-        with np.errstate(over="ignore"):
-            h += np.uint8(alpha * 255)
-        hsv_image = cv2.merge([h, s, v])
-        return cv2.cvtColor(hsv_image, cv2.COLOR_HSV2BGR_FULL).astype(dtype)
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class AdjustGamma(VisionTransform):
+    """Perform gamma correction on an image.
+        Also known as Power Law Transform. Intensities in RGB mode are adjusted
+        based on the following equation:
+        I_out = 255 * gain * ((I_in / 255) ** gamma)
+        See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+    Args:
+        gamma (float): Non negative real number. gamma larger than 1 make the
+            shadows darker, while gamma smaller than 1 make dark regions
+            lighter.
+        gain (float): The constant multiplier.
+    """
+
+    def __init__(self, gamma=1, gain=1,name='adjust_gamma', **kwargs):
+        super().__init__(name)
+        if gamma < 0:
+            raise ValueError('Gamma should be a non-negative real number')
+        self.gamma=gamma
+        self.gain=gain
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.gamma == 1:
+            return image
+        image = image.astype(np.float32)
+        image = 255. * self.gain * np.power(image / 255., self.gamma)
+        return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -907,23 +1004,55 @@ class AdjustHue(VisionTransform):
         return mask
 
 
-@randomize
+@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
 class RandomAdjustBrightness(AdjustBrightness):
     pass
 
-@randomize
+@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
 class RandomAdjustContrast(AdjustContrast):
     pass
 
-@randomize
+@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
 class RandomAdjustSaturation(AdjustSaturation):
     pass
 
 
-@randomize
+@randomize_with_validate(valid_range=(-0.5, 0.5), no_change_value=0.)
 class RandomAdjustHue(AdjustHue):
     pass
 
+@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
+class RandomAdjustGamma(AdjustGamma):
+    pass
+
+
+class Blur(VisionTransform):
+    def __init__(self, ksize=5,name='blur',**kwargs):
+        super().__init__(name)
+        if ksize <= 0:
+            raise ValueError("lighting scale should be positive")
+        self.ksize = int(ksize)
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if self.ksize == 0:
+            return image
+        blur = cv2.GaussianBlur(image, (int(self.ksize), int(self.ksize)),cv2.BORDER_DEFAULT)
+        return blur.clip(0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+@randomize_with_validate(valid_range=(1, 20), no_change_value=1)
+class RandomBlur(Blur):
+    pass
 
 class Lighting(VisionTransform):
 
