@@ -1,12 +1,14 @@
 import inspect
 import numbers
+import sys
+from collections import Counter
 from enum import Enum
 from inspect import signature
-from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session,get_backend,TensorShape
+from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, dtype
 from typing import Optional, Union, overload
 import numpy as np
 
-__all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType']
+__all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType','object_type_inference','distict_color_count']
 
 
 if get_backend()== 'pytorch':
@@ -18,9 +20,9 @@ elif get_backend() == 'tensorflow':
 
 class ObjectType(Enum):
     array_data = 'array_data'
-    gray = 'gray'
-    rgb = 'rgb'
-    rgba = 'rgba'
+    gray = 'gray_image'
+    rgb = 'rgb_image'
+    rgba = 'rgba_image'
     label_mask = 'label_mask'
     color_mask = 'color_mask'
     binary_mask = 'binary_mask'
@@ -33,6 +35,69 @@ class ObjectType(Enum):
     classification_label = 'classification_label'
     corpus = 'corpus'
     sequence_label='sequence_label'
+
+
+
+def distict_color_count(img):
+    """Count for distinct colors in input image
+
+    Returns:
+        object:
+
+    Examples:
+        >>> img=read_image('../../trident_logo.png')[:,:,:3]
+        >>> len(distict_color_count(img))
+        1502
+        >>> img=read_image('../../trident_logo.png')[:,:,:1]
+        >>> len(distict_color_count(img))
+        125
+
+    """
+    return Counter([tuple(colors) for i in img for colors in i])
+
+
+
+def object_type_inference(data):
+
+
+    if isinstance(data,np.ndarray):
+        tt= len(distict_color_count(np.expand_dims(data,-1)))
+        if data.ndim == 2 and data.shape[-1] == 2:
+            return ObjectType.landmarks
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+            return ObjectType.absolute_bbox
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
+            return ObjectType.relative_bbox
+        elif data.ndim == 2 and len(distict_color_count(np.expand_dims(data,-1)))==2:
+            return ObjectType.binary_mask
+        elif data.ndim == 2 and (data.max()-data.min()+1)== len(distict_color_count(np.expand_dims(data,-1))):
+            return ObjectType.label_mask
+        elif data.ndim == 2 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+            return ObjectType.gray
+        elif data.ndim == 3 and data.shape[-1] == 1 and len(distict_color_count(data))==2:
+            return ObjectType.binary_mask
+        elif data.ndim == 3 and data.shape[-1] == 1 and (data.max()-data.min()+1)== len(distict_color_count(data)):
+            return ObjectType.label_mask
+        elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+            return ObjectType.gray
+        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 and len(distict_color_count(data))<100:
+            return ObjectType.color_mask
+        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+            return ObjectType.rgb
+        elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+            return ObjectType.rgba
+        elif data.ndim == 3 and data.dtype==np.int64 and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
+            return ObjectType.binary_mask
+        elif data.ndim == 3 and data.dtype in [np.float32,np.float16] and 0<=data.max()<=1 and 0<=data.min().round(0)<=1:
+            return ObjectType.alpha_mask
+        elif data.ndim <= 1 and data.dtype==np.int64 :
+            return ObjectType.classification_label
+        elif data.ndim == 2 and data.dtype==np.int64:
+            return ObjectType.color_mask
+        else:
+            sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape,data.dtype,data.min(),data.max())+'\n')
+            return ObjectType.array_data
+
 
 
 ExpectDataType = ObjectType
@@ -84,11 +149,7 @@ class TensorSpec(object):
         self._dtype = dtype if dtype is not None else None
         self._shape_tuple = None
         self.object_type = object_type
-        if object_type is not None:
-            if 'mask' in object_type.value or 'bbox' in object_type.value or 'rgb' in object_type.value or object_type == ObjectType.gray or object_type == ObjectType.landmarks:
-                self.is_spatial = True
-            else:
-                self.is_spatial = is_spatial
+
         self._name = name
         if shape is not None:
             if isinstance(shape,TensorShape) :
@@ -134,8 +195,11 @@ class TensorSpec(object):
                 raise ValueError('Axis {} is greater than the maximum allowed value: {}'
                                  .format(max_axis, max_dim))
     @classmethod
-    def tensor_to_spec(cls, t:Tensor, object_type:ObjectType=None,name=None):
-        return cls(shape=tensor_to_shape(t),dtype=t.dtype,object_type=object_type,name=name)
+    def tensor_to_spec(cls, t:Tensor, object_type:ObjectType=None,need_exclude_batch_axis=True, is_singleton=False, name=None):
+        if isinstance(t,numbers.Number):
+            return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=True), dtype=dtype.int64, object_type=object_type, name=name)
+
+        return cls(shape=tensor_to_shape(t,need_exclude_batch_axis=need_exclude_batch_axis,is_singleton=is_singleton),dtype=t.dtype,object_type=object_type,name=name)
 
 
     @property
@@ -147,6 +211,13 @@ class TensorSpec(object):
     def name(self):
         """Returns the (optionally provided) name of the described tensor."""
         return self._name
+
+    @property
+    def is_spatial(self):
+         if self.object_type is not None:
+            if 'mask' in self.object_type.value or 'bbox' in self.object_type.value or 'rgb' in self.object_type.value or self.object_type == ObjectType.gray or self.object_type == ObjectType.landmarks:
+                return True
+         return False
 
     def is_compatible_with(self, inputs):  # pylint:disable=useless-super-delegation
         """Returns True if spec_or_tensor is compatible with this TensorSpec.
