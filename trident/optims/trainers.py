@@ -14,6 +14,8 @@ from functools import partial
 import builtins
 
 import numpy as np
+
+from trident.backend.decorators import deprecated
 from trident.callbacks.lr_schedulers import AdjustLRCallback
 
 from trident.backend import iteration_tools
@@ -211,13 +213,41 @@ class TrainingPlan(object):
         self.num_epochs = num_epochs
         return self
 
+    @deprecated('0.7.0','with_batch_size')
     def within_minibatch_size(self, minibatch_size: int):
         self.minibatch_size = minibatch_size
         return self
 
+    def with_batch_size(self, minibatch_size: int):
+        self.minibatch_size = minibatch_size
+        return self
+
+    @deprecated('0.7.0', 'with_tensorboard')
     def within_tensorboard(self):
         self.enable_tensorboard=True
         #check weather have tensorboard
+        if get_backend() == 'pytorch':
+            try:
+                from trident.loggers.pytorch_tensorboard import SummaryWriter
+                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+
+            except Exception as e:
+                print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                print(e)
+                PrintException()
+        elif get_backend() == 'tensorflow':
+            try:
+                from trident.loggers.tensorflow_tensorboard import SummaryWriter
+                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+            except Exception as e:
+                print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                print(e)
+                PrintException()
+        return self
+
+    def with_tensorboard(self):
+        self.enable_tensorboard = True
+        # check weather have tensorboard
         if get_backend() == 'pytorch':
             try:
                 from trident.loggers.pytorch_tensorboard import SummaryWriter
@@ -318,12 +348,12 @@ class TrainingPlan(object):
         self.callbacks.append(plot)
         return self
 
-    def generate_datafeed(self, data_loader):
-        if data_loader.signature is None:
-            _ = data_loader.next()
-        # data_input=data_loader.traindata.data.symbol
-        # if len(data_loader.traindata.unpair)>0:
-        #     data_unpair = data_loader.traindata.unpair
+    def generate_datafeed(self, data_provider):
+        if data_provider.signature is None:
+            _ = data_provider.next()
+        # data_input=data_provider.traindata.data.symbol
+        # if len(data_provider.traindata.unpair)>0:
+        #     data_unpair = data_provider.traindata.unpair
 
         for trainingitem in self.training_items.value_list:
             existing_data_feed = None
@@ -331,10 +361,19 @@ class TrainingPlan(object):
                 existing_data_feed = trainingitem.training_context['data_feed']
 
             data_feed = OrderedDict()
-            datasets = data_loader.traindata.get_datasets()
-            available_items = data_loader.signature.outputs.key_list
-            available_items.extend(trainingitem.signature.outputs.key_list)
-            available_items = list(set(available_items))
+            datasets = data_provider.traindata.get_datasets()
+            data_symbols = iteration_tools.flatten([data_provider.traindata.data.symbol], iterable_types=(list, tuple))
+            label_symbols = iteration_tools.flatten([data_provider.traindata.label.symbol], iterable_types=(list, tuple))
+            unpair_symbols = iteration_tools.flatten([data_provider.traindata.unpair.symbol], iterable_types=(list, tuple))
+
+
+            available_items =list(set(data_symbols+label_symbols+unpair_symbols+trainingitem.signature.outputs.key_list))
+            if "" in available_items:
+                available_items.remove("")
+            if "" in label_symbols:
+                label_symbols.remove("")
+            if "" in unpair_symbols:
+                unpair_symbols.remove("")
 
             for inp in trainingitem.signature.inputs.key_list:
                 data_feed[inp] = None
@@ -353,24 +392,20 @@ class TrainingPlan(object):
                     data_feed['input'] = 'input'
                     available_items.remove('input')
 
-            data_symbols = iteration_tools.flatten([data_loader.traindata.data.symbol], iterable_types=(list, tuple))
-            label_symbols = iteration_tools.flatten([data_loader.traindata.label.symbol], iterable_types=(list, tuple))
-            unpair_symbols = iteration_tools.flatten([data_loader.traindata.unpair.symbol], iterable_types=(list, tuple))
-            if "" in label_symbols:
-                label_symbols.remove("")
-            if "" in unpair_symbols:
-                unpair_symbols.remove("")
+
 
             if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
-                if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_loader.traindata.data.element_spec.shape):
-                    data_feed[trainingitem.signature.inputs.key_list[0]] = data_loader.traindata.data.symbol
-                    available_items.remove(data_loader.traindata.data.symbol)
-            if len(trainingitem.signature.outputs) == len(label_symbols) == 1:
-                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_loader.traindata.label.symbol
-                available_items.remove(data_loader.traindata.label.symbol)
-            elif len(trainingitem.signature.outputs) == 1 and len(data_symbols) == 1 and len(label_symbols) == 0:
-                # autoencoder
-                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_loader.traindata.data.symbol
+                #if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_provider.traindata.data.element_spec.shape):
+                data_feed[trainingitem.signature.inputs.key_list[0]] = data_provider.traindata.data.symbol
+                available_items.remove(data_provider.traindata.data.symbol)
+            if len(trainingitem.signature.outputs) ==1 and  len(label_symbols) == 0:
+                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_provider.traindata.data.symbol
+                if data_provider.traindata.label.symbol in available_items:
+                    available_items.remove(data_provider.traindata.label.symbol)
+            elif len(trainingitem.signature.outputs) == len(label_symbols) == 1:
+                data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_provider.traindata.label.symbol
+                available_items.remove(data_provider.traindata.label.symbol)
+
 
             for out in trainingitem.signature.outputs.key_list:  # fill the data_feed by key
 
@@ -434,20 +469,20 @@ class TrainingPlan(object):
                     if callback.is_shared == True:
                         callback.on_training_start(self.__dict__)
 
-            data_loader = self._dataloaders.value_list[0]
-            data_loader.minibatch_size = self.minibatch_size
+            data_provider = self._dataloaders.value_list[0]
+            data_provider.minibatch_size = self.minibatch_size
             # generate data feed
 
             if not is_resume or only_steps == True:
-                self.generate_datafeed(data_loader)
-                if collect_data_inteval == 1 and len(data_loader.batch_sampler) * self.num_epochs > 1000:
+                self.generate_datafeed(data_provider)
+                if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
             if only_steps == True:
-                self.num_epochs = (max_batches // len(data_loader.batch_sampler)) + 2
+                self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
 
             for epoch in range(self.num_epochs):
                 try:
-                    for mbs, return_data in enumerate(data_loader):
+                    for mbs, return_data in enumerate(data_provider):
 
                         if self.is_terminate:
                             for callback in self.callbacks:
@@ -461,39 +496,27 @@ class TrainingPlan(object):
                                         callback.on_training_terminated(trainitem.training_context)
                         else:
 
-                            num_batches = len(data_loader.batch_sampler) * epoch + mbs
+                            num_batches = len(data_provider.batch_sampler) * epoch + mbs
                             iter_data = OrderedDict()
                             if isinstance(return_data, OrderedDict):
                                 for spec, data in return_data.item_list:
                                     iter_data[spec.name] = data
                             elif isinstance(return_data, tuple):
                                 for i in range(len(return_data)):
-                                    iter_data[data_loader.traindata.data_template.key_list[i].name] = return_data[i]
+                                    iter_data[data_provider.traindata.data_template.key_list[i].name] = return_data[i]
 
                             # check weather need out-of-sample evaluation
                             need_out_sample_evaluation = False
-                            if only_steps == False and self.out_sample_evaluation_on_epoch_end == True and mbs == len(
-                                    data_loader.batch_sampler) - 1:
-                                need_out_sample_evaluation = True
-                            elif only_steps == True and self.out_sample_evaluation_on_epoch_end == True and num_batches \
-                                    == max_batches - 1:
-                                need_out_sample_evaluation = True
-                            elif only_steps == False and self.out_sample_evaluation_unit == 'batch' and mbs > 0 and mbs % \
-                                    self.out_sample_evaluation_frequency == 0:
-                                need_out_sample_evaluation = True
-                            elif only_steps == True and self.out_sample_evaluation_unit == 'batch' and num_batches > 0 \
-                                    and num_batches % self.out_sample_evaluation_frequency == 0:
-                                need_out_sample_evaluation = True
-                            elif only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
-                                    data_loader.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
-                                need_out_sample_evaluation = True
-                            elif only_steps == True and self.out_sample_evaluation_unit == 'epoch' and num_batches == \
-                                    max_batches - 1:
+                            if self.out_sample_evaluation_on_epoch_end == True and mbs > 0 and self.out_sample_evaluation_unit == 'batch' and  mbs %  self.out_sample_evaluation_frequency == 0:
+                                need_out_sample_evaluation=True
+                            elif self.out_sample_evaluation_on_epoch_end == True and only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
+                                    data_provider.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
                                 need_out_sample_evaluation = True
 
+
                             iter_testdata = None
-                            if isinstance(data_loader, DataProvider) and data_loader.testdata is not None and need_out_sample_evaluation:
-                                return_test = data_loader.next_test()
+                            if isinstance(data_provider, DataProvider) and data_provider.testdata is not None and need_out_sample_evaluation:
+                                return_test = data_provider.next_test()
                                 if return_test is not None:
                                     iter_testdata = OrderedDict()
                                     if isinstance(return_test, OrderedDict):
@@ -501,7 +524,7 @@ class TrainingPlan(object):
                                             iter_testdata[spec.name] = data
                                     elif isinstance(return_test, tuple):
                                         for i in range(len(return_test)):
-                                            iter_testdata[data_loader.traindata.data_template.key_list[i].name] = return_test[i]
+                                            iter_testdata[data_provider.traindata.data_template.key_list[i].name] = return_test[i]
 
                             # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
 
@@ -517,7 +540,7 @@ class TrainingPlan(object):
                                                       epoch if only_steps == False else 0,
                                                       mbs if only_steps == False else num_batches,
                                                       self.num_epochs if only_steps == False else 1,
-                                                      len(data_loader.batch_sampler) if only_steps == False else max_batches,
+                                                      len(data_provider.batch_sampler) if only_steps == False else max_batches,
                                                       is_collect_data=mbs % collect_data_inteval == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0,
@@ -577,7 +600,7 @@ class TrainingPlan(object):
                                         print(e)
                                 return True
 
-                            if only_steps == False and (mbs + 1) % len(data_loader.batch_sampler) == 0:
+                            if only_steps == False and (mbs + 1) % len(data_provider.batch_sampler) == 0:
                                 break
 
                 except StopIteration:
