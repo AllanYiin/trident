@@ -8,6 +8,8 @@ from typing import Sequence, Tuple, Dict, Union, Optional
 import collections
 import  numpy as np
 import cv2
+from scipy import ndimage
+
 from trident.backend.tensorspec import TensorSpec,object_type_inference
 
 
@@ -16,6 +18,7 @@ from trident.backend.pytorch_ops import tensor_to_shape
 from trident.backend.common import OrderedDict
 from trident.backend.common import *
 from trident.backend.tensorspec import TensorSpec,object_type_inference
+
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
@@ -24,7 +27,8 @@ from trident.data.transform import VisionTransform
 
 __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomTransform','RandomTransformAffine',
            'AdjustBrightness','AdjustContrast','AdjustSaturation','AddNoise','AdjustHue','RandomAdjustHue','RandomAdjustBrightness','RandomAdjustContrast','RandomAdjustSaturation',
-           'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip','RandomMirror','AdjustGamma','RandomBlur','RandomAdjustGamma','Blur']
+           'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip','RandomMirror','AdjustGamma','RandomBlur','RandomAdjustGamma','Blur','InvertColor','RandomInvertColor','GrayScale','RandomGrayScale',
+           'ImageDilation','ImageErosion','ErosionThenDilation','DilationThenErosion','AdaptiveBinarization','SaltPepper','RandomErasing']
 
 
 
@@ -722,13 +726,15 @@ class Normalize(VisionTransform):
         norm_mean=self.mean
         norm_std=self.std
         if isinstance(self.mean, numbers.Number) and image.ndim == 3:
-            norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
-            norm_mean = np.expand_dims(norm_mean, 0)
-            norm_mean = np.expand_dims(norm_mean, 0)
+            norm_mean=np.ones((1,1,image.shape[-1]),dtype=np.float32)*self.mean
+        elif  isinstance(self.mean,(list,tuple))  and len(self.mean)==image.shape[-1]  and image.ndim == 3:
+            norm_mean=np.expand_dims(np.expand_dims(to_numpy(self.mean),0),0)
+
         if isinstance(self.std, numbers.Number) and image.ndim == 3:
-            norm_std = np.array([self.std, self.std, self.std]).astype(np.float32)
-            norm_std = np.expand_dims(norm_std, 0)
-            norm_std = np.expand_dims(norm_std, 0)
+            norm_std = np.ones((1, 1, image.shape[-1]),dtype=np.float32) * self.std
+        elif isinstance(self.std, (list, tuple)) and len(self.std) == image.shape[-1] and image.ndim == 3:
+            norm_std = np.expand_dims(np.expand_dims(to_numpy(self.std), 0), 0)
+
         if image.ndim == 3:
             image -= norm_mean
             image /= norm_std
@@ -1026,6 +1032,9 @@ class RandomAdjustGamma(AdjustGamma):
     pass
 
 
+
+
+
 class Blur(VisionTransform):
     def __init__(self, ksize=5,name='blur',**kwargs):
         super().__init__(name)
@@ -1050,9 +1059,237 @@ class Blur(VisionTransform):
         return mask
 
 
+class InvertColor(VisionTransform):
+    def __init__(self, name='color',**kwargs):
+        super().__init__(name)
+
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+            return 255 - image
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class GrayScale(VisionTransform):
+    def __init__(self, name='gray_scale',**kwargs):
+        super().__init__(name)
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if image.ndim == 3:
+            return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGB2GRAY),cv2.COLOR_GRAY2RGB)
+        elif image.ndim == 2:
+            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
 @randomize_with_validate(valid_range=(1, 20), no_change_value=1)
 class RandomBlur(Blur):
     pass
+
+@randomize
+class RandomInvertColor(InvertColor):
+    pass
+
+@randomize
+class RandomGrayScale(GrayScale):
+    pass
+
+
+
+
+class ImageErosion(VisionTransform):
+    r"""
+       Adjust hue of the input data.
+       :param value: how much to adjust the hue. Can be any number
+           between 0 and 0.5, 0 gives the original image.
+
+    """
+
+    def __init__(self, filter_size=3,repeat=1,name='image_erosion',**kwargs):
+        super().__init__(name)
+        if filter_size < 0:
+            raise ValueError('Gamma should be a non-negative real number')
+        self.filter_size=filter_size
+        self.repeat=repeat
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        # Creating kernel
+        kernel = np.ones((self.filter_size, self.filter_size), np.uint8)
+
+        # Using cv2.erode() method
+        image = cv2.erode(image, kernel, iterations = self.repeat)
+
+        return image.clip(0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class ImageDilation(VisionTransform):
+    r"""
+       Adjust hue of the input data.
+       :param value: how much to adjust the hue. Can be any number
+           between 0 and 0.5, 0 gives the original image.
+
+    """
+
+    def __init__(self, filter_size=3,repeat=1,name='image_dilation',**kwargs):
+        super().__init__(name)
+        if filter_size < 0:
+            raise ValueError('Gamma should be a non-negative real number')
+        self.filter_size=filter_size
+        self.repeat=repeat
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        # Creating kernel
+        kernel = np.ones((self.filter_size, self.filter_size), np.uint8)
+
+        # Using cv2.erode() method
+        image = cv2.dilate(image, kernel, iterations = self.repeat)
+
+        return image.clip(0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class DilationThenErosion(VisionTransform):
+    r"""
+       Adjust hue of the input data.
+       :param value: how much to adjust the hue. Can be any number
+           between 0 and 0.5, 0 gives the original image.
+
+    """
+
+    def __init__(self, filter_size=3,repeat=1,name='dilation_then_erosion',**kwargs):
+        super().__init__(name)
+        if filter_size < 0:
+            raise ValueError('Gamma should be a non-negative real number')
+        self.filter_size=filter_size
+        self.repeat=repeat
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        # Creating kernel
+        kernel = np.ones((self.filter_size, self.filter_size), np.uint8)
+
+        # Using cv2.erode() method
+        for i in range(self.repeat):
+            image = cv2.dilate(image, kernel, iterations=1)
+            image = cv2.erode(image, kernel, iterations =1)
+
+        return image.clip(0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+class ErosionThenDilation(VisionTransform):
+    r"""
+       Adjust hue of the input data.
+       :param value: how much to adjust the hue. Can be any number
+           between 0 and 0.5, 0 gives the original image.
+
+    """
+
+    def __init__(self, filter_size=3,repeat=1,name='erosion_then_dilation',**kwargs):
+        super().__init__(name)
+        if filter_size < 0:
+            raise ValueError('Gamma should be a non-negative real number')
+        self.filter_size=filter_size
+        self.repeat=repeat
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        kernel = np.ones((self.filter_size, self.filter_size), np.uint8)
+
+        # Using cv2.erode() method
+        for i in range(self.repeat):
+            image = cv2.erode(image, kernel, iterations=1)
+            image = cv2.dilate(image, kernel, iterations=1)
+
+
+        return image.clip(0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class AdaptiveBinarization(VisionTransform):
+    """Perform gamma correction on an image.
+        Also known as Power Law Transform. Intensities in RGB mode are adjusted
+        based on the following equation:
+        I_out = 255 * gain * ((I_in / 255) ** gamma)
+        See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+    Args:
+        gamma (float): Non negative real number. gamma larger than 1 make the
+            shadows darker, while gamma smaller than 1 make dark regions
+            lighter.
+        gain (float): The constant multiplier.
+    """
+
+    def __init__(self,threshold_type='otsu', name='adaptive_binarization', **kwargs):
+        super().__init__(name)
+        self.threshold_type=threshold_type
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        structure_shape = [1] * image.ndim
+        structure_shape[0]=self.filter_size
+        structure_shape[1] =self.filter_size
+        for i in range(self.repeat):
+            image = ndimage.morphology.grey_dilation(image, size=(self.filter_size,self.filter_size),structure=np.ones(tuple(structure_shape)))
+        return clip(image,0,255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
 
 class Lighting(VisionTransform):
 
@@ -1112,6 +1349,108 @@ class CLAHE(VisionTransform):
         lab_planes[0] = clahe.apply(lab_planes[0])
         lab = cv2.merge(lab_planes)
         return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class SaltPepper(VisionTransform):
+    """Perform gamma correction on an image.
+        Also known as Power Law Transform. Intensities in RGB mode are adjusted
+        based on the following equation:
+        I_out = 255 * gain * ((I_in / 255) ** gamma)
+        See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+    Args:
+        gamma (float): Non negative real number. gamma larger than 1 make the
+            shadows darker, while gamma smaller than 1 make dark regions
+            lighter.
+        gain (float): The constant multiplier.
+    """
+
+    def __init__(self, prob=0.01, name='adaptive_binarization', **kwargs):
+        super().__init__(name)
+        self.prob=prob
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        imgtype = image.dtype
+        rnd = np.random.rand(image.shape[0], image.shape[1])
+        #noisy = image.copy()
+        image[rnd < self.prob / 2] = 0.0
+        image[rnd > 1 - self.prob / 2] = 255.0
+        return clip(image,0,255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class RandomErasing(VisionTransform):
+    """Perform gamma correction on an image.
+        Also known as Power Law Transform. Intensities in RGB mode are adjusted
+        based on the following equation:
+        I_out = 255 * gain * ((I_in / 255) ** gamma)
+        See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+    Args:
+        gamma (float): Non negative real number. gamma larger than 1 make the
+            shadows darker, while gamma smaller than 1 make dark regions
+            lighter.
+        gain (float): The constant multiplier.
+    """
+
+    def __init__(self, size_range=(0.02,0.3),transparency_range=(0.4,0.8),transparancy_ratio=0.5, name='random_erasing', **kwargs):
+        super().__init__(name)
+        self.size_range=size_range
+        self.transparency_range=transparency_range
+        self.transparancy_ratio=transparancy_ratio
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        s_l, s_h = self.size_range
+        r_1 = 0.3
+        r_2 = 1 / 0.3
+        h, w, c = image.shape
+        p_1 = np.random.rand()
+
+        if p_1 > 0.5:
+            return image
+
+        while True:
+            s = np.random.uniform(s_l, s_h) * h * w / 4.0
+            r = np.random.uniform(r_1, r_2)
+            w1 = int(np.sqrt(s / r))
+            h1 = int(np.sqrt(s * r))
+            left = np.random.randint(0, w)
+            top = np.random.randint(0, h)
+
+            if left + w1 <= w and top + h1 <= h:
+                break
+        self.rr = np.random.uniform(0, 1)
+        if self.rr  <= self.transparancy_ratio:
+            transparancy = np.random.uniform(*self.transparency_range)
+            mask = np.ones_like(image)
+            mask[top:top + h1, left:left + w1, :] = 0
+            image = image * (mask) + image * (1 - mask) * (transparancy)
+        else:
+
+            if self.rr % 2 == 1:
+                c1 = np.random.uniform(0, 255, (h1, w1, c))
+            else:
+                c1 = np.random.uniform(0, 255)
+
+            image[top:top + h1, left:left + w1, :] = c1
+        return clip(image,0,255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
