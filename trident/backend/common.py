@@ -870,7 +870,7 @@ class Signature(object):
         elif isinstance(v, (list, tuple)):
             return '{0}: Tensor[{1}]'.format(k, v)
         elif  v.__class__.__name__== "TensorSpec":
-            return '{0}: Tensor[{1}]'.format(k, v._shape_tuple)
+            return '{0}: Tensor[{1}] ({2})'.format(k, v._shape_tuple,v.object_type)
         else:
             return '{0}:{1}'.format(k, v)
 
