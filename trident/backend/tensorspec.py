@@ -16,7 +16,7 @@ if get_backend()== 'pytorch':
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops  import *
 
-
+_primes=[1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251]
 
 class ObjectType(Enum):
     array_data = 'array_data'
@@ -55,13 +55,11 @@ def distict_color_count(img):
     """
     return Counter([tuple(colors) for i in img for colors in i])
 
-
+def pixel_numbers(data):
+    return list(set(data.reshape(-1).to_list()))
 
 def object_type_inference(data):
-
-
     if isinstance(data,np.ndarray):
-        tt= len(distict_color_count(np.expand_dims(data,-1)))
         if data.ndim == 2 and data.shape[-1] == 2:
             return ObjectType.landmarks
         elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
@@ -80,10 +78,17 @@ def object_type_inference(data):
             return ObjectType.label_mask
         elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.gray
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 and len(distict_color_count(data))<100:
-            return ObjectType.color_mask
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
-            return ObjectType.rgb
+        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 :
+            if np.array_equal(data[:,:0],data[:,:1]) and np.array_equal(data[:,:2],data[:,:1]):
+                return ObjectType.gray
+            elif not np.array_equal(data,data.round()):
+                return ObjectType.rgb
+            elif len(list(set(pixel_numbers(data)) & set(_primes[3:])))>3 :
+                return ObjectType.rgb
+            elif len(distict_color_count(data)) < 100:
+                return ObjectType.color_mask
+            else:
+                return ObjectType.rgb
         elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.rgba
         elif data.ndim == 3 and data.dtype==np.int64 and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
