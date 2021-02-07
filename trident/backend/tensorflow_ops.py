@@ -68,8 +68,16 @@ def numpy_compatible(func):
             mathfuncs=get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
+        elif isinstance(x, list) and all([isinstance(arg, np.ndarray) for arg in x]) and func.__name__ in ['concate','stack','vstack','hstack']:
+            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
+            y = numpy_func(*args, **kwargs)
+            return y
+        elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
+            tensor_func = get_function(func.__name__, ['trident.backend.tensorflow_ops'])
+            y = tensor_func(*args, **kwargs)
+            return y
         elif isinstance(x, np.ndarray):
-            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops'])
+            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
             if numpy_func is not None:
                 for arg in args:
                     if is_tensor(arg):

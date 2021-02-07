@@ -103,8 +103,16 @@ def numpy_compatible(func):
             mathfuncs=get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
+        elif isinstance(x, list) and all([isinstance(arg, np.ndarray) for arg in x]) and func.__name__ in ['concate','stack','vstack','hstack']:
+            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
+            y = numpy_func(*args, **kwargs)
+            return y
+        elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
+            tensor_func = get_function(func.__name__, ['trident.backend.pytorch_ops'])
+            y = tensor_func(*args, **kwargs)
+            return y
         elif isinstance(x, np.ndarray):
-            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops'])
+            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
             if numpy_func is not None:
                 for arg in args:
                     if is_tensor(arg):
@@ -403,6 +411,8 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
         TensorShape([None, 64, 32, 32])
 
     """
+    if isinstance(x,numbers.Number):
+        return TensorShape((None,))
     if need_exclude_batch_axis and is_singleton==False:
         return TensorShape((None,)+int_shape(x)[1:])
     elif need_exclude_batch_axis and is_singleton==True:
