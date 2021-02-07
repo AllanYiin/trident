@@ -2040,30 +2040,20 @@ class Reshape(Layer):
         """
         Reshape the input volume
         Args:
-            *shape (ints): new shape, WITHOUT specifying batch size as first
+            *target_shape (ints): new shape, WITHOUT specifying batch size as first
             dimension, as it will remain unchanged.
         """
         super(Reshape, self).__init__(name=name)
-        if isinstance(target_shape, int):
-            target_shape = to_tensor(target_shape)
-        elif isinstance(target_shape, tuple):
-            target_shape = to_tensor(to_list(target_shape))
-        elif isinstance(target_shape, list):
-            target_shape = to_tensor(tuple(target_shape))
-        elif is_tensor(target_shape):
-            target_shape = target_shape
-
-        self.register_buffer('target_shape', target_shape)
+        if isinstance(target_shape,numbers.Integral):
+            self.target_shape=(target_shape,)
+        elif isinstance(target_shape,list):
+            self.target_shape= tuple(target_shape)
+        else:
+            self.target_shape=target_shape
 
     def forward(self, x, **kwargs):
-        x = enforce_singleton(x)
         shp = self.target_shape
-        new_shape = None
-        if -1 in shp:
-            new_shape = concate([to_tensor(x.shape[0]), shp], axis=0)
-        else:
-            new_shape = concate([to_tensor(-1), shp], axis=0)
-        return torch.reshape(x, tuple(to_list(new_shape)))
+        return torch.reshape(x,(int_shape(x)[0],)+ tuple(shp))
 
 
 class Permute(Layer):

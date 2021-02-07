@@ -8,6 +8,7 @@ import collections
 import inspect
 import itertools
 import math
+import numbers
 from itertools import repeat
 import numpy as np
 import tensorflow as tf
@@ -31,6 +32,7 @@ from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_activations import get_activation
 from trident.layers.tensorflow_initializers import *
 from trident.backend import dtype
+
 _tf_data_format = 'channels_last'
 
 
@@ -1469,7 +1471,12 @@ class Lambda(Layer):
 class Reshape(Layer):
     def __init__(self, target_shape, name=None, **kwargs):
         super(Reshape, self).__init__(name=name)
-        self.target_shape = target_shape
+        if isinstance(target_shape, numbers.Integral):
+            self.target_shape = (target_shape,)
+        elif isinstance(target_shape, list):
+            self.target_shape = tuple(target_shape)
+        else:
+            self.target_shape =target_shape
 
     def build(self, input_shape:TensorShape):
         if self._built == False:
@@ -1478,7 +1485,7 @@ class Reshape(Layer):
 
     def forward(self, x, **kwargs) :
 
-        x = tf.reshape(x, tf.constant((x.get_shape()[0], *self.target_shape), dtype=tf.int32))
+        x = tf.reshape(x, tf.constant((int_shape(x)[0], *self.target_shape), dtype=tf.int32))
         return x
 
     def extra_repr(self):
