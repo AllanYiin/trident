@@ -369,10 +369,10 @@ class ImageDataProvider(object):
         if name=='mode':
             if isinstance(self.traindata,Iterator):
                 self.traindata.mode=value
-
-                self.traindata._sample_iter.mode=value
+                self.traindata.batch_sampler.mode=value
             if isinstance(self.testdata,Iterator):
                 self.testdata.mode=value
+                self.testdata.batch_sampler.mode = value
 
 
 
