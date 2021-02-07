@@ -109,7 +109,7 @@ class BatchSampler(Sampler):
         [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
     """
 
-    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=False, sample_filter=None,mode='tuple'):
+    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=False, sample_filter=None):
         super().__init__(data_source)
         if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size <= 0:
             raise ValueError("batch_size should be a positive integeral value, "
@@ -121,7 +121,7 @@ class BatchSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.is_shuffle = is_shuffle
-        self.mode=mode
+
 
         idxes = np.arange(len(self.data_source))
         if len(self.data_source) % self.batch_size > 0:
@@ -138,7 +138,6 @@ class BatchSampler(Sampler):
     def __iter__(self):
 
         batch_data = []
-
         for idx in self.sampler:
             try:
                 _return_data = self.data_source[idx]
@@ -146,27 +145,26 @@ class BatchSampler(Sampler):
                 if self.sample_filter is None or self.sample_filter(_return_data.value_list):
                     batch_data.append(_return_data.value_list)
 
+                    if len(batch_data) == self.batch_size:
+                        returnData = copy.deepcopy(self.data_source.data_template)
+                        unzip_batch_data = list(zip(*batch_data))
+                        for i in range(len(unzip_batch_data)):
+                            if check_same_size(*unzip_batch_data[i]):
+                                try:
+                                    returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i] ])
+                                except Exception as e:
+                                    print([array.shape for array in unzip_batch_data[i] ])
+                            else:
+                                print([array.shape for array in unzip_batch_data[i] ])
+                                batch_data=[]
+
+                        if self.data_source.mode=='tuple':
+                            yield tuple(returnData.value_list)
+                        elif self.data_source.mode=='dict':
+                            yield returnData
+                        batch_data = []
             except Exception as e:
                 print(e)
-
-            if len(batch_data) == self.batch_size:
-                returnData = copy.deepcopy(self.data_source.data_template)
-                unzip_batch_data = list(zip(*batch_data))
-                if self.mode=='tuple':
-                    for i in range(len(unzip_batch_data)):
-                        if all([isinstance(item, numbers.Integral) for item in unzip_batch_data[i]]):
-                            unzip_batch_data[i]= np.array(list(unzip_batch_data[i])).astype(np.int64)
-                        else:
-                            unzip_batch_data[i] = np.array(list(unzip_batch_data[i]))
-                    yield tuple(unzip_batch_data)
-                elif self.mode=='dict':
-                    for i in range(len(unzip_batch_data)):
-                        if all([isinstance(item,numbers.Integral) for item in unzip_batch_data[i]]):
-                            returnData[returnData.key_list[i]] =np.array(list(unzip_batch_data[i])).astype(np.int64)
-                        else:
-                            returnData[returnData.key_list[i]] = np.array(list(unzip_batch_data[i]))
-                    yield returnData
-                batch_data = []
 
 
 

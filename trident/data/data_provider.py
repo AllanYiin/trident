@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import copy
+import inspect
 import itertools
 import locale
 import os
@@ -12,6 +13,9 @@ import warnings
 from typing import List
 
 import numpy as np
+from trident.data.vision_transforms import Unnormalize
+
+from trident.data.transform import Transform
 
 try:
     from urllib.request import urlretrieve
@@ -150,10 +154,8 @@ class ImageDataProvider(object):
             return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.image_transform_funcs:
-                if not fc.__qualname__.startswith('random_') or 'crop' in fc.__qualname__ or 'rescale' in fc.__qualname__ or (
-                        fc.__qualname__.startswith('random_') and random.randint(0, 10) % 2 == 0):
+                if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
                     img_data = fc(img_data)
-
             img_data = image_backend_adaption(img_data)
 
             return img_data
@@ -166,9 +168,9 @@ class ImageDataProvider(object):
         return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.image_transform_funcs)):
             fn = self.image_transform_funcs[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
-        # return_list.append(array2image)
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
+                return_list.append(Unnormalize(fn.mean, fn.std))
+        #return_list.append(array2image)
         return return_list
 
     def reverse_image_transform(self, img_data: np.ndarray):
@@ -180,7 +182,7 @@ class ImageDataProvider(object):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 img_data = fc(img_data)
-            img_data = reverse_image_backend_adaption(img_data)
+            #img_data = reverse_image_backend_adaption(img_data)
 
         return img_data
 
@@ -236,7 +238,7 @@ class ImageDataProvider(object):
                 data, label = self.next()
                 data = self.reverse_image_transform(data)
                 if is_concate:
-                    data = np.concatenate([img for img in data], axis=-1 if data[0].ndim==2 or (data[0].ndim==3 and data[0].shape[0] in [1.3,4]) else -2)
+                    data = np.concatenate([img for img in data], axis=-1 if data[0].ndim==2 or (data[0].ndim==3 and data[0].shape[0] in [1,3,4]) else -2)
                     return array2image(data)
                 else:
                     return [array2image(img) for img in data]
@@ -248,7 +250,7 @@ class ImageDataProvider(object):
                     img= self.reverse_image_transform(self.traindata.data.__getitem__(k))
                     results.append(img)
                 if is_concate:
-                    results = np.concatenate(results, axis=-1 if results[0].ndim==2 or (results[0].ndim==3 and results[0].shape[0] in [1.3,4]) else -2)
+                    results = np.concatenate(results, axis=-1 if results[0].ndim==2 or (results[0].ndim==3 and results[0].shape[0] in [1,3,4]) else -2)
                     return array2image(results)
                 else:
                     return [array2image(img) for img in results]
@@ -361,6 +363,19 @@ class ImageDataProvider(object):
 
     def get_language(self):
         return self.__default_language__
+
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        if name=='mode':
+            if isinstance(self.traindata,Iterator):
+                self.traindata.mode=value
+
+                self.traindata._sample_iter.mode=value
+            if isinstance(self.testdata,Iterator):
+                self.testdata.mode=value
+
+
+
 
 
 DataProvider = ImageDataProvider
@@ -502,7 +517,7 @@ class TextSequenceDataProvider(object):
         for i in range(len(self.text_transform_funcs)):
             fn = self.text_transform_funcs[-1 - i]
             if fn.__qualname__ == 'normalize.<locals>.text_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
+                return_list.append(Unnormalize(fn.mean, fn.std))
         # return_list.append(array2text)
         return return_list
 

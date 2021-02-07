@@ -354,6 +354,13 @@ class TrainingPlan(object):
         # data_input=data_provider.traindata.data.symbol
         # if len(data_provider.traindata.unpair)>0:
         #     data_unpair = data_provider.traindata.unpair
+        data_symbols = iteration_tools.flatten([data_provider.traindata.data.symbol], iterable_types=(list, tuple))
+        label_symbols = iteration_tools.flatten([data_provider.traindata.label.symbol], iterable_types=(list, tuple))
+        unpair_symbols = iteration_tools.flatten([data_provider.traindata.unpair.symbol], iterable_types=(list, tuple))
+        if "" in label_symbols:
+            label_symbols.remove("")
+        if "" in unpair_symbols:
+            unpair_symbols.remove("")
 
         for trainingitem in self.training_items.value_list:
             existing_data_feed = None
@@ -361,19 +368,12 @@ class TrainingPlan(object):
                 existing_data_feed = trainingitem.training_context['data_feed']
 
             data_feed = OrderedDict()
-            datasets = data_provider.traindata.get_datasets()
-            data_symbols = iteration_tools.flatten([data_provider.traindata.data.symbol], iterable_types=(list, tuple))
-            label_symbols = iteration_tools.flatten([data_provider.traindata.label.symbol], iterable_types=(list, tuple))
-            unpair_symbols = iteration_tools.flatten([data_provider.traindata.unpair.symbol], iterable_types=(list, tuple))
-
+            #datasets = data_provider.traindata.get_datasets()
 
             available_items =list(set(data_symbols+label_symbols+unpair_symbols+trainingitem.signature.outputs.key_list))
             if "" in available_items:
                 available_items.remove("")
-            if "" in label_symbols:
-                label_symbols.remove("")
-            if "" in unpair_symbols:
-                unpair_symbols.remove("")
+
 
             for inp in trainingitem.signature.inputs.key_list:
                 data_feed[inp] = None
@@ -398,6 +398,7 @@ class TrainingPlan(object):
                 #if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_provider.traindata.data.element_spec.shape):
                 data_feed[trainingitem.signature.inputs.key_list[0]] = data_provider.traindata.data.symbol
                 available_items.remove(data_provider.traindata.data.symbol)
+
             if len(trainingitem.signature.outputs) ==1 and  len(label_symbols) == 0:
                 data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_provider.traindata.data.symbol
                 if data_provider.traindata.label.symbol in available_items:
@@ -406,12 +407,11 @@ class TrainingPlan(object):
                 data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_provider.traindata.label.symbol
                 available_items.remove(data_provider.traindata.label.symbol)
 
-
             for out in trainingitem.signature.outputs.key_list:  # fill the data_feed by key
-
                 if out in available_items:  # output=putput
                     data_feed[out] = out
                     available_items.remove(out)
+
             for key in data_feed.keys():
                 if data_feed[key] == None and key in available_items:
                     data_feed[key] = key
@@ -471,8 +471,9 @@ class TrainingPlan(object):
 
             data_provider = self._dataloaders.value_list[0]
             data_provider.minibatch_size = self.minibatch_size
-            # generate data feed
+            data_provider.mode='dict'
 
+            # generate data feed
             if not is_resume or only_steps == True:
                 self.generate_datafeed(data_provider)
                 if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
@@ -498,6 +499,7 @@ class TrainingPlan(object):
 
                             num_batches = len(data_provider.batch_sampler) * epoch + mbs
                             iter_data = OrderedDict()
+
                             if isinstance(return_data, OrderedDict):
                                 for spec, data in return_data.item_list:
                                     iter_data[spec.name] = data
@@ -531,6 +533,7 @@ class TrainingPlan(object):
                             for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
+                                trainitem.training_context['data_template'] = data_provider.traindata.data_template
 
                                 trainitem.training_context['model_name'] = trainitem_name
                                 if epoch < int(trainitem.start_epoch):

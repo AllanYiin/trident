@@ -876,7 +876,7 @@ class Iterator(object):
 
         self._minibatch_size = minibatch_size
         self.paired_transform_funcs = []
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False,mode=self.mode)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         if buffer_size is None:
             buffer_size=8*minibatch_size
@@ -900,7 +900,7 @@ class Iterator(object):
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
 
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False,mode=self.mode)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -916,7 +916,7 @@ class Iterator(object):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False, mode=self.mode)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -927,6 +927,8 @@ class Iterator(object):
     @unpair.setter
     def unpair(self, value):
         self._unpair = value
+
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -944,7 +946,7 @@ class Iterator(object):
     @minibatch_size.setter
     def minibatch_size(self, value):
         self._minibatch_size = value
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False,mode=self.mode)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size =8*value
@@ -1023,7 +1025,7 @@ class Iterator(object):
                 ds.element_spec = TensorSpec.tensor_to_spec(dataitem,need_exclude_batch_axis=True, is_singleton=True,object_type=ds.object_type,name=ds.symbol)
                 data_template[ds.element_spec] = None
                 self.signature.outputs[ds.symbol] = ds.element_spec
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False,mode=self.mode)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         self.data_template=data_template
 
