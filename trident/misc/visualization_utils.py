@@ -84,7 +84,7 @@ def plot_bbox(x, img, color=None, label=None, line_thickness=None,**kwargs):
 
 def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
     make_dir_if_need(save_path)
-    distinct_row=set([ len(ims) for ims in imgs])
+    distinct_row=list(set([ len(ims) for ims in imgs]))
     if len(distinct_row)>1:
         raise ValueError('imgs should have same length, but got {0}'.format(distinct_row))
     else:
@@ -135,6 +135,8 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
 
 def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max_iteration=None,
                       save_path=None, imshow=False, **kwargs):
+    colors=[]
+    line_type=['-','--','-.',':']
     fig = plt.gcf()
     fig.set_size_inches(18, 8)
     plt.clf()
@@ -149,7 +151,8 @@ def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max
         for item in losses:
             if  item.__class__.__name__=='HistoryBase':
                 steps, values = item.get_series('total_losses')
-                plt.plot(steps,values)
+                p=plt.plot(steps,values)
+                colors.append(p[-1].get_color())
         if legend is not None:
             plt.legend(['{0}'.format(lg) for lg in legend], loc='upper right')
         else:
@@ -173,13 +176,15 @@ def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max
         legend_list = []
         for i in range(len(metrics)):
             item = metrics[i]
+            line_color=colors[i]
             if  item.__class__.__name__=='HistoryBase':
-                for k, v in item.items():
+                for j in range(len(item.items())):
+                    k=list(item.keys())[j]
                     steps, values = item.get_series(k)
-                    plt.plot(steps, values)
-                    if len(v) > 0 and legend is not None:
+                    plt.plot(steps, values,color=line_color,linestyle =line_type[j%4],linewidth=int((j//4)%4)+1)
+                    if len(values) > 0 and legend is not None:
                         legend_list.append(['{0} {1}'.format(k, legend[i])])
-                    elif len(v) > 0:
+                    elif len(values) > 0:
                         legend_list.append(['{0} {1}'.format(k, i)])
         plt.legend(legend_list, loc='upper left')
 
@@ -193,7 +198,7 @@ def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
 
-    if imshow == True:
+    if imshow:
         if is_in_ipython():
             plt.ioff()
             display.display(plt.gcf())
