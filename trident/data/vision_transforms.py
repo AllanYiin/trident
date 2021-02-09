@@ -28,7 +28,7 @@ from trident.data.transform import VisionTransform
 __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomTransform','RandomTransformAffine',
            'AdjustBrightness','AdjustContrast','AdjustSaturation','AddNoise','AdjustHue','RandomAdjustHue','RandomAdjustBrightness','RandomAdjustContrast','RandomAdjustSaturation',
            'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip','RandomMirror','AdjustGamma','RandomBlur','RandomAdjustGamma','Blur','InvertColor','RandomInvertColor','GrayScale','RandomGrayScale',
-           'ImageDilation','ImageErosion','ErosionThenDilation','DilationThenErosion','AdaptiveBinarization','SaltPepper','RandomErasing']
+           'ImageDilation','ImageErosion','ErosionThenDilation','DilationThenErosion','AdaptiveBinarization','SaltPepper','RandomErasing','ToRGB']
 
 
 
@@ -69,7 +69,7 @@ def randomize_with_validate(valid_range=None,no_change_value=None,**kwargs):
                     self.wrap = cls(*list(rangs.values()),**other_rangs)
                 self.rn=0
 
-            def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray]):
+            def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],spec:TensorSpec=None,**kwargs):
                 rangs,other_rangs=self.set_random()
                 if len(rangs)>0 and len(self.kwargs)>0:
                     for k,v in rangs:
@@ -79,7 +79,7 @@ def randomize_with_validate(valid_range=None,no_change_value=None,**kwargs):
                         setattr(self.wrap,self._args[0],random.uniform(*self.valid_range))
 
                 if self.rn % 5 > 0:
-                    return self.wrap(inputs)
+                    return self.wrap(inputs,spec=spec,**kwargs)
                 else:
                     return inputs
 
@@ -100,9 +100,9 @@ def randomize(cls):
             self.kwargs=kwargs
             self.wrap = cls()
             self.rn=0
-        def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray]):
+        def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],spec:TensorSpec=None,**kwargs):
             if self.rn % 5 > 0:
-                return self.wrap(inputs)
+                return self.wrap(inputs,spec=spec,**kwargs)
             else:
                 return inputs
 
@@ -773,26 +773,29 @@ class Unnormalize(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         image = image.astype(np.float32)
+        if image.ndim == 3 and image.shape[0] <=4:
+            image=image.transpose([1,2,0])
+
         norm_mean=self.mean
         norm_std=self.std
         if isinstance(self.mean, numbers.Number) and image.ndim == 3:
             norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
             norm_mean = np.expand_dims(norm_mean, 0)
+
+        elif isinstance(self.mean, (list,tuple)) and image.ndim == 3:
+            norm_mean = np.array([self.mean]).astype(np.float32)
             norm_mean = np.expand_dims(norm_mean, 0)
+
         if isinstance(self.std, numbers.Number) and image.ndim == 3:
             norm_std = np.array([self.std, self.std, self.std]).astype(np.float32)
             norm_std = np.expand_dims(norm_std, 0)
-            norm_std = np.expand_dims(norm_std, 0)
-        if image.ndim == 3:
-            image *= norm_std
-            image += norm_mean
 
-            return image
-        elif image.ndim == 2:
-            if isinstance(norm_mean, numbers.Number) and isinstance(norm_std, numbers.Number):
-                image *= norm_std
-                image += norm_mean
-                return image
+        elif isinstance(self.std, (list,tuple)) and image.ndim == 3:
+            norm_std = np.array([self.std]).astype(np.float32)
+            norm_std = np.expand_dims(norm_std, 0)
+
+        image *= norm_std
+        image += norm_mean
         return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -1047,8 +1050,10 @@ class Blur(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        if self.ksize == 0:
-            return image
+        if int(self.ksize)%2 == 0:
+            self.ksize=int(self.ksize)+1
+        else:
+            self.ksize = int(self.ksize)
         blur = cv2.GaussianBlur(image, (int(self.ksize), int(self.ksize)),cv2.BORDER_DEFAULT)
         return blur.clip(0, 255).astype(np.float32)
 
@@ -1081,6 +1086,7 @@ class InvertColor(VisionTransform):
 class GrayScale(VisionTransform):
     def __init__(self, name='gray_scale',**kwargs):
         super().__init__(name)
+        self.is_spatial = False
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
@@ -1097,8 +1103,28 @@ class GrayScale(VisionTransform):
     def _apply_mask(self, mask,spec:TensorSpec):
         return mask
 
+class ToRGB(VisionTransform):
+    def __init__(self, name='to_rgb',**kwargs):
+        super().__init__(name)
+        self.is_spatial = False
 
-@randomize_with_validate(valid_range=(1, 20), no_change_value=1)
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return self._apply_image(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        if image.ndim == 3:
+            return image
+        elif image.ndim == 2:
+            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+@randomize_with_validate(valid_range=(1, 10), no_change_value=1)
 class RandomBlur(Blur):
     pass
 
@@ -1114,10 +1140,15 @@ class RandomGrayScale(GrayScale):
 
 
 class ImageErosion(VisionTransform):
-    r"""
-       Adjust hue of the input data.
-       :param value: how much to adjust the hue. Can be any number
-           between 0 and 0.5, 0 gives the original image.
+    """ Erosion operation
+    Erosion is a mathematical morphology operation that uses a structuring element for shrinking the shapes in an image. The binary erosion of an image by a structuring element is the locus of the points where a superimposition of the structuring element centered on the point is entirely contained in the set of non-zero elements of the image.
+
+    Args:
+        filter_size (int): the size of the structuring element .
+        repeat (int): the number of repeating operation.
+
+    Returns:
+        output image array
 
     """
 
@@ -1138,6 +1169,8 @@ class ImageErosion(VisionTransform):
 
         # Using cv2.erode() method
         image = cv2.erode(image, kernel, iterations = self.repeat)
+        if image.ndim==2:
+            image=cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
 
         return image.clip(0, 255).astype(np.float32)
 
@@ -1148,10 +1181,15 @@ class ImageErosion(VisionTransform):
         return mask
 
 class ImageDilation(VisionTransform):
-    r"""
-       Adjust hue of the input data.
-       :param value: how much to adjust the hue. Can be any number
-           between 0 and 0.5, 0 gives the original image.
+    """ Dilation operation
+    Dilation is a mathematical morphology operation that uses a structuring element for expanding the shapes in an image. The binary dilation of an image by a structuring element is the locus of the points covered by the structuring element, when its center lies within the non-zero points of the image.
+
+    Args:
+        filter_size (int): the size of the structuring element .
+        repeat (int): the number of repeating operation.
+
+    Returns:
+        output image array
 
     """
 
@@ -1172,6 +1210,8 @@ class ImageDilation(VisionTransform):
 
         # Using cv2.erode() method
         image = cv2.dilate(image, kernel, iterations = self.repeat)
+        if image.ndim==2:
+            image=cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
 
         return image.clip(0, 255).astype(np.float32)
 
@@ -1209,7 +1249,8 @@ class DilationThenErosion(VisionTransform):
         for i in range(self.repeat):
             image = cv2.dilate(image, kernel, iterations=1)
             image = cv2.erode(image, kernel, iterations =1)
-
+        if image.ndim==2:
+            image=cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
         return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -1245,7 +1286,8 @@ class ErosionThenDilation(VisionTransform):
             image = cv2.erode(image, kernel, iterations=1)
             image = cv2.dilate(image, kernel, iterations=1)
 
-
+        if image.ndim==2:
+            image=cv2.cvtColor(image,cv2.COLOR_GRAY2RGB)
         return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -1268,20 +1310,67 @@ class AdaptiveBinarization(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self,threshold_type='otsu', name='adaptive_binarization', **kwargs):
+    def __init__(self,threshold_type='otsu',gaussian_filtering=True, name='adaptive_binarization', **kwargs):
         super().__init__(name)
+        valid_item=[ 'otsu' 'percentile', 'isodata', 'local', 'minimum']
         self.threshold_type=threshold_type
+        self.gaussian_filtering=gaussian_filtering
+
 
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        structure_shape = [1] * image.ndim
-        structure_shape[0]=self.filter_size
-        structure_shape[1] =self.filter_size
-        for i in range(self.repeat):
-            image = ndimage.morphology.grey_dilation(image, size=(self.filter_size,self.filter_size),structure=np.ones(tuple(structure_shape)))
+        if image.ndim==3:
+            gray = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.uint8)
+        else:
+            gray=image.astype(np.uint8)
+        if gray.min()==gray.max():
+            return image
+        if self.gaussian_filtering:
+            gray = cv2.GaussianBlur(gray, (5, 5), 0)
+        ret=None
+        th=127.5
+        if self.threshold_type=='otsu':
+            ret, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        elif self.threshold_type == 'minimum':
+            pass
+        elif self.threshold_type == 'local':
+            # min_val = 0.0
+            # max_val = 0.0
+            # output=zeros_like(gray)
+            # for i in range(gray.shape[0]):
+            #     for j in range(gray.shape[1]):
+            #         if gray[i,j]>max_val / 2:
+            #             output[i,j]=255.0
+            th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 25, 2)
+        elif self.threshold_type == 'isodata':
+
+            gray=gray/255.0
+            epst = 0.01
+            th =gray.mean()
+            while 1:
+                mL =gray[gray <= th].mean()
+                mH =gray[gray > th].mean()
+                th_new = (mL + mH) / 2
+                if abs(th - th_new) <epst:
+                    break
+                th = th_new
+            gray = gray * 255.0
+            th=th*255.0
+
+        elif self.threshold_type == 'percentile':
+            p10 = np.percentile(gray.copy(), 10)
+            p90 = np.percentile(gray.copy(), 90)
+            if abs(gray.mean() - p90) < abs(gray.mean() - p10) and p90 - p10 > 80:  # white background
+                gray[gray < p10] = 0
+                gray[gray > p90] = 255
+            elif abs(gray.mean() - p90) > abs(gray.mean() - p10) and p90 - p10 > 80:  # white background
+                gray[gray > p90] = 255
+                gray[gray < p10] = 0
+        gray = (gray > th).astype(np.float32) * 255.0
+        image=cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
         return clip(image,0,255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
