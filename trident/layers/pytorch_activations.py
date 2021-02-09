@@ -654,8 +654,8 @@ def get_activation(fn_name):
                     return activation_fn()
         elif getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
             if inspect.isfunction(fn_name):
-                return fn_name
-            elif inspect.isclass(fn_name) and inspect._is_type(fn_name):
+                return partial(fn_name)
+            elif inspect.isclass(fn_name) and  fn_name.__class__.__name__=="type":
                 return fn_name()
             elif isinstance(fn_name, Layer):
                 return fn_name
