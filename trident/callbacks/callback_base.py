@@ -306,8 +306,12 @@ class LambdaCallback(CallbackBase):
         self.batch_frequency=batch_frequency
 
         def on_trigger(self, training_context):
-            if ('epoch' in when  and  (self.epoch is None or training_context['current_epoch']==self.epoch) )or (self.batch is None or ('batch' in when and training_context['current_batch']==self.batch)) :
+            if (('epoch' in when and 'batch' not in when)  and  ((self.epoch is None and self.epoch_frequency is None) or training_context['current_epoch']==self.epoch or (training_context['current_epoch']+1)%self.epoch_frequency==0 )) or ( ('batch' in when and 'epoch' not in when) and ((self.batch is None and self.batch_frequency is None) or training_context['current_batch']==self.batch or (training_context['steps']+1)%self.batch_frequency==0)) :
                     self.func(training_context)
+            elif (('epoch' not  in when and 'batch' not in when)  and ( training_context['current_epoch'] == self.epoch or (
+                    training_context['current_epoch'] + 1) % self.epoch_frequency == 0)) or (('epoch' not  in when and 'batch' not in when) and (
+                    training_context['current_batch'] == self.batch or (training_context['steps'] + 1) % self.batch_frequency == 0)):
+                self.func(training_context)
 
         setattr(self,when,MethodType(on_trigger, self))
 
