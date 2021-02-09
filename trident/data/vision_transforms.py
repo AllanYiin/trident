@@ -89,7 +89,8 @@ def randomize_with_validate(valid_range=None,no_change_value=None,**kwargs):
                 other_rangs = dict([(k, v) for k, v in kwargs.items() if not (isinstance(v, tuple) and len(v) == 2)])
                 return rangs,other_rangs
 
-        Wrapper.__name__ =  cls.__name__
+        Wrapper.__name__ = Wrapper.__qualname__ =  cls.__name__
+        Wrapper.__doc__ = cls.__doc__
         return Wrapper
     return randomize_wrapper
 
@@ -109,7 +110,8 @@ def randomize(cls):
         def set_random(self):
             self.rn = random.randint(0, 10)
 
-    Wrapper.__name__ =  cls.__name__
+    Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
+    Wrapper.__doc__ = cls.__doc__
     return Wrapper
 
 
@@ -143,13 +145,13 @@ class Resize(VisionTransform):
         self._shape_info = self._get_shape(image)
         h, w, th, tw,pad_vert,pad_horz = self._shape_info
 
-        if self.keep_aspect == False:
+        if not self.keep_aspect:
             return cv2.resize(image, (tw,th), self.interpolation)
         else:
 
             image=cv2.resize(image, (tw,th), self.interpolation)
             output=np.zeros((*self.output_size,3))
-            if self.align_corner==True:
+            if self.align_corner:
                 output[:th,:tw,:]=image
             else:
                 output[pad_vert//2:th+pad_vert, pad_horz//2:tw+pad_horz, :] = image
@@ -161,7 +163,7 @@ class Resize(VisionTransform):
             return coords
         coords[:, 0] = coords[:, 0] * (tw / w)
         coords[:, 1] = coords[:, 1] * (th / h)
-        if self.align_corner == False:
+        if not self.align_corner:
             coords[:, 0] +=pad_horz//2
             coords[:, 1] +=pad_vert//2
         return coords
@@ -171,7 +173,7 @@ class Resize(VisionTransform):
         if h == th and w == tw:
             return mask
 
-        if self.keep_aspect == False:
+        if not self.keep_aspect:
             return cv2.resize(mask, (tw, th), cv2.INTER_NEAREST)
         else:
 
@@ -182,7 +184,7 @@ class Resize(VisionTransform):
             elif mask.ndim==3 :
                 output = np.zeros((*self.output_size, mask.shape[-1]))
 
-            if self.align_corner == True:
+            if self.align_corner:
                 output[:th, :tw, :] = mask
             else:
                 output[pad_vert // 2:th + pad_vert , pad_horz // 2:tw + pad_horz , :] = mask
@@ -194,7 +196,7 @@ class Resize(VisionTransform):
         h, w,c = image.shape
         eh, ew = self.output_size
 
-        if self.keep_aspect==False:
+        if not self.keep_aspect:
             return h, w,  eh, ew,0,0
         else:
             self.scale = min(float(eh) / h, float(ew) / w)
@@ -231,7 +233,7 @@ class ShortestEdgeResize(VisionTransform):
 
     def apply(self, input: Tuple,spec:TensorSpec):
 
-        return super().apply(input)
+        return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
         self._shape_info = self._get_shape(input)
