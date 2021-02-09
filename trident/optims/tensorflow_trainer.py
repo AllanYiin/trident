@@ -644,8 +644,6 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['steps'] += 1
-
         if self.training_context['steps'] % 100 == 0:
             gc.collect()
         if self.training_context['steps'] % 200 == 0:
@@ -1670,7 +1668,7 @@ class FaceRecognitionModel(Model):
             return x / (b if b != 0 else 1)
 
         img = image2array(img_path)
-        img = resize((224, 224), keep_aspect=True)(img)
+        img = Resize((224, 224), keep_aspect=True)(img)
         img = normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
         img = to_tensor(np.expand_dims(img.transpose([2, 0, 1]), 0))
         embedding = self.model(img)[0]

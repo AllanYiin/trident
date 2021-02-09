@@ -678,7 +678,7 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['steps'] += 1
+
         if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
@@ -1079,8 +1079,7 @@ class Model(ModelBase):
 
     @property
     def reverse_preprocess_flow(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
+        return_list = [reverse_image_backend_adaption]
         for i in range(len(self._preprocess_flow)):
             fn = self._preprocess_flow[-1 - i]
             if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Normalize) and fn.name == 'normalize'):
