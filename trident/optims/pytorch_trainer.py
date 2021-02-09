@@ -21,7 +21,7 @@ import torch
 import torch.nn as nn
 from trident.data.transform import Transform
 
-from trident.data.vision_transforms import Unnormalize
+from trident.data.vision_transforms import Unnormalize, Resize, Normalize
 
 from trident.backend.opencv_backend import array2image, image2array
 
@@ -653,13 +653,7 @@ class Model(ModelBase):
         self.training_context['time_epoch_start'] = time.time()
         if self.training_context['steps'] == 0:
             self.training_context['time_epoch_progress'] = self.training_context['time_epoch_start']
-        if self.warmup > 0 and self.training_context['current_epoch'] < self.warmup:
-            lr = 1e-6 * (self.training_context['current_epoch'] + 1)
-            self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
-            self.training_context['current_lr'] = lr
-        elif self.warmup > 0 and self.training_context['current_epoch'] == self.warmup:
-            self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
-            self.training_context['current_lr'] = self.base_lr
+
         if self.model.device == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
@@ -667,6 +661,13 @@ class Model(ModelBase):
 
     def do_on_epoch_end(self):
         self.training_context['time_epoch_end'] = time.time()
+        if self.warmup > 0 and self.training_context['current_epoch']+1 < self.warmup:
+            lr = 1e-6 * (self.training_context['current_epoch'] + 1)
+            self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
+            self.training_context['current_lr'] = lr
+        elif self.warmup > 0 and self.training_context['current_epoch']+1 == self.warmup:
+            self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
+            self.training_context['current_lr'] = self.base_lr
 
     def do_on_batch_start(self):
         self.training_context['time_batch_start'] = time.time()
@@ -678,8 +679,8 @@ class Model(ModelBase):
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
         self.training_context['steps'] += 1
-        if self.training_context['steps'] % _session.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == self.training_context['steps'] // _session.epoch_equivalent:
+        if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
+            if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
                 self.warmup = 0
         if self.training_context['current_batch'] == 0 and self.training_context['is_print_batch_progress'] == True:
@@ -1082,7 +1083,7 @@ class Model(ModelBase):
         return_list.append(reverse_image_backend_adaption)
         for i in range(len(self._preprocess_flow)):
             fn = self._preprocess_flow[-1 - i]
-            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Normalize) and fn.name == 'normalize'):
                 return_list.append(Unnormalize(fn.mean, fn.std))
         return_list.append(array2image)
         return return_list
@@ -1421,7 +1422,7 @@ class FaceLandmarkModel(Model):
                 result = to_numpy(result)/ rescale_scale
                 result[:,:, 0::2] =clip(result[:,:, 0::2] ,0,img_shp[1])
                 result[:,:, 1::2] =clip(result[:,:, 1::2],0,img_shp[0])
-                return result.astype(np.int32)
+                return result#.astype(np.int32)
             else:
 
                 raise ValueError('the model is not layer.')
@@ -1445,8 +1446,8 @@ class FaceRecognitionModel(Model):
             return x / (b if b != 0 else 1)
 
         img = image2array(img_path)
-        img = resize((224, 224), keep_aspect=True)(img)
-        img = normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
+        img = Resize((224, 224), keep_aspect=True)(img)
+        img = Normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
         img = to_tensor(np.expand_dims(img.transpose([2, 0, 1]), 0))
         embedding = self.model(img)[0]
         return norm(embedding)
