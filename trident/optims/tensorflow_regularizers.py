@@ -14,19 +14,19 @@ _session=get_session()
 _epsilon=_session.epsilon
 
 
-def l1_reg(model:Layer,reg_weight=1e-6):
+def l1_reg(model:Layer,reg_weight=1e-4):
     loss=0.0
-    for  param in model.trainable_weights:
-        if not any_abnormal_number(param) and param.trainable:
+    for name, param in model.named_parameters():
+        if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
             loss = loss + (reg_weight * reduce_sum(abs(param.value())))
     return loss
 
 
-def l2_reg(model:Layer ,reg_weight=1e-6):
+def l2_reg(model:Layer ,reg_weight=1e-4):
     loss = 0.0
-    for param in model.trainable_weights:
-        if not any_abnormal_number(param) and param.trainable:
-            loss = loss +  reg_weight * tf.norm(param.value())
+    for name, param in model.named_parameters():
+        if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
+            loss = loss +  reg_weight *reduce_sum(square(param.value()))
     return loss
 
 
