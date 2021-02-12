@@ -312,13 +312,13 @@ class ImageDataProvider(object):
         else:
             return None
 
-    def get_all_data(self, is_shuffle=False,  topk=-1):
+    def get_all_data(self, is_shuffle=False, topk=-1):
         idxes = np.arange(len(self.traindata.data))
-        if is_shuffle == True:
+        if is_shuffle :
             np.random.shuffle(idxes)
         data = []
         if topk == -1:
-           topk=len(self.traindata.data)
+            topk = len(self.traindata.data)
         for i in range(topk):
             data.append(self.traindata.data.__getitem__(idxes[i]))
         return data
