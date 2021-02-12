@@ -13,7 +13,7 @@ import warnings
 from typing import List
 
 import numpy as np
-from trident.data.vision_transforms import Unnormalize
+from trident.data.vision_transforms import Unnormalize, Normalize
 
 from trident.data.transform import Transform
 
@@ -247,7 +247,12 @@ class ImageDataProvider(object):
                 stop = key.stop
                 results=[]
                 for k in range(start,stop,1):
-                    img= self.reverse_image_transform(self.traindata.data.__getitem__(k))
+                    img=self.traindata.data.__getitem__(k)
+
+                    if isinstance(img, np.ndarray):
+                        for fc in self.image_transform_funcs:
+                            if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption and  fc is not Normalize and fc is not normalize:
+                                img = fc(img)
                     results.append(img)
                 if is_concate:
                     results = np.concatenate(results, axis=-1 if results[0].ndim==2 or (results[0].ndim==3 and results[0].shape[0] in [1,3,4]) else -2)
@@ -255,9 +260,12 @@ class ImageDataProvider(object):
                 else:
                     return [array2image(img) for img in results]
             elif isinstance(key, int):
-                img=self.reverse_image_transform(self.traindata.data.__getitem__(key))
+                img=self.traindata.data.__getitem__(key)
+                if isinstance(img, np.ndarray):
+                    for fc in self.image_transform_funcs:
+                        if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption and fc is not Normalize and fc is not normalize:
+                            img = fc(img)
                 return array2image(img)
-
 
 
     def _next_index(self):
@@ -304,22 +312,15 @@ class ImageDataProvider(object):
         else:
             return None
 
-    def get_all_data(self, is_shuffle=False, get_image_mode=GetImageMode.expect, topk=-1):
-        orig_get_image_mode = None
-        if hasattr(self.traindata.data, 'get_image_mode'):
-            orig_get_image_mode = self.traindata.data.get_image_mode
-            self.traindata.data.get_image_mode = get_image_mode
-
+    def get_all_data(self, is_shuffle=False,  topk=-1):
         idxes = np.arange(len(self.traindata.data))
         if is_shuffle == True:
             np.random.shuffle(idxes)
         data = []
         if topk == -1:
-            topk = len(self.traindata.data)
+           topk=len(self.traindata.data)
         for i in range(topk):
-            data.append(self.traindata.data[idxes[i]])
-        if hasattr(self.traindata.data, 'get_image_mode'):
-            self.traindata.data.get_image_mode = orig_get_image_mode
+            data.append(self.traindata.data.__getitem__(idxes[i]))
         return data
 
     def binding_class_names(self, class_names=None, language=None):
