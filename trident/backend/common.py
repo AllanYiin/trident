@@ -842,13 +842,25 @@ class OrderedDict(collections.OrderedDict):
 
 
 class Signature(object):
-    """ more easy-to-use OrderedDict"""
-
-    def __init__(self, name=None):
+    def __init__(self, input_spec=None, output_spec=None,name=None):
         super().__init__()
         self.name = name
         self.inputs = OrderedDict()
         self.outputs = OrderedDict()
+        if input_spec is not None:
+            self.inputs[input_spec.name if input_spec.name is not None else 'input']=input_spec
+        if output_spec is not None:
+            self.outputs[output_spec.name if output_spec.name is not None else 'output']=output_spec
+
+    # @classmethod
+    # def get_signature(cls, fn:callable):
+    #
+    #     if "Layer"==fn.__class__.__base__:
+    #
+    #     if inspect.isfunction(fn)
+
+
+
 
     def maybe_not_complete(self):
         if len(self.inputs)<1 and len(self.outputs)<1:
@@ -864,11 +876,14 @@ class Signature(object):
             return True
         else:
             return False
-    def get_kvsting(self, k, v):
+
+    def _get_kvsting(self, k, v):
         if v is None:
             return '{0}'.format(k)
         elif isinstance(v, (list, tuple)):
             return '{0}: Tensor[{1}]'.format(k, v)
+        elif  v.__class__.__name__== "TensorSpec" and v.object_type is None:
+            return '{0}: Tensor[{1}] '.format(k, v._shape_tuple)
         elif  v.__class__.__name__== "TensorSpec":
             return '{0}: Tensor[{1}] ({2})'.format(k, v._shape_tuple,v.object_type)
         else:
@@ -879,8 +894,8 @@ class Signature(object):
 
     def __repr__(self):
         # ElementTimes(x: Tensor[13]) -> Tensor[13]
-        input_str = ', '.join([self.get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(self.inputs.item_list) > 0 else ''
-        output_str = ', '.join([self.get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(self.outputs.item_list) > 0 else ''
+        input_str = ', '.join([self._get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(self.inputs.item_list) > 0 else ''
+        output_str = ', '.join([self._get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(self.outputs.item_list) > 0 else ''
         return '{0}( {1}) -> {2} '.format(self.name, input_str, output_str)
 
 class AverageMeter(object):
@@ -1450,7 +1465,7 @@ def isprime(n):
     if n >= 9:
         divisors = [d for d in range(2, int(math.sqrt(n))) if n % d == 0]
         return all(n % od != 0 for od in divisors if od != n)
-    elif n in [1, 2, 3, 5, 7]:
+    elif n in [1, 2,3, 5, 7]:
         return True
     else:
         return False
@@ -1470,6 +1485,7 @@ def prev_prime(n):
         if isprime(pos):
             return pos
         pos -= 1
+
 
 
 def nearest_prime(n):
