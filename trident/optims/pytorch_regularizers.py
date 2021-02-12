@@ -20,7 +20,7 @@ def l1_reg(model:nn.Module,reg_weight=1e-4):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name and  not any_abnormal_number(param) and param.requires_grad==True:
-            loss = loss + (reg_weight * sum(abs(param.data)))
+            loss = loss + (reg_weight * sum(abs(param)))
         return loss
 
 
@@ -28,7 +28,7 @@ def l2_reg(model:nn.Module,reg_weight=1e-4):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name  and  not any_abnormal_number(param) and  param.requires_grad==True:
-            loss=loss+ reg_weight *square(param.data).sum()
+            loss=loss+ reg_weight *square(param).sum()
         return loss
 
 
