@@ -17,6 +17,8 @@ import json
 from typing import List, Callable
 
 import numpy as np
+from trident.data.vision_transforms import Unnormalize
+
 from trident.backend.opencv_backend import array2image
 
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, get_backend, \
@@ -77,7 +79,6 @@ class ModelBase(object):
 
 
         self._preprocess_flow = []
-        self.input_spec=None
 
         self.current_save_path=None
 
@@ -140,6 +141,12 @@ class ModelBase(object):
         self._targets = OrderedDict()
 
         if isinstance(value, Layer):
+            if not value.is_root or value.nodes.key_list[0]!=value.uuid:
+                value.nodes = OrderedDict([(mod.uuid, mod) for mod in list(value.modules()) if isinstance(mod, Layer)])
+                for name, mod in value.named_modules():
+                    if isinstance(mod, Layer):
+                        mod.nodes = value.nodes
+                        mod.relative_name = name
             value.signature = None
             inp_shape=None
             if hasattr(value,'signature') and value.signature is not None and len(value.signature.inputs)>0:
@@ -273,17 +280,17 @@ class ModelBase(object):
     @preprocess_flow.setter
     def preprocess_flow(self,value):
         self._preprocess_flow=value
-        if isinstance(self.input_spec,TensorSpec):
-            self.input_spec=None
+        self.input_spec=None
+
+
 
     @property
     def reverse_preprocess_flow(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
+        return_list = [reverse_image_backend_adaption]
         for i in range(len(self.preprocess_flow)):
             fn = self.preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
+            if fn.__qualname__ == 'normalize.<locals>.img_op' or fn.__class__.__name__=='Normalize':
+                return_list.append(Unnormalize(fn.mean, fn.std))
         return_list.append(array2image)
         return return_list
 
@@ -295,8 +302,10 @@ class ModelBase(object):
             return np.expand_dims(image_backend_adaption(img_data),0)
         if isinstance(img_data, np.ndarray):
             for fc in self.preprocess_flow:
-                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+                if self._model is not None and  self.input_spec is not None:
                     img_data = fc(img_data,spec=self.input_spec)
+                elif self._model is not None and self.signature is not None and len(self.signature.inputs) > 1 :
+                    img_data = fc(img_data,spec=self.signature.inputs.value_list[0])
                 else:
                     img_data = fc(img_data)
             img_data = np.expand_dims(image_backend_adaption(img_data),0)
@@ -355,10 +364,14 @@ class ModelBase(object):
 
 
     def __getattr__(self, name):
+        if name in ['_input_shape','_output_shape','_class_names','class_names']:
+            return self.__dict__[name]
         if name == 'signature' or name == '_signature':
             _model = self.__dict__['_model']
             if _model is not None and isinstance(_model, Layer):
                 return _model.signature
+            else:
+                return Signature()
         if 'training_context' in self.__dict__:
             if name in  self.__dict__['training_context']:
                 return  self.__dict__['training_context'][name]
@@ -382,9 +395,17 @@ class ModelBase(object):
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __setattr__(self, name, value):
-        if name in ['_input_shape','_output_shape']:
-            pass
+        if name in ['_input_shape','_output_shape','_class_names','class_names']:
+            object.__setattr__(self, name, value)
+        elif name in ['_model']:
+            object.__setattr__(self, '_model', value)
+            if value is not None and value.signature is None and hasattr(value,'_built') and value._built==True:
+                value.signature=Signature()
+                value.signature.inputs['input']=TensorSpec(shape=value.input_shape,name='input')
+                value.signature.outputs['output'] = TensorSpec(shape=value.output_shape, name='output')
+
         else:
+
             if name=='signature' or name=='_signature':
                 _model = self.__dict__['_model']
                 if _model is not None and isinstance(_model ,Layer):
@@ -410,7 +431,9 @@ class ModelBase(object):
                 object.__setattr__(self, name, value)
 
     def __call__(self, *input, **kwargs):
-        return self._model(*input, **kwargs)
+        input=enforce_singleton(input)
+        input=self.data_preprocess(input)
+        return self._model(input, **kwargs)
 
     def with_optimizer(self, optimizer, **kwargs):
         return self
@@ -563,7 +586,7 @@ class ModelBase(object):
     def do_post_gradient_update(self):
 
         self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],self.training_context['current_loss'])
-        if self.training_context['is_collect_data'] == True:
+        if self.training_context['is_collect_data'] :
             steps,values=self.training_context['tmp_losses'].get_series('total_losses')
             self.training_context['losses'].collect('total_losses',self.training_context['steps'],float(np.asarray(values).mean()))
             self.training_context['tmp_losses'].reset()
@@ -1024,7 +1047,7 @@ class ModelBase(object):
         raise NotImplementedError
 
     def trigger_when(self, when='on_batch_end',epoch=None,batch=None,epoch_frequency=None,batch_frequency=None,action=None):
-        new_callbacks=LambdaCallback(when,epoch=epoch,batch=batch,epoch_frequency=epoch_frequency,batch_frequency=batch_frequency,function=action)
+        new_callbacks=LambdaCallback(when,epoch=epoch,batch=batch,epoch_frequency=epoch_frequency,batch_frequency=batch_frequency,action=action)
         self.with_callbacks(new_callbacks)
         return self
 
