@@ -1,12 +1,108 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import inspect
+from functools import partial
+
 import torch.nn as nn
 from torch.nn import init
 
 
 
-__all__ = ['kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
+__all__ = ['uniform','normal','ones','zeros','kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
+
+from trident.backend.common import get_function, camel2snake
+
+
+def uniform(tensor, a=0., b=1.):
+    # type: (Tensor, float, float) -> Tensor
+    r"""Fills the input Tensor with values drawn from the uniform
+    distribution :math:`\mathcal{U}(a, b)`.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        a: the lower bound of the uniform distribution
+        b: the upper bound of the uniform distribution
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.uniform_(w)
+    """
+
+    if isinstance(tensor,nn.Module):
+        for name,weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name:
+                init.uniform_(weight, a=a,b=b)
+    elif isinstance(tensor, nn.Parameter):
+        if tensor.requires_grad:
+            init.uniform_(tensor, a=a,b=b)
+
+
+def normal(tensor, mean=0., std=1.):
+    # type: (Tensor, float, float) -> Tensor
+    r"""Fills the input Tensor with values drawn from the normal
+    distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+        mean: the mean of the normal distribution
+        std: the standard deviation of the normal distribution
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.normal_(w)
+    """
+    if isinstance(tensor,nn.Module):
+        for name,weight in tensor.named_parameters():
+            if weight.requires_grad==True and 'bias' not in name:
+                init.normal(weight,mean=mean,std=std)
+    elif isinstance(tensor, nn.Parameter):
+        if tensor.requires_grad:
+            init.normal(tensor,mean=mean,std=std)
+
+
+
+
+def zeros(tensor):
+    # type: (Tensor) -> Tensor
+    r"""Fills the input Tensor with the scalar value `0`.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.zeros_(w)
+    """
+
+    if isinstance(tensor,nn.Module):
+        for name,weight in tensor.named_parameters():
+            if weight.requires_grad:
+                init.zeros_(weight)
+    elif isinstance(tensor, nn.Parameter):
+        if tensor.requires_grad:
+            init.zeros_(tensor)
+
+
+def ones(tensor):
+    # type: (Tensor) -> Tensor
+    r"""Fills the input Tensor with the scalar value `1`.
+
+    Args:
+        tensor: an n-dimensional `torch.Tensor`
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> nn.init.ones_(w)
+    """
+    if isinstance(tensor,nn.Module):
+        for name,weight in tensor.named_parameters():
+            if weight.requires_grad==True and 'bias' not in name:
+                init.ones_(weight)
+    elif isinstance(tensor, nn.Parameter):
+        if tensor.requires_grad:
+            init.ones_(tensor)
 
 
 def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
@@ -38,11 +134,15 @@ def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     """
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name:
-                init.kaiming_uniform_(weight, a, mode, nonlinearity)
+            if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
+                kaiming_uniform(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad == True :
+        if tensor.requires_grad and tensor.dim()>=2:
             init.kaiming_uniform_(tensor, a, mode, nonlinearity)
+        elif tensor.requires_grad and tensor.dim()<2:
+            init.kaiming_uniform_(tensor.unsqueeze_(0).unsqueeze_(0), a, mode, nonlinearity)
+            tensor.squeeze_(0).squeeze_(0)
+
 
 def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     r"""Fills the input `Tensor` with values according to the method
@@ -73,11 +173,14 @@ def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     """
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name:
-                init.kaiming_normal_(weight, a, mode, nonlinearity)
+            if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
+                kaiming_normal(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad == True:
+        if tensor.requires_grad and tensor.dim()>=2:
             init.kaiming_normal_(tensor, a, mode, nonlinearity)
+        elif tensor.requires_grad and tensor.dim()<2:
+            init.kaiming_normal_(tensor.unsqueeze_(0).unsqueeze_(0), a, mode, nonlinearity)
+            tensor.squeeze_(0).squeeze_(0)
 
 
 def xavier_uniform(tensor, gain=1.):
@@ -104,10 +207,10 @@ def xavier_uniform(tensor, gain=1.):
 
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
-            if weight.requires_grad == True and 'bias' not in name:
+            if weight.requires_grad == True and 'bias' not in name and weight.dim()>=2:
                 init.xavier_uniform(weight,gain=gain)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad == True:
+        if tensor.requires_grad and tensor.dim()>=2:
             init.xavier_uniform(tensor, gain=gain)
 
 
@@ -134,10 +237,10 @@ def xavier_normal(tensor, gain=1.):
     """
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name:
+            if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
                 init.xavier_normal_(weight,gain=gain)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad == True:
+        if tensor.requires_grad and tensor.dim()>=2:
             init.xavier_normal_(tensor, gain=gain)
 
 def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
@@ -167,6 +270,16 @@ def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
                 init.trunc_normal_(weight,mean=0., std=1., a=-2., b=2)
 
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad == True:
+        if tensor.requires_grad:
             init.trunc_normal_(tensor,mean=0., std=1., a=-2., b=2)
 
+
+
+def get_initializer(initializer,**kwargs):
+    if isinstance(initializer,str):
+        initializer_fn = get_function(camel2snake(initializer), ['trident.backend.pytorch_initializers'])
+        initializer_fn=partial(initializer_fn,**kwargs) if len(kwargs)>0 else initializer_fn
+        return initializer_fn
+    elif inspect.isfunction(initializer) and getattr(initializer, '__module__', None) =='trident.backend.pytorch_initializers':
+        initializer = partial(initializer, **kwargs) if len(kwargs) > 0 else initializer
+        return initializer
