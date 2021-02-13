@@ -64,19 +64,27 @@ class HistoryBase(OrderedDict):
         if data_name not in self:
             self[data_name]=[]
 
-    def collect(self,data_name:str,step:int,value:(float,Tensor)):
-        if data_name not in self:
-            self.regist(data_name)
-        if is_tensor(value):
-            value=to_numpy(value.copy().cpu().detach()).mean()
-            self[data_name].append((step, value))
-        else:
-            self[data_name].append((step, value))
-        if self.enable_tensorboard:
-            if self.training_name is None:
-                self.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
+    def collect(self, data_name: str, step: int, value: (float, Tensor)):
+        if value is not None:
+            if data_name not in self:
+                self.regist(data_name)
+            if is_tensor(value):
+                if get_backend()=='pytorch':
+                    value=to_numpy(value.copy().cpu().detach()).mean()
+                    self[data_name].append((step, value))
+                elif get_backend()=='tensorflow':
+                    with tf.device('/cpu:0'):
+                        value = to_numpy(tf.identity(value)).mean()
+                        self[data_name].append((step, value))
+
+
             else:
-                self.summary_writer.add_scalar(self.training_name+ "/"+self.name + "/" + data_name, value, global_step=step, walltime=time.time())
+                self[data_name].append((step, value))
+            if self.enable_tensorboard:
+                if self.training_name is None:
+                    self.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
+                else:
+                    self.summary_writer.add_scalar(self.training_name+ "/"+self.name + "/" + data_name, value, global_step=step, walltime=time.time())
 
     def reset(self):
         for i in range(len(self)):
