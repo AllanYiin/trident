@@ -428,6 +428,9 @@ class TrainingPlan(object):
 
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
+        data_provider = self._dataloaders.value_list[0]
+        data_provider.minibatch_size = self.minibatch_size
+        data_provider.mode = 'dict'
         try:
             self.execution_id = get_time_suffix()
             exception_cnt = 0
@@ -459,27 +462,27 @@ class TrainingPlan(object):
                     for callback in self.callbacks:
                         if callback not in item.callbacks:
                             # private callback
-                            if callback.is_shared == False:
+                            if not callback.is_shared:
                                 item.with_callbacks(copy.deepcopy(callback))
                             else:
                                 # shared callback
                                 item.with_callbacks(callback)
                 # shared callbacks will access training plan dict instead of training_context
                 for callback in self.callbacks:
-                    if callback.is_shared == True:
+                    if callback.is_shared:
                         callback.on_training_start(self.__dict__)
 
-            data_provider = self._dataloaders.value_list[0]
-            data_provider.minibatch_size = self.minibatch_size
-            data_provider.mode='dict'
+
 
             # generate data feed
             if not is_resume or only_steps == True:
                 self.generate_datafeed(data_provider)
                 if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
-            if only_steps == True:
+            if only_steps:
                 self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
+
+
 
             for epoch in range(self.num_epochs):
                 try:
@@ -495,6 +498,7 @@ class TrainingPlan(object):
                                 for callback in trainitem.training_context['callbacks']:
                                     if callback.is_shared == False:
                                         callback.on_training_terminated(trainitem.training_context)
+                            data_provider.mode = 'tuple'
                         else:
 
                             num_batches = len(data_provider.batch_sampler) * epoch + mbs
@@ -624,16 +628,19 @@ class TrainingPlan(object):
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():
                         trainitem.save_model()
+            data_provider.mode = 'tuple'
 
 
         except KeyboardInterrupt:
             for k, trainitem in self.training_items.items():
                 trainitem.save_model()
+            data_provider.mode = 'tuple'
         except Exception as e:
             print(e)
             PrintException()
             for k, trainitem in self.training_items.items():
                 trainitem.save_model()
+            data_provider.mode = 'tuple'
 
     def resume(self):
         self.start_now(is_resume=True)
