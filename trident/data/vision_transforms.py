@@ -9,6 +9,7 @@ import collections
 import  numpy as np
 import cv2
 from scipy import ndimage
+from skimage.filters import threshold_otsu, threshold_minimum, threshold_local, threshold_isodata, threshold_yen
 
 from trident.backend.tensorspec import TensorSpec,object_type_inference
 
@@ -417,38 +418,53 @@ class RandomCenterCrop(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         self._shape_info = self._get_shape(image)
-        x, y, th, tw, eh, ew = self._shape_info
-
-        crop_image = image[y: y + th, x: x + tw]
-        return cv2.resize(crop_image, (ew, eh), self.interpolation)
+        x, y, th, tw, eh, ew,h,w = self._shape_info
+        image=cv2.resize(image, (th, tw), self.interpolation)
+        crop_image = image[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
+        if crop_image.shape[0]<eh or crop_image.shape[1]<ew:
+            background=np.zeros((eh,ew,3))
+            background[builtins.max(eh-crop_image.shape[0],0)//2:builtins.max(eh-crop_image.shape[0],0)//2+crop_image.shape[0],builtins.max(ew-crop_image.shape[1],0)//2:builtins.max(ew-crop_image.shape[1],0)//2+crop_image.shape[1],:]=crop_image
+            return background
+        else:
+            return crop_image
 
     def _apply_coords(self, coords,spec:TensorSpec):
-        x, y, th, tw, eh, ew = self._shape_info
-        coords[:, 0] -= x
-        coords[:, 1] -= y
-        coords[:, 0] = (coords[:, 0]*true_divide(ew,tw)).astype(np.int)
-        coords[:, 1] =(coords[:, 1]*(true_divide(eh,th))).astype(np.int)
+        x, y, th, tw, eh, ew,h,w = self._shape_info
+        coords[:, 0] = (coords[:, 0] * true_divide(tw, w)).astype(np.int)
+        coords[:, 1] = (coords[:, 1] * (true_divide(th, h))).astype(np.int)
+        coords[:, 0] -= builtins.max(int(round((tw - ew) / 2.0)),0)
+        coords[:, 1] -= builtins.max(int(round((th - eh) / 2.0)),0)
+        coords[:, 0] +=builtins.max(ew-tw,0)//2
+        coords[:, 1] +=builtins.max(eh - th, 0) // 2
         return coords
 
     def _apply_mask(self, mask,spec:TensorSpec):
-        x, y, th, tw, eh, ew = self._shape_info
-
-        crop_imask = mask[y: y + th, x: x + tw]
-        return cv2.resize(crop_imask, (ew, eh),cv2.INTER_NEAREST)
+        x, y, th, tw, eh, ew, h, w = self._shape_info
+        mask = cv2.resize(mask, (th, tw), self.interpolation)
+        crop_mask =  mask[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
+        if crop_mask.shape[0] < eh or crop_mask.shape[1] < ew:
+            background = np.zeros((eh, ew))
+            background[builtins.max(eh-crop_mask.shape[0],0)//2:builtins.max(eh-crop_mask.shape[0],0)//2+crop_mask.shape[0],builtins.max(ew-crop_mask.shape[1],0)//2:builtins.max(ew-crop_mask.shape[1],0)//2+crop_mask.shape[1]]=crop_mask
+            return background
+        else:
+            return crop_mask
 
 
     def _get_shape(self, image):
-        current_scale = np.random.uniform(*self.scale_range)
+        h, w, _ = image.shape
+
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
+        base_scale =builtins.min(eh/h,ew/w)
+        current_scale = np.random.uniform(*self.scale_range)
+        current_scale=base_scale*current_scale
 
-        h, w, _ = image.shape
-        th, tw = builtins.min(int(h * current_scale),eh), builtins.min(int(w * current_scale),ew)
+        th, tw = int(h * current_scale), int(w * current_scale)
 
-        x = int(round((w - tw) / 2.0))
-        y = int(round((h - th) / 2.0))
-        return x, y, th, tw, eh, ew
+        x = builtins.max(int(round((tw - ew) / 2.0)),0)
+        y = builtins.max(int(round((th - eh) / 2.0)),0)
+        return x, y, th, tw, eh, ew,h,w
 
 
 class RandomCrop(VisionTransform):
@@ -1335,33 +1351,16 @@ class AdaptiveBinarization(VisionTransform):
         ret=None
         th=127.5
         if self.threshold_type=='otsu':
-            ret, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            th = threshold_otsu(gray)
+            #ret, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         elif self.threshold_type == 'minimum':
-            pass
+            th = threshold_minimum(gray)
+        elif self.threshold_type == 'yen':
+            th = threshold_yen(gray)
         elif self.threshold_type == 'local':
-            # min_val = 0.0
-            # max_val = 0.0
-            # output=zeros_like(gray)
-            # for i in range(gray.shape[0]):
-            #     for j in range(gray.shape[1]):
-            #         if gray[i,j]>max_val / 2:
-            #             output[i,j]=255.0
-            th = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 25, 2)
+            th = threshold_local(gray, block_size=35, offset=10)
         elif self.threshold_type == 'isodata':
-
-            gray=gray/255.0
-            epst = 0.01
-            th =gray.mean()
-            while 1:
-                mL =gray[gray <= th].mean()
-                mH =gray[gray > th].mean()
-                th_new = (mL + mH) / 2
-                if abs(th - th_new) <epst:
-                    break
-                th = th_new
-            gray = gray * 255.0
-            th=th*255.0
-
+            th = threshold_isodata(gray, nbins=256)
         elif self.threshold_type == 'percentile':
             p10 = np.percentile(gray.copy(), 10)
             p90 = np.percentile(gray.copy(), 90)
@@ -1372,6 +1371,8 @@ class AdaptiveBinarization(VisionTransform):
                 gray[gray > p90] = 255
                 gray[gray < p10] = 0
         gray = (gray > th).astype(np.float32) * 255.0
+        if gray.max() - gray.min() < 20:
+            return clip(image,0,255).astype(np.float32)
         image=cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
         return clip(image,0,255).astype(np.float32)
 
@@ -1497,7 +1498,7 @@ class RandomErasing(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, size_range=(0.02,0.3),transparency_range=(0.4,0.8),transparancy_ratio=0.5, name='random_erasing', **kwargs):
+    def __init__(self, size_range=(0.05,0.4),transparency_range=(0.4,0.8),transparancy_ratio=0.5, name='random_erasing', **kwargs):
         super().__init__(name)
         self.size_range=size_range
         self.transparency_range=transparency_range
