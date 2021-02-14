@@ -68,7 +68,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
-           'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
+           'leaky_relu6', 'smooth_relu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
@@ -1369,7 +1369,7 @@ def pow(x: Tensor, y:(Tensor,float)):
     """
 
     y = to_tensor(y, dtype=x.dtype)
-    return torch.pow(x,y)
+    return torch.pow(x,y).to(x.dtype)
 
 @numpy_compatible
 def log(x: Tensor):
@@ -1472,7 +1472,7 @@ def sin(x: Tensor):
                 [-0.2474, -0.6816]])
 
     """
-    return torch.sin(x.float())
+    return torch.sin(x)
 
 @numpy_compatible
 def cos(x: Tensor):
@@ -2111,7 +2111,7 @@ def max(*args, **kwargs):
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
         return reduce_max(allargs[0], axis=axis, keepdims=keepdims)
     elif len(args) > 1 and is_tensor(args[0]) and all([is_tensor(arg) or isinstance(arg,(np.ndarray,float,int))for arg in args]):
-        new_args = [to_tensor(a).float() for a in args]
+        new_args = [to_tensor(a) for a in args]
         return torch.max(*new_args)
     else:
         raise NotImplementedError('Max({0},{1}) is not implemented yet '.format(*args,**kwargs))
@@ -2138,7 +2138,7 @@ def min(*args, **kwargs):
         keepdims = kwargs.get('keepdims', kwargs.get('keepdim', False))
         return reduce_min(allargs[0], axis=axis, keepdims=keepdims)
     elif len(args) > 1 and is_tensor(args[0]) and all([is_tensor(arg) or isinstance(arg, (np.ndarray, float, int)) for arg in args]):
-        new_args = [to_tensor(a).float() for a in args]
+        new_args = [to_tensor(a) for a in args]
         return torch.min(*new_args)
     else:
         raise NotImplementedError('Min({0},{1}) is not implemented yet '.format(*args, **kwargs))
@@ -2262,6 +2262,32 @@ def smooth_relu(x):
     """
     return torch.log(1 + torch.exp(x))
 
+@numpy_compatible
+def crelu(x,axis=1):
+    """Computes Concatenated ReLU.
+
+    Concatenates a ReLU which selects only the positive part of the activation
+    with a ReLU which selects only the *negative* part of the activation.
+    Note that as a result this non-linearity doubles the depth of the activations.
+    Source: [Understanding and Improving Convolutional Neural Networks via
+    Concatenated Rectified Linear Units. W. Shang, et
+    al.](https://arxiv.org/abs/1603.05201)
+
+    Args:
+        x (Tensor): input tensor.
+        axis: The axis that the output values are concatenated along. Default is 1.
+
+    Returns:
+      A `Tensor` with the same type as `x`.
+
+    References:
+      Understanding and Improving Convolutional Neural Networks via Concatenated
+      Rectified Linear Units:
+        [Shang et al., 2016](http://proceedings.mlr.press/v48/shang16)
+        ([pdf](http://proceedings.mlr.press/v48/shang16.pdf))
+    """
+
+    return torch.cat([relu(x),relu(-x)],dim=axis)
 
 def p_relu(x, weight):
     """Parametric Rectified Linear Unit.
