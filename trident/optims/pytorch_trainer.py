@@ -19,6 +19,8 @@ from typing import List, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+from trident.data.mask_common import color2label
+
 from trident.data.transform import Transform
 
 from trident.data.vision_transforms import Unnormalize, Resize, Normalize
@@ -115,7 +117,7 @@ class Model(ModelBase):
                         self.inputs[k] = TensorSpec(shape=TensorShape(v), name=k)
                     elif isinstance(v, TensorSpec):
                         self.inputs[v.name] = v
-            elif isinstance(input_shape, (tuple, list)) and all([isinstance(item, int) for item in input_shape]):
+            elif isinstance(input_shape, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in input_shape]):
                 input_name = 'input'
                 input_shape=TensorShape((None,)+tuple(input_shape))
                 self.inputs[input_name] = TensorSpec(shape=input_shape, name=input_name)
@@ -146,19 +148,20 @@ class Model(ModelBase):
                         v = to_tensor(v)
                     self.inputs[k] = TensorSpec(shape=tensor_to_shape(v),dtype=v.dtype, name=k)
         elif is_tensor(inputs):
-            self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs),dtype=inputs.dtype, name='input')
+            self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True),dtype=inputs.dtype, name='input')
         elif isinstance(inputs, np.ndarray):
             inputs = to_tensor(inputs)
-            self.inputs['input'] =   TensorSpec(shape=tensor_to_shape(inputs),dtype=inputs.dtype,name='input')
+            self.inputs['input'] =   TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True),dtype=inputs.dtype,name='input')
 
         # single model
         if isinstance(output, (Layer, nn.Module)):
             # update notes
+            output.is_root=True
             output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules()) if isinstance(mod, Layer)])
-            for mod in output.modules():
+            for name,mod in output.named_modules():
                 if isinstance(mod, Layer):
                     mod.nodes = output.nodes
-
+                    mod.relative_name=name
             # output.cpu()
             if output.built and hasattr(output, '_output_shape') and output._output_shape is not None:
                 self._model = output
@@ -572,6 +575,12 @@ class Model(ModelBase):
 
         return self
 
+    def with_initializer(self, initializer, **kwargs):
+        self.initializer=initializer
+        if self._model is not None and isinstance(self._model,Layer) and self._model._built:
+            self.initializer(self._model, **kwargs)
+        return self
+
     def with_model_save_path(self, save_path, **kwargs):
         if save_path is None or len(save_path) == 0:
             save_path = os.path.join('Models', '{0}.pth.tar_'.format(self.name))
@@ -654,18 +663,19 @@ class Model(ModelBase):
         if self.training_context['steps'] == 0:
             self.training_context['time_epoch_progress'] = self.training_context['time_epoch_start']
 
+
+    def do_on_epoch_end(self):
+        self.training_context['time_epoch_end'] = time.time()
         if self.model.device == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             gc.collect()
 
-    def do_on_epoch_end(self):
-        self.training_context['time_epoch_end'] = time.time()
         if self.warmup > 0 and self.training_context['current_epoch']+1 < self.warmup:
             lr = 1e-6 * (self.training_context['current_epoch'] + 1)
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = lr
-        elif self.warmup > 0 and self.training_context['current_epoch']+1 == self.warmup:
+        elif 0 < self.warmup == self.training_context['current_epoch']+1:
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = self.base_lr
 
@@ -673,8 +683,11 @@ class Model(ModelBase):
         self.training_context['time_batch_start'] = time.time()
         if self.training_context['steps'] == 0:
             self.training_context['time_batch_progress'] = self.training_context['time_batch_start']
-        if self.model.device == 'cuda':
-            torch.cuda.empty_cache()
+        if (self.training_context['steps'] + 1) % 100== 0:
+            if self.model.device == 'cuda':
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
+                gc.collect()
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
@@ -683,11 +696,12 @@ class Model(ModelBase):
             if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
                 self.warmup = 0
-        if self.training_context['current_batch'] == 0 and self.training_context['is_print_batch_progress'] == True:
+        if self.training_context['current_batch'] == 0 :
             temp = OrderedDict()
             for k in self.training_context['losses'].key_list:
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
+            temp['total_losses']=self.training_context['current_loss'].item()
             print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp.items()])+' }')
 
     def do_on_data_received(self, train_data, test_data):
@@ -967,6 +981,7 @@ class Model(ModelBase):
             import_or_install('torch.onnx')
             self._model.eval()
 
+
             dummy_input =to_tensor( self.signature.inputs.value_list[0].shape.get_dummy_tensor()).to(get_device())
             folder, filename, ext = split_path(save_path)
             if filename == '':
@@ -1066,59 +1081,58 @@ class Model(ModelBase):
 
     def test(self, input, target):
         raise NotImplementedError
+    #
+    # @property
+    # def preprocess_flow(self):
+    #     return self._preprocess_flow
+    #
+    # @preprocess_flow.setter
+    # def preprocess_flow(self, value):
+    #     self._preprocess_flow = value
 
-    @property
-    def preprocess_flow(self):
-        return self._preprocess_flow
+    #
+    # @property
+    # def reverse_preprocess_flow(self):
+    #     return_list = [reverse_image_backend_adaption]
+    #     for i in range(len(self._preprocess_flow)):
+    #         fn = self._preprocess_flow[-1 - i]
+    #         if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Normalize) and fn.name == 'normalize'):
+    #             return_list.append(Unnormalize(fn.mean, fn.std))
+    #     return_list.append(array2image)
+    #     return return_list
 
-    @preprocess_flow.setter
-    def preprocess_flow(self, value):
-        self._preprocess_flow = value
-        if isinstance(self.input_spec, TensorSpec):
-            self.input_spec = None
-
-    @property
-    def reverse_preprocess_flow(self):
-        return_list = [reverse_image_backend_adaption]
-        for i in range(len(self._preprocess_flow)):
-            fn = self._preprocess_flow[-1 - i]
-            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Normalize) and fn.name == 'normalize'):
-                return_list.append(Unnormalize(fn.mean, fn.std))
-        return_list.append(array2image)
-        return return_list
-
-    def data_preprocess(self, img_data):
-        if not hasattr(self, '_preprocess_flow') or self._preprocess_flow is None:
-            self._preprocess_flow = []
-        if img_data.ndim == 4:
-            return to_tensor(to_numpy([self.data_preprocess(im) for im in img_data]))
-        if len(self._preprocess_flow) == 0:
-            return image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
-            for fc in self._preprocess_flow:
-                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
-                    img_data = fc(img_data, spec=self.input_spec)
-                else:
-                    img_data = fc(img_data)
-            img_data = image_backend_adaption(img_data)
-            if self.input_spec is None:
-                self.input_spec = TensorSpec(shape=tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
-
-            return img_data
-        else:
-            return img_data
-
-    def reverse_data_preprocess(self, img_data: np.ndarray):
-        if img_data.ndim == 4:
-            return to_numpy([self.reverse_data_preprocess(im) for im in img_data])
-        if len(self.reverse_preprocess_flow) == 0:
-            return reverse_image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
-            # if img_data.ndim>=2:
-            for fc in self.reverse_preprocess_flow:
-                img_data = fc(img_data)
-            img_data = reverse_image_backend_adaption(img_data)
-        return img_data
+    # def data_preprocess(self, img_data):
+    #     if not hasattr(self, '_preprocess_flow') or self._preprocess_flow is None:
+    #         self._preprocess_flow = []
+    #     if img_data.ndim == 4:
+    #         return to_tensor(to_numpy([self.data_preprocess(im) for im in img_data]))
+    #     if len(self._preprocess_flow) == 0:
+    #         return image_backend_adaption(img_data)
+    #     if isinstance(img_data, np.ndarray):
+    #         for fc in self._preprocess_flow:
+    #             if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+    #                 img_data = fc(img_data, spec=self.input_spec)
+    #             else:
+    #                 img_data = fc(img_data)
+    #         img_data = image_backend_adaption(img_data)
+    #         if self.input_spec is None:
+    #             self.input_spec = TensorSpec(shape=tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+    #
+    #         return img_data
+    #     else:
+    #         return img_data
+    #
+    # def reverse_data_preprocess(self, img_data: np.ndarray):
+    #     if img_data.ndim == 4:
+    #         return to_numpy([self.reverse_data_preprocess(im) for im in img_data])
+    #     if len(self.reverse_preprocess_flow) == 0:
+    #         return reverse_image_backend_adaption(img_data)
+    #     if isinstance(img_data, np.ndarray):
+    #         # if img_data.ndim>=2:
+    #         for fc in self.reverse_preprocess_flow:
+    #             img_data = fc(img_data)
+    #         img_data = reverse_image_backend_adaption(img_data)
+    #     return img_data
 
     def extra_repr(self):
         return ''
@@ -1360,6 +1374,64 @@ class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageSegmentationModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
+        self.palette= OrderedDict()
+        self._class_names = []
+        self._idx2lab = {}
+        self._lab2idx = {}
+
+    @property
+    def class_names(self):
+        return self._class_names
+
+    @class_names.setter
+    def class_names(self, value):
+        if self._class_names is not None and self._class_names != value:
+            self._class_names = value
+            self._lab2idx = {v: k for k, v in enumerate(self._class_names)}
+            self._idx2lab = {k: v for k, v in enumerate(self._class_names)}
+
+    def index2label(self, idx: int):
+        if self._idx2lab is None or len(self._idx2lab.items()) == 0:
+            raise ValueError('You dont have proper mapping class names')
+        elif idx not in self._idx2lab:
+            raise ValueError('Index :{0} is not exist in class names'.format(idx))
+        else:
+            return self._idx2lab[idx]
+
+    def label2index(self, label):
+        if self._lab2idx is None or len(self._lab2idx.items()) == 0:
+            raise ValueError('You dont have proper mapping class names')
+        elif label not in self._lab2idx:
+            raise ValueError('label :{0} is not exist in class names'.format(label))
+        else:
+            return self._lab2idx[label]
+
+    def infer_single_image(self, img):
+        if self._model.built:
+            self._model.eval()
+            img = image2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+
+            for func in self.preprocess_flow:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                    img = func(img)
+            img = image_backend_adaption(img)
+            inp = to_tensor(np.expand_dims(img, 0)).to(
+                torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
+                self._model.weights[0].data.dtype)
+            result =argmax( self._model(inp)[0],axis=1)
+            result = to_numpy(result)
+            if self.class_names is None or len(self.class_names) == 0:
+                return result
+            else:
+                if len(self.palette)>0:
+                    color_result=color2label(result,self.palette)
+                    return color_result
+                else:
+                    return result
+        else:
+            raise ValueError('the model is not built yet.')
 
 
 class ImageGenerationModel(Model):
