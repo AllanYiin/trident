@@ -35,12 +35,15 @@ __all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean
 
 
 
-def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
+@torch.no_grad()
+def accuracy(output, target, topk=1,axis=1,ignore_index=-100, exclude_mask=False):
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
     input_tensor=output.copy().detach()
     target_tensor=target.copy().detach()
+    num_classes = int_shape(output)[axis]
+
 
     is_logsoftmax = None
     from_logits = None
@@ -67,10 +70,17 @@ def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
         target_tensor=argmax(target_tensor,axis).squeeze()
     if input_tensor.shape!=target_tensor.shape and topk==1:
         raise  ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,target_tensor.shape))
+    input_mask=ones_like(input_tensor)
+    if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
+        input_mask[input_tensor==ignore_index] = 0
+    elif isinstance(ignore_index, (list, tuple)):
+        for idx in ignore_index:
+            if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
+                input_mask[input_tensor == idx] = 0
 
     batch_size = target_tensor.size(0)
     if topk==1:
-        return input_tensor.eq(target_tensor).float().mean()
+        return input_tensor.eq(target_tensor).float()*input_mask.sum()/(target_tensor*input_mask).float().sum()
     else:
         _, pred = input_tensor.topk(topk)
         pred = pred.t()
@@ -81,7 +91,7 @@ def accuracy(output, target, topk=1,axis=1,exclude_mask=False):
 
 
 
-
+@torch.no_grad()
 def psnr(output, target):
     input_tensor = output.clone().detach()
     target_tensor = target.clone().detach()
@@ -92,7 +102,7 @@ def psnr(output, target):
     psnr = 20 * (1 / rmse).log10_()
     return psnr
 
-
+@torch.no_grad()
 def mean_absolute_error(output, target):
     input_tensor = output.view(-1).clone().detach()
     target_tensor = target.view(-1).clone().detach()
@@ -103,7 +113,7 @@ def mean_absolute_error(output, target):
     return torch.abs(input_tensor- target_tensor).mean()
 mae=mean_absolute_error
 
-
+@torch.no_grad()
 def mean_squared_error(output, target):
     input_tensor = output.view(-1).clone().detach()
     target_tensor = target.view(-1).clone().detach()
@@ -116,7 +126,7 @@ mse=mean_squared_error
 
 
 
-
+@torch.no_grad()
 def root_mean_squared_error(output, target):
     input_tensor=output.view(-1).clone().detach()
     target_tensor=target.view(-1).clone().detach()
@@ -127,7 +137,7 @@ def root_mean_squared_error(output, target):
 rmse=root_mean_squared_error
 
 
-
+@torch.no_grad()
 def mean_squared_logarithmic_error(output, target):
     input_tensor=output.view(-1).clone().detach()
     target_tensor=target.view(-1).clone().detach()
@@ -138,7 +148,7 @@ def mean_squared_logarithmic_error(output, target):
 msle=mean_squared_logarithmic_error
 
 
-
+@torch.no_grad()
 def pixel_accuracy(output, target):
     input_tensor = output.clone().detach()
     target_tensor = target.clone().detach()
@@ -148,6 +158,7 @@ def pixel_accuracy(output, target):
     pixel_correct = ((input_tensor == target_tensor)*(target_tensor > 0)).sum().float()
     return pixel_correct/max(pixel_labeled,1)
 
+@torch.no_grad()
 def alpha_pixel_accuracy(output, alpha):
     output_tensor = to_numpy(output)
     alpha_tensor =  to_numpy(alpha)
@@ -166,6 +177,7 @@ def alpha_pixel_accuracy(output, alpha):
     pixel_correct = ((output_tensor == alpha_tensor)*(trimap == 1)).sum()+ (np.less(np.abs(output_tensor - alpha_tensor),0.1).astype(np.float32)*(trimap == 0.5)).sum()
     return pixel_correct/max(pixel_labeled,1)
 
+@torch.no_grad()
 def iou(output, target):
     input_tensor = output.clone().detach()
     target_tensor = target.clone().detach()
@@ -176,7 +188,6 @@ def iou(output, target):
     union=((input_tensor+target_tensor)>0).sum().float()
 
     return intersection/max(union,1)
-
 
 
 def get_metric(metric_name):
