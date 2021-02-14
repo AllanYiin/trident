@@ -146,7 +146,7 @@ class TileImageCallback(VisualizationCallbackBase):
 
 
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['current_batch']  % self.batch_inteval == 0):
+        if self.batch_inteval > 0 and (training_context['steps']  % self.batch_inteval == 0):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
@@ -230,7 +230,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
         if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
             training_context['summary_writer'].add_figure(training_context['training_name']+'/plot/segtile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
+        if self.batch_inteval > 0 and (training_context['steps']) % self.batch_inteval == 0:
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
@@ -291,7 +291,7 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
             training_context['summary_writer'].add_figure(training_context['training_name']+'/plot/detection_plot', fig, global_step=training_context['steps'], close=True, walltime=time.time())
 
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['current_batch']) % self.batch_inteval == 0:
+        if self.batch_inteval > 0 and (training_context['steps']) % self.batch_inteval == 0:
             self.plot_detection_image(training_context)
 
     def on_epoch_end(self, training_context):
@@ -320,7 +320,7 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
 
     def on_overall_batch_end(self, training_context):
         if not self.is_inplace:
-            if (self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['current_batch'] + 1) % self.batch_inteval == 0) or (self.epoch_inteval > 0 and self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch']  and (self.training_items.value_list[0].training_context['current_epoch'] + 1) % self.epoch_inteval == 0):
+            if self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['steps']+1) % self.batch_inteval == 0:
                 if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
                     display.clear_output(wait=True)
                     self.counter = 0
@@ -370,7 +370,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
 
     def on_optimization_step_start(self, training_context):
         if get_backend()=='pytorch':
-            if  (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
+            if  training_context['steps'] % self.batch_inteval == 0:
                 grad_dict = {}
                 if 'grads_state' not in training_context:
                     training_context['grads_state']=OrderedDict()
