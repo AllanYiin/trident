@@ -605,15 +605,16 @@ class TrainingPlan(object):
                                         trainitem.save_model()
                                     except Exception as e:
                                         print(e)
+                                data_provider.mode = 'tuple'
                                 return True
 
                             if only_steps == False and (mbs + 1) % len(data_provider.batch_sampler) == 0:
                                 break
-
+                        trainitem.do_on_epoch_end()
                 except StopIteration:
                     for k, trainitem in self.training_items.items():
                         trainitem.do_on_epoch_end()
-                    pass
+                    trainitem.do_on_epoch_end()
                 except ValueError as ve:
                     print(ve)
                     PrintException()
