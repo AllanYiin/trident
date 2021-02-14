@@ -11,7 +11,7 @@ import re
 import builtins
 import time
 import warnings
-from collections import Counter
+
 from itertools import repeat
 from functools import partial
 import inspect
@@ -28,7 +28,9 @@ from skimage import transform, exposure
 from skimage.filters import *
 from skimage.morphology import square
 from trident.backend.common import *
+from trident.backend.decorators import deprecated
 from trident.backend.tensorspec import TensorSpec, assert_input_compatibility, ObjectType
+from trident.data.vision_transforms import *
 
 __all__ = [ 'list_pictures','list_images','check_same_size', 'normalize', 'unnormalize', 'channel_reverse', 'blur', 'random_blur',
            'random_crop', 'resize', 'rescale', 'downsample_then_upsample', 'add_noise', 'gray_scale', 'to_rgb',
@@ -49,66 +51,6 @@ elif get_backend() == 'tensorflow':
 from trident.backend.opencv_backend import *
 
 
-
-
-def distict_color_count(img):
-    """Count for distinct colors in input image
-
-    Returns:
-        object:
-
-    Examples:
-        >>> img=read_image('../../trident_logo.png')[:,:,:3]
-        >>> len(distict_color_count(img))
-        1502
-        >>> img=read_image('../../trident_logo.png')[:,:,:1]
-        >>> len(distict_color_count(img))
-        125
-
-    """
-    return Counter([tuple(colors) for i in img for colors in i])
-
-
-
-def object_type_inference(data):
-
-
-    if isinstance(data,np.ndarray):
-        if data.ndim == 2 and data.shape[-1] == 2:
-            return ObjectType.landmarks
-        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
-            return ObjectType.absolute_bbox
-        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
-            return ObjectType.relative_bbox
-        elif data.ndim == 2 and len(distict_color_count(np.expand_dims(data,-1)))==2:
-            return ObjectType.binary_mask
-        elif data.ndim == 2 and (data.max()-data.min()+1)== len(distict_color_count(np.expand_dims(data,-1))):
-            return ObjectType.label_mask
-        elif data.ndim == 2 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
-            return ObjectType.gray
-        elif data.ndim == 3 and data.shape[-1] == 1 and len(distict_color_count(data))==2:
-            return ObjectType.binary_mask
-        elif data.ndim == 3 and data.shape[-1] == 1 and (data.max()-data.min()+1)== len(distict_color_count(data)):
-            return ObjectType.label_mask
-        elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
-            return ObjectType.gray
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 and len(distict_color_count(data))<100:
-            return ObjectType.color_mask
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
-            return ObjectType.rgb
-        elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
-            return ObjectType.rgba
-        elif data.ndim == 3 and data.dtype==np.int64 and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
-            return ObjectType.binary_mask
-        elif data.ndim == 3 and data.dtype in [np.float32,np.float16] and 0<=data.max()<=1 and 0<=data.min().round(0)<=1:
-            return ObjectType.alpha_mask
-        elif data.ndim <= 1 and data.dtype==np.int64 :
-            return ObjectType.classification_label
-        elif data.ndim == 2 and data.dtype==np.int64:
-            return ObjectType.color_mask
-        else:
-            sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape,data.dtype,data.min(),data.max())+'\n')
-            return ObjectType.array_data
 
 
 
@@ -136,19 +78,22 @@ def transform_func(func):
 
     return wrapper
 
-
+@deprecated('0.7.0', 'list_images')
 def list_pictures(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
-    r"""Deprecated; see :func:`~list_images`."""
-    warnings.warn(
-        "This function will be removed in next major version, please use \"list_images\" instead",
-        FutureWarning)
-    return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
-            re.match(r'([\w]+\.(?:' + ext + '))', f)]
+    filelist = []
+    for root, dirs, files in os.walk(directory):
+        filelist = filelist + [os.path.join(root,f) for f in files if re.match( "([^\\s]+(\\.(?i)({0}))$)".format(ext), f)]
+    return filelist
+
+
 
 def list_images(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
-    return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
-            re.match(r'([\w]+\.(?:' + ext + '))', f)]
-
+    # return [os.path.join(root, f) for root, _, files in os.walk(directory) for f in files if
+    #         re.match(r'([\w]+\.(?:' + ext + '))', f)]
+    filelist = []
+    for root, dirs, files in os.walk(directory):
+        filelist = filelist + [os.path.join(root,f) for f in files if re.match( "([^\\s]+(\\.(?i)({0}))$)".format(ext), f)]
+    return filelist
 
 
 def check_same_size(*images):
@@ -172,81 +117,15 @@ def check_same_size(*images):
 
 
 def add_noise(intensity=0.1):
-    def img_op(image: np.ndarray,**kwargs):
-        rr = random.randint(0, 10)
-        orig_min = image.min()
-        orig_max = image.max()
-        noise = np.random.standard_normal(image.shape) * (intensity * (orig_max - orig_min))
-        if rr % 2 == 0:
-            noise = np.random.uniform(-1, 1, image.shape) * (intensity * (orig_max - orig_min))
-        image = np.clip(image + noise, orig_min, orig_max)
-        return image
-
-    return img_op
+    return AddNoise(intensity=intensity)
 
 
 def normalize(mean, std):
-    def img_op(image: np.ndarray,**kwargs):
-        norm_mean = mean
-        norm_std = std
-        if isinstance(norm_mean, numbers.Number) and image.ndim == 3:
-            norm_mean = np.array([norm_mean, norm_mean, norm_mean])
-            norm_mean = np.expand_dims(norm_mean, 0)
-            norm_mean = np.expand_dims(norm_mean, 0)
-        if isinstance(norm_std, numbers.Number) and image.ndim == 3:
-            norm_std = np.array([norm_std, norm_std, norm_std])
-            norm_std = np.expand_dims(norm_std, 0)
-            norm_std = np.expand_dims(norm_std, 0)
-        if image.ndim == 3:
-            image.flags.writeable = True
-            image-=norm_mean
-            image/=norm_std
-            return image
-        elif image.ndim == 2:
-            if isinstance(norm_mean, numbers.Number) and isinstance(norm_std,numbers.Number):
-                image.flags.writeable = True
-                image -= norm_mean
-                image /= norm_std
-                return image
-        return image
-
-    img_op.mean = mean
-    img_op.std = std
-    return img_op
+    return Normalize(mean=mean,std=std)
 
 
 def unnormalize(mean, std):
-    def img_op(image: np.ndarray,**kwargs):
-        image = reverse_image_backend_adaption(image)
-        norm_mean = mean
-        norm_std = std
-        if isinstance(norm_mean, tuple):
-            norm_mean = list(norm_mean)
-
-        if isinstance(norm_std, tuple):
-            norm_std = list(norm_std)
-
-        if isinstance(norm_mean, (float, int)) and isinstance(norm_std, (float, int)) and image.ndim == 3:
-            image.flags.writeable = True
-            image*= float(norm_std)
-            image+= float(norm_mean)
-            return image
-        elif isinstance(norm_mean, list) and isinstance(norm_std, list) and len(norm_mean) == 1 and len(norm_std) == 1:
-            image.flags.writeable = True
-            image *= float(norm_std[0])
-            image += float(norm_mean[0])
-            return image
-        elif isinstance(norm_mean, list) and isinstance(norm_std, list) and len(norm_mean) == 3 and len(norm_std) == 3:
-            norm_mean = np.reshape(np.array(norm_mean), (1, 1, 3))
-            norm_std = np.reshape(np.array(norm_std), (1, 1, 3))
-            image.flags.writeable = True
-            image *= norm_std
-            image += norm_mean
-            return image
-        return image
-
-    return img_op
-
+    return Unnormalize(mean=mean,std=std)
 
 #
 # 0: Nearest-neighbor
@@ -258,593 +137,40 @@ def unnormalize(mean, std):
 
 # all size is HWC or (H,W)
 def resize(size, keep_aspect=True, order=1, align_corner=True):
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        results=None
-        if isinstance(image,np.ndarray):
-            imspec=kwargs.get("spec")
-            if imspec is None:
-
-                imspec=TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-            results = OrderedDict()
-            results[imspec]=image
-        elif isinstance(image,dict):
-            results=image
-
-        if keep_aspect:
-            heigth,width  = size
-            currentHeight = None
-            currentWidth = None
-            if isinstance(image, np.ndarray):
-                currentHeight, currentWidth = image.shape[:2]
-            elif isinstance(image, OrderedDict):
-                currentHeight, currentWidth = image.value_list[0].shape[:2]
-
-            scale=builtins.min(heigth/currentHeight,width/currentWidth)
-            new_h=currentHeight*scale
-            new_w=currentWidth*scale
-            pad_vert = (heigth - new_h) / 2
-            pad_horz = (width - new_w) / 2
-            pad_top, pad_btm = np.floor(pad_vert).astype(int), np.ceil(pad_vert).astype(int)
-            pad_left, pad_right = np.floor(pad_horz).astype(int), np.ceil(pad_horz).astype(int)
-
-            img_op.scale = scale
-            if align_corner:
-                img_op.pad_top = 0
-                img_op.pad_btm = int(pad_btm + pad_top)
-                img_op.pad_left = 0
-                img_op.pad_right = int(pad_right + pad_left)
-            else:
-                img_op.pad_top = int(pad_top)
-                img_op.pad_btm = int(pad_btm)
-                img_op.pad_left = int(pad_left)
-                img_op.pad_right = int(pad_right)
-
-            img_op.all_pad = (img_op.pad_top, img_op.pad_btm, img_op.pad_left, img_op.pad_right)
-            for spec,im in results.items():
-                if spec.is_spatial==True:
-                    if im is None:
-                        pass
-                    elif spec.object_type in [ObjectType.absolute_bbox] :  # bbox [:,4]   [:,5]
-                        class_info = None
-                        if im.shape[-1] >4:
-                            class_info = im[:, 4:]
-                            im = im[:, :4]
-                        im[:, :4]=im[:, :4]*img_op.scale
-                        im[:, 0::2] +=img_op.pad_left
-                        im[:, 1::2] +=img_op.pad_top
-
-                        if class_info is not None:
-                            im=np.concatenate([im,class_info],axis=-1)
-                        results[spec] = im
-                    elif spec.object_type in [ObjectType.landmarks]  :  # landmark [:,2]
-                        if im[30,:].max()<1:
-                            pass
-                        else:
-                            im[:, :2]=im[:, :2]*img_op.scale
-                            im[:, 0::2] += img_op.pad_left
-                            im[:, 1::2] += img_op.pad_top
-                        results[spec] = im
-                    # elif spec.object_type in [ObjectType.color_mask]:  # landmark [:,2]
-                    #     new_im = np.zeros((size[0], size[1],3),dtype=np.int64)
-                    #     im = transform.rescale(im,  img_op.scale, clip=False, anti_aliasing=False, multichannel=True,preserve_range=True, order=0).astype(np.int64)
-                    #     if align_corner:
-                    #         new_im[:im.shape[0], :im.shape[1],:] = im
-                    #     else:
-                    #         new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left,:] = im
-                    #     results[spec]= np.pad(im, img_op.all_pad, 'constant').astype(np.int64)
-                    #
-
-                    elif spec.object_type in [ObjectType.label_mask, ObjectType.color_mask, ObjectType.label_mask]:  # label_mask
-                        im= transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False if im.ndim == 2 else True, preserve_range=True,order=0).astype(np.int64)
-                        new_im = np.zeros((size[0], size[1], 3))
-                        if align_corner:
-                            if im.ndim==2:
-                                new_im = np.zeros((size[0], size[1]))
-                                new_im[:im.shape[0], :im.shape[1]] = im
-                            elif im.ndim==3:
-                                new_im[:im.shape[0], :im.shape[1], :] = im
-                        else:
-                            if im.ndim==2:
-                                new_im = np.zeros((size[0], size[1]))
-                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
-                            elif im.ndim==3:
-                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left, :] = im
-
-                        results[spec] = new_im
-                    elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray]:  # image
-
-                        im = im.astype(np.float32)
-                        im= transform.rescale(im, (scale, scale), clip=True, anti_aliasing=True,multichannel=False if im.ndim == 2 else True,order=1)
-                        new_im=None
-                        if align_corner:
-                            if im.ndim==2:
-                                new_im = np.zeros((size[0], size[1]))
-                                new_im[:im.shape[0], :im.shape[1]] = im
-                            elif im.ndim==3:
-                                new_im = np.zeros((size[0], size[1],im.shape[-1]))
-                                new_im[:im.shape[0], :im.shape[1], :] = im
-                        else:
-                            if im.ndim==2:
-                                new_im = np.zeros((size[0], size[1]))
-                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left] = im
-                            elif im.ndim==3:
-                                new_im = np.zeros((size[0], size[1], im.shape[-1]))
-                                new_im[pad_top:im.shape[0] + pad_top, pad_left:im.shape[1] + pad_left, :] = im
-
-                        results[spec] = new_im
-                        del im
-            if isinstance(image, np.ndarray):
-                return results.value_list[0]
-            elif isinstance(image, OrderedDict):
-                return results
-
-
-        else:
-            img_op.scalex =np.true_divide(float(size[1]),float(image[0].shape[1]))
-            img_op.scaley =np.true_divide(float(size[0]),float(image[0].shape[0]))
-            img_op.scale = (img_op.scaley, img_op.scalex)
-            for spec, im in results.items():
-                if spec.is_spatial == True:
-                    if im is None:
-                        pass
-                    elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox
-                        im[:, 0::2] /= img_op.w
-                        im[:, 1::2] /= img_op.h
-                        results[spec]=im
-                    else:
-                        im = im.astype(np.float32)
-                        results[spec]= transform.resize(im, size, anti_aliasing=True, order=0 if im.ndim == 2 else order)
-            return results
-    return img_op
+    interpolation=cv2.INTER_LINEAR if order==1 else cv2.INTER_NEAREST
+    return Resize(size, keep_aspect=keep_aspect,interpolation=interpolation, align_corner=align_corner)
 
 
 def rescale(scale, order=1):
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        results = None
-        if isinstance(image, np.ndarray):
-            imspec = kwargs.get("spec")
-            if imspec is None:
-                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-
-            results = OrderedDict()
-            results[imspec] = image
-        elif isinstance(image, dict):
-            results = image
-
-        height = None
-        width = None
-        if isinstance(image, np.ndarray):
-            height, width = image.shape[:2]
-        elif isinstance(image, OrderedDict):
-            height, width = image.value_list[0].shape[:2]
-
-        img_op.height = height
-        img_op.width = width
-        img_op.scale = scale
-        for spec, im in results.items():
-            if spec.is_spatial == True:
-                if im is None:
-                    pass
-                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
-                    class_info = None
-                    if im.shape[-1] > 4:
-                        class_info = im[:, 4:]
-                        im = im[:, :4]
-                    im[:, :4] = im[:, :4] * img_op.scale
-                    if class_info is not None:
-                        im = np.concatenate([im, class_info], axis=-1)
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
-                    im[:, :2] = im[:, :2] * img_op.scale
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.label_mask,ObjectType.color_mask,ObjectType.label_mask]:  # label_mask
-                    results[spec] = transform.rescale(im, (scale, scale), clip=True, anti_aliasing=False, multichannel=False if im.ndim==2 else True,preserve_range=True, order=0).astype(np.int64)
-                elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray]:  # image
-                    im = im.astype(np.float32)
-                    results[spec] = transform.rescale(im, (scale, scale), clip=True, anti_aliasing=True,
-                                                   multichannel=False if im.ndim==2 else True,
-                                                   order=0 if im.ndim == 2 else order)
-                else:
-                    pass
-        if isinstance(image, np.ndarray):
-            return results.value_list[0]
-        elif isinstance(image, OrderedDict):
-            return results
-    return img_op
+    interpolation = cv2.INTER_LINEAR if order == 1 else cv2.INTER_NEAREST
+    return Rescale(scale=scale,interpolation=interpolation)
 
 def random_rescale_crop(h, w, scale=(0.5, 2), order=1):
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        # start = time.time()
-        scalemin, scalemax = scale
-        current_scale = np.random.choice(np.random.uniform(scalemin, scalemax, 100))
-        rescale_fn=rescale(current_scale)
-        random_crop_fn=random_crop(h,w)
-
-        results = None
-        if isinstance(image, np.ndarray):
-            imspec = kwargs.get("spec")
-            if imspec is None:
-                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-            results = OrderedDict()
-            results[imspec] = image
-        elif isinstance(image, dict):
-            results = image
-        results = random_crop_fn(rescale_fn(results, **kwargs))
-
-        if isinstance(image, np.ndarray):
-            return results.value_list[0]
-        elif isinstance(image, OrderedDict):
-            return results
-
-    return img_op
+    interpolation = cv2.INTER_LINEAR if order == 1 else cv2.INTER_NEAREST
+    return RandomRescaleCrop(output_size=(h,w),scale_range=scale,interpolation=interpolation)
 
 
-def random_center_crop(h,w, scale=(0.8, 1.2)):
-    scalemin, scalemax = scale
-
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        results = None
-        # generare strong typed dict
-        if isinstance(image, np.ndarray):
-            imspec = kwargs.get("spec")
-            if imspec is None:
-                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-            results = OrderedDict()
-            results[imspec] = image
-        elif isinstance(image, dict):
-            results = image
-
-        height = None
-        width = None
-        if isinstance(image, np.ndarray):
-            height, width = image.shape[:2]
-        elif isinstance(image, OrderedDict):
-            height, width = image.value_list[0].shape[:2]
-
-        max_value = max(height, width)
-        i = int(round((max_value - height) / 2.))
-        j = int(round((max_value - width) / 2.))
-
-        scale = min(w / max_value, h / max_value) * np.random.choice(np.arange(scalemin, scalemax, 0.01))
-        img_op.scale=scale
-        resized_h = int(round(max_value * scale))
-        resized_w = int(round(max_value * scale))
-        i1 = int(round((max(resized_h, h) - resized_h) / 2.))
-        j1 = int(round((max(resized_w, w) - resized_w) / 2.))
-
-        i2 = int(round((max(resized_h, h) - h) / 2.))
-        j2 = int(round((max(resized_w, w) - w) / 2.))
-        for spec, im in results.items():
-            if spec.is_spatial == True:
-                if im is None:
-                    pass
-                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
-                    class_info = None
-                    if im.shape[-1] >4:
-                        class_info = im[:, 4:]
-                        im = im[:, :4]
-                    im[:, 0] = np.clip((im[:, 0] + j) * scale + j1 - j2, 0, w)
-                    im[:, 1] = np.clip((im[:, 1] + i) * scale + i1 - i2, 0, h)
-                    im[:, 2] = np.clip((im[:, 2] + j) * scale + j1 - j2, 0, w)
-                    im[:, 3] = np.clip((im[:, 3] + i) * scale + i1 - i2, 0, h)
-                    area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                    im = im[area > 0]
-                    if len(im) > 0:
-                        if class_info is not None:
-                            class_info= class_info[area > 0]
-                            im=np.concatenate([im,class_info],axis=-1)
-                    results[spec] = im
-
-                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
-                    im[:, 0] = (im[:, 0] + j) * scale + j1 - j2
-                    im[:, 1] = (im[:, 1] + i) * scale + i1 - i2
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray, ObjectType.binary_mask, ObjectType.color_mask, ObjectType.label_mask]:
-
-                    if im.ndim == 3:
-                        blank = np.zeros((max_value, max_value, im.shape[-1]))
-                        blank[i:i + height, j:j + width, :] = im
-
-                        resized_im = transform.rescale(blank, scale=scale, anti_aliasing=False if 'mask' in spec.object_type.value else True,clip=True, multichannel=False if im.ndim==2 else True,preserve_range=True,order=0 if 'mask' in spec.object_type.value else 1)
-                        returnData = np.zeros((max(resized_h, h), max(resized_w, w), resized_im.shape[-1]))
-
-                        returnData[i1:i1 + resized_im.shape[0], j1:j1 + resized_im.shape[1], :] = resized_im
-                        results[spec] = returnData[i2:i2 + h, j2:j2 + w, :]
-                    elif im.ndim == 2:
-                        blank = np.zeros((max_value, max_value)).astype(im.dtype)
-                        blank[i:i + height, j:j + width] = im
-
-                        resized_im = np.round(transform.rescale(blank,scale=scale, anti_aliasing=False if 'mask' in spec.object_type.value else True, clip=True, multichannel=False if im.ndim==2 else True,preserve_range=True, order=0 if 'mask' in spec.object_type.value else 1)).astype(im.dtype)
-                        returnData = np.zeros((max(resized_h, h), max(resized_w, w))).astype(im.dtype)
-
-                        returnData[i1:i1 + resized_im.shape[0], j1:j1 + resized_im.shape[1]] = resized_im
-                        results[spec] = returnData[i2:i2 + h, j2:j2 + w]
-        if isinstance(image, np.ndarray):
-            return results.value_list[0]
-        elif isinstance(image, OrderedDict):
-            return results
-
-    return img_op
+def random_center_crop(h,w, scale=(0.8, 1.2), order=1):
+    interpolation = cv2.INTER_LINEAR if order == 1 else cv2.INTER_NEAREST
+    return RandomCenterCrop(output_size=(h,w),scale_range=scale,interpolation=interpolation)
 
 
 def random_crop(h, w):
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        results = None
-        #generare strong typed dict
-        if isinstance(image, np.ndarray):
-            imspec = kwargs.get("spec")
-            if imspec is None:
-                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-            results = OrderedDict()
-            results[imspec] = image
-        elif isinstance(image, dict):
-            results = image
-
-        height = None
-        width = None
-        if isinstance(image, np.ndarray):
-            height, width = image.shape[:2]
-        elif isinstance(image, OrderedDict):
-            height, width = image.value_list[0].shape[:2]
-
-        img_op.h = h
-        img_op.w = w
-        offset_x = 0
-        offset_y = 0
-
-        if width > w:
-            offset_x = random.choice(range(width - w))
-        if height > h:
-            offset_y = random.choice(range(height - h))
-        offset_x1 = random.choice(range(w - width)) if w > width else 0
-        offset_y1 = random.choice(range(h - height)) if h > height else 0
-        for spec, im in results.items():
-            if spec.is_spatial == True:
-                if im is None:
-                    pass
-                elif spec.object_type in [ObjectType.absolute_bbox] :  # bbox
-                    class_info=None
-                    if im.shape[-1] ==5:
-                        class_info=im[:,4:5]
-                        im=im[:,:4]
-                    im[:, 0::2] = np.clip(im[:, 0::2] - offset_x, 0, w)
-                    im[:, 1::2] = np.clip(im[:, 1::2] - offset_y, 0, h)
-
-                    area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                    im = im[area > 0]
-
-                    if len(im) > 0:
-                        im[:, 0::2] += offset_x1
-                        im[:, 1::2] += offset_y1
-                        if class_info is not None:
-                            class_info= class_info[area > 0]
-                            im=np.concatenate([im,class_info],axis=-1)
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
-                    im[:, 0] = im[:, 0] - offset_x+offset_x1
-                    im[:, 1] = im[:, 1] - offset_y+offset_y1
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.rgb,ObjectType.rgba, ObjectType.gray,ObjectType.binary_mask,ObjectType.color_mask,ObjectType.label_mask]:
-                    if im.ndim == 2:
-                        returnData = np.zeros((h, w), dtype=np.float32)
-                        crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w]
-                        returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
-                        results[spec] = returnData
-                    elif im.ndim == 3:
-                        returnData = np.zeros((h, w, im.shape[-1]), dtype=np.float32)
-                        crop_im = im[offset_y:offset_y + h, offset_x:offset_x + w, :]
-                        returnData[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
-                        results[spec] = returnData
-        if isinstance(image, np.ndarray):
-            return results.value_list[0]
-        elif isinstance(image, OrderedDict):
-            return results
-    return img_op
+    return RandomCrop(output_size=(h,w))
 
 
 
-def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,shear_range = 0.2,
-                     random_flip= 0.15):
-    # 把現有的圖片隨機擾亂
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        rotation = np.random.uniform(-rotation_range, rotation_range) if rotation_range != 0 else 0
-        scale = np.random.uniform(1 - zoom_range, 1 + zoom_range) if zoom_range != 0 else 1
-        shear = np.random.uniform(- shear_range, shear_range) if shear_range != 0 else 0
-        shift_x = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
-        shift_y = np.random.uniform(-shift_range, shift_range) if shift_range != 0 else 0
-        rr = np.random.random()
-        results = None
-        if isinstance(image, np.ndarray):
-            imspec = kwargs.get("spec")
-            if imspec is None:
-                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-            results = OrderedDict()
-            results[imspec] = image
-        elif isinstance(image, dict):
-            results = image
-
-        height = None
-        width = None
-        if isinstance(image, np.ndarray):
-            height, width = image.shape[:2]
-        elif isinstance(image, OrderedDict):
-            height, width = image.value_list[0].shape[:2]
-
-        img_op.tx = int(shift_x* width)
-        img_op.ty = int(shift_y* height )
-        mat = cv2.getRotationMatrix2D((width // 2+img_op.tx, height // 2+img_op.ty), rotation,1)
-        #mat[:, 2] += (tx, ty)
-
-        cos = np.abs(mat[0, 0])
-        sin = np.abs(mat[0, 1])
-        new_W = int((height * sin) + (width * cos))
-        new_H = int((height * cos) + (width * sin))
-        mat[0, 2] += (new_W / 2) - width // 2
-        mat[1, 2] += (new_H / 2) - height // 2
-        mat_img = mat.copy()
-        mat_box = mat.copy()
-
-        for spec, im in results.items():
-            if spec.is_spatial == True:
-                if im is None:
-                    pass
-                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
-                    class_info = None
-                    if im.shape[-1] >4:
-                        class_info = im[:, 4:]
-                        im = im[:, :4]
-                    # compute the new bounding dimensions of the image
-                    box_w = (im[:, 2] - im[:, 0]).reshape(-1, 1)
-                    box_h = (im[:, 3] - im[:, 1]).reshape(-1, 1)
-
-                    x1 = im[:, 0].reshape(-1, 1)
-                    y1 = im[:, 1].reshape(-1, 1)
-
-                    x2 = x1 + box_w
-                    y2 = y1
-
-                    x3 = x1
-                    y3 = y1 + box_h
-
-                    x4 = im[:, 2].reshape(-1, 1)
-                    y4 = im[:, 3].reshape(-1, 1)
-
-                    corners = np.hstack((x1, y1, x2, y2, x3, y3, x4, y4))
-                    corners = corners.reshape(-1, 2)
-
-                    corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
-                    new_box = np.dot(mat_box, corners.T).T
-                    new_box=new_box.reshape(-1, 8)
-
-                    x_ = new_box[:, [0, 2, 4, 6]]
-                    y_ = new_box[:, [1, 3, 5, 7]]
-
-                    xmin = np.min(x_, 1).reshape(-1, 1)
-                    ymin = np.min(y_, 1).reshape(-1, 1)
-                    xmax = np.max(x_, 1).reshape(-1, 1)
-                    ymax = np.max(y_, 1).reshape(-1, 1)
-
-                    im = np.hstack((xmin, ymin, xmax, ymax, new_box[:, 8:]))
-
-                    if im.ndim==1:
-                        im=np.expand_dims(im,0)
-
-                    if rr< random_flip:
-                        im[:, 0::2] =img_op.flip_width - im[:, 2::-2]
-                    im[:, 0] = np.clip(im[:,0],0,width)
-                    im[:, 1] = np.clip(im[:, 1], 0, height)
-                    im[:, 2] = np.clip(im[:,2], 0, width)
-                    im[:, 3] = np.clip(im[:,3], 0, height)
-
-                    area = (im[:, 3] - im[:, 1]) * (im[:, 2] - im[:, 0])
-                    im = im[area > 0]
-                    if len(im) > 0:
-                        if class_info is not None:
-                            class_info = class_info[area > 0]
-                            im=np.concatenate([im,class_info],axis=-1)
-                        results[spec] = im
-                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
-                    new_n=[]
-
-                    for i in range(len(im)):
-                        is_normalized=False
-                        if im[30,:].max()<=1:
-                            is_normalized=True
-                            im[:,1] *= float(height)
-                            im[:, 0] *= float(width)
-                        pts = []
-                        pts.append(np.squeeze(np.array(mat_img[0]))[0] * im[i][0] + np.squeeze(np.array(mat_img[0]))[1] * im[i][1] + np.squeeze(np.array(mat_img[0]))[2])
-                        pts.append(np.squeeze(np.array(mat_img[1]))[0] * im[i][0] + np.squeeze(np.array(mat_img[1]))[1] * im[i][1] + np.squeeze(np.array(mat_img[1]))[2])
-                        pts=np.asarray(pts)
-                        if is_normalized:
-                            pts[1] /=float(height)
-                            pts[0] /=float(width)
-                        new_n.append(pts)
-                    results[spec] = np.array(new_n)
-                elif im.ndim == 3:
-
-                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(random.randint(0,255), random.randint(0,255), random.randint(0,255)))  # , borderMode=cv2.BORDER_REPLICATE
-                    if rr< random_flip:
-                        img_op.flip_width=new_image.shape[1]
-                        new_image = new_image[:, ::-1]
-                    results[spec] =  new_image
-                elif im.ndim ==2:
-                    image=np.concatenate([np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1),np.expand_dims(im.copy(),-1)],axis=-1)
-
-                    new_image = cv2.warpAffine(im.copy(), mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT,borderValue=(random.randint(0,255), random.randint(0,255), random.randint(0,255)))  # , borderMode=cv2.BORDER_REPLICATE
-                    if np.random.random() < random_flip:
-                        new_image = new_image[:, ::-1]
-                    new_image=cv2.cvtColor(new_image,cv2.COLOR_RGB2GRAY)
-
-                    results[spec] = new_image
-        if isinstance(image, np.ndarray):
-            return results.value_list[0]
-        elif isinstance(image, OrderedDict):
-            return results
-    return img_op
+def random_transform(rotation_range= 15, zoom_range= 0.02, shift_range= 0.02,shear_range = 0.2,   random_flip= 0.15):
+    return RandomTransformAffine(rotation_range=rotation_range,zoom_range=zoom_range,shift_range=shift_range,shear_range=shear_range,random_flip=random_flip)
 
 
 
 def horizontal_flip():
-    # horizontal flip doesn't need skimage, it's easy as flipping the image array of pixels !
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        results = None
-        if isinstance(image, np.ndarray):
-            imspec = kwargs.get("spec")
-            if imspec is None:
-                imspec = TensorSpec(shape=TensorShape(image.shape), object_type=object_type_inference(image))
-            results = OrderedDict()
-            results[imspec] = image
-        elif isinstance(image, dict):
-            results = image
-
-        height = None
-        width = None
-        if isinstance(image, np.ndarray):
-            height, width = image.shape[:2]
-        elif isinstance(image, OrderedDict):
-            height, width = image.value_list[0].shape[:2]
-
-        for spec, im in results.items():
-            if spec.is_spatial == True:
-                if im is None:
-                    pass
-                elif spec.object_type in [ObjectType.absolute_bbox]:  # bbox [:,4]   [:,5]
-                    class_info = None
-                    if im.shape[-1] >4:
-                        class_info = im[:, 4:]
-                        im = im[:, :4]
-                    im[:, 0::2] = width - im[:, 2::-2]
-                    if len(im) > 0:
-                        if class_info is not None:
-                            im=np.concatenate([im,class_info],axis=-1)
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.landmarks]:  # landmark [:,2]
-                    im[:, 0::2] = width - im[:, 2::-2]
-                    results[spec] = im
-                elif spec.object_type in [ObjectType.rgb, ObjectType.rgba, ObjectType.gray]:  # image
-                    if im.ndim == 3:
-                        results[spec] = im[:, ::-1]
-                    elif im.ndim == 2:
-                        results[spec] = im[::-1]
-        if isinstance(image, np.ndarray):
-            return results.value_list[0]
-        elif isinstance(image, OrderedDict):
-            return results
-
-    return img_op
+    return HorizontalFlip()
 
 
 def random_mirror():
-    fn=horizontal_flip()
-    def img_op(image: Union[np.ndarray,Dict[TensorSpec,np.ndarray]],**kwargs):
-        img_op.rnd = random.randint(0, 10)
-        if img_op.rnd % 2 == 0:
-            return fn(image,**kwargs)
-        else:
-            return image
-
-    return img_op
+    return RandomMirror()
 
 
 
@@ -859,44 +185,18 @@ def downsample_then_upsample(scale=4, order=1, repeat=1):
 
 
 def invert_color():
-    def img_op(image: np.ndarray,**kwargs):
-        if np.min(image) >= 0 and np.max(image) <= 1:
-            return 1 - image
-        elif np.min(image) >= -1 and np.min(image) < 0 and np.max(image) <= 1:
-            return 1 - (image * 0.5 + 0.5)
-        else:
-            return 255 - image
-
-    return img_op
+    return InvertColor()
 
 
 def random_invert_color():
-    def img_op(image: np.ndarray,**kwargs):
-        if random.random() < 0.7:
-            if np.min(image) >= 0 and np.max(image) <= 1:
-                return 1 - image
-            elif np.min(image) >= -1 and np.min(image) < 0 and np.max(image) <= 1:
-                return 1 - (image * 0.5 + 0.5)
-            else:
-                return 255 - image
-        else:
-            return image
-
-    return img_op
+    return RandomInvertColor()
 
 
 def gray_scale():
-    def img_op(image: np.ndarray,**kwargs):
-        if image.shape[-1] == 3:
-            image = color.rgb2gray(image.astype(np.float32))
-            if image.ndim==2 or (image.ndim==3 and  image.shape[-1] == 1):
-                if image.ndim == 2:
-                    image=np.expand_dims(image,-1)
-                image=np.concatenate([image,image,image],axis=-1)
-        return image
+    return GrayScale()
 
-    return img_op
-
+def random_gray_scale():
+    return RandomGrayScale()
 
 def to_rgb():
     def img_op(image: np.ndarray,**kwargs):
@@ -942,31 +242,18 @@ def to_bgr():
     return img_op
 
 
-def adjust_brightness(src, x):
-    alpha = 1.0 + random.uniform(-x, x)
-    src *= alpha
-    return src
+def adjust_brightness(value):
+    return AdjustBrightness(value=value)
 
 
-# def adjust_contrast(src, x):
-#     alpha = 1.0 + random.uniform(-x, x)
-#     coef = np.array([[[0.299, 0.587, 0.114]]])
-#     gray = src * coef
-#     gray = (3.0 * (1.0 - alpha) / gray.size) * np.sum(gray)
-#     src *= alpha
-#     src += gray
-#     return src
+
+def adjust_saturation(value):
+    return AdjustSaturation(value=value)
 
 
-def adjust_saturation(src, x):
-    alpha = 1.0 + random.uniform(-x, x)
-    coef = np.array([[[0.299, 0.587, 0.114]]])
-    gray = src * coef
-    gray = np.sum(gray, axis=2, keepdims=True)
-    gray *= (1.0 - alpha)
-    src *= alpha
-    src += gray
-    return src
+
+def adjust_contrast(value):
+    return AdjustContrast(value=value)
 
 
 def adjust_brightness_contrast(brightness=255, contrast=127):
@@ -1035,64 +322,13 @@ def random_adjust_gamma(gamma=(0.6, 1.4)):
     return img_op
 
 
-def adjust_contrast(alpha=1):
-    beta = 0
-
-    def img_op(image: np.ndarray,**kwargs):
-        image = image.astype(np.float32) * alpha + beta
-        if image.max() > 255.0:
-            image=image * 255 / (image.max())
-        return image.astype(np.float32)
-
-    return img_op
-
 
 def random_adjust_contrast(scale=(0.5, 1.5)):
-    beta = 0
-    scalemin, scalemax = scale
-
-    def img_op(image: np.ndarray,**kwargs):
-        image=np.clip(image,0.0,255.0)
-        alpha = random.uniform(scalemin, scalemax)
-        image = image.astype(np.float32) * alpha + beta
-        if image.max()>255.0:
-            image=image*255.0/(image.max())
-        return image.astype(np.float32)
-
-    return img_op
+    return RandomAdjustContrast(value_range=scale)
 
 
 def random_adjust_hue(hue_range=(-20, 20), saturation_range=(0.5, 1.5), lightness_range=(-50, 50)):
-    def img_op(image: np.ndarray,**kwargs):
-        # hue is mapped to [0, 1] from [0, 360]
-        # if hue_offset not in range(-180, 180):
-        #     raise ValueError('Hue should be within (-180, 180)')
-        # if saturation not in range(-100, 100):
-        #     raise ValueError('Saturation should be within (-100, 100)')
-        # if lightness not in range(-100, 100):
-        #     raise ValueError('Lightness should be within (-100, 100)')
-        image = np.clip(image, 0.0, 255.0)
-        hue_offset = random.uniform(*hue_range)
-        saturation_offset = random.uniform(*saturation_range)
-        lightness_offset = random.uniform(*lightness_range)
-
-        image =cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGB2HSV)
-
-        image[:, :, 0] +=hue_offset
-        image[:, :, 0][image[:, :, 0] > 360.0] -= 360.0
-        image[:, :, 0][image[:, :, 0] < 0.0] += 360.0
-
-        image[:, :, 1] *=saturation_offset
-
-        image[:, :, 2] = image[:, :, 2] +lightness_offset
-
-        image =cv2.cvtColor(image,cv2.COLOR_HSV2RGB).astype(np.float32)
-
-        if image.max()>255.0:
-            image=image* 255.0/image.max()
-        return np.clip(image.astype(np.float32),0,255)
-
-    return img_op
+    return RandomAdjustHue(value_range=(0,0.5))
 
 
 def auto_level():
@@ -1152,44 +388,7 @@ def random_channel_shift(intensity=0.15):
 
 
 def random_erasing(size_range=(0.02,0.3),transparency_range=(0.4,0.8),transparancy_ratio=0.5):
-    def img_op(image: np.ndarray,**kwargs):
-        s_l ,s_h= size_range
-        r_1 = 0.3
-        r_2 = 1 / 0.3
-        h, w, c = image.shape
-        p_1 = np.random.rand()
-
-        if p_1 > 0.5:
-            return image
-
-        while True:
-            s = np.random.uniform(s_l, s_h) * h * w/4.0
-            r = np.random.uniform(r_1, r_2)
-            w1 = int(np.sqrt(s / r))
-            h1 = int(np.sqrt(s * r))
-            left = np.random.randint(0, w)
-            top = np.random.randint(0, h)
-
-            if left + w1 <= w and top + h1 <= h:
-                break
-        rr=np.random.uniform(0,1)
-        if rr<=transparancy_ratio:
-            transparancy= np.random.uniform(*transparency_range)
-            mask=np.ones_like(image)
-            mask[top:top + h1, left:left + w1, :]=0
-            image=image*(mask)+ image*(1-mask)*(transparancy)
-        else:
-
-            if rr%2==1:
-                c1 = np.random.uniform(0, 255, (h1, w1, c))
-            else:
-                c1 = np.random.uniform(0, 255)
-
-            image[top:top + h1, left:left + w1, :] = c1
-
-        return image
-
-    return img_op
+    return RandomErasing
 
 
 def random_cutout(img, mask):
@@ -1241,15 +440,9 @@ def image_erosion(filter_size=3, repeat=1):
         output image array
 
     """
-    def img_op(image: np.ndarray,**kwargs):
-        structure_shape = [1] * image.ndim
-        structure_shape[0]=filter_size
-        structure_shape[1] = filter_size
-        for i in range(repeat):
-            image =ndimage.morphology.grey_erosion(image,size=(filter_size,filter_size),structure=np.ones(tuple(structure_shape)))
-        return clip(image,0,255)
 
-    return img_op
+
+    return ImageDilation(filter_size=filter_size,repeat=repeat)
 
 
 def image_dilation(filter_size=3, repeat=1):
@@ -1264,16 +457,7 @@ def image_dilation(filter_size=3, repeat=1):
         output image array
 
     """
-    def img_op(image: np.ndarray,**kwargs):
-        structure_shape = [1] * image.ndim
-        structure_shape[0]=filter_size
-        structure_shape[1] = filter_size
-        for i in range(repeat):
-            image = ndimage.morphology.grey_dilation(image, size=(filter_size,filter_size),structure=np.ones(tuple(structure_shape)))
-
-        return clip(image,0,255)
-
-    return img_op
+    return  ImageErosion(filter_size=filter_size, repeat=repeat)
 
 
 def erosion_then_dilation(filter_size=3, repeat=1):
@@ -1305,56 +489,56 @@ def dilation_then_erosion(filter_size=3, repeat=1):
 
 
 def adaptive_binarization(threshold_type='otsu'):
-    def img_op(image: np.ndarray,**kwargs):
+    # def img_op(image: np.ndarray,**kwargs):
+    #
+    #     image = image.astype(np.float32)
+    #     original_shape=image.shape
+    #     local_thresh = None
+    #     blur = gaussian(image, sigma=0.5, multichannel=True if image.ndim == 3 else None)
+    #     try:
+    #         if threshold_type == 'otsu':
+    #             if len(blur.shape) > 2 and blur.shape[-1] in (3, 4):
+    #                 blur = color.rgb2gray(blur.astype(np.float32))
+    #             if blur.min() == blur.max():
+    #                 return image
+    #             else:
+    #                 local_thresh = threshold_otsu(blur)
+    #         elif threshold_type == 'minimum':
+    #             local_thresh = threshold_minimum(blur)
+    #         elif threshold_type == 'local':
+    #             local_thresh = threshold_local(blur, block_size=35, offset=10)
+    #         elif threshold_type == 'isodata':
+    #             local_thresh = threshold_isodata(blur, nbins=256)
+    #         elif threshold_type == 'percentile':
+    #             p10 = np.percentile(image.copy(), 10)
+    #             p90 = np.percentile(image.copy(), 90)
+    #             if abs(image.mean() - p90) < abs(image.mean() - p10) and p90 - p10 > 80:  # white background
+    #                 image[image < p10] = 0
+    #                 image[image > p90] = 255
+    #             elif abs(image.mean() - p90) > abs(image.mean() - p10) and p90 - p10 > 80:  # white background
+    #                 image[image > p90] = 255
+    #                 image[image < p10] = 0
+    #             return image
+    #
+    #         blur = (blur > local_thresh).astype(np.float32) * 255.0
+    #         if blur.max() - blur.min() < 10:
+    #             pass
+    #         else:
+    #             image = blur
+    #     except Exception as e:
+    #         print(e)
+    #
+    #     if image.ndim==2:
+    #         if len(original_shape)==2:
+    #             pass
+    #         elif  len(original_shape)==3:
+    #             image=np.expand_dims(image,-1)
+    #             if original_shape[-1] ==3:
+    #                 image=to_rgb()(image)
+    #
+    #     return image
 
-        image = image.astype(np.float32)
-        original_shape=image.shape
-        local_thresh = None
-        blur = gaussian(image, sigma=0.5, multichannel=True if image.ndim == 3 else None)
-        try:
-            if threshold_type == 'otsu':
-                if len(blur.shape) > 2 and blur.shape[-1] in (3, 4):
-                    blur = color.rgb2gray(blur.astype(np.float32))
-                if blur.min() == blur.max():
-                    return image
-                else:
-                    local_thresh = threshold_otsu(blur)
-            elif threshold_type == 'minimum':
-                local_thresh = threshold_minimum(blur)
-            elif threshold_type == 'local':
-                local_thresh = threshold_local(blur, block_size=35, offset=10)
-            elif threshold_type == 'isodata':
-                local_thresh = threshold_isodata(blur, nbins=256)
-            elif threshold_type == 'percentile':
-                p10 = np.percentile(image.copy(), 10)
-                p90 = np.percentile(image.copy(), 90)
-                if abs(image.mean() - p90) < abs(image.mean() - p10) and p90 - p10 > 80:  # white background
-                    image[image < p10] = 0
-                    image[image > p90] = 255
-                elif abs(image.mean() - p90) > abs(image.mean() - p10) and p90 - p10 > 80:  # white background
-                    image[image > p90] = 255
-                    image[image < p10] = 0
-                return image
-
-            blur = (blur > local_thresh).astype(np.float32) * 255.0
-            if blur.max() - blur.min() < 10:
-                pass
-            else:
-                image = blur
-        except Exception as e:
-            print(e)
-
-        if image.ndim==2:
-            if len(original_shape)==2:
-                pass
-            elif  len(original_shape)==3:
-                image=np.expand_dims(image,-1)
-                if original_shape[-1] ==3:
-                    image=to_rgb()(image)
-
-        return image
-
-    return img_op
+    return AdaptiveBinarization(threshold_type=threshold_type)
 
 
 def blur(sigma=0.3):
