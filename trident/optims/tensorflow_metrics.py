@@ -32,13 +32,15 @@ def flatten_check(output, target):
     else:
         raise ValueError('output and target have diffent elements.')
 
-def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
+
+def accuracy(output, target, topk=1, axis=-1,ignore_index=-100, exclude_mask=False):
     """Computes the precision@k for the specified values of k
     prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
     """
 
     input_tensor = output.copy().detach()
     target_tensor = target.copy().detach()
+    num_classes = int_shape(output)[axis]
 
     is_logsoftmax = None
     from_logits = None
@@ -66,15 +68,71 @@ def accuracy(output, target, topk=1, axis=-1, exclude_mask=False):
     if input_tensor.shape != target_tensor.shape and topk == 1:
         raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
 
+    input_mask=ones_like(input_tensor,dtype=input_tensor.dtype)
+    if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
+        input_mask[input_tensor==ignore_index] = 0
+    elif isinstance(ignore_index, (list, tuple)):
+        for idx in ignore_index:
+            if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
+                input_mask[input_tensor == idx] = 0
+
     batch_size = int_shape(target_tensor)[0]
     if topk == 1:
-        return equal(input_tensor,target_tensor).mean()
+        return reduce_sum(cast(tf.equal(input_tensor,target_tensor),output.dtype)*input_mask)/clip(reduce_sum(input_mask),min=1)
     else:
         _,pred = input_tensor.topk(topk)
         pred = cast(tf.transpose(pred),'float32')
         target_tensor= cast(repeat_elements(expand_dims(target_tensor,0),topk,axis=0),'float32')
         correct = equal(pred,target_tensor).sum()
         return correct/batch_size
+
+
+def recall(output, target, axis=-1,ignore_index=-100):
+    """Computes the precision@k for the specified values of k
+    prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+    """
+
+    input_tensor = output.copy().detach()
+    target_tensor = target.copy().detach()
+    num_classes = int_shape(output)[axis]
+
+    is_logsoftmax = None
+    from_logits = None
+    output_exp = exp(input_tensor)
+    if (ndim(input_tensor) >= 1 and 'float' in str(input_tensor.dtype) and input_tensor.min() >= 0 and input_tensor.max() <= 1):
+        is_logsoftmax = False
+        from_logits = True
+        input_tensor = clip(input_tensor, min=1e-8, max=1 - 1e-8)
+
+    elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+        is_logsoftmax = True
+        from_logits = True
+        input_tensor = clip(output_exp, min=1e-8, max=1 - 1e-8)
+    else:
+        is_logsoftmax = False
+        from_logits = False
+
+    if input_tensor.dtype != tf.int64 :
+        if len(int_shape(input_tensor)) == 1:  # binary
+            input_tensor =greater_equal(input_tensor,0.5)
+        else:
+            input_tensor = argmax(input_tensor, axis).squeeze()
+    if target_tensor.dtype != tf.int64:
+        target_tensor = argmax(target_tensor, axis).squeeze()
+    if input_tensor.shape != target_tensor.shape :
+        raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
+
+    target_mask=ones_like(target_tensor,dtype=input_tensor.dtype)
+    if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
+        target_mask[target_tensor==ignore_index] = 0
+    elif isinstance(ignore_index, (list, tuple)):
+        for idx in ignore_index:
+            if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
+                target_mask[target_tensor == idx] = 0
+
+    batch_size = int_shape(target_tensor)[0]
+
+    return reduce_sum(cast(tf.equal(input_tensor,target_tensor),output.dtype)*target_mask)/clip(reduce_sum(target_mask),min=1)
 
 
 def pixel_accuracy(output, target):
@@ -85,8 +143,8 @@ def pixel_accuracy(output, target):
         input_tensor=argmax(input_tensor,axis=-1).squeeze()
     return equal(cast(input_tensor,'float32'),cast(target_tensor,'float32')).mean()
 
-def alpha_pixel_accuracy(output, alpha):
-    output, target = flatten_check(output, target)
+def alpha_pixel_accuracy(output,alpha):
+    output, alpha = flatten_check(output, alpha)
     output_tensor = to_numpy(output)
     alpha_tensor =  to_numpy(alpha)
 

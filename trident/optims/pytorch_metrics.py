@@ -16,7 +16,7 @@ from trident.backend.common import get_session, addindent, get_time_suffix, get_
 from trident.backend.pytorch_ops import *
 from trident.data.mask_common import mask2trimap
 
-__all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
+__all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 # def accuracy(input, target,axis=1):
 #     input_tensor=input.clone().detach()
@@ -70,6 +70,7 @@ def accuracy(output, target, topk=1,axis=1,ignore_index=-100, exclude_mask=False
         target_tensor=argmax(target_tensor,axis).squeeze()
     if input_tensor.shape!=target_tensor.shape and topk==1:
         raise  ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,target_tensor.shape))
+
     input_mask=ones_like(input_tensor)
     if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
         input_mask[input_tensor==ignore_index] = 0
@@ -80,13 +81,61 @@ def accuracy(output, target, topk=1,axis=1,ignore_index=-100, exclude_mask=False
 
     batch_size = target_tensor.size(0)
     if topk==1:
-        return input_tensor.eq(target_tensor).float()*input_mask.sum()/(target_tensor*input_mask).float().sum()
+        return (input_tensor.eq(target_tensor).float()*input_mask).sum()/clip((input_mask).float().sum(),min=1)
     else:
         _, pred = input_tensor.topk(topk)
         pred = pred.t()
         correct = pred.eq(target_tensor.reshape((1, -1)).expand_as(pred))
         correct_k = reduce_sum(correct[:topk].reshape(-1).float(),axis=0,keepdims=True)
         return correct_k.mul_(1 / batch_size)
+
+
+
+@torch.no_grad()
+def recall(output, target, axis=1,ignore_index=-100):
+    """Computes the precision@k for the specified values of k
+    prec1, prec5 = accuracy(output.data, target, topk=(1, 5))
+    """
+    input_tensor=output.copy().detach()
+    target_tensor=target.copy().detach()
+    num_classes = int_shape(output)[axis]
+
+
+    is_logsoftmax = None
+    from_logits = None
+    output_exp = exp(input_tensor)
+    if (ndim(input_tensor) >= 1 and 'float' in str(input_tensor.dtype) and input_tensor.min() >= 0 and input_tensor.max() <= 1):
+        is_logsoftmax = False
+        from_logits = True
+        input_tensor = clip(input_tensor, min=1e-8, max=1 - 1e-8)
+
+    elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+        is_logsoftmax = True
+        from_logits = True
+        input_tensor =  clip(output_exp, min=1e-8, max=1 - 1e-8)
+    else:
+        is_logsoftmax = False
+        from_logits = False
+
+    if input_tensor.dtype!=torch.int64 :
+        if len(input_tensor.size())==1: #binary
+            input_tensor=input_tensor.gt(0.5).float()
+        else:
+            input_tensor=argmax(input_tensor,axis).squeeze()
+    if target_tensor.dtype!=torch.int64:
+        target_tensor=argmax(target_tensor,axis).squeeze()
+    if input_tensor.shape!=target_tensor.shape :
+        raise  ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape,target_tensor.shape))
+    target_mask=ones_like(target_tensor)
+    if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
+        target_mask[target_tensor==ignore_index] = 0
+    elif isinstance(ignore_index, (list, tuple)):
+        for idx in ignore_index:
+            if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
+                target_mask[target_tensor == idx] = 0
+
+    batch_size = target_tensor.size(0)
+    return (input_tensor.eq(target_tensor).float()*target_mask).sum()/clip((target_mask).float().sum(),min=1)
 
 
 
