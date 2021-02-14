@@ -15,7 +15,7 @@ from trident.backend.common import *
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu','SIREN', 'get_activation']
+__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','CRelu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu','SIREN', 'get_activation']
 
 
 
@@ -176,6 +176,30 @@ class SmoothRelu(Layer):
         return smooth_relu(x)
 
 
+class CRelu(Layer):
+    """Computes Concatenated ReLU.
+
+    Concatenates a ReLU which selects only the positive part of the activation
+    with a ReLU which selects only the *negative* part of the activation.
+    Note that as a result this non-linearity doubles the depth of the activations.
+    Source: [Understanding and Improving Convolutional Neural Networks via
+    Concatenated Rectified Linear Units. W. Shang, et
+    al.](https://arxiv.org/abs/1603.05201)
+
+    References:
+      Understanding and Improving Convolutional Neural Networks via Concatenated
+      Rectified Linear Units:
+        [Shang et al., 2016](http://proceedings.mlr.press/v48/shang16)
+        ([pdf](http://proceedings.mlr.press/v48/shang16.pdf))
+    """
+
+    def __init__(self, axis=-1,name=None):
+        super(CRelu, self).__init__()
+        self._built = True
+        self.axis=axis
+
+    def forward(self, x, **kwargs):
+        return crelu(x,axis=self.axis,name=self.name)
 
 
 class PRelu(Layer):
