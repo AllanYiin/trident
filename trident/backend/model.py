@@ -450,6 +450,9 @@ class ModelBase(object):
     def with_constraint(self, constraint, **kwargs):
         return self
 
+    def with_initializer(self, initializer, **kwargs):
+        return self
+
     def with_model_save_path(self, save_path, **kwargs):
         return self
 
@@ -785,14 +788,14 @@ class ModelBase(object):
                                 self.train_data[k] = v
                         elif 'tensor' in output.__class__.__name__.lower():
                             self.train_data[self.outputs.key_list[0]] = output
-                            if self.use_output_as_loss==True:
+                            if self.use_output_as_loss:
 
                                 this_loss=output.sum()
                                 self.training_context['losses'].collect(self.outputs.key_list[0],self.training_context['steps'],this_loss)
                                 self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                         else:
                             self.train_data[self.outputs.key_list[0]] = output
-                            if self.use_output_as_loss==True:
+                            if self.use_output_as_loss:
 
                                 this_loss=output.sum()
                                 self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
@@ -853,7 +856,7 @@ class ModelBase(object):
             for callback in self.callbacks:
                 callback.on_loss_calculation_end(self.training_context)
 
-            if accumulate_grads == False:
+            if not accumulate_grads:
                 # regularizer
                 for k, v in self._regs.items():
                     this_loss=to_tensor(0.0,requires_grad=True)
@@ -884,10 +887,10 @@ class ModelBase(object):
                 # ON_POSTBACKWARD_CALCULATION
                 self.do_post_gradient_update()
 
-                if isinstance(self._model, Layer) and any_abnormal_number(self._model):
-                    for para in self._model.parameters():
-                        if any_abnormal_number(para):
-                            para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+                # if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+                #     for para in self._model.parameters():
+                #         if any_abnormal_number(para):
+                #             para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
 
                 # model comfirm
                 for k, v in self._constraints.items():
@@ -998,8 +1001,9 @@ class ModelBase(object):
                         self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values).mean())
                         self.training_context['metrics'].last_aggregate_idx = len(metric_values)
                     else:
-                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
-                        self.training_context['metrics'].last_aggregate_idx = len(metric_values)
+                        if self.training_context['metrics'].last_aggregate_idx<len(metric_values):
+                            self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
+                            self.training_context['metrics'].last_aggregate_idx = len(metric_values)
 
 
 

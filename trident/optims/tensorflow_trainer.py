@@ -19,6 +19,8 @@ from tensorflow.python.eager import context, tape, function
 from tensorflow.python.eager import forwardprop
 from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.ops.losses import util as tf_losses_utils
+
+
 from trident.backend.opencv_backend import array2image, image2array
 
 from trident import __version__
@@ -30,6 +32,7 @@ from trident.backend.tensorflow_ops import is_tensor
 from trident.backend.tensorflow_serialization import save, load, load_pthtar
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
 from trident.data.image_common import *
+from trident.data.vision_transforms import *
 from trident.backend.tensorspec import *
 from trident.layers.tensorflow_layers import SoftMax
 
@@ -1251,9 +1254,10 @@ class Model(ModelBase):
                             self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values).mean())
                             self.training_context['metrics'].last_aggregate_idx = len(metric_values)
                         else:
-                            self.epoch_metric_history.collect(k, self.training_context['current_epoch'],
-                                                              np.array(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
-                            self.training_context['metrics'].last_aggregate_idx = len(metric_values)
+                            if self.training_context['metrics'].last_aggregate_idx < len(metric_values):
+                                self.epoch_metric_history.collect(k, self.training_context['current_epoch'],
+                                                                  np.array(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
+                                self.training_context['metrics'].last_aggregate_idx = len(metric_values)
 
                     if is_print_epoch_progress:
                         self.do_on_progress_start()
@@ -1668,8 +1672,8 @@ class FaceRecognitionModel(Model):
             return x / (b if b != 0 else 1)
 
         img = image2array(img_path)
-        img = Resize((224, 224), keep_aspect=True)(img)
-        img = normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
+        img = Resize((224, 224))(img)
+        img = Normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
         img = to_tensor(np.expand_dims(img.transpose([2, 0, 1]), 0))
         embedding = self.model(img)[0]
         return norm(embedding)
