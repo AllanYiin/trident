@@ -4,6 +4,8 @@ from __future__ import print_function
 
 import gc
 import time
+import urllib
+
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -11,6 +13,18 @@ import matplotlib.image as mpimg
 import os
 import sys
 
+import PIL
+
+try:
+    from PIL import ImageEnhance
+    from PIL import ImageOps
+    from PIL import ImageFilter
+    from PIL import Image as pil_image
+    from PIL.PngImagePlugin import PngImageFile
+except ImportError:
+    pil_image = None
+    ImageEnhance = None
+    ImageFilter=None
 import cv2
 import numpy as np
 
@@ -30,93 +44,283 @@ sys.stderr.write('Opencv version:{0}.\n'.format(version))
 
 
 def read_image(im_path:str):
+    """
+    Read pillow image from the image file path
+
+    Args:
+        im_path (str):
+
+    Returns:
+        pillow image
+
+    """
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
-           #fix opencv cannot open image if  there is double byte character...
-            img=mpimg.imread(im_path).astype(np.float32).copy()
+            img=pil_image.open(im_path)
+            img=np.array(img).astype(np.float32)
             if img.max()<=1:
-                img=img*255
+                img=img*255.0
             return img
         else:
             if not os.path.exists(im_path):
-                sys.stderr.write('{0} not exsit'.format(im_path))
+                raise ValueError('{0} not exsit'.format(im_path))
             else:
-                sys.stderr.write('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
-            return   None
-    except Exception as e:
-        sys.stderr.write(e)
-        return None
+                raise ValueError('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
+    except :
+        try:
+            img = plt.imread(im_path)
+            return img[::-1]
+        except Exception as e:
+            print(e)
+            return None
 
 def read_mask(im_path:str):
+    """
+    Read pillow image as mask from the image file path
+    The result is the same as  pillow_image.convert('L')
+
+    Args:
+        im_path (str):
+
+    Returns:
+        pillow image
+
+    """
     try:
         if os.path.exists(im_path) and im_path.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
-            img=mpimg.imread(im_path,2)
+            img=pil_image.open(im_path).convert('L')
             return img
         else:
             if not os.path.exists(im_path):
-                sys.stderr.write('{0} not exsit'.format(im_path))
+                raise ValueError('{0} not exsit'.format(im_path))
             else:
-                sys.stderr.write('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
-            return   None
+                raise ValueError('extension {0} not support (jpg, jepg, png, bmp, tiff)'.format(im_path.split('.')[-1]))
     except Exception as e:
-        sys.stderr.write(e)
+        print(e)
         return None
 
-def save_image(arr, file_path):
-    img = array2image(arr)
-    img=img[::-1]
-    plt.imsave(file_path,img)
+def save_image(arr,file_path):
+    """
+    Saving a ndarray/ pillow image as image file
 
-def save_mask(arr, file_path):
-    img = array2mask(arr)
-    plt.imsave(file_path, img)
+    Args:
+        arr (tensor, ndarray, pillow image):
+        file_path ():
+
+    Returns:
+
+    """
+
+    img=array2image(arr)
+    img.save(file_path)
+
+def save_mask(arr,file_path):
+    img=array2mask(arr)
+    img.save(file_path)
+
+
+
 
 
 def image2array(img):
     """
-    Parameters
-        img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
 
-    Returns
+    Args:
+        img (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
+
+    Returns:
         ndarray  (HWC / RGB)
-
-
     """
-    arr=None
-    if isinstance(img,str):
+    arr = None
+    if isinstance(img, str):
         if os.path.exists(img) and img.split('.')[-1] in 'jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'.split('|'):
-            arr=mpimg.imread(img).copy()[::-1]
-            if arr.max()<=1:
-                arr*=255.0
+            arr = mpimg.imread(img)
+            if arr.ndim==2 :
+                arr=cv2.cvtColor(arr,cv2.COLOR_GRAY2RGB)
+            else:
+                arr=arr#[::-1]
+            if arr.max() <= 1 and arr.dtype !=np.uint8:
+                arr *= 255.0
             # Clear the current axes.
             plt.cla()
             # Clear the current figure.
             plt.clf()
             #Closes all the figure windows.
             plt.close('all')
+            plt.close()
             return arr
-        else:
-            return None
-
-    if isinstance(arr, np.ndarray):
+    elif isinstance(img, PngImageFile):
+        arr = np.array(img.im).astype(np.float32)
+    elif isinstance(img, pil_image.Image):
+        arr = np.array(img).astype(np.float32)
+    if isinstance(img, np.ndarray):
+        arr = img.astype(_session.floatx)
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:
             if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
+                pass
+            elif arr.shape[0] in [1, 3, 4]:
+                arr = arr.transpose([1, 2, 0])
+            else:
+                raise ValueError('3d image should be 1, 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
 
-                arr=cv2.cvtColor(arr,cv2.COLOR_BGR2RGB)
+    arr = np.ascontiguousarray(arr)
+    if arr.ndim == 2:
+        arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+
+    del img
+    return arr.astype(np.float32)
+
+
+def array2image(arr:np.ndarray):
+    """
+    Args
+        arr  (ndarry)  : array need to convert back to image
+
+    Returns
+        pillow image
+
+
+    """
+    # confirm back to numpy
+    arr=np.clip(np.squeeze(arr),0,255)
+    if arr.ndim not in [2, 3]:
+        raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
+    mode = None
+
+    if arr.ndim == 2:
+        mode = 'L'
+    elif arr.ndim == 3:
+        if (_backend=='tensorflow' and  arr.shape[2] in [3, 4]) or (arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]):
+            pass
+        elif (_backend!='tensorflow' and  arr.shape[0] in [3, 4] and arr.shape[2] not in [3, 4]):
+            arr = arr.transpose([1, 2, 0])
+        elif _backend in ['pytorch', 'cntk'] and arr.ndim == 3 and arr.shape[0] in [3, 4] and arr.shape[2] not in [3, 4]:
+            arr = arr.transpose([1, 2, 0])
+        else:
+            raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
+        if arr.shape[2] == 3:
+            mode = 'RGB'
+        elif arr.shape[2] == 4:
+            mode = 'RGBA'
+
+    arr = np.clip(arr, 0, 255).astype(np.uint8)
+    img = pil_image.fromarray(arr, mode)
+    return img
+
+
+def file2array(img_path):
+    """
+
+    Args:
+        img_path ():
+
+    Returns:
+
+    Examples:
+        >>> arr=file2array('../../trident.png')
+
+
+    """
+    with open(img_path, "rb") as f:
+        img_np = np.frombuffer(f.read(), np.uint8)
+        flag = cv2.IMREAD_COLOR
+        img = cv2.imdecode(img_np, flag)
+        cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img)
+        return img
+
+def file2array1(img_path):
+    """
+
+    Args:
+        img_path ():
+
+    Returns:
+
+    Examples:
+        >>> arr=file2array('../../trident.png')
+
+
+    """
+    arr = mpimg.imread(img_path)
+    if arr.ndim == 2:
+        arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+    else:
+        arr = arr  # [::-1]
+    if arr.max() <= 1 and arr.dtype != np.uint8:
+        arr *= 255.0
+    # Clear the current axes.
+    plt.cla()
+    # Clear the current figure.
+    plt.clf()
+    # Closes all the figure windows.
+    plt.close('all')
+    plt.close()
+    return arr
+
+def file2array2(img_path):
+    """
+
+    Args:
+        img_path ():
+
+    Returns:
+
+    Examples:
+        >>> arr=file2array('../../trident.png')
+
+
+    """
+    img = pil_image.open(img_path)
+    arr = np.array(img).astype(np.float32)
+    if arr.ndim == 3:
+        if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
+            pass
+        elif arr.shape[0] in [1, 3, 4]:
+            arr = arr.transpose([1, 2, 0])
+    if not arr.flags['C_CONTIGUOUS']:
+        arr = np.ascontiguousarray(arr)
+    return arr.astype(np.float32)
+
+def mask2array(img):
+    """
+
+    Args
+        img  (string), pillow image or numpy.ndarray): Image to be converted to ndarray.
+
+    Returns
+        ndarray  (HW / single channel)
+
+
+    """
+    if isinstance(img,str):
+        if os.path.exists(img) and img.split('.')[-1] in ('jpg','jepg','png','bmp','tiff'):
+            img=pil_image.open(img).convert('L')
+        else:
+            return None
+    arr=None
+    if isinstance(img,pil_image.Image):
+        arr = np.array(img).astype(_session.floatx)
+    elif isinstance(img, np.ndarray):
+        if arr.ndim not in [2, 3]:
+            raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
+        if arr.ndim == 3:
+            if arr.shape[3] in [3, 4] and arr.shape[0] not in [3, 4]:
+                pass
             elif arr.shape[0] in [3, 4]:
                 arr = arr.transpose([1, 2, 0])
-                arr = cv2.cvtColor(arr, cv2.COLOR_BGR2RGB)
             else:
                 raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
-        #arr=img.astype(_session.floatx)[::-1]
+        arr=img.astype(_session.floatx)
     if arr.flags['C_CONTIGUOUS'] == False:
         arr = np.ascontiguousarray(arr)
     return arr
-def array2image(arr:np.ndarray):
+
+def array2mask(arr:np.ndarray):
     """
-    Parameters
+
+    Args
         arr  ndarry  : array need to convert back to image
 
     Returns
@@ -125,78 +329,31 @@ def array2image(arr:np.ndarray):
 
     """
     # confirm back to numpy
-    arr=np.clip(arr,0,255)
+    arr=np.squeeze(arr)
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     mode = None
+    if arr.max()==1:
+        arr=arr*255
     if arr.ndim == 2:
-        arr = np.expand_dims(arr, 2)
+        #arr = np.expand_dims(arr, 2)
         mode = 'L'
     elif arr.ndim == 3:
-        if (_backend == 'tensorflow' and arr.shape[2] in [3, 4]) or (  arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]):
+        if arr.shape[3] in [3, 4] and arr.shape[0] not in [3, 4]:
             pass
-        elif (_backend != 'tensorflow' and arr.shape[0] in [3, 4]):
-            arr = arr.transpose([1, 2, 0])
-        elif _backend in ['pytorch', 'cntk'] and arr.ndim == 3 and arr.shape[0] in [ 3, 4]:
+        elif arr.shape[0] in [3, 4]:
             arr = arr.transpose([1, 2, 0])
         else:
             raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
+        if arr.shape[3] == 3:
+            mode = 'RGB'
+        elif arr.shape[3] == 4:
+            mode = 'RGBA'
 
     arr = np.clip(arr, 0, 255).astype(np.uint8)
-    img = cv2.cvtColor(arr,cv2.COLOR_RGB2BGR)
+    img = pil_image.fromarray(arr, mode)
     return img
 
-
-
-def mask2array(img):
-    """
-    Args
-        img  (string, pillow image or numpy.ndarray): Image to be converted to ndarray.
-    Returns
-        ndarray  (HW / single channel)
-
-    """
-    arr = None
-    if isinstance(img, str):
-        if os.path.exists(img) and img.split('.')[-1] in ('jpg', 'jepg', 'png', 'bmp', 'tiff'):
-            arr = mpimg.imread(img,2)
-        else:
-            return None
-    arr=np.squeeze(arr)
-    if isinstance(arr, np.ndarray):
-        if arr.ndim not in [2, 3]:
-            raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
-        if arr.ndim == 3:
-            arr=cv2.cvtColor(arr,cv2.COLOR_BGR2GRAY)
-        arr = img.astype(_session.floatx)
-    if arr.flags['C_CONTIGUOUS'] == False:
-        arr = np.ascontiguousarray(arr)
-    return arr
-
-def array2mask(arr:np.ndarray):
-    """
-    Args
-        arr  ndarry  : array need to convert back to image
-
-    Returns
-        pillow image
-    """
-    if arr.ndim not in [2, 3]:
-        raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
-    arr=np.squeeze(arr)
-    if arr.ndim == 2:
-        pass
-    elif arr.ndim == 3:
-
-        if (_backend == 'tensorflow' and arr.shape[3] in [3, 4]) or ( arr.shape[3] in [3, 4] and arr.shape[0] not in [3, 4]):
-            arr = arr[:,:,0]
-        elif (_backend != 'tensorflow' and arr.shape[0] in [3, 4]):
-            arr = arr[0,:,:]
-        else:
-            raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
-
-    img = np.clip(arr, 0, 255).astype(np.uint8)
-    return img
 
 
 def resize(image,size):
