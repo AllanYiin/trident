@@ -35,13 +35,14 @@ class AdjustLRCallbackBase(CallbackBase):
         super(AdjustLRCallbackBase, self).__init__()
         self.base_lr=1e-3
         self.base_lrs = [1e-3]
-    def adjust_learning_rate(self,training_context,new_lr):
+    def adjust_learning_rate(self,training_context,new_lr,verbose=True):
         old_lr = training_context['optimizer'].lr
 
         if old_lr!=new_lr:
             training_context['optimizer'].param_groups[0]['lr'] = new_lr
             training_context['current_lr'] = new_lr
-            print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
+            if verbose:
+                print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
 
 
@@ -189,9 +190,9 @@ class OnceCycleLR(AdjustLRCallbackBase):
             # Exceeded given num_steps: do nothing
             return
 
-        self.optimizer.param_groups[0]['lr'] = lr
+        training_context['optimizer'].param_groups[0]['lr'] = lr
         if momentum:
-            self.optimizer.param_groups[0]['momentum'] = momentum
+            training_context['optimizer'].param_groups[0]['momentum'] = momentum
 
 
 class ReduceLROnPlateau(AdjustLRCallbackBase):
@@ -425,7 +426,7 @@ class LambdaLR(AdjustLRCallbackBase):
         epoch = training_context['current_epoch']
         if epoch>=self.decay_start_epoch:
             lr= clip(self.base_lr *pow(1- (epoch + self.offset - self.decay_start_epoch) / (n_epochs - self.decay_start_epoch),self.power),1e-6,np.inf)
-            self.adjust_learning_rate(training_context,lr)
+            self.adjust_learning_rate(training_context,lr,verbose=False)
 
 def lambda_lr(offset=0,decay_start_epoch=50):
    return LambdaLR(offset=offset,decay_start_epoch=decay_start_epoch)
@@ -474,7 +475,7 @@ class CosineLR(AdjustLRCallbackBase):
         if self.max_lr  is None:
             self.max_lr= training_context['base_lr']
 
-        self.T_current=training_context['current_epoch'] * training_context['total_batch'] + training_context[ 'current_batch']% (2 * self.T_max)
+        self.T_current=training_context['steps']% (2 * self.T_max)
 
         if self.T_current == 0:
             training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
