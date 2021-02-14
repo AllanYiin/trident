@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import builtins
 import copy
 import inspect
 import itertools
@@ -13,6 +13,8 @@ import warnings
 from typing import List
 
 import numpy as np
+from trident.misc.ipython_utils import is_in_ipython
+
 from trident.data.vision_transforms import Unnormalize, Normalize
 
 from trident.data.transform import Transform
@@ -164,8 +166,7 @@ class ImageDataProvider(object):
 
     @property
     def reverse_image_transform_funcs(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
+        return_list = [reverse_image_backend_adaption]
         for i in range(len(self.image_transform_funcs)):
             fn = self.image_transform_funcs[-1 - i]
             if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
@@ -234,8 +235,9 @@ class ImageDataProvider(object):
         if not isinstance(self.traindata.data,ImageDataset):
             return None
         else:
-            if key is None :
-                data, label = self.next()
+            if key is None and isinstance(self.traindata.data,ImageDataset):
+                data= self.next()
+                data=enforce_singleton(data)
                 data = self.reverse_image_transform(data)
                 if is_concate:
                     data = np.concatenate([img for img in data], axis=-1 if data[0].ndim==2 or (data[0].ndim==3 and data[0].shape[0] in [1,3,4]) else -2)
@@ -266,6 +268,15 @@ class ImageDataProvider(object):
                         if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption and fc is not Normalize and fc is not normalize:
                             img = fc(img)
                 return array2image(img)
+
+    def label_statistics(self):
+        if self.traindata.label is LabelDataset:
+            unique, counts = np.unique(np.array(self.traindata.label.items), return_counts=True)
+            for i in range(len(unique)):
+                bar=['█']*int(builtins.round(50*counts[i] / float(len(self.traindata.label.items))))
+                print('{0:<10} {1} {2} {3:.3%}'.format(unique[i],''.join(bar),counts[i],counts[i]/float(len(self.traindata.label.items))))
+
+
 
 
     def _next_index(self):
