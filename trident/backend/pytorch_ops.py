@@ -11,7 +11,7 @@ from distutils.version import Version, LooseVersion
 from collections import Sized, Iterable
 from enum import Enum
 from functools import wraps
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional, Union, Sequence
 import gc
 import numpy as np
 import torch
@@ -67,7 +67,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh',
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
-           'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
+           'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth','pad', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
@@ -103,14 +103,15 @@ def numpy_compatible(func):
             mathfuncs=get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
-        elif isinstance(x, list) and all([isinstance(arg, np.ndarray) for arg in x]) and func.__name__ in ['concate','stack','vstack','hstack']:
-            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
-            y = numpy_func(*args, **kwargs)
-            return y
-        elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
-            tensor_func = get_function(func.__name__, ['trident.backend.pytorch_ops'])
-            y = tensor_func(*args, **kwargs)
-            return y
+        # elif isinstance(x, list) and all([isinstance(arg, np.ndarray) for arg in x]) and func.__name__ in ['concate','stack','vstack','hstack']:
+        #     numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
+        #     y = numpy_func(*args, **kwargs)
+        #     return y
+        # elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
+        #     tensor_func = get_function(func.__name__, ['trident.backend.pytorch_ops'])
+        #     y = tensor_func(*args, **kwargs)
+        #     return y
+        #
         elif isinstance(x, np.ndarray):
             numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
             if numpy_func is not None:
@@ -1790,15 +1791,15 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
-        return torch.mean(x,dim=axis,keepdim=keepdims)
+        if ndim(x) == 1:
+            axis = 0
+        elif ndim(x) > 1:
+            axis =tuple(list(range(ndim(x))))
+        return torch.mean(x, dim=axis, keepdim=keepdims)
     elif isinstance(axis, int):
         return torch.mean(x,dim=[axis],keepdim=keepdims)
     elif isinstance(axis, list):
-        axis = [a if a >= 0 else x.ndim + a for a in axis]
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            x = torch.mean(x,dim=a,keepdim=keepdims)
+        x = torch.mean(x,dim=tuple(axis),keepdim=keepdims)
         return x
 
 @numpy_compatible
@@ -1833,15 +1834,16 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
-        return torch.sum(x,dim=axis,keepdim=keepdims)
+        if ndim(x) == 1:
+            axis = 0
+        elif ndim(x) > 1:
+            axis =tuple(list(range(ndim(x))))
+        arr, idx = torch.sum(x, dim=axis, keepdim=keepdims)
+        return arr
     elif isinstance(axis, int):
         return torch.sum(x,dim=axis,keepdim=keepdims)
     elif isinstance(axis, list):
-        axis = [a if a >= 0 else x.ndim + a for a in axis]
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            x =torch.sum(x,dim=a,keepdim=keepdims)
+        x =torch.sum(x,dim=tuple(axis),keepdim=keepdims)
         return x
 
 @numpy_compatible
@@ -1890,18 +1892,18 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
-        return torch.max(x,dim=axis,keepdim=keepdims)
+        if ndim(x)==1:
+            axis=0
+        elif  ndim(x)>1:
+            axis =tuple(list(range(ndim(x))))
+        arr, idx =torch.max(x,dim=axis,keepdim=keepdims)
+        return arr
     elif isinstance(axis, int):
         arr, idx = torch.max(x,dim=axis,keepdim=keepdims)
         return arr
     elif isinstance(axis, list):
-        axis = [a if a >= 0 else x.ndim + a for a in axis]
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            arr, idx = torch.max(x,dim=a,keepdim=keepdims)
-            x = arr
-        return x
+        arr, idx = torch.max(x,dim=tuple(axis),keepdim=keepdims)
+        return arr
 
 @numpy_compatible
 def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -1951,18 +1953,18 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
-        return torch.min(x,dim=axis,keepdim=keepdims)
+        if ndim(x) == 1:
+            axis = 0
+        elif ndim(x) > 1:
+            axis =tuple(list(range(ndim(x))))
+        arr, idx = torch.min(x, dim=axis, keepdim=keepdims)
+        return arr
     elif isinstance(axis, int):
         arr, idx = torch.min(x,dim=axis,keepdim=keepdims)
         return arr
     elif isinstance(axis, list):
-        axis = [a if a >= 0 else x.ndim + a for a in axis]
-        axis = sorted(axis)
-        axis.reverse()
-        for a in axis:
-            arr, idx = torch.min(x,dim=a,keepdim=keepdims)
-            x = arr
-        return x
+        arr, idx = torch.min(x,dim=tuple(axis),keepdim=keepdims)
+        return arr
 
 @numpy_compatible
 def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -2002,7 +2004,12 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
-        return log(reduce_sum(exp(x), keepdims=keepdims))
+        if ndim(x) == 1:
+            axis = 0
+        elif ndim(x) > 1:
+            axis =tuple(list(range(ndim(x))))
+        return  log(torch.sum(x, dim=axis, keepdim=keepdims))
+
     else:
         return log(reduce_sum(exp(x), axis=axis, keepdims=keepdims))
 
@@ -2036,9 +2043,12 @@ def reduce_prod(x: Tensor, axis=None, keepdims=False, **kwargs):
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
-    if isinstance(axis, int):
-        arr, idx = x.prod(dim=axis, keepdim=keepdims)
-        return arr
+    if axis is None:
+        if ndim(x) == 1:
+            axis = 0
+        elif ndim(x) > 1:
+            axis =tuple(list(range(ndim(x))))
+        return  torch.prod(x, dim=axis, keepdim=keepdims)
     elif isinstance(axis, list):
         axis = sorted(axis)
         axis.reverse()
@@ -3039,6 +3049,75 @@ def space_to_depth(x: Tensor, block_size=2):
             return x[0]
         return x
 
+def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
+    r"""Pads tensor.
+
+    Padding size:
+        The padding size by which to pad some dimensions of :attr:`input`
+        are described starting from the last dimension and moving forward.
+        :math:`\left\lfloor\frac{\text{len(pad)}}{2}\right\rfloor` dimensions
+        of ``input`` will be padded.
+        For example, to pad only the last dimension of the input tensor, then
+        :attr:`pad` has the form
+        :math:`(\text{padding\_left}, \text{padding\_right})`;
+        to pad the last 2 dimensions of the input tensor, then use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom})`;
+        to pad the last 3 dimensions, use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom}`
+        :math:`\text{padding\_front}, \text{padding\_back})`.
+
+    Padding mode:
+        See :class:`torch.nn.ConstantPad2d`, :class:`torch.nn.ReflectionPad2d`, and
+        :class:`torch.nn.ReplicationPad2d` for concrete examples on how each of the
+        padding modes works. Constant padding is implemented for arbitrary dimensions.
+        Replicate padding is implemented for padding the last 3 dimensions of 5D input
+        tensor, or the last 2 dimensions of 4D input tensor, or the last dimension of
+        3D input tensor. Reflect padding is only implemented for padding the last 2
+        dimensions of 4D input tensor, or the last dimension of 3D input tensor.
+
+    Note:
+        When using the CUDA backend, this operation may induce nondeterministic
+        behaviour in its backward pass that is not easily switched off.
+        Please see the notes on :doc:`/notes/randomness` for background.
+
+    Args:
+        x (Tensor): N-dimensional tensor
+        pad (tuple): m-elements tuple, where
+            :math:`\frac{m}{2} \leq` input dimensions and :math:`m` is even.
+        mode: ``'constant'``, ``'reflect'``, ``'replicate'`` or ``'circular'``.
+            Default: ``'constant'``
+        value: fill value for ``'constant'`` padding. Default: ``0``
+
+    Examples::
+
+        >>> t4d = torch.empty(3, 3, 4, 2)
+        >>> p1d = (1, 1) # pad last dim by 1 on each side
+        >>> out = pad(t4d, p1d, "constant", 0)  # effectively zero padding
+        >>> print(out.size())
+        torch.Size([3, 3, 4, 4])
+        >>> p2d = (1, 1, 2, 2) # pad last dim by (1, 1) and 2nd to last by (2, 2)
+        >>> out = pad(t4d, p2d, "constant", 0)
+        >>> print(out.size())
+        torch.Size([3, 3, 8, 4])
+        >>> t4d = torch.empty(3, 3, 4, 2)
+        >>> p3d = (0, 1, 2, 1, 3, 3) # pad by (0, 1), (2, 1), and (3, 3)
+        >>> out = pad(t4d, p3d, "constant", 0)
+        >>> print(out.size())
+        torch.Size([3, 9, 7, 3])
+
+    """
+    valid_items=['constant', 'reflect', 'replicate' ,'circular','symmetric','zero']
+    if mode not in valid_items:
+        raise ValueError('{0} is not valid for mode.'.format(mode))
+    if mode=='zero':
+        mode='constant'
+        value=0
+    if mode == 'symmetric':
+        mode = 'circular'
+    return torch.nn.functional.pad(x,pad=paddings,mode=mode,value=value)
+
 
 ############################
 ## tensor generation
@@ -3306,7 +3385,7 @@ def reverse(x, axis):
 ############################
 ## tensor manipulation
 ###########################
-@numpy_compatible
+
 def concate(x: List[Tensor], axis=1):
     """
 
@@ -3319,7 +3398,7 @@ def concate(x: List[Tensor], axis=1):
     """
     return torch.cat(x, dim=axis)
 
-@numpy_compatible
+
 def stack(x: List[Tensor], axis=1):
     """
 
