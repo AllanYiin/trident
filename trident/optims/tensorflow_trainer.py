@@ -21,7 +21,7 @@ from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.ops.losses import util as tf_losses_utils
 
 
-from trident.backend.opencv_backend import array2image, image2array
+from trident.backend.opencv_backend import array2image, image2array, file2array
 
 from trident import __version__
 from trident.backend.common import *
@@ -1470,7 +1470,7 @@ class ImageClassificationModel(Model):
                 self._model.eval()
                 if self._model.input_spec.object_type is None:
                     self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             for func in self.preprocess_flow:
@@ -1507,7 +1507,7 @@ class ImageRegressionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             img_shp = img.shape
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1544,7 +1544,7 @@ class ImageDetectionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
@@ -1592,7 +1592,7 @@ class ImageGenerationModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
@@ -1620,7 +1620,7 @@ class FaceLandmarkModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             img_shp=img.shape
 
             if img.shape[-1] == 4:
@@ -1689,7 +1689,7 @@ class FaceRecognitionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 

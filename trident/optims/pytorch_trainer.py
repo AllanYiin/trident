@@ -25,7 +25,7 @@ from trident.data.transform import Transform
 
 from trident.data.vision_transforms import Unnormalize, Resize, Normalize
 
-from trident.backend.opencv_backend import array2image, image2array
+from trident.backend.opencv_backend import array2image, image2array, file2array
 
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
 from trident.optims.trainers import TrainingPlan
@@ -1268,7 +1268,7 @@ class ImageClassificationModel(Model):
     def infer_single_image(self, img, topk=1):
         if self._model.built:
             self._model.eval()
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
@@ -1306,7 +1306,7 @@ class ImageRegressionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             img_shp=img.shape
 
             if img.shape[-1] == 4:
@@ -1341,7 +1341,7 @@ class ImageDetectionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1
@@ -1409,7 +1409,7 @@ class ImageSegmentationModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
@@ -1444,7 +1444,7 @@ class ImageGenerationModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1.0
@@ -1532,7 +1532,7 @@ class FaceRecognitionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = image2array(img)
+            img = file2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1.0
