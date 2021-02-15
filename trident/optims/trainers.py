@@ -595,14 +595,14 @@ class TrainingPlan(object):
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'])
-                                    # if self.enable_tensorboard:
-                                    #     trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth','.onnx'))
-                                    #     self.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth','.onnx'));
-
+                                    if self.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx']==False):
+                                        trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth','.onnx'))
+                                        self.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth','.onnx'));
+                                        trainitem.training_context['upload_onnx']=True
                             if only_steps == True and num_batches >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
                                     try:
-                                        trainitem.save_model()
+                                        trainitem.save_model(trainitem.training_context['save_path'])
                                     except Exception as e:
                                         print(e)
                                 data_provider.mode = 'tuple'
@@ -610,37 +610,41 @@ class TrainingPlan(object):
 
                             if only_steps == False and (mbs + 1) % len(data_provider.batch_sampler) == 0:
                                 break
-                        trainitem.do_on_epoch_end()
+
+
                 except StopIteration:
                     for k, trainitem in self.training_items.items():
                         trainitem.do_on_epoch_end()
-                    trainitem.do_on_epoch_end()
+                        trainitem.save_model(trainitem.training_context['save_path'])
+
                 except ValueError as ve:
                     print(ve)
                     PrintException()
                     for k, trainitem in self.training_items.items():
                         trainitem.do_on_training_end()
+                        trainitem.save_model(trainitem.training_context['save_path'])
                 except Exception as e:
                     print(e)
                     PrintException()
                     for k, trainitem in self.training_items.items():
                         trainitem.do_on_training_end()
+                        trainitem.save_model(trainitem.training_context['save_path'])
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():
-                        trainitem.save_model()
+                        trainitem.save_model(trainitem.training_context['save_path'])
             data_provider.mode = 'tuple'
 
 
         except KeyboardInterrupt:
             for k, trainitem in self.training_items.items():
-                trainitem.save_model()
+                trainitem.save_model(trainitem.training_context['save_path'])
             data_provider.mode = 'tuple'
         except Exception as e:
             print(e)
             PrintException()
             for k, trainitem in self.training_items.items():
-                trainitem.save_model()
+                trainitem.save_model(trainitem.training_context['save_path'])
             data_provider.mode = 'tuple'
 
     def resume(self):
