@@ -211,7 +211,7 @@ def EfficientNetB0(include_top=True,
         input_shape=(224, 224,3)
     effb0 = EfficientNet(1.0, 1.0, default_size=input_shape, dropout_rate= 0.2, model_name='efficientnet-b0',include_top=include_top, num_classes=classes)
     with tf.device(get_device()):
-        if pretrained==True:
+        if pretrained:
             download_model_from_google_drive('1pO4wRWY6N4e7U_7E2H-NhBPEF4MlR4ru',dirname,'efficientnet-b0_tf.pth')
             recovery_model=load(os.path.join(dirname,'efficientnet-b0_tf.pth'))
             recovery_model = fix_layer(recovery_model)
@@ -222,6 +222,7 @@ def EfficientNetB0(include_top=True,
             effb0.model = _make_recovery_model_include_top(effb0.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb0.model.input_shape = input_shape
+        effb0.model.name='efficientnet-b0'
     return effb0
 
 
@@ -248,6 +249,7 @@ def EfficientNetB1(include_top=True,
             effb1.model = _make_recovery_model_include_top(effb1.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb1.model.input_shape = input_shape
+        effb1.model.name = 'efficientnet-b1'
     return effb1
 
 
@@ -274,6 +276,7 @@ def EfficientNetB2(include_top=True,
             effb2.model = _make_recovery_model_include_top(effb2.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb2.model.input_shape = input_shape
+        effb2.model.name = 'efficientnet-b2'
     return effb2
 
 
@@ -300,6 +303,7 @@ def EfficientNetB3(include_top=True,
             effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb3.model.input_shape = input_shape
+        effb3.model.name = 'efficientnet-b3'
     return effb3
 
 
@@ -326,6 +330,7 @@ def EfficientNetB4(include_top=True,
             effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb4.model.input_shape = input_shape
+        effb4.model.name = 'efficientnet-b4'
     return effb4
 
 
@@ -365,6 +370,7 @@ def EfficientNetB5(include_top=True,
             effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb5.model.input_shape = input_shape
+        effb5.model.name = 'efficientnet-b5'
     return effb5
 
 
@@ -392,6 +398,7 @@ def EfficientNetB6(include_top=True,
             effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb6.model.input_shape = input_shape
+        effb6.model.name = 'efficientnet-b6'
     return effb6
 
 
@@ -419,4 +426,5 @@ def EfficientNetB7(include_top=True,
             effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
 
         effb7.model.input_shape = input_shape
+        effb7.model.name = 'efficientnet-b7'
     return effb7
