@@ -11,7 +11,8 @@ from xml.etree import ElementTree
 import numpy as np
 import copy
 import cv2
-from trident.data.image_common import list_images, image2array, array2image
+from trident.backend.opencv_backend import image2array, array2image
+from trident.data.image_common import list_images
 from trident.data.data_provider import *
 from trident.data.dataset import *
 from trident.data.mask_common import *
@@ -653,17 +654,26 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'nsfw.tar')
         extract_path = os.path.join(dirname, 'nsfw')
         extract_archive(tar_file_path, dirname, archive_format='tar')
-        trainData = np.load(os.path.join(dirname, 'train_porn_detector64_small.npy'), allow_pickle=True)
-        testData = np.load(os.path.join(dirname, 'test_porn_detector64_small.npy'), allow_pickle=True)
+        folders = ['drawings', 'hentai', 'neutral', 'porn', 'sexy']
+        data=unpickle(os.path.join(dirname,'porn_detection_data.pkl'))
 
-        trainarray = ImageDataset(np.array(trainData[0].tolist()).transpose([0, 2, 3, 1]),
-                                  object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
-        trainlabel = LabelDataset(trainData[1].tolist(),object_type=ObjectType.classification_label)
+        trainData = []
+        testData = []
+        trainLabel = []
+        testLabel = []
+        for n  in range(5):
+            folder=folders[n]
+            trainData.extend(data[folder]['train'])
+            trainLabel.extend([n]*len(data[folder]['train']))
+            testData.extend(data[folder]['test'])
+            testLabel.extend([n] * len(data[folder]['test']))
+
+        trainarray = ImageDataset(trainData,object_type=ObjectType.rgb)
+        trainlabel = LabelDataset(trainLabel,object_type=ObjectType.classification_label)
         train_iter = Iterator(data=trainarray, label=trainlabel)
 
-        testarray = ImageDataset(np.array(testData[0].tolist()).transpose([0, 2, 3, 1]),
-                                 object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
-        testlabel = LabelDataset(testData[1].tolist(),object_type=ObjectType.classification_label)
+        testarray = ImageDataset(testData,object_type=ObjectType.rgb)
+        testlabel = LabelDataset(testLabel,object_type=ObjectType.classification_label)
         test_iter = Iterator(data=testarray, label=testlabel)
         print('training images: {0}  test images:{1}'.format(len(trainarray), len(testarray)))
 
@@ -800,7 +810,7 @@ def load_examples_data(dataset_name):
             image_paths[mode]=[]
             landmarks[mode] = []
             crops[mode] = []
-            n=0
+
             offset=5
             for j in tqdm(range(len(root[2]))):
                 try:
@@ -837,31 +847,36 @@ def load_examples_data(dataset_name):
                     landmark[:, 1] -= crop['top']
 
 
-                    im=image2array(os.path.join(root_dir, filename.attrib['file']))
-                    if im.ndim==2:
-                        im=cv2.cvtColor(im,cv2.COLOR_GRAY2RGB)
-                    im=im[crop['top']:min(crop['top']+crop['height'],im.shape[0]),crop['left']:min(crop['left']+crop['width'],im.shape[1]),:]
-                    if max(im.shape[:2])/max(min(im.shape[:2]),0)<=5:
-                        if not os.path.exists(os.path.join(dirname, 'crops',mode,'{0}.png'.format(n))) :
-                            array2image(im).save(os.path.join(dirname, 'crops',mode,'{0}.png'.format(n)))
-                        image_paths[mode].append(os.path.join(dirname, 'crops',mode,'{0}.png'.format(n)))
+                    if not os.path.exists(os.path.join(dirname, 'crops', mode, '{0}.png'.format(j))):
+                        im=image2array(os.path.join(root_dir, filename.attrib['file']))
+                        if im.ndim==2:
+                            im=cv2.cvtColor(im,cv2.COLOR_GRAY2RGB)
+                        im=im[crop['top']:min(crop['top']+crop['height'],im.shape[0]),crop['left']:min(crop['left']+crop['width'],im.shape[1]),:]
+
+                        if max(im.shape[:2])/max(min(im.shape[:2]),0)<=5:
+
+                            array2image(im).save(os.path.join(dirname, 'crops',mode,'{0}.png'.format(j)))
+                            image_paths[mode].append(os.path.join(dirname, 'crops', mode, '{0}.png'.format(j)))
+                            crops[mode].append(crop)
+                            landmarks[mode].append(landmark)
+                        del im
+                    else:
+                        #im = image2array(os.path.join(dirname, 'crops',mode,'{0}.png'.format(j)))
+                        image_paths[mode].append(os.path.join(dirname, 'crops',mode,'{0}.png'.format(j)))
                         crops[mode].append(crop)
                         landmarks[mode].append(landmark)
-                    del im
-                    n+=1
-                    if n%100==0:
+
+                    if j%100==0:
                         gc.collect()
                 except Exception as e:
                    pass
 
-
-
         print('ibug 300w train dataset: images: {0} landmarks:{1} \n'.format(len(image_paths['train']),len(landmarks['train'])))
         print('ibug 300w test dataset: images: {0} landmarks:{1} \n'.format(len(image_paths['test']), len(landmarks['test'])))
-        imdata=ImageDataset(images=image_paths['train'],symbol='faces')
-        landmarkdata = LandmarkDataset(landmarks=landmarks['train'], symbol='landmarks')
-        imtestdata = ImageDataset(images=image_paths['test'], symbol='faces')
-        landmarktestdata = LandmarkDataset(landmarks=landmarks['test'], symbol='landmarks')
+        imdata=ImageDataset(images=image_paths['train'],symbol='faces',object_type=ObjectType.rgb)
+        landmarkdata = LandmarkDataset(landmarks=landmarks['train'], symbol='landmarks',object_type=ObjectType.landmarks)
+        imtestdata = ImageDataset(images=image_paths['test'], symbol='faces',object_type=ObjectType.rgb)
+        landmarktestdata = LandmarkDataset(landmarks=landmarks['test'], symbol='landmarks',object_type=ObjectType.landmarks)
         data_provider=DataProvider(traindata=Iterator(data=imdata,label=landmarkdata),testdata=Iterator(data=imtestdata,label=landmarktestdata))
         return data_provider
 
