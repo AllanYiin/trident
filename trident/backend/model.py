@@ -674,7 +674,7 @@ class ModelBase(object):
             collect_history = self._metrics[k].collect_history
             metric_value=None
             batch_steps, batch_values = self.batch_metric_history.get_series(k)
-            if collect_history != False:
+            if collect_history:
                 if k in self.batch_metric_history and len(batch_values)>=print_batch_progress_frequency:
                     metric_value=np.array(batch_values[-1*print_batch_progress_frequency:]).mean()
                 elif k in self.training_context['tmp_metrics']:
@@ -682,7 +682,7 @@ class ModelBase(object):
                     metric_value = np.array(tmp_values).mean()
                     self.training_context['tmp_metrics'][k]=[]
 
-                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value)))
+                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value,value_type='metric')))
 
         loss_steps,loss_values=self.batch_loss_history.get_series('total_losses')
         loss_value=float(np.array(loss_values[-1*print_batch_progress_frequency:]).mean())
@@ -691,7 +691,7 @@ class ModelBase(object):
         step_time = progress_end - progress_start
         self.training_context['time_batch_progress'] = progress_end
         progress_bar(step_time,self.training_context['current_batch'], self.training_context['total_batch'],
-                 'Loss: {0} | {1} | learning rate: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value), ','.join(metric_strings), self.training_context['current_lr'],
+                 'Loss: {0} | {1} | learning rate: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value,value_type='loss'), ','.join(metric_strings), self.training_context['current_lr'],
                      self.training_context['current_epoch']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
     def print_epoch_progress(self, print_epoch_progress_frequency):
@@ -712,13 +712,13 @@ class ModelBase(object):
             elif np.max(metric_value)<1e-3:
                 format_string = '.3e'
 
-            metric_strings.append('{0}: {1:<8{2}}'.format(k,float(metric_value[-1*int(print_epoch_progress_frequency):].mean()),format_string))
+            metric_strings.append('{0}: {1}'.format(k,adaptive_format(float(metric_value[-1*int(print_epoch_progress_frequency):].mean()),value_type='metric')))
         progress_start = self.training_context['time_epoch_progress']
         progress_end = time.time()
         step_time = progress_end-progress_start
         self.training_context['time_epoch_progress']=progress_end
         progress_bar(step_time,self.training_context['current_epoch'], self.training_context['total_epoch'],
-                     'Loss: {0:<8.3f}| {1} | learning rate: {2:<10.3e}'.format(loss_value, ','.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
+                     'Loss: {0}| {1} | learning rate: {2:<10.3e}'.format(adaptive_format(loss_value,value_type='loss'), ','.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
     #@pysnooper.snoop()
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,

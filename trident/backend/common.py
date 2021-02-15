@@ -26,20 +26,18 @@ import warnings
 from enum import Enum
 from inspect import signature
 from pydoc import locate
-from typing import Union, Tuple, Any, overload,NewType,Text
 
-
-
+from typing import Iterable,Generator,Sequence,Iterator,Union, Tuple, Any, overload, NewType, Text
 import numpy as np
 
 __all__ = ['get_session','set_session','get_session_value','is_autocast_enabled','set_autocast_enabled','get_backend','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
-           'check_keys','make_sure', 'if_else', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
+           'check_keys','make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException','TensorShape', 'unpack_singleton', 'enforce_singleton',
-           'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature',
+           'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature','is_iter','get_string_actual_length',
            'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
 
-           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode','adaptive_format',
+           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode','adaptive_format','num_cpus',
           'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map','dtype']
 
 
@@ -119,32 +117,11 @@ def make_dir_if_need(path):
     return sanitize_path(path)
 
 
-def if_else(a, b):
-    """
-    Syntax suggar for  value assigment with None check
-    if_else(a, b)  means if a is None else b
 
-    Args:
-        a (obj):
-        b (obj):
 
-    Returns:
-        None replacement
-
-    Examples:
-        >>> d=dict({'a':None})
-        >>> d['a']=if_else(d['a'],5)
-        >>> print(d)
-        {'a': 5}
-        >>> d['a']=if_else(d['a'],3)
-        >>> print(d)
-        {'a': 5}
-    """
-
-    if a is None:
-        return b
-    else:
-        return a
+def if_none(a, b):
+    "`b` if `a` is None else `a`"
+    return b if a is None else a
 
 def _get_trident_dir():
     """Get or create trident directory
@@ -395,9 +372,11 @@ def snake2camel(string1):
     else:
         return ''.join(x.capitalize() or '_' for x in string1.split('_'))
 
-def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None):
+def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None,value_type=None):
     format_string= '.3f'
-    if (prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2:
+    if value_type=='metric':
+        format_string = '.3%'
+    if value_type!='loss' and ((prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2):
         format_string ='.3%'
     elif  (prev_value is None or prev_value==num) and builtins.abs(num)<1e-3:
         format_string = '.3e'
@@ -412,7 +391,23 @@ def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None):
             format_string = '.3e'
     return '{0:{1}}'.format(num, format_string)
 
+def get_string_actual_length(input_string:str):
+    """Get the string acutal length (considering Chinese double byte)
 
+    Args:
+        input_string ():
+
+    Returns:
+
+    Examples:
+        >>> get_string_actual_length('你好')
+        4
+        >>> get_string_actual_length('深度學習deep learning')
+        21
+
+    """
+
+    return builtins.sum([len(input_string[i].encode("UTF-8")) if len(input_string[i].encode("UTF-8")) ==3 else len(input_string[i].encode("UTF-8"))  for i in range(len(input_string))])
 
 def PrintException():
     """
@@ -445,7 +440,8 @@ class DeviceType(object):
 
 
 class dtype:
-    if get_backend() == 'pytorch':
+    backend=get_backend()
+    if backend == 'pytorch':
         import torch
         # type definition
         bool = torch.bool
@@ -469,9 +465,7 @@ class dtype:
         double = torch.float64
         long = torch.int64
         float = torch.float32
-
-
-    elif get_backend() == 'tensorflow':
+    elif backend == 'tensorflow':
         import tensorflow as tf
         bool = tf.bool
 
@@ -494,8 +488,30 @@ class dtype:
         double = tf.float64
         long = tf.int64
         float = tf.float32
+    elif backend== 'onnx':
+        import onnx
+        from onnx import helper, onnx_pb, defs, numpy_helper
+        bool = onnx_pb.TensorProto.BOOL
+        int8 =  onnx_pb.TensorProto.INT8
+        byte = onnx_pb.TensorProto.INT8
+        int16 = onnx_pb.TensorProto.INT16
+        short = onnx_pb.TensorProto.INT16
+        int32 = onnx_pb.TensorProto.INT32
+        intc = onnx_pb.TensorProto.INT32
+        int64 = onnx_pb.TensorProto.INT64
+        intp =onnx_pb.TensorProto.INT64
 
-    else:
+        uint8 = onnx_pb.TensorProto.UINT8
+        ubyte =onnx_pb.TensorProto.UINT8
+        float16 =onnx_pb.TensorProto.FLOAT1
+        half =onnx_pb.TensorProto.FLOAT1
+        float32 =onnx_pb.TensorProto.FLOAT
+        single = onnx_pb.TensorProto.FLOAT
+        float64 =onnx_pb.TensorProto.DOUBLE
+        double =onnx_pb.TensorProto.DOUBLE
+        long =onnx_pb.TensorProto.INT64
+        float =onnx_pb.TensorProto.FLOAT
+    elif backend == 'numpy':
         bool = np.bool
 
         int8 = np.int8
@@ -517,6 +533,9 @@ class dtype:
         double = np.float64
         long = np.int64
         float = np.float32
+
+
+
 # class Device(object):
 #     '''
 #     Describes device type and device id
@@ -958,6 +977,11 @@ def to_onehot(label, classes):
     onehot[label] = 1
     return onehot
 
+def is_iter(x):
+    "Test whether `x 'can be used in a `for` loop"
+    #Rank 0 tensors in PyTorch are not really iterable
+    return isinstance(x, (Iterable,Generator)) and getattr(x,'ndim',1)
+
 
 def to_list(x):
     """
@@ -999,6 +1023,8 @@ def to_list(x):
         return [x[i] for i in range(len(x))]
     elif 'tensor' in x.__class__.__name__.lower():
         return [x[i] for i in range(len(x))]
+    elif is_iter(x):
+        return list(x)
     elif hasattr(x, 'tolist') and callable(x.tolist):
         return x.tolist()
     elif isinstance(x, (int, float)):
@@ -1496,6 +1522,10 @@ def nearest_prime(n):
     else:
         return nextp
 
+def num_cpus():
+    "Get number of cpus"
+    try:                   return len(os.sched_getaffinity(0))
+    except AttributeError: return os.cpu_count()
 
 
 def get_memory_profile(mode):

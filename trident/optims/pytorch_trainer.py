@@ -702,7 +702,7 @@ class Model(ModelBase):
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
             temp['total_losses']=self.training_context['current_loss'].item()
-            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp.items()])+' }')
+            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v,value_type='loss')) for k,v in temp.items()])+' }')
 
     def do_on_data_received(self, train_data, test_data):
 

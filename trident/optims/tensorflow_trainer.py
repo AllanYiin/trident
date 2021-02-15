@@ -645,6 +645,9 @@ class Model(ModelBase):
         if self.training_context['steps'] == 0:
             self.training_context['time_batch_progress'] = self.training_context['time_batch_start']
 
+        if self.model.device == 'cuda':
+            gc.collect()
+
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
         if self.training_context['steps'] % 100 == 0:
@@ -654,17 +657,16 @@ class Model(ModelBase):
                 self._model.cpu()
                 self._model.cuda()
 
-        if self.training_context['steps'] % _session.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == self.training_context['steps'] // _session.epoch_equivalent:
-                self.adjust_learning_rate(self.training_context['base_lr'])
-                self.warmup = 0
-
-        if self.training_context['current_batch'] == 0 and self.training_context['is_print_batch_progress'] == True:
-            temp = OrderedDict()
-            for k in self.training_context['losses'].key_list:
-                if len(self.training_context['losses'][k]) > 0:
-                    temp[k] = self.training_context['losses'][k][-1][-1]
-            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v)) for k,v in temp.items()])+' }')
+            if (self.training_context['steps'] + 1) % _session.epoch_equivalent == 0:
+                if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // _session.epoch_equivalent:
+                    self.adjust_learning_rate(self.training_context['base_lr'])
+                    self.warmup = 0
+            if self.training_context['current_batch'] == 0 and self.training_context['is_print_batch_progress'] == True:
+                temp = OrderedDict()
+                for k in self.training_context['losses'].key_list:
+                    if len(self.training_context['losses'][k]) > 0:
+                        temp[k] = self.training_context['losses'][k][-1][-1]
+                print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v,value_type='loss')) for k, v in temp.items()]) + ' }')
 
     def do_on_data_received(self, train_data, test_data):
         if train_data is None and test_data is None:
