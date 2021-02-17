@@ -71,7 +71,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'leaky_relu6', 'smooth_relu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
-           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
+           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather', 'index_select','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial' ,'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
 
 Tensor=torch.Tensor
@@ -2684,7 +2684,7 @@ def log_softmax(x, axis=1):
         (Tensor): output tensor and have same shape with x.
 
     """
-    return x - reduce_logsumexp(x, axis=axis)
+    return x - reduce_logsumexp(x, axis=axis,keepdims=True)
 
 
 def gelu(x):
@@ -3083,6 +3083,7 @@ def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
         Please see the notes on :doc:`/notes/randomness` for background.
 
     Args:
+        paddings ():
         x (Tensor): N-dimensional tensor
         pad (tuple): m-elements tuple, where
             :math:`\frac{m}{2} \leq` input dimensions and :math:`m` is even.
@@ -3312,7 +3313,7 @@ def arange(*args, dtype=Dtype.int32, requires_grad=False):
     else:
         raise ValueError('only maximum  3 args in arange function ')
 
-@numpy_compatible
+
 def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     """Return meshgrid in range x & y.
 
@@ -3483,6 +3484,21 @@ def repeat_elements(x: Tensor, multiples:int,axis=1):
 @numpy_compatible
 def gather(x: Tensor,gather_axis, indices):
     return torch.gather(input=x,dim=gather_axis,index=indices)
+
+
+def index_select(x:Tensor, axis:int, indices:Tensor):
+    """
+    Args:
+        x (tensor): input tensor
+        axis(int): dimension
+        indices(list): selected indices list
+    Examples:
+        >>> arr=arange(9).reshape(3, 3)
+        >>> idx=to_tensor([[0, 1, 2], [2, 3, 4], [0, 2, 4]]).long()
+        >>>gather(arr,0,idx)
+
+    """
+    return torch.index_select(x, dim=axis, index=indices)
 
 
 @numpy_compatible

@@ -6,7 +6,7 @@ import builtins
 import numbers
 from enum import Enum
 from functools import wraps
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Sequence
 from types import MethodType
 import random
 import numpy as np
@@ -32,13 +32,15 @@ __all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy'
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
-           'leaky_relu6', 'smooth_relu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
+           'leaky_relu6', 'smooth_relu','crelu',  'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_crossentropy']
 
 Tensor=tf.Tensor
+FLOAT32MAX=np.finfo(float).max
+FLOAT32MIN=np.finfo(float).min
 
 
 def numpy_compatible(func):
@@ -384,14 +386,31 @@ def int_shape(x):
     return tuple(x.get_shape().as_list())
 
 
-def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True):
-    if need_exclude_batch_axis:
-        shp=list(int_shape(x))
-        shp[0]=None
-        return TensorShape(shp)
+
+def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->TensorShape:
+    """Get tensor shape information ten convert to TensorShape
+
+    Args:
+        is_singleton ():
+        x (Tensor):
+        need_exclude_batch_axis (bool):
+
+    Returns:
+        shape (TensorShape):
+
+    Examples:
+        >>> tensor_to_shape(random_normal((2,64,32,32)))
+        TensorShape([None, 64, 32, 32])
+
+    """
+    if isinstance(x,numbers.Number):
+        return TensorShape((None,))
+    if need_exclude_batch_axis and is_singleton==False:
+        return TensorShape((None,)+int_shape(x)[1:])
+    elif need_exclude_batch_axis and is_singleton==True:
+        return TensorShape((None,)+int_shape(x))
     else:
         return TensorShape(int_shape(x))
-
 
 
 def is_sparse(x):
@@ -1493,7 +1512,7 @@ def prod(x: Tensor):
     return tf.math.reduce_prod(x,axis=None,keepdims=False)
 
 @numpy_compatible
-def clip(x: Tensor, min=-np.inf, max=np.inf):
+def clip(x: Tensor, min=FLOAT32MIN, max=FLOAT32MAX):
     """Clips tensor values to a specified min and max.
 
     Given a tensor `t`, this operation returns a tensor of the same type and
@@ -2367,6 +2386,33 @@ def smooth_relu(x:Tensor, upper_limit=None,name='smooth_relu'):
         return clip(tf.math.log(1 + tf.math.exp(x)), -np.inf, upper_limit)
     return tf.math.log(1 + tf.math.exp(x))
 
+
+@numpy_compatible
+def crelu(x,axis=-1,name='crelu'):
+    """Computes Concatenated ReLU.
+
+    Concatenates a ReLU which selects only the positive part of the activation
+    with a ReLU which selects only the *negative* part of the activation.
+    Note that as a result this non-linearity doubles the depth of the activations.
+    Source: [Understanding and Improving Convolutional Neural Networks via
+    Concatenated Rectified Linear Units. W. Shang, et
+    al.](https://arxiv.org/abs/1603.05201)
+
+    Args:
+        x (Tensor): input tensor.
+        axis: The axis that the output values are concatenated along. Default is -1.
+
+    Returns:
+      A `Tensor` with the same type as `x`.
+
+    References:
+      Understanding and Improving Convolutional Neural Networks via Concatenated
+      Rectified Linear Units:
+        [Shang et al., 2016](http://proceedings.mlr.press/v48/shang16)
+        ([pdf](http://proceedings.mlr.press/v48/shang16.pdf))
+    """
+    return tf.nn.crelu(x,axis=axis,name=name)
+
 @numpy_compatible
 def p_relu(x:Tensor, upper_limit=None,name='p_relu'):
     if upper_limit is not None:
@@ -2962,7 +3008,88 @@ def space_to_depth(x: Tensor, block_size=2):
         else:
             return x
 
+def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
+    r"""Pads tensor.
 
+    Padding size:
+        The padding size by which to pad some dimensions of :attr:`input`
+        are described starting from the last dimension and moving forward.
+        :math:`\left\lfloor\frac{\text{len(pad)}}{2}\right\rfloor` dimensions
+        of ``input`` will be padded.
+        For example, to pad only the last dimension of the input tensor, then
+        :attr:`pad` has the form
+        :math:`(\text{padding\_left}, \text{padding\_right})`;
+        to pad the last 2 dimensions of the input tensor, then use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom})`;
+        to pad the last 3 dimensions, use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom}`
+        :math:`\text{padding\_front}, \text{padding\_back})`.
+
+    Padding mode:
+        See :class:`torch.nn.ConstantPad2d`, :class:`torch.nn.ReflectionPad2d`, and
+        :class:`torch.nn.ReplicationPad2d` for concrete examples on how each of the
+        padding modes works. Constant padding is implemented for arbitrary dimensions.
+        Replicate padding is implemented for padding the last 3 dimensions of 5D input
+        tensor, or the last 2 dimensions of 4D input tensor, or the last dimension of
+        3D input tensor. Reflect padding is only implemented for padding the last 2
+        dimensions of 4D input tensor, or the last dimension of 3D input tensor.
+
+    Note:
+        When using the CUDA backend, this operation may induce nondeterministic
+        behaviour in its backward pass that is not easily switched off.
+        Please see the notes on :doc:`/notes/randomness` for background.
+
+    Args:
+        x (Tensor): N-dimensional tensor
+        paddings (list): m-elements tuple, where
+            :math:`\frac{m}{2} \leq` input dimensions and :math:`m` is even.
+        mode: ``'constant'``, ``'reflect'``, ``'replicate'`` or ``'circular'``.
+            Default: ``'constant'``
+        value: fill value for ``'constant'`` padding. Default: ``0``
+
+    Examples:
+        >>> t=tf.constant([[0., 1., 2.],[3., 4., 5.],[6., 7., 8.]])
+        >>> pad(t, [1, 1, 2, 0], mode='replicate')
+        tensor([[0., 0., 1., 2., 2.],
+          [0., 0., 1., 2., 2.],
+          [0., 0., 1., 2., 2.],
+          [3., 3., 4., 5., 5.],
+          [6., 6., 7., 8., 8.]])
+
+
+
+    """
+    valid_items=['constant', 'reflect', 'replicate' ,'circular','symmetric','zero']
+
+    if mode not in valid_items:
+        raise ValueError('{0} is not valid for mode.'.format(mode))
+    if mode == 'zero':
+        mode = 'constant'
+        value = 0
+    if mode == 'circular':
+        mode = 'symmetric'
+    if  mode == 'replicate' :
+        for n in range(ndim(x)):
+            splits=array_ops.split(value=x,num_or_size_splits=int_shape(x)[n],axis=n)
+            splice_list=[]
+            if paddings[2*n]>0:
+                pad_first=repeat_elements(splits[0],paddings[2*n],axis=n)
+                splice_list.append(pad_first)
+            splice_list.append(x)
+            if paddings[2 * n+1] > 0:
+                pad_last=repeat_elements(splits[-1],paddings[2*n+1],axis=n)
+                splice_list.append(pad_last)
+            if len(splice_list)>1:
+                x=tf.concat(splice_list,axis=n)
+            else:
+                pass
+            print(cast(x,dtypes.int32))
+        return x
+    mode=mode.upper()
+
+    return tf.pad(x,paddings=paddings,mode=mode,value=value)
 ############################
 ## tensor generation
 ###########################
@@ -3172,7 +3299,7 @@ def make_onehot(label, num_classes, axis=-1):
     """
     return tf.one_hot(indices=cast(label,'int64'), depth=num_classes, on_value=1.0, off_value=0.0, axis=axis)
 
-@numpy_compatible
+
 def meshgrid(x, y, normalized_coordinates=False, requires_grad=None):
     """Return meshgrid in range x & y.
 
@@ -3346,7 +3473,7 @@ def repeat_elements(x: Tensor, multiples:int,axis=-1):
                                  axis=axis)
         # repeat each slice the given number of reps
         x_rep = [s for s in splits for _ in range(multiples)]
-        return concate(x_rep, axis)
+        return tf.concat(x_rep, axis)
 
     # Here we use tf.tile to mimic behavior of np.repeat so that
     # we can handle dynamic shapes (that include None).
@@ -3391,6 +3518,28 @@ def gather(x: Tensor,gather_axis, indices):
     gathered = tf.gather_nd(x, gather_indices)
     reshaped = tf.reshape(gathered, indices.shape)
     return reshaped
+
+
+def index_select(x:Tensor, axis:int, indices:Tensor):
+    """
+    input_(tensor): input tensor
+    dim(int): dimension
+    indices(list): selected indices list
+    """
+
+    shape = x.get_shape().as_list()
+    if axis == -1:
+        axis = len(shape) - 1
+    shape[axis] = 1
+
+    tmp = []
+    for idx in indices:
+        begin = [0] * len(shape)
+        begin[axis] = idx
+        tmp.append(tf.slice(x, begin, shape))
+    res = tf.concat(tmp, axis=axis)
+
+    return res
 
 @numpy_compatible
 def scatter_add(x: Tensor,indices: Tensor,updates: Tensor):
