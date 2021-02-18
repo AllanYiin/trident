@@ -20,10 +20,12 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.models.pretrained_utils import _make_recovery_model_include_top
+
 from trident.backend.opencv_backend import image2array, array2image
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import Layer, Sequential, get_device
+from trident.backend.pytorch_backend import Layer, Sequential, get_device, fix_layer, load
 from trident.backend.pytorch_ops import *
 from trident.data.image_common import *
 from trident.data.bbox_common import *
@@ -37,7 +39,7 @@ from trident.optims.pytorch_trainer import *
 from trident.misc.visualization_utils import generate_palette,plot_bbox
 from trident.data.vision_transforms import Resize,Normalize
 __all__ = [ 'yolo4_body', 'YoloDetectionModel', 'DarknetConv2D', 'DarknetConv2D_BN_Mish',
-           'DarknetConv2D_BN_Leaky', 'YoloLayer']
+           'DarknetConv2D_BN_Leaky', 'YoloLayer','YoLoV4']
 
 _session = get_session()
 _device =get_device()
@@ -45,6 +47,7 @@ _epsilon = _session.epsilon
 _trident_dir = _session.trident_dir
 
 
+dirname = os.path.join(_trident_dir, 'models')
 
 anchors1 = to_tensor(np.array([12, 16, 19, 36, 40, 28]).reshape(-1, 2),requires_grad=False)
 anchors2 = to_tensor(np.array([36, 75, 76, 55, 72, 146]).reshape(-1, 2),requires_grad=False)
@@ -281,8 +284,8 @@ class YoloDetectionModel(ImageDetectionModel):
     def __init__(self, inputs=None, input_shape=None,output=None):
         super(YoloDetectionModel, self).__init__(inputs, input_shape,output)
         self.preprocess_flow = [Resize((input_shape[-2], input_shape[-1]), True), Normalize(0, 255)]
-        self.detection_threshold = 0.7
-        self.iou_threshold = 0.3
+        self.detection_threshold = 0.5
+        self.nms_threshold = 0.3
         self.class_names = None
         self.palette = generate_palette(80)
 
@@ -317,12 +320,12 @@ class YoloDetectionModel(ImageDetectionModel):
         area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
         return overlap_area / (area0 + area1 - overlap_area + eps)
 
-    def hard_nms(self, box_scores, iou_threshold, top_k=-1, candidate_size=200):
+    def hard_nms(self, box_scores, nms_threshold, top_k=-1, candidate_size=200):
         """
 
         Args:
             box_scores (N, 5): boxes in corner-form and probabilities.
-            iou_threshold: intersection over union threshold.
+            nms_threshold: intersection over union threshold.
             top_k: keep top_k results. If k <= 0, keep all the results.
             candidate_size: only consider the candidates with the highest scores.
         Returns:
@@ -348,7 +351,7 @@ class YoloDetectionModel(ImageDetectionModel):
             indexes = indexes[:-1]
             rest_boxes = boxes[indexes, :]
             iou = self.iou_of(rest_boxes, np.expand_dims(current_box, axis=0), )
-            indexes = indexes[iou <= iou_threshold]
+            indexes = indexes[iou <= nms_threshold]
 
         return box_scores[picked, :], picked
 
@@ -457,9 +460,9 @@ class YoloDetectionModel(ImageDetectionModel):
                     boxes = concate([xywh2xyxy(boxes[:, :4]), boxes[:, 4:]], axis=-1)
                     boxes = to_numpy(boxes)
                     if len(boxes) > 1:
-                        box_probs, keep = self.hard_nms(boxes[:, :5], iou_threshold=self.iou_threshold, top_k=-1, )
+                        box_probs, keep = self.hard_nms(boxes[:, :5], nms_threshold=self.nms_threshold, top_k=-1, )
                         boxes = boxes[keep]
-                        print('         iou threshold:{0}'.format(self.iou_threshold))
+                        print('         iou threshold:{0}'.format(self.nms_threshold))
                         print('         {0} bboxes keep!'.format(len(boxes)))
                     boxes[:, :4] /=scale
                     boxes[:, :4]=np.round(boxes[:, :4],0)
@@ -516,7 +519,16 @@ def YoLoV4(pretrained=True,
              classes=80,
              **kwargs):
     detector = YoloDetectionModel(input_shape=input_shape, output=yolo4_body(classes, input_shape[-1]))
-    detector.load_model('Models/pretrained_yolov4_mscoco.pth.tar')
+
+    if pretrained:
+        download_model_from_google_drive('1CcbyinE8gQFjMjt05arSg2W0LLUwjsdt', dirname, 'pretrained_yolov4_mscoco.pth')
+        recovery_model = fix_layer(load(os.path.join(dirname, 'pretrained_yolov4_mscoco.pth')))
+        detector.model = recovery_model
+
+    detector.model .input_shape = input_shape
+    detector.model .to(get_device())
+    return detector
+
 
 
 def darknet_body():

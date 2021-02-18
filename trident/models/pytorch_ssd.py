@@ -16,9 +16,9 @@ from trident.backend.opencv_backend import image2array
 from trident.data.dataset import BboxDataset
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,ModuleList
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList
 from trident.backend.pytorch_ops import *
-from trident.data.bbox_common import xywh2xyxy, xyxy2xywh,bbox_giou,bbox_giou_numpy
+from trident.data.bbox_common import xywh2xyxy, xyxy2xywh, bbox_giou, bbox_giou_numpy
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu, softmax
@@ -28,8 +28,9 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.optims.pytorch_losses import *
-from trident.data.transform import  *
-from trident.data.vision_transforms import Resize,Normalize
+from trident.data.transform import *
+from trident.data.vision_transforms import Resize, Normalize
+
 image_size = [640, 480]
 cfg = {'min_sizes': [[10, 16, 24], [32, 48], [64, 96], [128, 192, 256]], 'steps': [8, 16, 32, 64],
        'variance': [0.1, 0.2], 'clip': False, }
@@ -163,7 +164,6 @@ def encode(matched, priors, variances):
     return torch.cat([g_cxcy, g_wh], 1)  # [num_priors,14]
 
 
-
 def decode(loc, priors, variances):
     """Decode locations from predictions using priors to undo
     the encoding we did for offset regression at train time.
@@ -281,7 +281,7 @@ class SsdBboxDatasetV2(BboxDataset):
             center_form_priors = np.expand_dims(center_form_priors, 0)
         return np.concatenate([(center_form_boxes[..., :2] - center_form_priors[..., :2]) / center_form_priors[...,
                                                                                             2:] / self.center_variance,
-                               np.log(np.clip(center_form_boxes[..., 2:] / center_form_priors[..., 2:],1e-8,np.inf)) / self.size_variance],
+                               np.log(np.clip(center_form_boxes[..., 2:] / center_form_priors[..., 2:], 1e-8, np.inf)) / self.size_variance],
                               axis=len(center_form_boxes.shape) - 1)
 
     def assign_priors(self, gt_boxes, gt_labels, center_form_priors, iou_threshold):
@@ -458,16 +458,17 @@ class MultiBoxLossV2(nn.Module):
             loss = -F.log_softmax(confidence, dim=2)[:, :, 0]
             mask = hard_negative_mining(loss, target_confidence, self.neg_pos_ratio)
 
-        classification_loss = CrossEntropyLoss(axis=-1,label_smooth=True,reduction='sum')(confidence[mask, :].reshape(-1, num_classes), target_confidence[mask].reshape(-1))
+        classification_loss = CrossEntropyLoss(axis=-1, label_smooth=True, reduction='sum')(confidence[mask, :].reshape(-1, num_classes), target_confidence[mask].reshape(-1))
 
         pos_mask = target_confidence > 0
         target_locations = target_locations[pos_mask, :].reshape(-1, 4)
 
         num_pos = target_locations.size(0)
-        return   classification_loss / num_pos
+        return classification_loss / num_pos
+
 
 class IouLoss(nn.Module):
-    def __init__(self, priors,  center_variance, size_variance):
+    def __init__(self, priors, center_variance, size_variance):
         """Implement SSD Multibox Loss.
 
         Basically, Multibox loss combines classification loss
@@ -488,7 +489,7 @@ class IouLoss(nn.Module):
             target_locations (batch_size, num_priors, 4): real boxes corresponding all the priors.
         """
         num_classes = confidence.size(2)
-        num_batch= confidence.size(0)
+        num_batch = confidence.size(0)
 
         confidence_logit = softmax(confidence, -1)
         confidence_logit_probs, confidence_logit_idxs = confidence_logit.max(-1)
@@ -496,39 +497,36 @@ class IouLoss(nn.Module):
         label_mask = confidence_logit_idxs > 0
 
         pos_target_mask_all = target_confidence > 0
-        pos_infer_mask_all = (pos_target_mask_all.float() +probs_mask.float() + label_mask.float()==3)
-
-
+        pos_infer_mask_all = (pos_target_mask_all.float() + probs_mask.float() + label_mask.float() == 3)
 
         decode_locations_all = decode(locations, self.priors, (self.center_variance, self.size_variance))
         decode_target_locations_all = decode(target_locations, self.priors, (self.center_variance, self.size_variance))
-        giou_np=0.0
-        giou=0.0
-        overlaps=0.0
-        num_boxes=0
+        giou_np = 0.0
+        giou = 0.0
+        overlaps = 0.0
+        num_boxes = 0
         for i in range(num_batch):
-            pos_target_mask=pos_target_mask_all[i]
-            pos_infer_mask=pos_infer_mask_all[i]
-            decode_locations=decode_locations_all[i][pos_infer_mask,:]
-            decode_target_locations=decode_target_locations_all[i][pos_target_mask,:]
-            num_boxes+=decode_target_locations.shape[0]
-            if decode_target_locations.shape[0]>0 and decode_locations.shape[0]>0:
-                giou=giou+(1-(bbox_giou(decode_locations, decode_target_locations).sum(0)/decode_target_locations.shape[0])).sum()
-                overlaps=overlaps+(-log(clip(jaccard(decode_locations, decode_target_locations),min=1e-8)).sum(0)/decode_target_locations.shape[0]).sum()
-            elif decode_target_locations.shape[0]==0 and decode_locations.shape[0]==0:
+            pos_target_mask = pos_target_mask_all[i]
+            pos_infer_mask = pos_infer_mask_all[i]
+            decode_locations = decode_locations_all[i][pos_infer_mask, :]
+            decode_target_locations = decode_target_locations_all[i][pos_target_mask, :]
+            num_boxes += decode_target_locations.shape[0]
+            if decode_target_locations.shape[0] > 0 and decode_locations.shape[0] > 0:
+                giou = giou + (1 - (bbox_giou(decode_locations, decode_target_locations).sum(0) / decode_target_locations.shape[0])).sum()
+                overlaps = overlaps + (-log(clip(jaccard(decode_locations, decode_target_locations), min=1e-8)).sum(0) / decode_target_locations.shape[0]).sum()
+            elif decode_target_locations.shape[0] == 0 and decode_locations.shape[0] == 0:
                 pass
             else:
-                giou=giou+1
-                overlaps=overlaps-log(to_tensor(1e-8))
+                giou = giou + 1
+                overlaps = overlaps - log(to_tensor(1e-8))
 
-        giou=giou/num_boxes
-        overlaps=overlaps/num_boxes
+        giou = giou / num_boxes
+        overlaps = overlaps / num_boxes
         return giou
 
 
 class Ssd(Layer):
-    def __init__(self, backbond, base_filters=16, num_classes=5, num_regressors=14, iou_threshold=0.3,
-                 variance=(0.1, 0.2), name='tiny_mobile_rfbnet', **kwargs):
+    def __init__(self, backbond, base_filters=16, num_classes=5, num_regressors=14,variance=(0.1, 0.2), name='tiny_mobile_rfbnet', **kwargs):
         """
 
         Parameters
@@ -556,7 +554,6 @@ class Ssd(Layer):
         else:
             raise ValueError('{0} is not a valid backbond...'.format(backbond.__class__.__name__))
 
-        self.iou_threshold = iou_threshold
         self.variance = variance
 
         self.num_classes = num_classes
@@ -704,12 +701,13 @@ class Ssd(Layer):
 
 
 class SsdDetectionModel(ImageDetectionModel):
-    def __init__(self, inputs=None,  input_shape=None,output=None):
-        super(SsdDetectionModel, self).__init__(inputs, input_shape,output)
+    def __init__(self, inputs=None, input_shape=None, output=None):
+        super(SsdDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
-        self.detection_threshold = 0.6
-        self.iou_threshold = 0.3
-        self.palette =OrderedDict()
+        self.palette = OrderedDict()
+
+        object.__setattr__(self, 'detection_threshold',  0.5)
+        object.__setattr__(self, 'nms_threshold', 0.3)
 
 
     def area_of(self, left_top, right_bottom):
@@ -743,12 +741,12 @@ class SsdDetectionModel(ImageDetectionModel):
         area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
         return overlap_area / (area0 + area1 - overlap_area + eps)
 
-    def hard_nms(self, box_scores, iou_threshold, top_k=-1, candidate_size=200):
+    def hard_nms(self, box_scores, nms_threshold, top_k=-1, candidate_size=200):
         """
 
         Args:
             box_scores (N, 5): boxes in corner-form and probabilities.
-            iou_threshold: intersection over union threshold.
+            nms_threshold: intersection over union threshold.
             top_k: keep top_k results. If k <= 0, keep all the results.
             candidate_size: only consider the candidates with the highest scores.
         Returns:
@@ -774,11 +772,11 @@ class SsdDetectionModel(ImageDetectionModel):
             indexes = indexes[:-1]
             rest_boxes = boxes[indexes, :]
             iou = self.iou_of(rest_boxes, expand_dims(current_box, axis=0), )
-            indexes = indexes[iou <= iou_threshold]
+            indexes = indexes[iou <= nms_threshold]
 
         return box_scores[picked, :], picked
 
-    def nms(self, boxes, threshold=0.3):
+    def nms(self, boxes, nms_threshold=0.3):
         # if there are no boxes, return an empty list
         if len(boxes) == 0:
             return []
@@ -832,7 +830,7 @@ class SsdDetectionModel(ImageDetectionModel):
 
                 # if there is sufficient overlap, suppress the
                 # current bounding box
-                if overlap > threshold:
+                if overlap > nms_threshold:
                     suppress.append(pos)
 
             # delete all indexes from the index list that are in the
@@ -853,11 +851,11 @@ class SsdDetectionModel(ImageDetectionModel):
                 if img.shape[-1] == 4:
                     img = img[:, :, :3]
                 img_orig = img.copy()
-                rescale_scale=1
+                rescale_scale = 1
                 for func in self.preprocess_flow:
-                    if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
-                        img = func(img,spec=self._model.input_spec)
-                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
+                    if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
+                        img = func(img, spec=self._model.input_spec)
+                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                             rescale_scale = func.scale
                     else:
                         print(func)
@@ -871,6 +869,7 @@ class SsdDetectionModel(ImageDetectionModel):
                 boxes = boxes[0]
                 confidence = confidence[0]
                 probs, label = confidence.data.max(-1)
+
                 mask = probs > self.detection_threshold
                 probs = probs[mask]
                 label = label[mask]
@@ -883,14 +882,15 @@ class SsdDetectionModel(ImageDetectionModel):
                 if boxes is not None and len(boxes) > 0:
                     box_probs = concate([boxes.float(), label.reshape(-1, 1).float(), probs.reshape(-1, 1).float()], axis=1)
                     if len(boxes) > 1:
-                        box_probs, keep = self.hard_nms(box_probs, iou_threshold=self.iou_threshold, top_k=-1, )
+                        box_probs, keep = self.hard_nms(box_probs, nms_threshold=self.nms_threshold, top_k=-1, )
+
                     boxes = box_probs[:, :4]
                     boxes[:, 0::2] *= self._model.input_spec.shape.dims[-1]
                     boxes[:, 1::2] *= self._model.input_spec.shape.dims[-2]
                     boxes[:, :4] /= rescale_scale
 
                     # boxes = boxes * (1 / scale[0])
-                    return img_orig, to_numpy(boxes), to_numpy(box_probs[:, 4]).astype(np.int32),to_numpy(box_probs[:, 5])
+                    return img_orig, to_numpy(boxes), to_numpy(box_probs[:, 4]).astype(np.int32), to_numpy(box_probs[:, 5])
                 else:
                     return img_orig, None, None, None
             except:
@@ -912,7 +912,7 @@ class SsdDetectionModel(ImageDetectionModel):
                 this_label = labels[m]
                 cv2.rectangle(bgr_image, (this_box[0], this_box[1]), (this_box[2], this_box[3]),
                               self.palette[this_label],
-                              1 if bgr_image.shape[1] < 480 else 2 if bgr_image.shape[1] < 640 else 3 )
+                              1 if bgr_image.shape[1] < 480 else 2 if bgr_image.shape[1] < 640 else 3)
         rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
         return rgb_image
 

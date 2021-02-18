@@ -19,7 +19,9 @@ from tensorflow.python.eager import context, tape, function
 from tensorflow.python.eager import forwardprop
 from tensorflow.python.eager.backprop import GradientTape
 from tensorflow.python.ops.losses import util as tf_losses_utils
+from trident.data.mask_common import color2label
 
+from trident.data.transform import Transform
 
 from trident.backend.opencv_backend import array2image, image2array, file2array
 
@@ -1474,8 +1476,8 @@ class ImageClassificationModel(Model):
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
+                    img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0))
             result = self._model(inp)
@@ -1513,9 +1515,9 @@ class ImageRegressionModel(Model):
                 img = img[:, :, :3]
             rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
                     img = func(img, spec=self._model.input_spec)
-                    if func.__qualname__ == 'resize.<locals>.img_op':
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             if isinstance( self._model,Layer):
@@ -1536,7 +1538,8 @@ class ImageDetectionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
-        self.detection_threshould = 0.5
+        object.__setattr__(self, 'detection_threshold', 0.5)
+        object.__setattr__(self, 'nms_threshold', 0.3)
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
@@ -1549,19 +1552,21 @@ class ImageDetectionModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func):
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                    img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                        rescale_scale = func.scale
 
             result = self._model(to_tensor(np.expand_dims(img, 0)))
             self._model._set_inputs(to_tensor(np.expand_dims(img, 0)))
-            bboxes = self.generate_bboxes(*result, threshould=self.detection_threshould, scale=scale)
+            bboxes = self.generate_bboxes(*result, threshold=self.detection_threshold, scale=scale)
             bboxes = self.nms(bboxes)
             # idx=int(np.argmax(result,-1)[0])
             return bboxes
         else:
             raise ValueError('the model is not built yet.')
 
-    def generate_bboxes(self, *outputs, threshould=0.5, scale=1):
+    def generate_bboxes(self, *outputs, threshold=0.5, scale=1):
         raise NotImplementedError
 
     def nms(self, bboxes):
@@ -1572,6 +1577,65 @@ class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageSegmentationModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
+
+    @property
+    def class_names(self):
+        return self._class_names
+
+    @class_names.setter
+    def class_names(self, value):
+        if self._class_names is not None and self._class_names != value:
+            self._class_names = value
+            self._lab2idx = {v: k for k, v in enumerate(self._class_names)}
+            self._idx2lab = {k: v for k, v in enumerate(self._class_names)}
+
+    def index2label(self, idx: int):
+        if self._idx2lab is None or len(self._idx2lab.items()) == 0:
+            raise ValueError('You dont have proper mapping class names')
+        elif idx not in self._idx2lab:
+            raise ValueError('Index :{0} is not exist in class names'.format(idx))
+        else:
+            return self._idx2lab[idx]
+
+    def label2index(self, label):
+        if self._lab2idx is None or len(self._lab2idx.items()) == 0:
+            raise ValueError('You dont have proper mapping class names')
+        elif label not in self._lab2idx:
+            raise ValueError('label :{0} is not exist in class names'.format(label))
+        else:
+            return self._lab2idx[label]
+
+    def infer_single_image(self, img):
+        if isinstance(self._model, Layer) and self._model.built:
+            self._model.eval()
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type = ObjectType.rgb
+            img = file2array(img)
+            if img.shape[-1] == 4:
+                img = img[:, :, :3]
+            rescale_scale = 1.0
+            for func in self.preprocess_flow:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
+                    img = func(img, spec=self._model.input_spec)
+
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
+                        rescale_scale = func.scale
+
+            img = image_backend_adaption(img)
+            inp = cast(to_tensor(np.expand_dims(img, 0)).to(self._model.get_root().device),self._model.weights[0].data.dtype)
+            result = argmax(self._model(inp)[0], axis=-1)
+            result = to_numpy(result)
+            if self.class_names is None or len(self.class_names) == 0:
+                return result
+            else:
+                if len(self.palette) > 0:
+                    color_result = color2label(result, self.palette)
+                    return color_result
+                else:
+                    return result
+        else:
+            raise ValueError('the model is not built yet.')
+
 
 class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
@@ -1597,8 +1661,8 @@ class ImageGenerationModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                    img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
             result = self._model(inp)
@@ -1627,10 +1691,11 @@ class FaceLandmarkModel(Model):
                 img = img[:, :, :3]
             rescale_scale=1.0
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
                     img = func(img,spec=self._model.input_spec)
-                    if func.__qualname__ == 'resize.<locals>.img_op':
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
+
             img = image_backend_adaption(img)
             if isinstance(self._model, Layer):
                 inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
@@ -1694,8 +1759,8 @@ class FaceRecognitionModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if inspect.isfunction(func) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                    img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
             result = self._model(inp)[0]

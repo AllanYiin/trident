@@ -13,12 +13,28 @@ import string
 import sys
 import time
 import uuid
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+import PIL
+
+try:
+    from PIL import ImageEnhance
+    from PIL import ImageOps
+    from PIL import ImageFilter
+    from PIL import Image as pil_image
+    from PIL.PngImagePlugin import PngImageFile
+except ImportError:
+    pil_image = None
+    ImageEnhance = None
+    ImageFilter=None
 from functools import partial
 from typing import List, Tuple
 
 import numpy as np
 import torch
 import torch.nn as nn
+from PIL.PngImagePlugin import PngImageFile
+
 from trident.data.mask_common import color2label
 
 from trident.data.transform import Transform
@@ -927,33 +943,37 @@ class Model(ModelBase):
             save_path = self.training_context['save_path']
 
         if isinstance(self._model, nn.Module):
-            folder, filename, ext = split_path(save_path)
-            if filename == '':
-                filename = self.name
+            try:
+                folder, filename, ext = split_path(save_path)
+                if filename == '':
+                    filename = self.name
 
-            ext = '.pth.tar_'
-            save_path = os.path.join(folder, filename + ext)
-            make_dir_if_need(sanitize_path(save_path))
-            save_path = sanitize_path(save_path)
-            device = get_device()
-            self._model.eval()
-            self._model.cpu()
-            torch.save({
-                'state_dict': self._model.state_dict(),
-                'backend': 'pytorch',
-                'trident_version': __version__,
-                'pytorch_version': torch.__version__,
-                'signature': self._model.signature
-            }, save_path)
+                ext = '.pth.tar_'
+                save_path = os.path.join(folder, filename + ext)
+                make_dir_if_need(sanitize_path(save_path))
+                save_path = sanitize_path(save_path)
+                device = get_device()
+                self._model.eval()
+                self._model.cpu()
+                torch.save({
+                    'state_dict': self._model.state_dict(),
+                    'backend': 'pytorch',
+                    'trident_version': __version__,
+                    'pytorch_version': torch.__version__,
+                    'signature': self._model.signature
+                }, save_path)
 
-            shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
-            os.remove(save_path)
-            save_path = save_path.replace('pth.tar_', 'pth_')
-            save(self._model, save_path)
-            shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
-            os.remove(save_path)
-            self._model.train()
-            self._model.to(device)
+                shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
+                os.remove(save_path)
+                save_path = save_path.replace('pth.tar_', 'pth_')
+                save(self._model, save_path)
+                shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
+                os.remove(save_path)
+                self._model.train()
+                self._model.to(device)
+            except Exception as e:
+                print(e)
+                PrintException()
 
         elif isinstance(self._model, torch.Tensor):
             folder, filename, ext = split_path(save_path)
@@ -1263,18 +1283,18 @@ class ImageClassificationModel(Model):
         else:
             return self._lab2idx[label]
 
-
-
     def infer_single_image(self, img, topk=1):
-        if self._model.built:
+        if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            img = file2array(img)
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type = ObjectType.rgb
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -1306,14 +1326,14 @@ class ImageRegressionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             img_shp=img.shape
 
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img,spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
@@ -1333,7 +1353,9 @@ class ImageDetectionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
-        self.detection_threshould = 0.5
+        object.__setattr__(self, 'detection_threshold',  0.5)
+        object.__setattr__(self, 'nms_threshold', 0.3)
+
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
@@ -1341,12 +1363,12 @@ class ImageDetectionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img,spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
@@ -1356,14 +1378,14 @@ class ImageDetectionModel(Model):
                 self._model.weights[0].data.dtype)
             result = self._model(inp)
 
-            bboxes = self.generate_bboxes(*result, threshould=self.detection_threshould, scale=scale)
+            bboxes = self.generate_bboxes(*result, threshold=self.detection_threshold, scale=scale)
             bboxes = self.nms(bboxes)
             # idx=int(np.argmax(result,-1)[0])
             return bboxes
         else:
             raise ValueError('the model is not built yet.')
 
-    def generate_bboxes(self, *outputs, threshould=0.5, scale=1):
+    def generate_bboxes(self, *outputs, threshold=0.5, scale=1):
         raise NotImplementedError
 
     def nms(self, bboxes):
@@ -1407,15 +1429,18 @@ class ImageSegmentationModel(Model):
             return self._lab2idx[label]
 
     def infer_single_image(self, img):
-        if self._model.built:
+        if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            img = file2array(img)
+            if self._model.input_spec.object_type is None:
+                self._model.input_spec.object_type = ObjectType.rgb
+            img = image2array(img)
+
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
-                    img = func(img)
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -1444,12 +1469,12 @@ class ImageGenerationModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1471,6 +1496,8 @@ class FaceLandmarkModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
+            if  self._model.input_spec is None:
+                self._model.input_spec=self.inputs.value_list[0]
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
             img = image2array(img)
@@ -1480,9 +1507,8 @@ class FaceLandmarkModel(Model):
                 img = img[:, :, :3]
             rescale_scale=1.0
             img_shape=int_shape(img)
-
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1532,12 +1558,12 @@ class FaceRecognitionModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale=1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale

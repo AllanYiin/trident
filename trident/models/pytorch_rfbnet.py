@@ -228,7 +228,7 @@ def tiny_mobile_rfbnet(filter_base=16, num_classes=2):
 
 
 class RFBnet(Layer):
-    def __init__(self, *args, base_filters=16, num_classes=2, num_regressors=4,prob_threshold=0.7, nms_threshold=0.3, center_variance=0.1, size_variance=0.2,
+    def __init__(self, *args, base_filters=16, num_classes=2, num_regressors=4,detection_threshold=0.7, nms_threshold=0.3, center_variance=0.1, size_variance=0.2,
                  name='tiny_mobile_rfbnet', **kwargs):
         """
 
@@ -242,7 +242,7 @@ class RFBnet(Layer):
         self.backbond1 = Sequential(*backbond[:8], name='backbond1')
         self.backbond2 = Sequential(*backbond[8:11], name='backbond2')
         self.backbond3 = Sequential(*backbond[11:13], name='backbond3')
-        self.prob_threshold = prob_threshold
+        self.detection_threshold = detection_threshold
         self.nms_threshold =nms_threshold
         self.variance = (center_variance, size_variance)
 
@@ -377,16 +377,16 @@ class RFBnet(Layer):
 
         return box_scores[picked, :]
 
-    def predict(self, width, height, confidences, boxes, prob_threshold=None, iou_threshold=0.3, top_k=-1):
+    def predict(self, width, height, confidences, boxes, detection_threshold=None, iou_threshold=0.3, top_k=-1):
         boxes = boxes
         confidences = confidences
-        if prob_threshold is not None:
-            self.prob_threshold=prob_threshold
+        if detection_threshold is not None:
+            self.detection_threshold=detection_threshold
         picked_box_probs = []
         picked_labels = []
         for class_index in range(1, confidences.shape[1]):
             probs = confidences[:, class_index]
-            mask = probs > self.prob_threshold
+            mask = probs > self.detection_threshold
             probs = probs[mask]
             if probs.shape[0] == 0:
                 continue
@@ -472,6 +472,8 @@ def RfbNet(include_top=True,
     else:
         input_shape = (3, 480, 640)
     rfbnet = SsdDetectionModel(input_shape=(3, 480, 640), output=RFBnet(base_filters=base_filters, num_classes=num_classes, num_regressors=num_regressors))
+    rfbnet.detection_threshold=0.7
+    rfbnet.nms_threshold=0.7
     rfbnet.palette[0] = (128, 255, 128)
     rfbnet.palette[1] = (128, 255, 128)
     rfbnet.preprocess_flow = [
@@ -480,11 +482,10 @@ def RfbNet(include_top=True,
     ]
     if pretrained == True:
         download_model_from_google_drive('1T_0VYOHaxoyuG1fAxY-6g0C7pfXiujns', dirname, 'version-RFB-640.pth')
-        recovery_model = load(os.path.join(dirname, 'version-RFB-640.pth'))
+        recovery_model =fix_layer( load(os.path.join(dirname, 'version-RFB-640.pth')))
         priors=recovery_model.priors.clone()
         recovery_model.__delattr__("priors")
         recovery_model.register_buffer("priors",priors)
-        recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'rfb640'
         recovery_model.eval()
         recovery_model.to(_device)
