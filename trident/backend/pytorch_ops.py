@@ -3642,8 +3642,8 @@ def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is not None:
-        return cast(torch.normal(mean=mean, std=std, size=shape), dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std, size=shape), dtype=torch.float32)
+        return cast(torch.normal(mean=mean, std=std, size=shape), cast_dtype=dtype)
+    return cast(torch.normal(mean=mean, std=std, size=shape), cast_dtype=torch.float32)
 
 
 @numpy_compatible
@@ -3687,8 +3687,8 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is not None:
-        return cast(torch.normal(mean=mean, std=std, size=x.shape), dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std, size=x.shape), dtype=torch.float32)
+        return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=dtype)
+    return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=torch.float32)
 
 
 
