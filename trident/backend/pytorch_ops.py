@@ -2797,10 +2797,10 @@ def norm(x:Tensor, order=None, axis=1,  keepdims=False):
     """
     if ndim(x) == 1:
         axis = 0
-    if pt_version >= version1_7:
-        return torch.linalg.norm(x, ord=order,dim=axis, keepdim=keepdims)
-    else:
-        return x.norm(p=order,dim=axis, keepdim=keepdims)
+    # if pt_version >= version1_7:
+    #     return torch.linalg.norm(x, ord=order,dim=axis, keepdim=keepdims)
+    # else:
+    return x.norm(p=order,dim=axis, keepdim=keepdims)
 
 
 @numpy_compatible
@@ -2830,9 +2830,9 @@ def l2_normalize(x: Tensor,axis=1, keepdims=True, eps=epsilon()):
     """
     if ndim(x)==1:
         axis=0
-    if pt_version>=version1_7:
-        return x / (torch.linalg.norm(x,dim=axis, keepdim=keepdims) + eps)
-    else:
+    # if pt_version>version1_7:
+    #     return x / (torch.linalg.norm(x,dim=axis, keepdim=keepdims) + eps)
+    # else:
         return x / (x.norm(dim=axis, keepdim=keepdims) + eps)
 
 ############################
