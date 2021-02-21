@@ -3,7 +3,13 @@ from typing import Optional, Union, Any
 
 import numpy as np
 from collections import namedtuple
-from trident.backend.pytorch_ops import *
+
+from trident.backend.common import get_backend
+
+if get_backend() == 'pytorch':
+    from trident.backend.pytorch_ops import *
+elif get_backend() == 'tensorflow':
+    from trident.backend.tensorflow_ops import *
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 

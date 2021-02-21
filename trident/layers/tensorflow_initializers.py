@@ -341,10 +341,10 @@ def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
 
 def get_initializer(initializer,**kwargs):
     if isinstance(initializer,str):
-        initializer_fn = get_function(camel2snake(initializer), ['trident.backend.pytorch_initializers'])
+        initializer_fn = get_function(camel2snake(initializer), ['trident.backend.tensorflow_initializers'])
         initializer_fn=partial(initializer_fn,**kwargs) if len(kwargs)>0 else initializer_fn
         return initializer_fn
-    elif inspect.isfunction(initializer) and getattr(initializer, '__module__', None) =='trident.backend.pytorch_initializers':
+    elif inspect.isfunction(initializer) and getattr(initializer, '__module__', None) =='trident.backend.tensorflow_initializers':
         initializer = partial(initializer, **kwargs) if len(kwargs) > 0 else initializer
         return initializer
 

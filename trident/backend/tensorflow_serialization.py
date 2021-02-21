@@ -14,7 +14,7 @@ try:
    import _pickle as pickle
 except:
    import pickle
-import dill
+
 import pathlib
 import inspect
 import tensorflow as tf
@@ -184,7 +184,7 @@ def check_module_version_greater_or_equal(module, req_version_tuple, error_if_ma
 
 
 def _cpu_tag(obj):
-    if type(obj).__module__ == 'torch':
+    if type(obj).__module__ == 'tensorflow':
         return 'cpu'
 
 
@@ -366,7 +366,7 @@ def _check_dill_version(pickle_module):
                              ))
 
 
-def save(obj, f, pickle_module=dill, pickle_protocol=DEFAULT_PROTOCOL, is_compressed=False):
+def save(obj, f, pickle_module=pickle, pickle_protocol=DEFAULT_PROTOCOL, is_compressed=False):
     """Saves an object to a disk file.
 
     See also: :ref:`recommend-saving-models`

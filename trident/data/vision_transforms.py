@@ -13,7 +13,6 @@ from skimage.filters import threshold_otsu, threshold_minimum, threshold_local, 
 
 from trident.backend.tensorspec import TensorSpec, object_type_inference, ObjectType
 
-from trident.backend.pytorch_ops import tensor_to_shape
 
 from trident.backend.common import OrderedDict
 from trident.backend.common import *
@@ -795,20 +794,20 @@ class Unnormalize(VisionTransform):
         norm_mean=self.mean
         norm_std=self.std
         if isinstance(self.mean, numbers.Number) and image.ndim == 3:
-            norm_mean = np.array([self.mean, self.mean, self.mean]).astype(np.float32)
-            norm_mean = np.expand_dims(norm_mean, 0)
+            norm_mean = np.array([self.mean]*image.shape[-1]).astype(np.float32)
+            norm_mean = np.expand_dims(np.expand_dims(norm_mean, 0), 0)
 
         elif isinstance(self.mean, (list,tuple)) and image.ndim == 3:
             norm_mean = np.array([self.mean]).astype(np.float32)
-            norm_mean = np.expand_dims(norm_mean, 0)
+            #norm_mean = np.expand_dims(np.expand_dims(norm_mean, 0), 0)
 
         if isinstance(self.std, numbers.Number) and image.ndim == 3:
-            norm_std = np.array([self.std, self.std, self.std]).astype(np.float32)
-            norm_std = np.expand_dims(norm_std, 0)
+            norm_std = np.array([self.std]*image.shape[-1]).astype(np.float32)
+            norm_std = np.expand_dims(np.expand_dims(norm_std, 0), 0)
 
         elif isinstance(self.std, (list,tuple)) and image.ndim == 3:
             norm_std = np.array([self.std]).astype(np.float32)
-            norm_std = np.expand_dims(norm_std, 0)
+            #norm_std = np.expand_dims(norm_std, 0)
 
         image *= norm_std
         image += norm_mean

@@ -8,7 +8,6 @@ import random
 import warnings
 import types
 import numpy as np
-from trident.backend.pytorch_backend import save, load
 
 from trident.backend.common import *
 from trident.backend.common import get_backend
@@ -17,8 +16,10 @@ from trident.callbacks.callback_base import CallbackBase
 _session = get_session()
 
 if get_backend()=='pytorch':
+    from trident.backend.pytorch_backend import save, load
     from trident.backend.pytorch_ops import to_numpy,to_tensor,pow,clip
 elif get_backend()=='tensorflow':
+    from trident.backend.tensorflow_backend import save, load
     from trident.backend.tensorflow_ops import  to_numpy,to_tensor,pow,clip
 
 

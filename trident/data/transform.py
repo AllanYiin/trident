@@ -4,13 +4,12 @@ from typing import Sequence, Tuple, Dict, Union, Optional
 import collections
 import  numpy as np
 import cv2
-from trident.data.image_common import object_type_inference
 
-from trident.backend.pytorch_ops import tensor_to_shape
 
 from trident.backend.common import OrderedDict
 from trident.backend.common import *
-from trident.backend.tensorspec import TensorSpec
+from trident.backend.tensorspec import TensorSpec, object_type_inference, ObjectType
+
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
@@ -25,9 +24,10 @@ class Transform(ABC):
     """
     def __init__(self, name=None):
         self.name=name
+        self.is_spatial=False
 
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
-        if spec  is None:
+        if spec  is None and self.is_spatial==True:
             spec=TensorSpec(shape=tensor_to_shape(inputs[0]), object_type=object_type_inference(inputs[0]))
         return tuple(self.apply(input,spec) for input in inputs)
 
@@ -35,11 +35,8 @@ class Transform(ABC):
     def apply(self, input: Tuple,spec:TensorSpec):
         pass
 
-    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray]):
-        if isinstance(inputs,Dict):
-            results=OrderedDict()
-            for spec, data in inputs:
-                results[spec]=self.apply_batch(data,spec)
+    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
+        pass
 
 
 
@@ -89,13 +86,13 @@ class VisionTransform(Transform):
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
         r"""Apply transform on batch input data."""
         if not isinstance(inputs,OrderedDict) :
-            if spec is None:
-                spec = TensorSpec(shape=tensor_to_shape(inputs), object_type=object_type_inference(inputs[0]))
+            if spec is None and self.is_spatial==True:
+                spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.rgb)
             return self.apply(inputs, spec)
         else:
             results=OrderedDict()
             for spec, data in inputs.items():
-                if isinstance(data,Iterable):
+                if (isinstance(data,Iterable) and not isinstance(data,np.ndarray)) or (is_tensor_like(data) and spec.ndim==data.ndim):
                     results[spec] = [self.apply(d, spec) for d in data]
                 else:
                     results[spec]=self.apply(data, spec)
@@ -105,7 +102,8 @@ class VisionTransform(Transform):
 
     def apply(self, input: Tuple,spec:TensorSpec):
         r"""Apply transform on single input data."""
-
+        if spec is None:
+            return self._apply_image(input,None)
         apply_func = self._get_apply(spec.object_type.value)
         if apply_func is None:
             return input
@@ -114,7 +112,7 @@ class VisionTransform(Transform):
 
 
     def _get_apply(self, key):
-        if 'image' in key or  'rgb' in key :
+        if 'image' in key or  'rgb' in key or  'gray' in key :
             return getattr(self, "_apply_{}".format('image'), None)
         elif 'bbox' in key:
             return getattr(self, "_apply_{}".format('boxes'), None)
@@ -168,10 +166,10 @@ class VisionTransform(Transform):
     def _apply_labels(self, labels,spec:TensorSpec):
         raise NotImplementedError
 
-    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray]):
-        if isinstance(inputs,Dict):
-            results=self.apply_batch(inputs)
-            return results
+    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
+        spec=kwargs.get('spec')
+        return self.apply_batch(inputs,spec)
+
 
 
 
