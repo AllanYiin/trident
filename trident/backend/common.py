@@ -46,7 +46,7 @@ __all__ = ['get_session','set_session','get_session_value','is_autocast_enabled'
 # types.  See https://github.com/python/mypy/issues/4146 for why these
 # workarounds is necessary
 import six
-
+from trident import context
 
 _int = builtins.int
 _float = builtins.float
@@ -54,7 +54,7 @@ _bool = builtins.bool
 
 
 
-_SESSION = threading.local()
+_SESSION = context._context()
 
 
 
@@ -123,36 +123,7 @@ def if_none(a, b):
     "`b` if `a` is None else `a`"
     return b if a is None else a
 
-def _get_trident_dir():
-    """Get or create trident directory
-    1)  read from enviorment variable 'TRIDENT_HOME'
-    2) use default directory '~/.trident'
-    3) if the directory not exist, create it!
 
-    Returns:
-        the  trident directory path
-
-    """
-    _trident_dir = ''
-    if 'TRIDENT_HOME' in os.environ:
-        _trident_dir = os.environ.get('TRIDENT_HOME')
-    else:
-        _trident_base_dir = os.path.expanduser('~')
-        if not os.access(_trident_base_dir, os.W_OK):
-            _trident_dir = '/tmp/.trident'
-        else:
-            _trident_dir = os.path.expanduser('~/.trident')
-
-    _trident_dir = sanitize_path(_trident_dir)
-    if not os.path.exists(_trident_dir):
-        try:
-            os.makedirs(_trident_dir)
-        except OSError as e:
-            # Except permission denied and potential race conditions
-            # in multi-threaded environments.
-            print(e)
-
-    return _trident_dir
 
 def get_trident_dir():
     """Method for access trident_dir attribute in session
@@ -164,7 +135,7 @@ def get_trident_dir():
         '~/.trident'
 
     """
-    return _SESSION.trident_dir
+    return context._context().trident_dir
 
 
 def get_plateform():
@@ -186,62 +157,7 @@ def get_plateform():
 
 
 
-def _initialize_session():
-    """
-    1) load session config from config file
-    2) if no exist value, assign the default value
 
-    """
-    global _SESSION
-    _SESSION.trident_dir = _get_trident_dir()
-    _SESSION.backend ='pytorch'
-
-    _SESSION.image_backend ='pillow'
-    _SESSION.epoch_equivalent =1000
-    _SESSION.floatx = 'float32'
-    _SESSION.epsilon = 1e-8
-    _SESSION.working_directory =os.getcwd()
-    _SESSION.plateform = get_plateform()
-    _SESSION.numpy_print_format = '{0:.4e}'
-    _SESSION.amp_available=False
-    _SESSION.is_autocast_enabled=False
-    _config_path = os.path.expanduser(os.path.join(_SESSION.trident_dir, 'trident.json'))
-    if os.path.exists(_config_path):
-        _config = {}
-        try:
-            with open(_config_path) as f:
-                _config = json.load(f)
-                for k, v in _config.items():
-                    try:
-                        if k == 'floatx':
-                            assert v in {'float16', 'float32', 'float64'}
-                        if k not in  ['trident_dir','device','working_directory']:
-                            _SESSION.__setattr__(k, v)
-                    except Exception as e:
-                        print(e)
-        except ValueError as ve:
-            print(ve)
-    if 'TRIDENT_WORKING_DIR' in os.environ:
-        _SESSION.working_directory = os.environ['TRIDENT_WORKING_DIR']
-        os.chdir(os.environ['TRIDENT_WORKING_DIR'])
-
-    if 'TRIDENT_BACKEND' in os.environ:
-        if _SESSION.backend != os.environ['TRIDENT_BACKEND']:
-            _SESSION.backend = os.environ['TRIDENT_BACKEND']
-    else:
-        try:
-            import torch
-            os.environ['TRIDENT_BACKEND'] = 'pytorch'
-        except:
-            try:
-                import tensorflow
-                os.environ['TRIDENT_BACKEND'] = 'tensorflow'
-            except:
-                pass
-    np.set_printoptions(formatter={'float_kind': lambda x: _SESSION.numpy_print_format.format(x)})
-    _SESSION.device = None
-
-_initialize_session()
 
 
 def get_session():
@@ -280,23 +196,13 @@ def set_session(key, value):
     return _SESSION
 
 def get_backend():
-    global  _SESSION
-    if hasattr(_SESSION,'backend'):
-        return _SESSION.backend
-    else:
-        return os.environ['TRIDENT_BACKEND']
+    return context._context().get_backend()
 
 def get_image_backend():
-    global  _SESSION
-    return _SESSION.image_backend
+    return context._context().image_backend
 
 def get_device():
-    global  _SESSION
-    if hasattr(_SESSION,'device'):
-        return _SESSION.device
-    else:
-
-        _SESSION.device
+    return context._context().device
 
 def is_autocast_enabled():
     return get_session_value('is_autocast_enabled')

@@ -24,7 +24,11 @@ def write_config(_config_path):
     # }
     try:
         with open(_config_path, 'w') as f:
-            f.write(json.dumps(_session.__dict__, indent=4))
+            session=_session.__dict__.copy()
+            session.pop('_thread_local_info')
+            session.pop('_context_handle')
+            session.pop('_module_dict')
+            f.write(json.dumps(session, indent=4))
     except IOError:
         # Except permission denied.
         pass
@@ -55,7 +59,6 @@ if get_backend()== 'pytorch':
     stdout.write('Using Pytorch backend.\n')
     stdout.write('Image Data Format: channels_first.\n')
     stdout.write('Image Channel Order: rgb.\n')
-    _session.backend='pytorch'
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
     import torch
@@ -72,7 +75,6 @@ elif _session.backend == 'tensorflow':
     stdout.write('Using TensorFlow backend.\n')
     stdout.write('Image Data Format: channels_last.\n')
     stdout.write('Image Channel Order: rgb.\n')
-    _session.backend = 'tensorflow'
     _session.image_data_format = 'channels_last'
     _session.image_channel_order = 'rgb'
 
@@ -81,7 +83,6 @@ elif _session.backend == 'tensorflow':
 
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
-
         try:
             tf.config.experimental.set_memory_growth(gpus[0], True)
             # tf.config.experimental.set_virtual_device_configuration(
@@ -111,25 +112,17 @@ elif _session.backend == 'onnx':
     stdout.write('Using ONNX backend.\n')
     stdout.write('Image Data Format: channels_first.\n')
     stdout.write('Image Channel Order: rgb.\n')
-    _session.backend = 'onnx'
     _session.image_data_format = 'channels_first'
     _session.image_channel_order = 'rgb'
 
-if 'TRIDENT_IMG_BACKEND' in os.environ:
-    _image_backend = os.environ['TRIDENT_IMG_BACKEND']
-    if _image_backend and _session.image_backend!=_image_backend:
-        _session.image_backend = _image_backend
+
+
+from trident.backend.opencv_backend import *
 
 
 
 
 
-
-
-if _session.image_backend == 'opencv':
-    stdout.write('Using opencv image backend\n')
-elif _session.image_backend== 'pillow':
-    stdout.write('Using pillow image backend.\n')
 
 
 

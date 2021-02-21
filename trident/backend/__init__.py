@@ -5,17 +5,26 @@ from __future__ import print_function
 import six
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+from trident.context import *
 from trident.backend.common import *
-import  trident.backend.numpy_ops
 from trident.backend import dtype
+import  trident.backend.numpy_ops
+
 import trident.backend.load_backend
-from trident.backend.tensorspec import *
 if get_backend()=='pytorch':
     from trident.backend.pytorch_ops import *
-    from trident.backend.pytorch_backend import *
+
 
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import *
+
+
+from trident.backend.tensorspec import *
+
+if get_backend()=='pytorch':
+    from trident.backend.pytorch_backend import *
+
+elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_backend import *
 
 
