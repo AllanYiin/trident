@@ -675,12 +675,13 @@ class Model(ModelBase):
 
     def do_on_epoch_start(self):
         self.training_context['time_epoch_start'] = time.time()
-        if self.training_context['steps'] == 0:
-            self.training_context['time_epoch_progress'] = self.training_context['time_epoch_start']
+        if self.training_context['current_batch'] == 0:
+            self.training_context['time_epoch_progress'] = 0
 
 
     def do_on_epoch_end(self):
         self.training_context['time_epoch_end'] = time.time()
+        self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_epoch_start'])
         if self.model.device == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
@@ -707,7 +708,7 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['time_batch_progress']+=(self.training_context['time_batch_end'] -self.training_context['time_batch_start'] )
+        self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
 
         if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
@@ -1365,7 +1366,6 @@ class ImageRegressionModel(Model):
 class ImageDetectionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
-        self.preprocess_flow = []
         object.__setattr__(self, 'detection_threshold',  0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
         if self._model.input_spec.object_type is None:
@@ -1412,13 +1412,15 @@ class ImageDetectionModel(Model):
 class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageSegmentationModel, self).__init__(inputs, input_shape, output)
-        self.preprocess_flow = []
+
         self.palette= OrderedDict()
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
         if self.input_spec is not None and self.input_spec.object_type is None:
             self.input_spec.object_type=ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
     @property
     def class_names(self):
@@ -1450,10 +1452,7 @@ class ImageSegmentationModel(Model):
     def infer_single_image(self, img):
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
+
             img = image2array(img)
 
             if img.shape[-1] == 4:
@@ -1483,7 +1482,6 @@ class ImageSegmentationModel(Model):
 class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
-        self.preprocess_flow = []
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
@@ -1559,7 +1557,6 @@ class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
 
-        self.preprocess_flow = []
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:

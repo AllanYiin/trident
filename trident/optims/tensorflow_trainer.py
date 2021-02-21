@@ -1464,10 +1464,9 @@ class Model(ModelBase):
 
 class ImageClassificationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageClassificationModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
+        super(ImageClassificationModel, self).__init__(inputs,input_shape,output)
+
         self._class_names = []
-        self.preprocess_flow = []
         self._idx2lab = {}
         self._lab2idx = {}
         if self._model.input_spec.object_type is None:
@@ -1538,8 +1537,7 @@ class ImageClassificationModel(Model):
 
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageRegressionModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
+        super(ImageRegressionModel, self).__init__(inputs,input_shape,output)
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
@@ -1577,9 +1575,7 @@ class ImageRegressionModel(Model):
 
 class ImageDetectionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageDetectionModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
-        self.preprocess_flow = []
+        super(ImageDetectionModel, self).__init__(inputs,input_shape,output)
         object.__setattr__(self, 'detection_threshold', 0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
         if self._model.input_spec.object_type is None:
@@ -1622,10 +1618,8 @@ class ImageDetectionModel(Model):
 
 class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageSegmentationModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
-        self.preprocess_flow = []
-        self.palette = OrderedDict()
+        super(ImageSegmentationModel, self).__init__(inputs,input_shape,output)
+        self.palette= OrderedDict()
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
@@ -1693,9 +1687,7 @@ class ImageSegmentationModel(Model):
 
 class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageGenerationModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
-        self.preprocess_flow = []
+        super(ImageGenerationModel, self).__init__(inputs,input_shape,output)
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
@@ -1737,8 +1729,8 @@ class ImageGenerationModel(Model):
 
 class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(FaceLandmarkModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
+        super(FaceLandmarkModel, self).__init__(inputs,input_shape,output)
+
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
@@ -1782,8 +1774,8 @@ class FaceLandmarkModel(Model):
 
 class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(FaceRecognitionModel, self).__init__()
-        self._initial_graph(inputs,input_shape,output)
+        super(FaceRecognitionModel, self).__init__(inputs,input_shape,output)
+
 
         self.preprocess_flow = []
         if self._model.input_spec.object_type is None:
