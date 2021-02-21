@@ -1512,7 +1512,7 @@ class ImageClassificationModel(Model):
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not  image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device)
@@ -1554,7 +1554,7 @@ class ImageRegressionModel(Model):
                 img = img[:, :, :3]
             rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
                         rescale_scale = func.scale
@@ -1594,7 +1594,7 @@ class ImageDetectionModel(Model):
                 img = img[:, :, :3]
             rescale_scale = 1
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1714,7 +1714,7 @@ class ImageGenerationModel(Model):
                 img = img[:, :, :3]
 
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
