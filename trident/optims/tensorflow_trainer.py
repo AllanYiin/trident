@@ -139,14 +139,13 @@ class Model(ModelBase):
             # output.cpu()
             if output.built and hasattr(output, '_output_shape') and output._output_shape is not None:
                 self._model = output
-                self._model.input_spec = self.inputs.value_list[0]
-                self.signature = None
-                if self.signature is not None and hasattr(self.signature, "outputs"):
-                    self._outputs = OrderedDict()
+                if self._model.signature.maybe_not_complete():
+                    self._model.signature = None
+                if self._model.signature is not None and hasattr(self._model.signature, "outputs"):
+                    self._outputs['output'] = self._model.signature.outputs
                     self._targets = OrderedDict()
-                    for name, spec in self.signature.outputs.item_list:
-                        self._outputs[name] = spec
-                        self._targets[name.replace("output", "target")] = spec
+                    for k, v in self._model.signature.outputs.item_list:
+                        self._targets[k.replace("output", "target")] = v
 
             else:
                 out = None
@@ -168,7 +167,7 @@ class Model(ModelBase):
                     out = output(dummay_input)
 
                 self._model = output
-                self._model.input_spec = self.inputs.value_list[0]
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].value().dtype)
                 if isinstance(out, Tensor):
                     self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
                     self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
