@@ -695,9 +695,10 @@ class Model(ModelBase):
             self.training_context['current_lr'] = self.base_lr
 
     def do_on_batch_start(self):
-        self.training_context['time_batch_start'] = time.time()
         if self.training_context['steps'] == 0:
-            self.training_context['time_batch_progress'] = self.training_context['time_batch_start']
+            self.training_context['time_batch_progress'] = 0
+        self.training_context['time_batch_start'] = time.time()
+
         if (self.training_context['steps'] + 1) % 100== 0:
             if self.model.device == 'cuda':
                 torch.cuda.synchronize()
@@ -706,6 +707,7 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
+        self.training_context['time_batch_progress']+=(self.training_context['time_batch_end'] -self.training_context['time_batch_start'] )
 
         if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:

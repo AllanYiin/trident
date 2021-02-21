@@ -642,15 +642,17 @@ class Model(ModelBase):
         self.training_context['time_epoch_end'] = time.time()
 
     def do_on_batch_start(self):
-        self.training_context['time_batch_start'] = time.time()
         if self.training_context['steps'] == 0:
-            self.training_context['time_batch_progress'] = self.training_context['time_batch_start']
+            self.training_context['time_batch_progress'] = 0
+        self.training_context['time_batch_start'] = time.time()
 
         if self.model.device == 'cuda':
             gc.collect()
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
+        self.training_context['time_batch_progress'] += (self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
+
         if self.training_context['steps'] % 100 == 0:
             gc.collect()
         if self.training_context['steps'] % 200 == 0:

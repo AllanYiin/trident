@@ -147,7 +147,7 @@ class ModelBase(object):
                     if isinstance(mod, Layer):
                         mod.nodes = value.nodes
                         mod.relative_name = name
-            value.signature = None
+
             inp_shape=None
             if hasattr(value,'signature') and value.signature is not None and len(value.signature.inputs)>0:
                 inp_shape=value.input_shape
@@ -686,10 +686,8 @@ class ModelBase(object):
 
         loss_steps,loss_values=self.batch_loss_history.get_series('total_losses')
         loss_value=float(np.array(loss_values[-1*print_batch_progress_frequency:]).mean())
-        progress_start = self.training_context['time_batch_progress']
-        progress_end = time.time()
-        step_time = progress_end - progress_start
-        self.training_context['time_batch_progress'] = progress_end
+        step_time =  self.training_context['time_batch_progress']
+        self.training_context['time_batch_progress'] = 0
         progress_bar(step_time,self.training_context['current_batch'], self.training_context['total_batch'],
                  'Loss: {0} | {1} | learning rate: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value,value_type='loss'), ','.join(metric_strings), self.training_context['current_lr'],
                      self.training_context['current_epoch']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
