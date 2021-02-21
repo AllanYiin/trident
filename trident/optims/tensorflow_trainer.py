@@ -626,20 +626,21 @@ class Model(ModelBase):
 
     def do_on_epoch_start(self):
         self.training_context['time_epoch_start'] = time.time()
-        if self.training_context['steps'] == 0:
-            self.training_context['time_epoch_progress'] = self.training_context['time_epoch_start']
+        if self.training_context['current_batch'] == 0:
+            self.training_context['time_epoch_progress'] = 0
 
         if self.warmup > 0 and self.training_context['current_epoch'] < self.warmup:
             lr = 1e-6 * (self.training_context['current_epoch'] + 1)
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = lr
-        elif self.warmup > 0 and self.training_context['current_epoch'] == self.warmup:
+        elif 0 < self.warmup == self.training_context['current_epoch']:
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = self.base_lr
 
 
     def do_on_epoch_end(self):
         self.training_context['time_epoch_end'] = time.time()
+        self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_epoch_start'])
 
     def do_on_batch_start(self):
         if self.training_context['steps'] == 0:
@@ -651,8 +652,7 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['time_batch_progress'] += (self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
-
+        self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
         if self.training_context['steps'] % 100 == 0:
             gc.collect()
         if self.training_context['steps'] % 200 == 0:
@@ -1464,8 +1464,8 @@ class Model(ModelBase):
 
 class ImageClassificationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageClassificationModel, self).__init__(inputs, input_shape, output)
-
+        super(ImageClassificationModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
         self._class_names = []
         self.preprocess_flow = []
         self._idx2lab = {}
@@ -1538,7 +1538,8 @@ class ImageClassificationModel(Model):
 
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
+        super(ImageRegressionModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
@@ -1576,7 +1577,8 @@ class ImageRegressionModel(Model):
 
 class ImageDetectionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
+        super(ImageDetectionModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
         self.preprocess_flow = []
         object.__setattr__(self, 'detection_threshold', 0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
@@ -1620,7 +1622,8 @@ class ImageDetectionModel(Model):
 
 class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageSegmentationModel, self).__init__(inputs, input_shape, output)
+        super(ImageSegmentationModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
         self.preprocess_flow = []
         self.palette = OrderedDict()
         self._class_names = []
@@ -1690,7 +1693,8 @@ class ImageSegmentationModel(Model):
 
 class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
+        super(ImageGenerationModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
         self.preprocess_flow = []
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
@@ -1733,7 +1737,8 @@ class ImageGenerationModel(Model):
 
 class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
+        super(FaceLandmarkModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
@@ -1777,7 +1782,8 @@ class FaceLandmarkModel(Model):
 
 class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
-        super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
+        super(FaceRecognitionModel, self).__init__()
+        self._initial_graph(inputs,input_shape,output)
 
         self.preprocess_flow = []
         if self._model.input_spec.object_type is None:
