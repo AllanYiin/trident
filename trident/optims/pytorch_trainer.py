@@ -1260,8 +1260,12 @@ class ImageClassificationModel(Model):
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
-
-
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.classification_label
     @property
     def class_names(self):
         return self._class_names
@@ -1292,10 +1296,6 @@ class ImageClassificationModel(Model):
     def infer_single_image(self, img, topk=1):
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            # if self._model.input_spec is None:
-            #     self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1328,17 +1328,15 @@ class ImageClassificationModel(Model):
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
-        if self.input_spec is not None and self.input_spec.object_type is None:
-            self.input_spec.object_type=ObjectType.rgb
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+
 
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
-
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type=ObjectType.rgb
             img = image2array(img)
             img_shp=img.shape
 
@@ -1368,19 +1366,18 @@ class ImageDetectionModel(Model):
         self.preprocess_flow = []
         object.__setattr__(self, 'detection_threshold',  0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
-        if self.input_spec is not None and self.input_spec.object_type is None:
-            self.input_spec.object_type=ObjectType.rgb
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+
 
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
             self._model.to(self.device)
             self._model.eval()
-            if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
 
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1485,14 +1482,16 @@ class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.rgb
 
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1516,15 +1515,17 @@ class ImageGenerationModel(Model):
 class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.landmarks
 
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
 
-            if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type=ObjectType.rgb
             img = image2array(img)
             img_shp=img.shape
 
@@ -1556,35 +1557,21 @@ class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
 
-        self._class_names = []
         self.preprocess_flow = []
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.embedding
 
-        self._idx2lab = {}
-        self._lab2idx = {}
 
-    def get_embedded(self, img_path):
-        def norm(x):
-            b = np.sqrt(np.sum(np.square(x)))
-            return x / (b if b != 0 else 1)
-
-        img = image2array(img_path)
-        img = Resize((224, 224), keep_aspect=True)(img)
-        img = Normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
-        img = to_tensor(np.expand_dims(img.transpose([2, 0, 1]), 0))
-        embedding = self.model(img)[0]
-        return norm(embedding)
 
     def infer_single_image(self, img):
-        def norm(x):
-            b = np.sqrt(np.sum(np.square(x)))
-            return x / (b if b != 0 else 1)
 
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
+
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1598,7 +1585,7 @@ class FaceRecognitionModel(Model):
             inp = to_tensor(np.expand_dims(img, 0)).to(torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(self._model.weights[0].data.dtype)
             result = self._model(inp)[0]
             embedding = to_numpy(result)
-            return norm(embedding)
+            return embedding
 
         else:
             raise ValueError('the model is not built yet.')

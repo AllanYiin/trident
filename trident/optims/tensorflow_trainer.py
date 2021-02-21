@@ -23,7 +23,7 @@ from trident.data.mask_common import color2label
 
 from trident.data.transform import Transform
 
-from trident.backend.opencv_backend import array2image, image2array, file2array
+from trident.backend.opencv_backend import array2image, image2array
 
 from trident import __version__
 from trident.backend.common import *
@@ -1468,6 +1468,12 @@ class ImageClassificationModel(Model):
         self.preprocess_flow = []
         self._idx2lab = {}
         self._lab2idx = {}
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.classification_label
 
     @property
     def class_names(self):
@@ -1500,16 +1506,15 @@ class ImageClassificationModel(Model):
         if self._model.built:
             if isinstance(self._model, Layer):
                 self._model.eval()
-                if self._model.input_spec.object_type is None:
-                    self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
                     img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
-            inp = to_tensor(np.expand_dims(img, 0))
+            inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device)
             result = self._model(inp)
             result = to_numpy(result)[0]
             if self.class_names is None or len(self.class_names) == 0:
@@ -1532,14 +1537,17 @@ class ImageClassificationModel(Model):
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+
 
 
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             img_shp = img.shape
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1570,24 +1578,29 @@ class ImageDetectionModel(Model):
         self.preprocess_flow = []
         object.__setattr__(self, 'detection_threshold', 0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
             self._model.to(self.device)
             self._model.eval()
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            rescale_scale = 1
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
-
-            result = self._model(to_tensor(np.expand_dims(img, 0)))
+            img = image_backend_adaption(img)
+            inp = to_tensor(np.expand_dims(img, 0)).to(get_device()).to( self._model.weights[0].value().dtype)
+            result = self._model(inp)
             self._model._set_inputs(to_tensor(np.expand_dims(img, 0)))
             bboxes = self.generate_bboxes(*result, threshold=self.detection_threshold, scale=scale)
             bboxes = self.nms(bboxes)
@@ -1607,6 +1620,12 @@ class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageSegmentationModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
+        self.palette = OrderedDict()
+        self._class_names = []
+        self._idx2lab = {}
+        self._lab2idx = {}
+        if self.input_spec is not None and self.input_spec.object_type is None:
+            self.input_spec.object_type = ObjectType.rgb
 
     @property
     def class_names(self):
@@ -1640,7 +1659,7 @@ class ImageSegmentationModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             rescale_scale = 1.0
@@ -1671,6 +1690,12 @@ class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.rgb
 
     @property
     def reverse_preprocess_flow(self):
@@ -1686,7 +1711,7 @@ class ImageGenerationModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
 
@@ -1707,6 +1732,12 @@ class ImageGenerationModel(Model):
 class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.landmarks
 
 
     def infer_single_image(self, img):
@@ -1714,7 +1745,7 @@ class FaceLandmarkModel(Model):
             self._model.eval()
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
-            img = file2array(img)
+            img = image2array(img)
             img_shp=img.shape
 
             if img.shape[-1] == 4:
@@ -1746,56 +1777,34 @@ class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
 
-        self._class_names = []
         self.preprocess_flow = []
+        if self._model.input_spec.object_type is None:
+            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+            self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+            self._model.signature.outputs.value_list[0].object_type = ObjectType.embedding
 
-        self._idx2lab = {}
-        self._lab2idx = {}
-
-    @property
-    def reverse_preprocess_flow(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
-        for i in range(len(self.preprocess_flow)):
-            fn = self.preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
-        return_list.append(array2image)
-        return return_list
-
-    def get_embedded(self, img_path):
-        def norm(x):
-            b = np.sqrt(np.sum(np.square(x)))
-            return x / (b if b != 0 else 1)
-
-        img = image2array(img_path)
-        img = Resize((224, 224))(img)
-        img = Normalize([131.0912, 103.8827, 91.4953], [1, 1, 1])(img)
-        img = to_tensor(np.expand_dims(img.transpose([2, 0, 1]), 0))
-        embedding = self.model(img)[0]
-        return norm(embedding)
 
     def infer_single_image(self, img):
-        def norm(x):
-            b = np.sqrt(np.sum(np.square(x)))
-            return x / (b if b != 0 else 1)
 
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
-            img = file2array(img)
+
+            img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and not isinstance(func , image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                        rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
             result = self._model(inp)[0]
             embedding = to_numpy(result)
-            return norm(embedding)
+            return embedding
 
         else:
             raise ValueError('the model is not built yet.')
