@@ -94,6 +94,8 @@ class Optimizer(trackable.Trackable):
 
         self.grad_tape = None
 
+
+
     def __getstate__(self):
         return {'defaults': self.defaults, 'state': self.state, 'param_groups': self.param_groups, }
 
@@ -389,8 +391,10 @@ class Adam(Optimizer):
         """
         # grads_and_vars=zip(new_grads, new_vars)
         #grads_and_vars = self._filter_grads(grads_and_vars)
-        group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+
+        group=self.param_groups[0]
+
+        for grad,p in grads_and_vars:
             if grad is None or not p.trainable:
                 continue
 
@@ -408,53 +412,54 @@ class Adam(Optimizer):
                 state['step'] = 0.0
                 state['exp_avg'] = zeros_like(p_data)
                 state['exp_avg_sq'] =zeros_like(p_data)
+                state['max_exp_avg_sq'] = zeros_like(p_data)
 
 
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-            if amsgrad:
-                # Maintains max of all exp. moving avg. of sq. grad. values
-                state['max_exp_avg_sq'] = zeros_like(p_data)
+            max_exp_avg_sq = state['max_exp_avg_sq']
             beta1, beta2 = group['betas']
 
             state['step'] += 1
-            bias_correction1 = 1 - pow(beta1 ,state['step'])
-            bias_correction2 = 1 - pow(beta2,state['step'])
+            bias_correction1 = 1 - beta1 ** state['step']
+            bias_correction2 = 1 - beta2 ** state['step']
+
+            if group['weight_decay'] != 0:
+                grad = grad+p.value()*group['weight_decay']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if len(list(grad.size())) > 3:
+                    grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
 
 
             # Decay the first and second moment running average coefficient
             # m_t = beta1 * m + (1 - beta1) * g_t
             exp_avg = beta1 * exp_avg + (1.0 - beta1) * grad
-            if amsgrad:
-                max_exp_avg_sq = state['max_exp_avg_sq']
             exp_avg_sq = beta2 * exp_avg_sq + (1.0 - beta2) * square(grad)
+
 
             # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
             if amsgrad:
-                max_exp_avg_sq = state['max_exp_avg_sq']
-                # Maintains the maximum of all 2nd moment running avg. till now
                 max_exp_avg_sq=maximum(max_exp_avg_sq, exp_avg_sq)
-                denom =sqrt(max_exp_avg_sq/bias_correction2) +group['eps']
+                denom =(sqrt(max_exp_avg_sq)/sqrt(bias_correction2)) +group['eps']
             else:
-                denom = sqrt(exp_avg_sq/bias_correction2)+ group['eps']
+                denom = (sqrt(exp_avg_sq)/sqrt(bias_correction2))+ group['eps']
 
-
-
-            if group['weight_decay'] != 0:
-                grad = grad +p_data * group['weight_decay']
-
-            step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
+            step_size = group['lr'] / bias_correction1
             G_grad = true_divide(exp_avg, denom)
 
             if self.gradient_centralization in ['all', 'gc']:
                 if len(list(G_grad.size())) > 1:
                     G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(G_grad.size())))), keepdims=True))
 
+
             if any_abnormal_number(p_data):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                 G_grad = where(is_abnormal_number(G_grad), zeros_like(p_data), G_grad)
+
             p.assign_add(-step_size * G_grad)
             state['exp_avg'] = exp_avg
             state['exp_avg_sq'] = exp_avg_sq
+            state['max_exp_avg_sq'] = exp_avg_sq
         return True
 
 
@@ -1155,7 +1160,7 @@ class RAdam(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, N_sma_threshhold=5, weight_decay=0,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, N_sma_threshhold=5, weight_decay=0,
                  degenerated_to_sgd=True, gradient_centralization=None):
         """Construct a new RAdam optimizer.
          Args:
@@ -1592,7 +1597,7 @@ class Ranger(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(.9, 0.999), alpha=0.5, k=6,eps=1e-8, N_sma_threshhold=5, weight_decay=0,
+    def __init__(self, params, lr=1e-3, betas=(.9, 0.999), alpha=0.5, k=6,eps=1e-6, N_sma_threshhold=5, weight_decay=0,
                   gradient_centralization=None):
         """Construct a new RAdam optimizer.
          Args:
@@ -1699,7 +1704,7 @@ class Ranger(Optimizer):
 
             if self.gradient_centralization in ['all', 'gcc']:
                 if grad.ndim > 3:
-                    grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim())),keepdims=True))
+                    grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim)),keepdims=True))
 
 
             exp_avg=beta1 * exp_avg + (1.0 - beta1) * grad
@@ -2129,7 +2134,7 @@ class AdaBelief(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0, amsgrad=False,
                  gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -2247,7 +2252,7 @@ class RangerBelief(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6,eps=1e-8, N_sma_threshhold=5, weight_decay=0,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6,eps=1e-6, N_sma_threshhold=5, weight_decay=0,
                   gradient_centralization=None):
         """Construct a new RAdam optimizer.
          Args:
@@ -2468,7 +2473,7 @@ class DiffGrad(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0,gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
