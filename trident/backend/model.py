@@ -280,8 +280,6 @@ class ModelBase(object):
     @preprocess_flow.setter
     def preprocess_flow(self,value):
         self._preprocess_flow=value
-        self.input_spec=None
-
 
 
     @property
@@ -548,9 +546,7 @@ class ModelBase(object):
         pass
 
     def do_on_epoch_start(self):
-        self.training_context['time_epoch_start'] = time.time()
-        if self.training_context['steps'] == 0:
-            self.training_context['time_epoch_progress'] = self.training_context['time_epoch_start']
+        pass
 
     def do_on_epoch_end(self):
         # set model as training state
@@ -558,14 +554,10 @@ class ModelBase(object):
         pass
 
     def do_on_batch_start(self):
-        self.training_context['time_batch_start'] = time.time()
-        if self.training_context['steps'] == 0:
-            self.training_context['time_batch_progress'] = self.training_context['time_batch_start']
+        pass
 
 
     def do_on_batch_end(self):
-        # set model as training state
-        # zero grad
         pass
 
     def do_on_data_received(self, train_data, test_data):
@@ -711,10 +703,9 @@ class ModelBase(object):
                 format_string = '.3e'
 
             metric_strings.append('{0}: {1}'.format(k,adaptive_format(float(metric_value[-1*int(print_epoch_progress_frequency):].mean()),value_type='metric')))
-        progress_start = self.training_context['time_epoch_progress']
-        progress_end = time.time()
-        step_time = progress_end-progress_start
-        self.training_context['time_epoch_progress']=progress_end
+
+        step_time =self.training_context['time_epoch_progress']
+        self.training_context['time_epoch_progress']=0
         progress_bar(step_time,self.training_context['current_epoch'], self.training_context['total_epoch'],
                      'Loss: {0}| {1} | learning rate: {2:<10.3e}'.format(adaptive_format(loss_value,value_type='loss'), ','.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
 
