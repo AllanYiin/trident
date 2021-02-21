@@ -35,6 +35,7 @@ class ObjectType(Enum):
     classification_label = 'classification_label'
     corpus = 'corpus'
     sequence_label='sequence_label'
+    embedding='embedding'
 
 
 
@@ -56,7 +57,7 @@ def distict_color_count(img):
     return Counter([tuple(colors) for i in img for colors in i])
 
 def pixel_numbers(data):
-    return list(set(data.reshape(-1).to_list()))
+    return list(set(data.reshape(-1).tolist()))
 
 def object_type_inference(data):
     if isinstance(data,np.ndarray):
@@ -72,14 +73,16 @@ def object_type_inference(data):
             return ObjectType.label_mask
         elif data.ndim == 2 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.gray
-        elif data.ndim == 3 and data.shape[-1] == 1 and len(distict_color_count(data))==2:
+        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0]==1 ) and len(distict_color_count(data))==2:
             return ObjectType.binary_mask
-        elif data.ndim == 3 and data.shape[-1] == 1 and (data.max()-data.min()+1)== len(distict_color_count(data)):
+        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0]==1) and (data.max()-data.min()+1)== len(distict_color_count(data)):
             return ObjectType.label_mask
-        elif data.ndim == 3 and data.shape[-1] == 1 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0]==1)and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
             return ObjectType.gray
-        elif data.ndim == 3 and data.shape[-1] == 3 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 :
-            if np.array_equal(data[:,:0],data[:,:1]) and np.array_equal(data[:,:2],data[:,:1]):
+        elif data.ndim == 3 and (data.shape[-1] == 3 or data.shape[0]==3) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 :
+            if np.array_equal(data[:,:,0],data[:,:,1]) and np.array_equal(data[:,:,2],data[:,:,1]):
+                return ObjectType.gray
+            elif np.array_equal(data[0,:,:],data[0,:,:]) and np.array_equal(data[2,:,:],data[2,:,:]):
                 return ObjectType.gray
             elif not np.array_equal(data,data.round()):
                 return ObjectType.rgb
