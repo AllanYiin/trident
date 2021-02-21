@@ -790,17 +790,17 @@ class Signature(object):
     def maybe_not_complete(self):
         if len(self.inputs)<1 and len(self.outputs)<1:
             return True
-
-        elif any([item is not None or 'TensorSpec' not in item.__class__.__name__  for item in self.inputs.value_list ]):
-            return True
-        elif any([item is not None or 'TensorSpec' not in item.__class__.__name__  for item in self.outputs.value_list ]):
-            return True
-        elif any([ 'TensorSpec' in item.__class__.__name__ and item.shape is None  for item in self.inputs.value_list ]):
-            return True
-        elif any([ 'TensorSpec' in item.__class__.__name__ and item.shape is None  for item in self.outputs.value_list ]):
-            return True
-        else:
+        completeness=0
+        if self.inputs.value_list[0] is not None and self.inputs.value_list[0].__class__.__name__=='TensorSpec':
+            if isinstance(self.inputs.value_list[0].shape,TensorShape):
+                completeness+=1
+        if self.outputs.value_list[0] is not None and self.outputs.value_list[0].__class__.__name__=='TensorSpec':
+            if isinstance(self.outputs.value_list[0].shape,TensorShape):
+                completeness+=1
+        if completeness==2:
             return False
+        else:
+            True
 
     def _get_kvsting(self, k, v):
         if v is None:
