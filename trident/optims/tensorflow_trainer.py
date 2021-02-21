@@ -955,24 +955,55 @@ class Model(ModelBase):
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
-
-        ext = '.pth.tar'
-        save_path = os.path.join(folder, filename + ext)
-        if not os.path.exists(save_path):
-            save_path = os.path.join(working_directory, filename + ext)
-        pretrained_dict = load_pthtar(file_path)
         state_dict = None
-        if "state_dict" in pretrained_dict.keys():
-            state_dict = pretrained_dict['state_dict']
+        pretrained_dict = None
+        if ext == '.pth.tar':
+            state_dict = load_pthtar(file_path)
+        elif ext == '.pth':
+            load_path = file_path
+            if not os.path.exists(file_path):
+                if os.path.exists(file_path.replace(ext, '.pth.tar')):
+                    load_path = file_path.replace(ext, '.pth.tar')
+                elif os.path.exists(os.path.join(working_directory, filename + ext)):
+                    load_path = os.path.join(working_directory, filename + ext)
+            recovery_pth = load_pthtar(load_path)
 
-            # pretrained_dict = remove_prefix(pretrained_dict, 'module.')
-        if check_keys(self._model, state_dict):
-            self._model.load_state_dict(state_dict, strict=False)
+            if isinstance(recovery_pth, dict):
+                state_dict = recovery_pth
+
+            elif isinstance(recovery_pth, Layer):
+                state_dict = recovery_pth.state_dict()
+
+        if 'backend' in state_dict and state_dict['backend'] != 'tensorflow':
+            raise RuntimeError(
+                'The model archive {0} is a {1}-based model, but current backend is Tensorflow, so cannot load model properly.'.format(file_path, state_dict['backend']))
+
+        if "state_dict" in state_dict.keys():
+            pretrained_dict = state_dict['state_dict']
+        else:
+            pretrained_dict = state_dict
+
+        if check_keys(self._model, pretrained_dict):
+            has_abnormal = False
+            for key in pretrained_dict.keys():
+                value = pretrained_dict[key]
+                if is_tensor(value) and any_abnormal_number(value):
+                    has_abnormal = True
+                    pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                if is_tensor(value) and ndim(value) == 0:
+                    pretrained_dict[key] = to_tensor(value.item())
+
+            if has_abnormal:
+                sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
+            self._model.load_state_dict(pretrained_dict, strict=False)
             print('Model loaded!')
+            # must switch to evluate first beforeinference or training
+            # Dropout and Batch normalization will behavior change!!!
 
-        self.signature = None
-        if 'signature' in pretrained_dict:
-            self.signature = pretrained_dict['signature']
+            self._model.eval()
+        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
+            self._model.signature = state_dict['signature']
+        self._model.to(get_device())
 
     def merge_grads(self, old_grads, new_grades):
         if isinstance(old_grads, list) and isinstance(new_grades, list) and len(old_grads) == len(new_grades):

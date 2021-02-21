@@ -181,7 +181,6 @@ class Model(ModelBase):
             # output.cpu()
             if output.built and hasattr(output, '_output_shape') and output._output_shape is not None:
                 self._model = output
-                self._model.input_spec = self.inputs.value_list[0]
                 if self._model.signature.maybe_not_complete():
                     self._model.signature = None
                 if self._model.signature is not None and hasattr(self._model.signature, "outputs"):
@@ -212,7 +211,7 @@ class Model(ModelBase):
 
 
                 self._model = output
-                self._model.input_spec=self.inputs.value_list[0]
+                self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
                 if isinstance(out, torch.Tensor):
                     self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
                     self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
@@ -1002,7 +1001,7 @@ class Model(ModelBase):
             self._model.eval()
 
 
-            dummy_input =to_tensor( self.signature.inputs.value_list[0].shape.get_dummy_tensor()).to(get_device())
+            dummy_input =(to_tensor( self.signature.inputs.value_list[0].shape.get_dummy_tensor()))
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -1012,24 +1011,24 @@ class Model(ModelBase):
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
 
-            # self._model.to(get_device())
-            # outputs = self._model(dummy_input)
-            # if dynamic_axes is None:
-            #     dynamic_axes = {self.inputs.key_list[0]: {0: 'batch_size'},  # variable lenght axes
-            #                     self.outputs.key_list[0]: {0: 'batch_size'}}
 
-            dynamic_axes = {}
+            outputs = self._model(dummy_input)
             if dynamic_axes is None:
-                for inp in self.signature.inputs.key_list:
-                    dynamic_axes[inp] = {0: 'batch_size'}
-                for out in self.signature.outputs.key_list:
-                    dynamic_axes[out] = {0: 'batch_size'}
+                dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
+                                self.outputs.key_list[0]: [0]}
+
+            # dynamic_axes = {}
+            #
+            # for inp in self.inputs.key_list:
+            #     dynamic_axes[inp] = [0]
+            # for out in self.outputs.key_list:
+            #     dynamic_axes[out] = [0]
             torch.onnx.export(self._model,  # model being run
                               dummy_input,  # model input (or a tuple for multiple inputs)
                               save_path,  # where to save the model (can be a file or file-like object)
                               export_params=True,  # store the trained parameter weights inside the model file
                               opset_version=11,  # the ONNX version to export the model to
-                              do_constant_folding=True,  # whether to execute constant folding for optimization
+                              do_constant_folding=False,  # whether to execute constant folding for optimization
                               input_names=self.signature.inputs.key_list,  # the model's input names
                               output_names=self.signature.outputs.key_list,  # the model's output names
                               dynamic_axes=dynamic_axes)
@@ -1046,22 +1045,33 @@ class Model(ModelBase):
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
-
-        ext = '.pth.tar'
-        save_path = os.path.join(folder, filename + ext)
-        if not os.path.exists(save_path):
-            save_path = os.path.join(working_directory, filename + ext)
-
-        state_dict = torch.load(save_path, map_location=torch.device(get_device()))
+        state_dict =None
         pretrained_dict = None
-        optimizer_dict = None
+        if ext== '.pth.tar':
+            state_dict = torch.load(file_path, map_location=torch.device(get_device()))
+        elif ext== '.pth':
+            load_path=file_path
+            if not os.path.exists(file_path):
+                if os.path.exists(file_path.replace(ext,'.pth.tar')):
+                    load_path=file_path.replace(ext,'.pth.tar')
+                elif os.path.exists( os.path.join(working_directory, filename + ext)):
+                    load_path = os.path.join(working_directory, filename + ext)
+            recovery_pth = torch.load(load_path, map_location=torch.device(get_device()))
+
+            if isinstance(recovery_pth,dict):
+                state_dict=recovery_pth
+
+            elif isinstance(recovery_pth,Layer):
+                state_dict=recovery_pth.state_dict()
+
+        if 'backend' in state_dict and state_dict['backend'] != 'pytorch':
+            raise RuntimeError(
+                'The model archive {0} is a {1}-based model, but current backend is PyTorch, so cannot load model properly.'.format(file_path, state_dict['backend']))
+
         if "state_dict" in state_dict.keys():
             pretrained_dict = state_dict['state_dict']
-        # if "optimizer_state_dict" in state_dict.keys():
-        #     optimizer_dict = state_dict['state_dict']
-        #
-        # if check_keys(self.optimizer, optimizer_dict):
-        #     self.optimizer.load_state_dict(optimizer_dict, strict=False)
+        else:
+            pretrained_dict = state_dict
 
         if check_keys(self._model, pretrained_dict):
             has_abnormal = False
@@ -1081,13 +1091,8 @@ class Model(ModelBase):
             # Dropout and Batch normalization will behavior change!!!
 
             self._model.eval()
-
-        self._model.signature = None
-        if "signature" in pretrained_dict.keys():
-            self._model.signature = pretrained_dict['signature']
-        if self.signature is None or self.signature != self._model.signature:
-            self.signature = self._model.signature
-
+        if "signature" in state_dict.keys() and (self._model.signature is None or  state_dict['signature'] != self._model.signature):
+            self._model.signature=state_dict['signature']
         self._model.to(get_device())
 
     def summary(self):
@@ -1256,6 +1261,7 @@ class ImageClassificationModel(Model):
         self._idx2lab = {}
         self._lab2idx = {}
 
+
     @property
     def class_names(self):
         return self._class_names
@@ -1286,6 +1292,8 @@ class ImageClassificationModel(Model):
     def infer_single_image(self, img, topk=1):
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
+            # if self._model.input_spec is None:
+            #     self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
@@ -1320,10 +1328,15 @@ class ImageClassificationModel(Model):
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
+        if self.input_spec is not None and self.input_spec.object_type is None:
+            self.input_spec.object_type=ObjectType.rgb
 
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
+            if self._model.input_spec is None:
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
+
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
             img = image2array(img)
@@ -1355,12 +1368,17 @@ class ImageDetectionModel(Model):
         self.preprocess_flow = []
         object.__setattr__(self, 'detection_threshold',  0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
+        if self.input_spec is not None and self.input_spec.object_type is None:
+            self.input_spec.object_type=ObjectType.rgb
 
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
             self._model.to(self.device)
             self._model.eval()
+            if self._model.input_spec is None:
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
+
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
@@ -1400,6 +1418,8 @@ class ImageSegmentationModel(Model):
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
+        if self.input_spec is not None and self.input_spec.object_type is None:
+            self.input_spec.object_type=ObjectType.rgb
 
     @property
     def class_names(self):
@@ -1431,6 +1451,8 @@ class ImageSegmentationModel(Model):
     def infer_single_image(self, img):
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
+            if self._model.input_spec is None:
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
@@ -1467,6 +1489,8 @@ class ImageGenerationModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
+            if self._model.input_spec is None:
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
@@ -1496,8 +1520,9 @@ class FaceLandmarkModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            if  self._model.input_spec is None:
-                self._model.input_spec=self.inputs.value_list[0]
+
+            if self._model.input_spec is None:
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type=ObjectType.rgb
             img = image2array(img)
@@ -1556,6 +1581,8 @@ class FaceRecognitionModel(Model):
 
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
+            if self._model.input_spec is None:
+                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].data.dtype, object_type=ObjectType.rgb)
             if self._model.input_spec.object_type is None:
                 self._model.input_spec.object_type = ObjectType.rgb
             img = image2array(img)
