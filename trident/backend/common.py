@@ -788,7 +788,7 @@ class Signature(object):
 
 
     def maybe_not_complete(self):
-        if len(self.inputs)<1 and len(self.outputs)<1:
+        if len(self.inputs)<1 or len(self.outputs)<1:
             return True
         completeness=0
         if self.inputs.value_list[0] is not None and self.inputs.value_list[0].__class__.__name__=='TensorSpec':
