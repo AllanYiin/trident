@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -94,12 +95,24 @@ def check_integrity(fpath, md5=None):
     fmd5=calculate_md5(fpath)
     return  md5 == fmd5
 
-def _write_h(dirname,is_downloaded=False,is_extracted=False):
+def _write_h(dirname,is_downloaded=False,is_extracted=False,tag=None):
     _h_path = os.path.join(dirname, 'status.json')
-    _h = {
-        'is_downloaded': is_downloaded,
-        'is_extracted': is_extracted
-    }
+    _h={}
+    if os.path.exists(_h_path):
+        try:
+            with open(_h_path) as f:
+                _h = json.load(f)
+        except ValueError:
+            _h = {}
+    if tag is None:
+        _h['is_downloaded']=is_downloaded
+        _h['is_extracted'] = is_extracted
+    else:
+        if tag not in _h:
+            _h[tag]={}
+        _h[tag]['is_downloaded'] = is_downloaded
+        _h[tag]['is_extracted'] = is_extracted
+
     try:
         with open(_h_path, 'w') as f:
             f.write(json.dumps(_h, indent=4))
@@ -116,10 +129,19 @@ def _read_h(dirname):
         except ValueError:
             _h = {}
     return _h
+def _delete_h(dirname):
+
+    _h_path = os.path.join(dirname, 'status.json')
+    if os.path.exists(_h_path):
+        os.remove(_h_path)
 
 def download_file(src, dirname, filename, desc=''):
+
     _h = _read_h(dirname)
-    if os.path.exists(os.path.join(dirname, filename)) and _h != {} and _h.get('is_downloaded', False) == True:
+
+    is_downloaded= _h[filename].get('is_downloaded', False) if filename in _h else _h.get('is_downloaded', False)
+
+    if os.path.exists(os.path.join(dirname, filename)) and _h != {} and is_downloaded == True:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
@@ -129,13 +151,11 @@ def download_file(src, dirname, filename, desc=''):
         try:
             with TqdmProgress(unit='B', unit_scale=True,  leave=True,miniters=10, desc=desc) as t:  # all optional kwargs
                 urlretrieve(src, filename=os.path.join(dirname, filename), reporthook=t.update_to, data=None)
-                _write_h(dirname, True, False)
+                _write_h(dirname, True, False,tag=filename)
             return True
         except Exception as e:
-            _write_h(dirname, False, False)
-            print('***Cannot download data, so the data provider cannot initialized.\n',flush=True)
-            print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format( dirname,src),flush=True)
-
+            _write_h(dirname, False, False,tag=filename)
+            print('***Cannot download data,.\n',flush=True)
             print(e)
             return False
 
@@ -180,21 +200,25 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None,ne
     _h = _read_h(dirname)
 
     dest_path = os.path.join(dirname, filename)
-    if os.path.exists(dest_path) and os.path.isfile(dest_path) and _h != {} and _h.get('is_downloaded', False) == True and need_up_to_date==False:
+    is_downloaded= _h[filename].get('is_downloaded', False) if filename in _h else _h.get('is_downloaded', False)
+
+    if os.path.exists(dest_path) and os.path.isfile(dest_path) and _h != {} and is_downloaded== True and need_up_to_date==False:
         print('archive file is already existing, donnot need download again.')
         return True
     else:
         try:
             session = requests.Session()
             response = session.get(url, params={'id': file_id}, stream=True)
+
             token = _get_confirm_token(response)
             if token:
                 params = {'id': file_id, 'confirm': token}
                 response = session.get(url, params=params, stream=True)
             _save_response_content(response, dest_path)
-            _write_h(dirname,True,False)
+            _write_h(dirname,True,False,filename)
             return True
         except Exception as e:
+            _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print( '***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
             print(e)
@@ -236,8 +260,10 @@ def download_file_from_onedrive(onedrive_path, dirname, filename=None, md5=None)
         try:
             with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10, desc='') as t:  # all optional kwargs
                 urlretrieve(url, filename=dest_path, reporthook=t.update_to, data=None)
+                _write_h(dirname, True, False, filename)
             return True
         except Exception as e:
+            _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0} '.format(dirname), flush=True)
 
@@ -367,12 +393,13 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
                     params = {'id': file_id, 'confirm': token}
                     response = session.get(url, params=params, stream=True)
                 _save_response_content(response, fpath)
-
+                _write_h(dirname, True, False, filename)
                 if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
                     print('model file is downloaded and validated.')
                 else:
                     print('model file is downloaded but not match md5.')
         except Exception as e:
+            _write_h(dirname, False, False, filename)
             print(e)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print('***Please check your internet or download  files from following url in another computer, \n and then '
@@ -393,7 +420,7 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
     """
     # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
     import requests
-    url = "https://docs.google.com/uc?export=download"
+    url=get_onedrive_directdownload(onedrive_path)
 
     fpath = os.path.join(dirname, filename)
     isload = False
@@ -417,14 +444,16 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
         check_internet=False
 
 
+
     if check_internet == False:
         if os.path.exists(os.path.join(dirname, filename)):
             print('internet connect  error,model file is already existing, donnot need download again.')
             return True
         else:
+            _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print('***Please check your internet or download  files from following url in another computer, \n and then '
-                'put them into {0}\n {1} '.format( dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
+                'put them into {0}\n {1} '.format( dirname,url), flush=True)
 
         return False
     else:
@@ -443,23 +472,19 @@ def download_model_from_onedrive(onedrive_path, dirname, filename=None, md5=None
                         need_download = False
 
             if need_download:
-                session = requests.Session()
-                response = session.get(url, params={'id': file_id}, stream=True)
-                token = _get_confirm_token(response)
-                if token:
-                    params = {'id': file_id, 'confirm': token}
-                    response = session.get(url, params=params, stream=True)
-                _save_response_content(response, fpath)
-
+                with TqdmProgress(unit='B', unit_scale=True, leave=True, miniters=10, desc='') as t:  # all optional kwargs
+                    urlretrieve(url, filename=os.path.join(dirname, filename), reporthook=t.update_to, data=None)
+                _write_h(dirname, True, False, filename)
                 if check_integrity(os.path.join(dirname, filename), models_md5[filename]):
                     print('model file is downloaded and validated.')
                 else:
                     print('model file is downloaded but not match md5.')
         except Exception as e:
+            _write_h(dirname, False, False, filename)
             print(e)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
             print('***Please check your internet or download  files from following url in another computer, \n and then '
-                'put them into {0}\n {1} '.format(dirname, 'https://drive.google.com/open?id={0}'.format(file_id)), flush=True)
+                'put them into {0}\n {1} '.format(dirname, url), flush=True)
             print(e)
 
         return False
@@ -475,16 +500,17 @@ def _get_confirm_token(response):
 
 
 def _save_response_content(response, destination, chunk_size=32768):
-    folder, file=os.path.split(destination)
-    progress=0
+    folder, file = os.path.split(destination)
+    progress = 0
     with open(destination, "wb") as f:
-        pbar = TqdmProgress(response.iter_content(chunk_size=chunk_size), total=None, unit='MB',unit_scale=True, miniters=10,desc=file, leave=True, file=sys.stdout)
+        pbar = TqdmProgress(response.iter_content(chunk_size=chunk_size), total=None, unit='MB', unit_scale=True, miniters=10, desc=file, leave=True, file=sys.stdout)
         for chunk in pbar:
             if chunk:  # filter out keep-alive new chunks
                 f.write(chunk)
                 progress += len(chunk)
                 pbar.update(progress - pbar.n)
         pbar.close()
+
 
 
 
@@ -505,9 +531,11 @@ def extract_archive(file_path, target_folder=None, archive_format='auto'):
       True if a match was found and an archive extraction was completed,
       False otherwise.
   """
-  folder,_=os.path.split(file_path)
+  folder,file, ext=split_path(file_path)
   _h = _read_h(target_folder)
-  if _h != {} and _h.get('is_extracted', False) == True:
+  filename=file+ext
+  is_extracted = _h[filename].get('is_extracted', False) if filename in _h else _h.get('is_extracted', False)
+  if _h != {} and is_extracted== True and os.path.exists(filename) :
       print('extraction is finished, donnot need extract again.')
       return True
   if archive_format is None:
@@ -536,13 +564,14 @@ def extract_archive(file_path, target_folder=None, archive_format='auto'):
             except (tarfile.TarError, RuntimeError, KeyboardInterrupt):
                 sys.stderr.write('Decompressing the archive is not success')
                 PrintException()
-                _write_h(target_folder, True, False)
+                _write_h(target_folder, True, False,filename)
                 if os.path.exists(target_folder):
                     shutil.rmtree(target_folder)
                 raise
+        _write_h(target_folder, True, True, filename)
         return True
     else:
-        _write_h(target_folder, False, False)
+        _write_h(target_folder, True, False,filename)
   return False
 
 
@@ -585,4 +614,16 @@ def check_image(image, imagepath):
 def read_mat(mat_path):
     mat = loadmat(mat_path)
     return mat
+
+def get_file_create_time(file_path):
+    if platform.system() == 'Windows':
+        return os.path.getctime(file_path)
+    else:
+        stat = os.stat(file_path)
+        try:
+            return stat.st_birthtime
+        except AttributeError:
+            # We're probably on Linux. No easy way to get creation dates here,
+            # so we'll settle for when its content was last modified.
+            return stat.st_mtime
 
