@@ -11,6 +11,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops.losses import loss_reduction
 from tensorflow.python.ops.losses import util as tf_losses_utils
+from trident import context
+
 from trident.backend.common import camel2snake, get_class, epsilon, PrintException
 from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
@@ -35,7 +37,7 @@ from trident.backend.common import dtype as Dtype
 
 
 __all__ = ['get_loss','_ClassificationLoss', 'CrossEntropyLoss', 'MSELoss', 'EdgeLoss', 'NLLLoss', 'F1ScoreLoss', '_ClassificationLoss',
-           'FocalLoss','DiceLoss','L1Loss','L2Loss','SmoothL1Loss','WingLoss','AdaptiveWingLoss']
+           'FocalLoss','DiceLoss','L1Loss','L2Loss','SmoothL1Loss','WingLoss','AdaptiveWingLoss','IoULoss','SoftIoULoss']
 
 
 
@@ -87,9 +89,18 @@ class _ClassificationLoss(Loss):
         self.ignore_index = ignore_index
         self.ignore_index_weight=None
         self.auto_balance = auto_balance
+        self.auto_balance = auto_balance
         if self.auto_balance:
-            self.running_statistics = None
+            self.label_statistics = None
+            ctx = context._context()
+            if hasattr(ctx._thread_local_info, 'data_providers') and len(ctx._thread_local_info.data_providers) > 0:
+                dp = list(ctx._thread_local_info.data_providers.values())[0]
+                if dp.traindata.label.__class__.__name__ == 'LabelDataset':
+                    unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
+                    reweights = np.clip(counts, 1, np.inf) / np.sum(counts).astype(np.float32)
 
+                    reweights1 = np.max(reweights) / reweights
+                    self.label_statistics = reweights1
         if cutoff is not None and not 0 < cutoff < 1:
             raise ValueError('cutoff should between 0 and 1')
         self.cutoff = cutoff
@@ -330,15 +341,17 @@ class _PairwiseLoss(Loss):
 
     def flatten_check(self, output, target):
         "Check that `out` and `targ` have the same number of elements and flatten them."
+        out_shp = int_shape(output)
+        tar_shp = int_shape(target)
         if ndim(output) > 2:
-            output = reshape(output,(-1,int_shape(output)[-1]))
-        if ndim(target) > 2:
-            target =reshape(target,(-1,int_shape(target)[-1]))
+            output = reshape(output,(out_shp[0],-1,out_shp[-1]))
+        if ndim(target) >2 and len(tar_shp)-1==len(tar_shp)  :
+            target =reshape(target,(tar_shp[0],-1))
+        elif ndim(target) >2 and len(tar_shp)==len(tar_shp)  :
+            target = reshape(target, (tar_shp[0], -1, tar_shp[-1]))
 
-        if len(output) == len(target):
-            return output, target
-        else:
-            raise ValueError('output and target have diffent elements.')
+        return output, target
+
 
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
@@ -487,21 +500,28 @@ class CrossEntropyLoss(_ClassificationLoss):
         # if self.ignore_index_weight is not None and ndim(self.ignore_index_weight)==1:
         #     self.ignore_index_weight=expand_dims(self.ignore_index_weight,0)
         with self._name_scope:
-            sample_weight = cast(self.sample_weight,output.dtype)*cast( self.ignore_index_weight,output.dtype)
-            if ndim(output) == 2:
-                pass
-            else:
-                reshape_shape = [1] * ndim(output)
-                reshape_shape[self.axis] = self.num_classes
-                sample_weight = sample_weight.reshape(reshape_shape)
+            sample_weight =expand_dims(cast(self.sample_weight,output.dtype)*cast( self.ignore_index_weight,output.dtype),0)
+            n_=ndim(output)-ndim(sample_weight)
+            for n in range(n_):
+                sample_weight=expand_dims(sample_weight,1)
+
+
+
 
             # -sum([p[i] * log2(q[i]) for i in range(len(p))])
             if not self.is_logsoftmax:
-                loss = -reduce_sum(target * log_softmax(output, axis=self.axis) * sample_weight,axis=-1)
+                loss = -reduce_sum(target * log_softmax(output, axis=self.axis,keepdims=True) * sample_weight,axis=-self.axis)
             else:
 
-                loss = -reduce_sum(target * output * sample_weight,axis=-1)
-            return loss
+                loss = -reduce_sum(target * output * sample_weight,axis=self.axis)
+            if ndim(loss)>1:
+                reduce_axes = list(range(loss.ndim))
+                reduce_axes.remove(0)
+                if len(reduce_axes) == 0:
+                    reduce_axes = None
+                return reduce_mean(loss,axis=reduce_axes)
+            else:
+                return loss
 
 
 class NLLLoss(_ClassificationLoss):
@@ -535,6 +555,10 @@ class NLLLoss(_ClassificationLoss):
                  reduction='mean' , enable_ohem=False, ohem_ratio=3.5, name='NLLLoss'):
         super().__init__(axis, sample_weight, auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction, enable_ohem,ohem_ratio,name)
         self._built = True
+        self.need_target_onehot=True
+
+
+
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -550,8 +574,19 @@ class NLLLoss(_ClassificationLoss):
         with self._name_scope:
             reshape_shape = [1] * ndim(output)
             reshape_shape[self.axis] = self.num_classes
-            loss = reduce_sum(-target * output * reshape(tf.stop_gradient(self.sample_weight), reshape_shape),axis=-1)
-            return loss
+            sample_weight = reshape(cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype), reshape_shape)
+
+
+            loss = reduce_sum(-target * output * self.sample_weight,axis=self.axis)
+            if ndim(loss) > 1:
+                reduce_axes = list(range(loss.ndim))
+                reduce_axes.remove(0)
+                if len(reduce_axes) == 0:
+                    reduce_axes = None
+                return reduce_mean(loss, axis=reduce_axes)
+            else:
+                return loss
+
 
 
 class F1ScoreLoss(_ClassificationLoss):
@@ -627,6 +662,7 @@ class FocalLoss(_ClassificationLoss):
         self.gamma = gamma
         self.threshold = threshold
         self.normalized = normalized
+        self.need_target_onehot=True
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -735,18 +771,16 @@ class DiceLoss(_ClassificationLoss):
         """
         with self._name_scope:
             if self.is_logsoftmax:
-                output=exp(output)
+                output=clip(exp(output),max=-1e-8)
+            sample_weight = expand_dims(cast(self.sample_weight,output.dtype)*cast( self.ignore_index_weight,output.dtype),0)
             reduce_axes=list(range(target.ndim))
             axis=self.axis if self.axis>=0 else target.ndim+self.axis
             reduce_axes.remove(0)
-            reduce_axes.remove(axis)
-            loss_weights=self.sample_weight.copy()
-            # for k in range(target.ndim-self.loss_weights.ndim):
-            #     loss_weights=loss_weights.expand_dims(0)
-            intersection = reduce_sum(target * output, axis=reduce_axes)*loss_weights
-            den1 = reduce_sum(output, axis=reduce_axes)*loss_weights
-            den2 = reduce_sum(target, axis=reduce_axes)*loss_weights
-            dice = 1.0 - ((2.0 * intersection + self.smooth) / (den1 + den2 + self.smooth))
+
+            intersection = reduce_sum(target * output*sample_weight, axis=reduce_axes)
+            denominator = reduce_sum((output+target)*sample_weight, axis=reduce_axes)
+
+            dice = 1.0 - 2.0 * (intersection + self.smooth) / (denominator+ self.smooth)
             return dice
 
 
@@ -985,23 +1019,32 @@ class EdgeLoss(_PairwiseLoss):
             loss2 = tf.reduce_mean(tf.math.square(self.first_order(output, 2) - self.first_order(target, 2)))
             return loss1 + loss2
 
-class IoULoss(Loss):
-    def __init__(self, ignore_index=-1000, reduction='mean'):
-        super(IoULoss, self).__init__(reduction=reduction)
-        self.ignore_index = ignore_index
+
+class IoULoss(_ClassificationLoss):
+    def __init__(self,axis=-1, sample_weight=None,auto_balance=False, from_logits=False, ignore_index=0, cutoff=None, label_smooth=False, reduction='mean' , enable_ohem=False, ohem_ratio=3.5, name='lou_loss'):
+        super(IoULoss, self).__init__(raxis=axis, sample_weight=sample_weight,auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem,ohem_ratio=ohem_ratio,name=name)
+        self.need_target_onehot=True
+        self.is_multiselection = False
+        self.is_logsoftmax=False
+        self._built = True
 
     def calculate_loss(self, output, target, **kwargs):
-        output = argmax(output, 1)
-        output_flat = output.reshape(-1)
-        target_flat = target.reshape(-1)
-        output_flat = output_flat[target_flat != self.ignore_index]
-        target_flat = target_flat[target_flat != self.ignore_index]
-        output_flat = output_flat[target_flat != 0]
-        target_flat = target_flat[target_flat != 0]
-        intersection = (output_flat == target_flat).to(output.dtype).sum()
-        union = ((output_flat + target_flat) > 0).to(output.dtype).sum().clamp(min=1)
-        loss = -(intersection / union).log()
-        return loss
+        with self._name_scope:
+            reshape_shape = [1] * ndim(output)
+            reshape_shape[self.axis] = self.num_classes
+            sample_weight = reshape(cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype), reshape_shape)
+
+            _dtype=output.dtype
+            if self.is_logsoftmax:
+                output = clip(exp(output), 1e-8, 1 - 1e-8)
+                self.from_logits = True
+            if not self.from_logits:
+                output = softmax(output, self.axis)
+
+            intersection = reduce_sum(output*target*sample_weight)
+            union = reduce_sum((output+target)*sample_weight)-intersection
+            loss = -log(intersection / union)
+            return loss
 
 
 class SoftIoULoss(Loss):
@@ -1017,7 +1060,7 @@ class SoftIoULoss(Loss):
 
         N = len(output)
 
-        pred =tf.math.softmax(output, dim=1)
+        pred =softmax(output, dim=1)
         target_onehot = make_onehot(target, self.n_classes)
 
         # Numerator Product
@@ -1034,7 +1077,6 @@ class SoftIoULoss(Loss):
 
         # Return average loss over classes and batch
         return -loss.mean()
-
 
 
 def get_loss(loss_name):
