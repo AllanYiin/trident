@@ -11,6 +11,8 @@ from xml.etree import ElementTree
 import numpy as np
 import copy
 import cv2
+from trident.data.utils import _delete_h
+
 from trident.backend.opencv_backend import image2array, array2image
 from trident.data.image_common import list_images
 from trident.data.data_provider import *
@@ -364,7 +366,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
     base_folder = sanitize_path(base_folder)
     if base_folder is not None and os.path.exists(base_folder):
         print(base_folder)
-        if folder_as_label == True:
+        if folder_as_label:
             class_names = []
             if classes is not None and isinstance(classes, list) and len(classes) > 0:
                 class_names.extend(classes)
@@ -388,7 +390,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                 labels.extend([i] * len(class_imgs))
                 imgs.extend(class_imgs)
 
-            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
+            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb)
             print('extract {0} images...'.format(len(imagedata)))
             labelsdata = LabelDataset(labels,object_type=ObjectType.classification_label)
             labelsdata.binding_class_names(class_names)
@@ -399,7 +401,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
 
         else:
             imgs = list_images(base_folder)
-            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb, get_image_mode=GetImageMode.processed)
+            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb)
             traindata = Iterator(data=imagedata)
             dataset = DataProvider(dataset_name, traindata=traindata)
         return dataset
@@ -509,8 +511,8 @@ def load_lfw(format='aligned_face', is_paired=False):
     # detector = mtcnn.Mtcnn(pretrained=True,verbose=False)
     # detector.minsize = 70
     #
-    # detector.detection_threshould = [0.8, 0.8, 0.9]
-    # detector.nms_threshould = [0.5, 0.5, 0.3]
+    # detector.detection_threshold = [0.8, 0.8, 0.9]
+    # detector.nms_threshold = [0.5, 0.5, 0.3]
     # faces = glob.glob(os.path.join(dirname, 'lfw-deepfunneled' if only_aligned_face else 'lfw') + '/*/*.*g')
     # faces_crop=glob.glob(os.path.join(dirname, 'lfw-crop')+ '/*/*.*g')
     # if len(faces_crop)==0 or len(faces_crop)!=len(faces):
@@ -523,10 +525,10 @@ def load_lfw(format='aligned_face', is_paired=False):
     #         else:
     #             make_dir_if_need(new_path)
     #             img = read_image(img_path)
-    #             detector.detection_threshould = [0.8, 0.8, 0.9]
+    #             detector.detection_threshold = [0.8, 0.8, 0.9]
     #             results = detector.infer_single_image(img_path)
     #             if len(results)==0 or results is None:
-    #                 detector.detection_threshould = [0.5, 0.7, 0.8]
+    #                 detector.detection_threshold = [0.5, 0.7, 0.8]
     #                 results = detector.infer_single_image(img_path)
     #
     #             results = detector.rerec(to_tensor(results), img.shape)
@@ -650,8 +652,14 @@ def load_examples_data(dataset_name):
         dataset = load_folder_images(dataset_name, dirname, folder_as_label=True)
         return dataset
     elif dataset_name == 'examples_nsfw':
-        download_file_from_google_drive('1EXpV2QUrSFJ7zJn8NqtqFl1k6HvXsUzp', dirname, 'nsfw.tar')
         tar_file_path = os.path.join(dirname, 'nsfw.tar')
+        if os.path.exists(tar_file_path) and get_file_create_time(tar_file_path)<datetime.datetime(2021, 2, 20, 0, 0, 0).timestamp():
+            os.remove(tar_file_path)
+            if os.path.exists(os.path.join(dirname,'porn_detection_data.pkl')):
+                os.remove(os.path.join(dirname,'porn_detection_data.pkl'))
+            _delete_h(dirname)
+        download_file_from_google_drive('1EXpV2QUrSFJ7zJn8NqtqFl1k6HvXsUzp', dirname, 'nsfw.tar')
+
         extract_path = os.path.join(dirname, 'nsfw')
         extract_archive(tar_file_path, dirname, archive_format='tar')
         folders = ['drawings', 'hentai', 'neutral', 'porn', 'sexy']
@@ -679,8 +687,8 @@ def load_examples_data(dataset_name):
 
         dataset = DataProvider(dataset_name, traindata=train_iter, testdata=test_iter)
         dataset.binding_class_names(['drawing', 'hentai', 'neutral', 'porn', 'sexy'], 'en-us')
-        dataset.binding_class_names(['繪畫', '色情漫畫', '中性', '色情', '性感'], 'zh-tw')
         dataset.binding_class_names(['绘画', '色情漫画', '中性', '色情', '性感'], 'zh-cn')
+        dataset.binding_class_names(['繪畫', '色情漫畫', '中性', '色情', '性感'], 'zh-tw')
         dataset.scenario = 'train'
         return dataset
     elif dataset_name == 'examples_simpsons':
