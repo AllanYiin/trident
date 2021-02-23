@@ -33,7 +33,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy'
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu','crelu',  'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
+           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse','index_select',
            'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_crossentropy']
@@ -70,14 +70,15 @@ def numpy_compatible(func):
             mathfuncs=get_function(func.__name__, ['math','numpy','trident.backend.numpy_ops'])
             y = mathfuncs(*args, **kwargs)
             return y
-        elif isinstance(x, list) and all([isinstance(arg, np.ndarray) for arg in x]) and func.__name__ in ['concate','stack','vstack','hstack']:
-            numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
-            y = numpy_func(*args, **kwargs)
-            return y
-        elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
-            tensor_func = get_function(func.__name__, ['trident.backend.tensorflow_ops'])
-            y = tensor_func(*args, **kwargs)
-            return y
+        # elif isinstance(x, list) and all([isinstance(arg, np.ndarray) for arg in x]) and func.__name__ in ['concate','stack','vstack','hstack']:
+        #     numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
+        #     y = numpy_func(*args, **kwargs)
+        #     return y
+        # elif isinstance(x, list) and all([isinstance(arg, Tensor) for arg in x])  and func.__name__ in ['concate','stack','vstack','hstack']:
+        #     tensor_func = get_function(func.__name__, ['trident.backend.pytorch_ops'])
+        #     y = tensor_func(*args, **kwargs)
+        #     return y
+        #
         elif isinstance(x, np.ndarray):
             numpy_func = get_function(func.__name__, ['trident.backend.numpy_ops','numpy'])
             if numpy_func is not None:
@@ -352,7 +353,7 @@ def ndim(x):
         (int) The number of dimensions
 
     """
-    return x.shape.rank
+    return len(int_shape(x))
 
 
 @numpy_compatible
@@ -3386,15 +3387,15 @@ def reverse(x, axis):
 ############################
 ## tensor manipulation
 ###########################
-@numpy_compatible
+
 def concate(x: List[Tensor], axis=-1):
     return tf.concat(x, axis=axis)
 
-@numpy_compatible
+
 def stack(x: List[Tensor], axis=-1):
     return tf.stack(x, axis=axis)
 
-@numpy_compatible
+
 def split(x: Tensor, num_splits=2,axis=-1):
     """Splits a tensor `value` into a list of sub tensors.
 
