@@ -16,7 +16,7 @@ from trident.backend.tensorflow_ops import *
 _tf_data_format = 'channels_last'
 
 __all__ = ['MaxPool2d', 'MaxPool1d', 'MaxPool3d', 'MaxUnpool2d', 'AvgPool1d', 'AvgPool2d', 'AvgPool3d',
-           'GlobalAvgPool1d','GlobalAvgPool2d']
+           'GlobalAvgPool1d','GlobalAvgPool2d','AdaptiveAvgPool2d']
 
 _session = get_session()
 
@@ -606,3 +606,49 @@ class GlobalAvgPool2d(Layer):
 
         x = tf.reduce_mean(x, [1, 2], keepdims=self.keepdims)
         return x
+
+
+
+class AdaptiveAvgPool2d(Layer):
+    r"""
+     Applies a 2D adaptive average pooling over an input signal composed of
+     several input planes.
+
+     See :class:`~torch.nn.AdaptiveAvgPool2d` for details and output shape.
+
+     Args:
+         output_size: (height,width)the target output size (single integer or
+             double-integer tuple)
+
+    Examples:
+        >>> a=random_normal((2,64,64,96))
+        >>> pool=AdaptiveAvgPool2d((16,16))
+        >>> out=pool(a)
+        >>> print(int_shape(out))
+        (2, 16, 16, 96)
+        >>> pool=AdaptiveAvgPool2d((16,8))
+        >>> out=pool(a)
+        >>> print(int_shape(out))
+        (2, 16, 8 96)
+     """
+    def __init__(self, output_size, name='adaptive_avg_pool'):
+        super(AdaptiveAvgPool2d, self).__init__()
+        self.output_size = _pair(output_size)
+        self.name = name
+
+    def build(self, input_shape:TensorShape):
+        if not self._built:
+            inp_size = to_tensor(input_shape.dims[1:3], dtype=dtype.float32)
+            out_size = to_tensor(list(self.output_size), dtype=dtype.float32)
+            self.strides = floor(inp_size / out_size)
+            self.kernels = inp_size - (out_size - 1) * self.strides
+
+            self._built = True
+
+    def forward(self, x, **kwargs):
+        x = tf.nn.avg_pool2d(x, ksize=to_list(self.kernels), strides=self.strides, padding='VALID')
+        return x
+
+
+
+
