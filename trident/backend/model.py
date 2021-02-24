@@ -580,12 +580,8 @@ class ModelBase(object):
         pass
 
     def do_post_gradient_update(self):
+        self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],self.training_context['current_loss'].item)
 
-        self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],self.training_context['current_loss'])
-        if self.training_context['is_collect_data'] :
-            steps,values=self.training_context['tmp_losses'].get_series('total_losses')
-            self.training_context['losses'].collect('total_losses',self.training_context['steps'],float(np.asarray(values).mean()))
-            self.training_context['tmp_losses'].reset()
 
     def do_on_metrics_evaluation_start(self):
         pass
@@ -876,12 +872,7 @@ class ModelBase(object):
                 # ON_POSTBACKWARD_CALCULATION
                 self.do_post_gradient_update()
 
-                # if isinstance(self._model, Layer) and any_abnormal_number(self._model):
-                #     for para in self._model.parameters():
-                #         if any_abnormal_number(para):
-                #             para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
 
-                # model comfirm
                 for k, v in self._constraints.items():
                     if self.training_context['stop_update'] == 0 :
                         v(self._model)
@@ -915,7 +906,7 @@ class ModelBase(object):
 
                 for k, v in self._metrics.items():
                     collect_history =getattr(v,'collect_history') if  hasattr(v,'collect_history') else True
-                    if collect_history == True:
+                    if collect_history:
                         self.training_context['metrics'].regist(k)
                     self.training_context['tmp_metrics'].regist(k)
 
@@ -939,8 +930,14 @@ class ModelBase(object):
                     #aggregate tmp data and move to metrics history
                     for k, v in self.training_context['tmp_metrics'].items():
                         steps,values=self.training_context['tmp_metrics'].get_series(k)
-                        self.training_context['metrics'].collect(k, self.training_context['steps'], np.asarray(values).mean())
+                        self.training_context['metrics'].collect(k, self.training_context['steps'], np.array(values).mean())
                     self.training_context['tmp_metrics'].reset()
+
+                    for k, v in self.training_context['tmp_losses'].items():
+                        steps, values = self.training_context['tmp_losses'].get_series(k)
+                        self.training_context['losses'].collect(k, self.training_context['steps'], np.array(values).mean())
+                    self.training_context['tmp_losses'].reset()
+
 
                 # ON_BATCH_END
                 self.do_on_batch_end()
@@ -976,10 +973,10 @@ class ModelBase(object):
                 self.do_on_epoch_end()
                 batch_steps,batch_values=self.training_context['losses'].get_series('total_losses')
                 if not hasattr(self.training_context['losses'],'last_aggregate_idx'):
-                    self.epoch_loss_history.collect('total_losses',self.training_context['current_epoch'],np.asarray(batch_values).mean())
+                    self.epoch_loss_history.collect('total_losses',self.training_context['current_epoch'],np.array(batch_values).mean())
                     self.training_context['losses'].last_aggregate_idx=len(batch_values)
                 else:
-                    self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'], np.asarray(batch_values[self.training_context['losses'].last_aggregate_idx:]).mean())
+                    self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'], np.array(batch_values[self.training_context['losses'].last_aggregate_idx:]).mean())
                     self.training_context['losses'].last_aggregate_idx = len(batch_values)
 
 
@@ -987,11 +984,11 @@ class ModelBase(object):
                 for k, v in self.training_context['metrics'].items():
                     metric_steps, metric_values = self.training_context['metrics'].get_series(k)
                     if not hasattr(self.training_context['metrics'], 'last_aggregate_idx'):
-                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values).mean())
+                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values).mean())
                         self.training_context['metrics'].last_aggregate_idx = len(metric_values)
                     else:
                         if self.training_context['metrics'].last_aggregate_idx<len(metric_values):
-                            self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.asarray(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
+                            self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
                             self.training_context['metrics'].last_aggregate_idx = len(metric_values)
 
 

@@ -625,8 +625,8 @@ class Model(ModelBase):
         self.eval()
 
     def do_on_epoch_start(self):
-        self.training_context['time_epoch_start'] = time.time()
-        if self.training_context['current_batch'] == 0:
+        if self.training_context['steps'] == 0:
+            self.training_context['time_epoch_start'] = time.time()
             self.training_context['time_epoch_progress'] = 0
 
         if self.warmup > 0 and self.training_context['current_epoch'] < self.warmup:
@@ -639,8 +639,7 @@ class Model(ModelBase):
 
 
     def do_on_epoch_end(self):
-        self.training_context['time_epoch_end'] = time.time()
-        self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_epoch_start'])
+        pass
 
     def do_on_batch_start(self):
         if self.training_context['steps'] == 0:
@@ -652,7 +651,10 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
+        diff=( time.time() -self.training_context['time_batch_start'] )
+        self.training_context['time_batch_progress']+=diff
+        self.training_context['time_epoch_progress'] += diff
+        self.training_context['steps'] += 1
         if self.training_context['steps'] % 100 == 0:
             gc.collect()
         if self.training_context['steps'] % 200 == 0:
@@ -660,16 +662,16 @@ class Model(ModelBase):
                 self._model.cpu()
                 self._model.cuda()
 
-            if (self.training_context['steps'] + 1) % _session.epoch_equivalent == 0:
-                if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // _session.epoch_equivalent:
-                    self.adjust_learning_rate(self.training_context['base_lr'])
-                    self.warmup = 0
-            if self.training_context['current_batch'] == 0 and self.training_context['is_print_batch_progress'] == True:
-                temp = OrderedDict()
-                for k in self.training_context['losses'].key_list:
-                    if len(self.training_context['losses'][k]) > 0:
-                        temp[k] = self.training_context['losses'][k][-1][-1]
-                print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v,value_type='loss')) for k, v in temp.items()]) + ' }')
+        if (self.training_context['steps'] + 1) % _session.epoch_equivalent == 0:
+            if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // _session.epoch_equivalent:
+                self.adjust_learning_rate(self.training_context['base_lr'])
+                self.warmup = 0
+        if self.training_context['current_batch'] == 0 and self.training_context['is_print_batch_progress'] == True:
+            temp = OrderedDict()
+            for k in self.training_context['losses'].key_list:
+                if len(self.training_context['losses'][k]) > 0:
+                    temp[k] = self.training_context['losses'][k][-1][-1]
+            print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v,value_type='loss')) for k, v in temp.items()]) + ' }')
 
     def do_on_data_received(self, train_data, test_data):
         if train_data is None and test_data is None:
@@ -825,7 +827,7 @@ class Model(ModelBase):
     def do_post_gradient_update(self):
 
         self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'], to_numpy(self.training_context['current_loss']).mean())
-        if self.training_context['is_collect_data'] == True:
+        if self.training_context['is_collect_data']:
             steps, values = self.training_context['tmp_losses'].get_series('total_losses')
             self.training_context['losses'].collect('total_losses', self.training_context['steps'], float(to_numpy(values).mean()))
             self.training_context['tmp_losses'].reset()
@@ -1060,7 +1062,7 @@ class Model(ModelBase):
                 for callback in self.callbacks:
                     callback.on_data_received(self.training_context)
 
-                if accumulate_grads == False:
+                if not accumulate_grads:
                     self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
                     self.do_preparation_for_loss()
                     self.training_context['optimizer'] = self.optimizer
@@ -1086,7 +1088,7 @@ class Model(ModelBase):
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                                 else:
                                     self.train_data[self.outputs.key_list[0]] = output
-                                    if self.use_output_as_loss == True:
+                                    if self.use_output_as_loss:
                                         this_loss = output.sum()
                                         self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
@@ -1146,7 +1148,7 @@ class Model(ModelBase):
                     for callback in self.callbacks:
                         callback.on_loss_calculation_end(self.training_context)
 
-                    if accumulate_grads == False:
+                    if not accumulate_grads:
                         # regularizer
                         for k, v in self._regs.items():
                             this_loss = to_tensor(0.0)
@@ -1237,6 +1239,12 @@ class Model(ModelBase):
                         steps, values = self.training_context['tmp_metrics'].get_series(k)
                         self.training_context['metrics'].collect(k, self.training_context['steps'], float(to_numpy(values).mean()))
                     self.training_context['tmp_metrics'].reset()
+
+                    if self.training_context['is_collect_data'] and 'total_losses' in self.training_context['tmp_losses'].key_list and len(self.training_context['tmp_losses']) > 0:
+                        loss_steps, loss_values = self.training_context['tmp_losses'].get_series('total_losses')
+                        if len(loss_values) > 0:
+                            self.training_context['losses'].collect('total_losses', loss_steps[-1], float(np.array(loss_values).mean()))
+                            self.training_context['tmp_losses'].reset()
 
                 # ON_BATCH_END
                 self.do_on_batch_end()
