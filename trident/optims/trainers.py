@@ -490,18 +490,17 @@ class TrainingPlan(object):
 
                         if self.is_terminate:
                             for callback in self.callbacks:
-                                if callback.is_shared == True:
+                                if callback.is_shared:
                                     callback.on_training_terminated(self.__dict__)
 
                             for k, trainitem in self.training_items.items():
 
                                 for callback in trainitem.training_context['callbacks']:
-                                    if callback.is_shared == False:
+                                    if not callback.is_shared:
                                         callback.on_training_terminated(trainitem.training_context)
                             data_provider.mode = 'tuple'
                         else:
 
-                            num_batches = len(data_provider.batch_sampler) * epoch + mbs
                             iter_data = OrderedDict()
 
                             if isinstance(return_data, OrderedDict):
@@ -545,7 +544,7 @@ class TrainingPlan(object):
 
                                 trainitem.train_model(train_data, test_data,
                                                       epoch if only_steps == False else 0,
-                                                      mbs if only_steps == False else num_batches,
+                                                      mbs if only_steps == False else  self.steps ,
                                                       self.num_epochs if only_steps == False else 1,
                                                       len(data_provider.batch_sampler) if only_steps == False else max_batches,
                                                       is_collect_data=mbs % collect_data_inteval == 0,
@@ -574,10 +573,6 @@ class TrainingPlan(object):
 
 
 
-
-
-
-
                             if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
                                 if len(self.training_items)>1:
@@ -585,13 +580,13 @@ class TrainingPlan(object):
 
                             for k, trainitem in self.training_items.items():
                                 for callback in trainitem.training_context['callbacks']:
-                                    if callback.is_shared == False:
+                                    if not callback.is_shared:
                                         callback.on_overall_batch_end(trainitem.training_context)
                             for callback in self.callbacks:
-                                if callback.is_shared == True:
+                                if callback.is_shared:
                                     callback.on_overall_batch_end(self.__dict__)
 
-                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (num_batches + 1) % \
+                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and ( self.steps  + 1) % \
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'])
@@ -599,7 +594,7 @@ class TrainingPlan(object):
                                         trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth','.onnx'))
                                         self.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth','.onnx'));
                                         trainitem.training_context['upload_onnx']=True
-                            if only_steps == True and num_batches >= max_batches - 1:
+                            if only_steps == True and  self.steps  >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
                                     try:
                                         trainitem.save_model(trainitem.training_context['save_path'])
