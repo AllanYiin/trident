@@ -23,6 +23,8 @@ from torch._jit_internal import List
 from torch._six import container_abcs
 from torch.nn import Module
 from torch.nn import init
+from trident.optims.pytorch_constraints import get_constraint
+
 from trident.optims.pytorch_regularizers import get_reg
 from trident.backend.common import *
 from trident.backend.common import TensorShape
@@ -91,7 +93,7 @@ class Dense(Layer):
         torch.Size([2, 30])
     """
 
-    def __init__(self, num_filters, use_bias=True, activation=None, kernel_regularizer=None, keep_output=False, name=None, **kwargs):
+    def __init__(self, num_filters, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None, **kwargs):
         super(Dense, self).__init__(name=name, keep_output=keep_output)
         self.rank = 0
         if isinstance(num_filters, int):
@@ -103,15 +105,14 @@ class Dense(Layer):
         self.weight = None
         self.bias = None
         self.use_bias = use_bias
-        if kernel_regularizer == 'l2':
-            self.kernel_regularizer = l2_normalize
+        if weights_norm == 'l2':
+            self.weights_norm = l2_normalize
         else:
-            self.kernel_regularizer = None
-
+            self.weights_norm = None
         self.activation = get_activation(activation)
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             if len(input_shape.dims) == 1:
                 self.input_filters = input_shape.dims[0]
             else:
@@ -127,9 +128,8 @@ class Dense(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-
-        if hasattr(self, 'kernel_regularizer') and self.kernel_regularizer is not None:
-            x = F.linear(x, self.kernel_regularizer(self.weight), self.bias)
+        if hasattr(self, 'weights_norm') and self.weights_norm is not None:
+            x = F.linear(x, self.weights_norm(self.weight) , self.bias)
         else:
             x = F.linear(x, self.weight, self.bias)
 
@@ -259,7 +259,7 @@ class Embedding(Layer):
     def build(self, input_shape:TensorShape):
         if self._built == False and self.sparse == False:
             raise ValueError('Only sparse embedding support shape inferred, please setting num_embeddings manually. ')
-        elif self._built == False:
+        elif not self._built:
             if len(input_shape.dims) == 1:
                 self.input_filters = input_shape.dims[0]
             else:
@@ -341,7 +341,7 @@ class Flatten(Layer):
         super(Flatten, self).__init__(name=name, keep_output=keep_output)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x.view(x.size()[0], -1)
+        return x.view(x.size(0), -1)
 
 
 class Concate(Layer):
@@ -471,7 +471,7 @@ class SoftMax(Layer):
             self.add_noise = False
             self.noise_intensity = 0.005
         if self.training:
-            if self.add_noise == True:
+            if self.add_noise:
                 noise = self.noise_intensity * torch.randn_like(x, dtype=dtype.float32)
                 x = x + noise
             x = F.log_softmax(x, dim=self.axis)
@@ -640,7 +640,7 @@ def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None,
     kernal_shape = to_numpy(list(kernal_shape))
     strides = to_numpy(list(strides)).astype(np.float32)
     dilations = to_numpy(list(dilations))
-    if transpose == False:
+    if not transpose:
         output_shape = np.ceil(input_shape / strides)
         raw_padding = np.clip((output_shape - 1) * strides + (kernal_shape - 1) * dilations + 1 - input_shape, a_min=0, a_max=np.inf)
         remainder = np.remainder(raw_padding, np.ones_like(raw_padding) * 2)
@@ -667,9 +667,9 @@ def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None,
         static_padding = []
 
         for k in range(rank):
-            static_padding.append(lefttop_pad[-1 - k])
-            static_padding.append(rightbtm_pad[-1 - k])
-        return tuple(static_padding), tuple(out_pad.astype(np.int32).tolist())
+            static_padding.append(int(lefttop_pad[-1 - k]))
+            static_padding.append(int(rightbtm_pad[-1 - k]))
+        return tuple(static_padding), tuple([int(item) for item in out_pad.astype(np.int32)])
 
 
 class _ConvNd(Layer):
@@ -698,7 +698,7 @@ class _ConvNd(Layer):
 
         self.depthwise = depthwise
         self.separable = separable
-        if self.separable == True:
+        if self.separable:
             self.depthwise = True
 
         self.register_parameter('weight', None)
@@ -709,14 +709,13 @@ class _ConvNd(Layer):
         self.to(self.device)
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
-            self.input_filters =input_shape[self.filter_index]
+        if not self._built:
+            self.input_filters =int(input_shape[self.filter_index])
             if self.auto_pad:
-                if self.transposed == False:
-                    padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[2:])
-                    self.padding = tuple(padding)
+                if not self.transposed:
+                    self.padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.dims[2:])
                 else:
-                    self.padding, self.output_padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.tolist()[2:], self.transposed)
+                    self.padding, self.output_padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.dims[2:], self.transposed)
             else:
                 if self.padding is None:
                     self.padding = [0] * (2 * self.rank)
@@ -746,7 +745,7 @@ class _ConvNd(Layer):
             if self.depthwise and self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
 
-            channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
+            #channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
 
             if self.transposed:
                 self.weight = Parameter(torch.Tensor(int(self.input_filters), int(self.num_filters // self.groups), *self.kernel_size))
@@ -2157,7 +2156,7 @@ class CoordConv2d(Layer):
             self.comput_coord(image_size)
 
     def comput_coord(self, input_shape):
-        _, y_dim, x_dim = input_shape
+        _,_, y_dim, x_dim = input_shape.dims
         xs = torch.linspace(0, 1, x_dim, requires_grad=False)
         ys = torch.linspace(0, 1, y_dim, requires_grad=False)
         grid_x, grid_y = torch.meshgrid([xs, ys])
@@ -2167,7 +2166,7 @@ class CoordConv2d(Layer):
         self.register_buffer('coord', grid.float().detach())
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             self.comput_coord(input_shape)
 
     def append_coords(self, x):
