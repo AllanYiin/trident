@@ -157,7 +157,7 @@ class ModelBase(object):
             self._initial_graph(input_shape=inp_shape,output=value)
         elif isinstance(value, np.ndarray) or 'tensor' in value.__name__.lower():
             self.inputs = OrderedDict()
-            self._initial_graph(input_shape=value.input_shape,output= to_tensor(value))
+            self._initial_graph(input_shape=int_shape(value),output= to_tensor(value))
         else:
             raise ValueError('Only Layer, Module, Image and Tensor can be valid model')
 
@@ -240,38 +240,51 @@ class ModelBase(object):
     def update_signature(self, arg_names):
         if self.model is not None and hasattr(self.model, 'signature') and self.signature != self.model.signature:
             self.signature = self.model.signature
-        if self.signature is None or len(self.signature.inputs.key_list)+len(self.signature.outputs.key_list) == len(arg_names):
 
-            new_inputs =  OrderedDict()
-            for i in range(len(arg_names[:len(self.inputs)])):
-                arg = arg_names[:len(self.inputs)][i]
-                new_inputs[arg] = self.inputs.value_list[0]
-            self.inputs = new_inputs
+        if self.signature is not None and  len(self.signature.inputs.key_list) == len(arg_names):
+            old_inputs = copy.deepcopy(self.signature.inputs)
+            self.signature.inputs = OrderedDict()
+            self.inputs= OrderedDict()
+            for i in range(len(old_inputs)):
+                spec=old_inputs[i]
+                spec.name=arg_names[i]
+                self.signature.inputs[arg_names[i]]=spec
+                self.inputs[arg_names[i]]=spec
+            if len(old_inputs)==1:
+                self.input_spec=self.signature.inputs.value_list[0]
 
-            new_outputs = OrderedDict()
-            new_target = OrderedDict()
-            outputs_args = arg_names[len(self.signature.inputs.key_list):]
-            outputs=self._outputs
-            targets=self._targets
-            for i in range(len(outputs_args)):
-                arg = outputs_args[i]
-                new_outputs[arg] = outputs.value_list[0]
-                target_arg = arg.replace('output', 'target')
+        elif self.signature is not None and len(self.signature.inputs.key_list)+len(self.signature.outputs.key_list) == len(arg_names):
+
+            old_inputs = copy.deepcopy(self.signature.inputs)
+            old_outputs = copy.deepcopy(self.signature.outputs)
+            self.signature.inputs = OrderedDict()
+            self.signature.outputs = OrderedDict()
+            self.inputs= OrderedDict()
+            self._outputs = OrderedDict()
+            self._targets = OrderedDict()
+            for i in range(len(old_inputs)):
+                spec = old_inputs[i]
+                spec.name = arg_names[i]
+                self.signature.inputs[arg_names[i]] = spec
+                self.inputs[arg_names[i]] = spec
+            if len(old_inputs) == 1:
+                self.input_spec = self.signature.inputs.value_list[0]
+            for i in range(len(old_inputs)):
+                target_arg = arg_names[i ].replace('output', 'target')
                 if 'target' not in target_arg:
                     target_arg = 'target_' + target_arg
-                new_target[target_arg] = targets.value_list[0]
-            self._outputs = new_outputs
-            self._targets = new_target
-            # if self.model is not None:
-            #     self.signature = get_signature(self._model.forward, 'model')
-            #     self.signature.inputs = copy.deepcopy(self.inputs)
-            #     self.signature.outputs = copy.deepcopy(self._outputs)
+
+                spec = old_outputs[i]
+                spec.name = arg_names[i+len(old_inputs)]
+                self.signature.outputs[arg_names[i+len(old_inputs)]] = spec
+                self._outputs[arg_names[i+len(old_inputs)]] = spec
+                self._targets[target_arg] = spec
 
             print(self.signature)
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
         elif len(self.signature) != len(arg_names):
-            raise ValueError('data deed and arg_names should be the same length')
+            raise ValueError('data feed and arg_names should be the same length')
 
     @property
     def preprocess_flow(self):
@@ -659,38 +672,51 @@ class ModelBase(object):
         if 'max_name_length' not in self.training_context:
             self.training_context['max_name_length']=len(self.name)+1
         metric_strings=[]
-        for k, v in self._metrics.items():
-            collect_history = self._metrics[k].collect_history
+
+        for k in  self.batch_metric_history.key_list:
+            collect_history =True
+            slice_length = print_batch_progress_frequency // self.training_context['collect_data_inteval']
+            if k in self._metrics:
+                collect_history=self._metrics[k].collect_history
             metric_value=None
-            batch_steps, batch_values = self.batch_metric_history.get_series(k)
             if collect_history:
-                if k in self.batch_metric_history and len(batch_values)>=print_batch_progress_frequency:
-                    metric_value=np.array(batch_values[-1*print_batch_progress_frequency:]).mean()
-                elif k in self.training_context['tmp_metrics']:
-                    tmp_steps,tmp_values=self.training_context['tmp_metrics'].get_series(k)
-                    metric_value = np.array(tmp_values).mean()
-                    self.training_context['tmp_metrics'][k]=[]
+                batch_steps, batch_values = self.batch_metric_history.get_series(k)
+                if len(batch_values)==0:
+                    batch_steps, batch_values = self.tmp_metrics.get_series(k)
+                    metric_value = np.array(batch_values).mean()
+                else:
 
-                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value,value_type='metric')))
-
+                    if len(batch_values) > slice_length:
+                        metric_value = np.array(batch_values[-1 * slice_length:]).mean()
+                    else:
+                        metric_value=np.array(batch_values).mean()
+                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, value_type='metric')))
+        loss_value=None
         loss_steps,loss_values=self.batch_loss_history.get_series('total_losses')
-        loss_value=float(np.array(loss_values[-1*print_batch_progress_frequency:]).mean())
+        if len(loss_values) == 0:
+            loss_steps, loss_values = self.tmp_losses.get_series('total_losses')
+            loss_value = np.array(loss_values).mean()
+        else:
+            if len(loss_values) > slice_length:
+                loss_value= to_numpy(loss_values[-1*slice_length:]).astype(np.float32).mean()
+            else:
+                loss_value = to_numpy(loss_values).astype(np.float32).mean()
         step_time =  self.training_context['time_batch_progress']
-        self.training_context['time_batch_progress'] = 0
         progress_bar(step_time,self.training_context['current_batch'], self.training_context['total_batch'],
-                 'Loss: {0} | {1} | learning rate: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value,value_type='loss'), ','.join(metric_strings), self.training_context['current_lr'],
+                 'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value,value_type='loss'), ', '.join(metric_strings), self.training_context['current_lr'],
                      self.training_context['current_epoch']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
+        self.training_context['time_batch_progress'] = 0
 
     def print_epoch_progress(self, print_epoch_progress_frequency):
         if 'max_name_length' not in self.training_context:
             self.training_context['max_name_length']=len(self.name)+1
         metric_strings=[]
-        loss_steps, loss_values = self.epoch_loss_history.get_series('total_losses')
+        loss_steps, loss_values = self.batch_loss_history.get_series('total_losses')
         if print_epoch_progress_frequency>len(loss_values):
             print_epoch_progress_frequency=len(loss_values)
 
-        loss_value = float(np.array(loss_values[-1 * print_epoch_progress_frequency:]).mean())
-        for k, v in self.epoch_metric_history.items():
+        loss_value = to_numpy(loss_values[-1*int(print_epoch_progress_frequency):]).astype(np.float32).mean()
+        for k  in self.epoch_metric_history.key_list:
             format_string='.3%'
             steps,values=self.epoch_metric_history.get_series(k)
             metric_value=to_numpy(values)
@@ -701,9 +727,10 @@ class ModelBase(object):
 
             metric_strings.append('{0}: {1}'.format(k,adaptive_format(float(metric_value[-1*int(print_epoch_progress_frequency):].mean()),value_type='metric')))
         step_time = self.training_context['time_epoch_progress']
-        self.training_context['time_batch_progress'] = 0
+
         progress_bar(step_time,self.training_context['current_epoch'], self.training_context['total_epoch'],
-                     'Loss: {0}| {1} | learning rate: {2:<10.3e}'.format(adaptive_format(loss_value,value_type='loss'), ','.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
+                     'Loss: {0}| {1} | lr: {2:<10.3e}'.format(adaptive_format(loss_value,value_type='loss'), ', '.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
+        self.training_context['time_epoch_progress'] = 0
 
     #@pysnooper.snoop()
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
@@ -930,12 +957,19 @@ class ModelBase(object):
                     #aggregate tmp data and move to metrics history
                     for k, v in self.training_context['tmp_metrics'].items():
                         steps,values=self.training_context['tmp_metrics'].get_series(k)
-                        self.training_context['metrics'].collect(k, self.training_context['steps'], np.array(values).mean())
+
+                        #check
+                        if len(steps) > 0:
+                            values = np.mean(to_numpy(values))
+                            self.training_context['metrics'].collect(k, self.training_context['steps'], values)
                     self.training_context['tmp_metrics'].reset()
 
                     for k, v in self.training_context['tmp_losses'].items():
                         steps, values = self.training_context['tmp_losses'].get_series(k)
-                        self.training_context['losses'].collect(k, self.training_context['steps'], np.array(values).mean())
+
+                        if len(steps)>0:
+                            values =np.mean(to_numpy(values))
+                            self.training_context['losses'].collect(k, self.training_context['steps'], values)
                     self.training_context['tmp_losses'].reset()
 
 
@@ -973,23 +1007,27 @@ class ModelBase(object):
                 self.do_on_epoch_end()
                 batch_steps,batch_values=self.training_context['losses'].get_series('total_losses')
                 if not hasattr(self.training_context['losses'],'last_aggregate_idx'):
-                    self.epoch_loss_history.collect('total_losses',self.training_context['current_epoch'],np.array(batch_values).mean())
-                    self.training_context['losses'].last_aggregate_idx=len(batch_values)
+                    if len(batch_values)>0:
+                        self.epoch_loss_history.collect('total_losses',self.training_context['current_epoch'],batch_values)
+                        self.training_context['losses'].last_aggregate_idx=len(batch_values)
                 else:
-                    self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'], np.array(batch_values[self.training_context['losses'].last_aggregate_idx:]).mean())
-                    self.training_context['losses'].last_aggregate_idx = len(batch_values)
+                    if len(batch_values) > 0:
+                        self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'],batch_values[self.training_context['losses'].last_aggregate_idx:])
+                        self.training_context['losses'].last_aggregate_idx = len(batch_values)
 
 
 
                 for k, v in self.training_context['metrics'].items():
                     metric_steps, metric_values = self.training_context['metrics'].get_series(k)
                     if not hasattr(self.training_context['metrics'], 'last_aggregate_idx'):
-                        self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values).mean())
-                        self.training_context['metrics'].last_aggregate_idx = len(metric_values)
-                    else:
-                        if self.training_context['metrics'].last_aggregate_idx<len(metric_values):
-                            self.epoch_metric_history.collect(k, self.training_context['current_epoch'], np.array(metric_values[self.training_context['metrics'].last_aggregate_idx:]).mean())
+                        if len(metric_values) > 0:
+                            self.epoch_metric_history.collect(k, self.training_context['current_epoch'], metric_values)
                             self.training_context['metrics'].last_aggregate_idx = len(metric_values)
+                    else:
+                        if len(metric_values) > 0:
+                            if self.training_context['metrics'].last_aggregate_idx<len(metric_values):
+                                self.epoch_metric_history.collect(k, self.training_context['current_epoch'], metric_values[self.training_context['metrics'].last_aggregate_idx:])
+                                self.training_context['metrics'].last_aggregate_idx = len(metric_values)
 
 
 

@@ -199,6 +199,8 @@ class Model(ModelBase):
                         out = output(*inputs)
                     else:
                         out = output(inputs)
+                        if len(output.signature.outputs) == 0:
+                            output.signature.outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
 
                 else:
 
@@ -208,6 +210,9 @@ class Model(ModelBase):
                     output.to(get_device())
                     output.eval()
                     out = output(dummay_input)
+                    if len(output.signature.outputs)==0:
+                        output.signature.outputs['output'] =TensorSpec(shape=tensor_to_shape(out), name='output')
+
 
 
                 self._model = output
@@ -224,8 +229,7 @@ class Model(ModelBase):
                     for i in range(len(out)):
                         self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
                         self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='target_{0}'.format(i))
-            if self._model.signature.maybe_not_complete():
-                self._model.signature = None
+
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (nn.Module)) for m in output]):
             output_list = []
             model_list = []
@@ -246,8 +250,7 @@ class Model(ModelBase):
             for i in range(len(output_list)):
                 self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='output_{0}'.format(i))
                 self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='target_{0}'.format(i))
-            if self._model.signature.maybe_not_complete():
-                self._model.signature = None
+
         elif isinstance(output, (np.ndarray, torch.Tensor)):
             # style transfer , or adversarial attack
             self._model = to_tensor(output, requires_grad=True)
@@ -674,14 +677,11 @@ class Model(ModelBase):
         self.eval()
 
     def do_on_epoch_start(self):
-        self.training_context['time_epoch_start'] = time.time()
-        if self.training_context['current_batch'] == 0:
+        if self.training_context['steps'] == 0:
             self.training_context['time_epoch_progress'] = 0
 
 
     def do_on_epoch_end(self):
-        self.training_context['time_epoch_end'] = time.time()
-        self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_epoch_start'])
         if self.model.device == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
@@ -698,6 +698,7 @@ class Model(ModelBase):
     def do_on_batch_start(self):
         if self.training_context['steps'] == 0:
             self.training_context['time_batch_progress'] = 0
+            self.training_context['time_epoch_progress'] = 0
         self.training_context['time_batch_start'] = time.time()
 
         if (self.training_context['steps'] + 1) % 100== 0:
@@ -709,7 +710,8 @@ class Model(ModelBase):
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
         self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
-
+        self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
+        self.training_context['steps']+=1
         if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
@@ -719,7 +721,7 @@ class Model(ModelBase):
             for k in self.training_context['losses'].key_list:
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
-            temp['total_losses']=self.training_context['current_loss'].item()
+            temp['total_losses']=to_numpy(self.training_context['current_loss'])[0]
             print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v,value_type='loss')) for k,v in temp.items()])+' }')
 
     def do_on_data_received(self, train_data, test_data):
@@ -901,6 +903,10 @@ class Model(ModelBase):
         except Exception as e:
             print(e)
             PrintException()
+
+    def do_post_gradient_update(self):
+        self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],self.training_context['current_loss'])
+
 
     def do_on_progress_end(self):
         if self.training_context['current_epoch'] > self.warmup:

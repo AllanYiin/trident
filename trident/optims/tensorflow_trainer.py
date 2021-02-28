@@ -1237,14 +1237,20 @@ class Model(ModelBase):
                     # aggregate tmp data and move to metrics history
                     for k, v in self.training_context['tmp_metrics'].items():
                         steps, values = self.training_context['tmp_metrics'].get_series(k)
-                        self.training_context['metrics'].collect(k, self.training_context['steps'], float(to_numpy(values).mean()))
+
+                        # check
+                        if len(steps) > 0:
+                            values = np.mean(to_numpy(values))
+                            self.training_context['metrics'].collect(k, self.training_context['steps'], values)
                     self.training_context['tmp_metrics'].reset()
 
-                    if self.training_context['is_collect_data'] and 'total_losses' in self.training_context['tmp_losses'].key_list and len(self.training_context['tmp_losses']) > 0:
-                        loss_steps, loss_values = self.training_context['tmp_losses'].get_series('total_losses')
-                        if len(loss_values) > 0:
-                            self.training_context['losses'].collect('total_losses', loss_steps[-1], float(np.array(loss_values).mean()))
-                            self.training_context['tmp_losses'].reset()
+                    for k, v in self.training_context['tmp_losses'].items():
+                        steps, values = self.training_context['tmp_losses'].get_series(k)
+
+                        if len(steps) > 0:
+                            values = np.mean(to_numpy(values))
+                            self.training_context['losses'].collect(k, self.training_context['steps'], values)
+                    self.training_context['tmp_losses'].reset()
 
                 # ON_BATCH_END
                 self.do_on_batch_end()
