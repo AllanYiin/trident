@@ -30,7 +30,7 @@ from pydoc import locate
 from typing import Iterable,Generator,Sequence,Iterator,Union, Tuple, Any, overload, NewType, Text
 import numpy as np
 
-__all__ = ['get_session','set_session','get_session_value','is_autocast_enabled','set_autocast_enabled','get_backend','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
+__all__ = ['get_session','set_session','get_session_value','is_autocast_enabled','set_autocast_enabled','get_backend','get_plateform','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
            'check_keys','make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException','TensorShape', 'unpack_singleton', 'enforce_singleton',
@@ -279,9 +279,13 @@ def snake2camel(string1):
         return ''.join(x.capitalize() or '_' for x in string1.split('_'))
 
 def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None,value_type=None):
+    if num is None:
+        return 'nan'
     format_string= '.3f'
     if value_type=='metric':
         format_string = '.3%'
+        if num>3:
+            format_string = '.3f'
     if value_type!='loss' and ((prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2):
         format_string ='.3%'
     elif  (prev_value is None or prev_value==num) and builtins.abs(num)<1e-3:
