@@ -239,7 +239,7 @@ def DenseNetFcn(blocks=(4, 5, 7, 10, 12),
              num_classes=num_classes,
              name=name,
              **kwargs))
-    model.signature = get_signature(model.model.forward)
+
 
     model.preprocess_flow = [Resize((input_shape[2], input_shape[1]), keep_aspect=True), Normalize(0, 255),
                              Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
@@ -334,7 +334,7 @@ def DenseNet121(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet121.pth'))
         recovery_model=fix_layer(recovery_model)
         recovery_model.name = 'densenet121'
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet121.model = recovery_model
     else:
         densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -382,7 +382,7 @@ def DenseNet161(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet161.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet161'
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet161.model = recovery_model
     else:
         densenet161.model = _make_recovery_model_include_top(densenet161.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -431,7 +431,7 @@ def DenseNet169(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet169.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
-        densenet169 = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        densenet169 = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet169.model = recovery_model
     else:
         densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -478,7 +478,7 @@ def DenseNet201(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet201.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet201'
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet201.model = recovery_model
 
     else:
