@@ -8,6 +8,7 @@ import sys
 import warnings
 import time
 import numpy as np
+from trident import context
 
 from trident.backend.common import *
 from trident.backend.load_backend import *
@@ -20,18 +21,16 @@ from trident.data.bbox_common import *
 
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call
-    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp
+    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp, expand_dims
 
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import try_map_args_and_call
-    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, \
-        any_abnormal_number, ndim, exp, \
-        not_equal, reduce_any
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, any_abnormal_number, ndim, exp, not_equal, reduce_any, expand_dims
 
 if is_in_ipython() or is_in_colab():
     from IPython import display
 
-_session = get_session()
+ctx =context._context()
 _backend = get_backend()
 
 __all__ = ['VisualizationCallbackBase', 'TileImageCallback', 'PrintGradientsCallback', 'SegTileImageCallback',
@@ -138,9 +137,8 @@ class TileImageCallback(VisualizationCallbackBase):
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
         fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
-        if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
-            training_context['summary_writer'].add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True,
-                                                          walltime=time.time())
+        if ctx.enable_tensorboard and ctx.summary_writer is not None:
+            ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True,  walltime=time.time())
 
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0):
@@ -181,22 +179,33 @@ class SegTileImageCallback(VisualizationCallbackBase):
         for data_key in data.key_list:
             if data_key == data_feed[model.signature.inputs.key_list[0]]:
                 input = data[data_feed[model.signature.inputs.key_list[0]]]
-            elif data_key == data_feed[model.signature.outputs.key_list[0]]:
-                output = data[data_feed[model.signature.outputs.key_list[0]]]
-                if output.max() < 0:
-                    output = exp(output)
+                model.eval()
+                if is_label_mask:
+                    output =to_numpy(argmax(model(input), axis=axis))
+                else:
+                    output=to_numpy(expand_dims(cast(argmax(model(input),axis=axis), input.dtype),axis=-1))
+
+                model.train()
+
+            # elif data_key == data_feed[model.signature.outputs.key_list[0]]:
+            #     output = data[data_feed[model.signature.outputs.key_list[0]]]
+            #     if output.max() < 0:
+            #         output = exp(output)
 
             elif (
                     'target' in data_key or 'label' in data_key or 'mask' in data_key) and not 'output' in data_key and data_key in data_feed.value_list:
                 target = to_numpy(data[data_key])
-
+        output_arr=None
         if 'alpha' not in data:
-            output = to_numpy(output)[:, :, :, 1:2]
+            output_arr = output.copy()
             if is_label_mask:
                 target = label2color(target, self.palette)
                 output = label2color(output, self.palette)
         else:
-            output = to_numpy(output[:, 1, :, :] * argmax(output, axis))
+            if get_backend() == 'tensorflow':
+                output = output[:, :, :, 1:2]* argmax(output, axis)
+            else:
+                output = (output[:, 1:2, :, :] * argmax(output, axis)).transpose(0,2,3,1)
             target = to_numpy(data['alpha'])
 
         input_arr = []
@@ -211,11 +220,14 @@ class SegTileImageCallback(VisualizationCallbackBase):
             tile_images_list.append(output)
         else:
             target_arr = target
+
             if len(target.shape) < len(int_shape(input)):
-                target_arr = np.expand_dims(target, -1)
-            output_arr = output
-            if len(output.shape) < len(int_shape(input)):
-                output_arr = np.expand_dims(output, -1)
+                if get_backend() == 'tensorflow':
+                    target_arr = np.expand_dims(target, -1)
+                else:
+                    target_arr = np.expand_dims(target, 1)
+
+
 
             if 'alpha' not in data:
                 target_arr[target_arr > 0] = 1
@@ -224,17 +236,13 @@ class SegTileImageCallback(VisualizationCallbackBase):
 
             tile_images_list.append(target_arr * input_arr + (1 - target_arr) * background)
 
-            if 'alpha' not in data:
-                output_arr[output_arr >= 0.5] = 1
-                output_arr[output_arr < 0.5] = 0
-
             tile_images_list.append(output_arr * input_arr + (1 - output_arr) * background)
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
         fig = tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
-        if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
-            training_context['summary_writer'].add_figure(training_context['training_name'] + '/plot/segtile_image', fig, global_step=training_context['steps'], close=True,
+        if ctx.enable_tensorboard and ctx.summary_writer is not None:
+            ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/segtile_image', fig, global_step=training_context['steps'], close=True,
                                                           walltime=time.time())
 
     def on_batch_end(self, training_context):
@@ -293,8 +301,8 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
 
         tile_images_list.append(input_image2)
         fig = tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
-        if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
-            training_context['summary_writer'].add_figure(training_context['training_name'] + '/plot/detection_plot', fig, global_step=training_context['steps'], close=True,
+        if ctx.enable_tensorboard and ctx.summary_writer is not None:
+            ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/detection_plot', fig, global_step=training_context['steps'], close=True,
                                                           walltime=time.time())
 
     def on_batch_end(self, training_context):
@@ -340,8 +348,8 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                                         legend=training_context['training_names'].value_list, calculate_base='batch',
                                         max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
                                         imshow=self.imshow)
-                if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
-                    training_context['summary_writer'].add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
+                if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                    ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
 
                 # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
 
