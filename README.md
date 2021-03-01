@@ -27,6 +27,11 @@
 - 訓練計畫(Training Plan) 可以如同堆積木般彈性設計你想要的訓練流程，同時使用fluent style語法讓整體代碼易讀更容易管理。
 - 提供最新的優化器( Ranger,Lars, RangerLars, AdaBelief...)以及優化技巧(gradient centralization)。
 
+
+## New Release version 0.7.1 
+![Alt text](images/vision_transform.png)
+- New Vision Transform.
+
 ## New Release version 0.7.0 
 ![Alt text](images/tensorboard.png)
 
