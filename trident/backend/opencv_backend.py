@@ -69,7 +69,7 @@ def read_image(im_path:str):
     except :
         try:
             img = plt.imread(im_path)
-            return img[::-1]
+            return img[::-1].astype(np.float32)
         except Exception as e:
             print(e)
             return None
@@ -133,22 +133,7 @@ def image2array(img):
     """
     arr = None
     if isinstance(img, str):
-        if os.path.exists(img) and img.split('.')[-1] in 'jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'.split('|'):
-            arr = mpimg.imread(img)
-            if arr.ndim==2 :
-                arr=cv2.cvtColor(arr,cv2.COLOR_GRAY2RGB)
-            else:
-                arr=arr#[::-1]
-            if arr.max() <= 1 and arr.dtype !=np.uint8:
-                arr *= 255.0
-            # Clear the current axes.
-            plt.cla()
-            # Clear the current figure.
-            plt.clf()
-            #Closes all the figure windows.
-            plt.close('all')
-            plt.close()
-            return arr
+        arr=file2array(img)
     elif isinstance(img, PngImageFile):
         arr = np.array(img.im).astype(np.float32)
     elif isinstance(img, pil_image.Image):
@@ -169,7 +154,6 @@ def image2array(img):
     if arr.ndim == 2:
         arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
 
-    del img
     return arr.astype(np.float32)
 
 
@@ -208,80 +192,6 @@ def array2image(arr:np.ndarray):
     arr = np.clip(arr, 0, 255).astype(np.uint8)
     img = pil_image.fromarray(arr, mode)
     return img
-
-
-def file2array(img_path):
-    """
-
-    Args:
-        img_path ():
-
-    Returns:
-
-    Examples:
-        >>> arr=file2array('../../trident.png')
-
-
-    """
-    with open(img_path, "rb") as f:
-        img_np = np.frombuffer(f.read(), np.uint8)
-        flag = cv2.IMREAD_COLOR
-        img = cv2.imdecode(img_np, flag)
-        cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img)
-        return img
-
-def file2array1(img_path):
-    """
-
-    Args:
-        img_path ():
-
-    Returns:
-
-    Examples:
-        >>> arr=file2array('../../trident.png')
-
-
-    """
-    arr = mpimg.imread(img_path)
-    if arr.ndim == 2:
-        arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
-    else:
-        arr = arr  # [::-1]
-    if arr.max() <= 1 and arr.dtype != np.uint8:
-        arr *= 255.0
-    # Clear the current axes.
-    plt.cla()
-    # Clear the current figure.
-    plt.clf()
-    # Closes all the figure windows.
-    plt.close('all')
-    plt.close()
-    return arr
-
-def file2array2(img_path):
-    """
-
-    Args:
-        img_path ():
-
-    Returns:
-
-    Examples:
-        >>> arr=file2array('../../trident.png')
-
-
-    """
-    img = pil_image.open(img_path)
-    arr = np.array(img).astype(np.float32)
-    if arr.ndim == 3:
-        if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
-            pass
-        elif arr.shape[0] in [1, 3, 4]:
-            arr = arr.transpose([1, 2, 0])
-    if not arr.flags['C_CONTIGUOUS']:
-        arr = np.ascontiguousarray(arr)
-    return arr.astype(np.float32)
 
 def mask2array(img):
     """
@@ -353,6 +263,84 @@ def array2mask(arr:np.ndarray):
     arr = np.clip(arr, 0, 255).astype(np.uint8)
     img = pil_image.fromarray(arr, mode)
     return img
+
+
+
+def file2array(img_path,flag = cv2.IMREAD_COLOR):
+    """
+
+    Args:
+        flag ():
+        img_path ():
+
+    Returns:
+
+    Examples:
+        >>> arr=file2array('../../trident.png')
+
+
+    """
+
+    with open(img_path, "rb") as f:
+        img_np = np.frombuffer(f.read(), np.uint8)
+
+        img = cv2.imdecode(img_np, flag)
+        cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img)
+        return img.astype(np.float32)
+
+def file2array1(img_path):
+    """
+
+    Args:
+        img_path ():
+
+    Returns:
+
+    Examples:
+        >>> arr=file2array('../../trident.png')
+
+
+    """
+    arr = mpimg.imread(img_path)
+    if arr.ndim == 2:
+        arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2RGB)
+    else:
+        arr = arr  # [::-1]
+    if arr.max() <= 1 and arr.dtype != np.uint8:
+        arr *= 255.0
+    # Clear the current axes.
+    plt.cla()
+    # Clear the current figure.
+    plt.clf()
+    # Closes all the figure windows.
+    plt.close('all')
+    plt.close()
+    return arr
+
+def file2array2(img_path):
+    """
+
+    Args:
+        img_path ():
+
+    Returns:
+
+    Examples:
+        >>> arr=file2array('../../trident.png')
+
+
+    """
+    img = pil_image.open(img_path)
+    arr = np.array(img).astype(np.float32)
+    if arr.ndim == 3:
+        if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
+            pass
+        elif arr.shape[0] in [1, 3, 4]:
+            arr = arr.transpose([1, 2, 0])
+    if not arr.flags['C_CONTIGUOUS']:
+        arr = np.ascontiguousarray(arr)
+    return arr.astype(np.float32)
+
 
 
 

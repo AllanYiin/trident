@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import builtins
 import sys
 
 from trident.backend.opencv_backend import array2image
@@ -52,11 +54,32 @@ from trident.data.image_common import *
 __all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram', 'generate_palette', 'plot_bbox', 'plot_3d_histogram', 'plot_centerloss']
 
 
-def generate_palette(num_classes):
-    hsv_tuples = [(x / num_classes, 1., 1.) for x in range(num_classes)]
+def generate_palette(num_classes:int,format:str='rgb'):
+    """Generate palette used in visualization.
+
+    Args:
+        num_classes (int): numbers of colors need in palette?
+        format (string):  'rgb' by pixel tuple or  'hex'  by hex formatted color.
+
+    Returns:
+        colors in rgb or hex format
+    Examples:
+        >>> generate_palette(10)
+        [(128, 64, 64), (128, 102, 64), (115, 128, 64), (77, 128, 64), (64, 128, 89), (64, 128, 128), (64, 89, 128), (76, 64, 128), (115, 64, 128), (128, 64, 102)]
+        >>> generate_palette(24,'hex')
+        ['#804040', '#805040', '#806040', '#807040', '#808040', '#708040', '#608040', '#508040', '#408040', '#408050', '#408060', '#408070', '#408080', '#407080', '#406080', '#405080', '#404080', '#504080', '#604080', '#704080', '#804080', '#804070', '#804060', '#804050']
+
+    """
+
+    def hex_format(rgb_tuple):
+        return '#{:02X}{:02X}{:02X}'.format(rgb_tuple[0], rgb_tuple[1], rgb_tuple[2])
+    hsv_tuples = [(x / num_classes,1.0, 1.0) for x in range(num_classes)]
     colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
-    colors = list(map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)), colors))
-    return colors
+    colors = list(map(lambda x: (int(builtins.round(x[0] * 255.)), int(builtins.round(x[1] * 255.)), int(builtins.round(x[2] * 255.))), colors))
+    if format=='rgb':
+        return colors
+    elif format == 'hex':
+        return [hex_format(color) for color in colors]
 
 
 def plot_bbox(x, img, color=None, label=None, line_thickness=None,**kwargs):

@@ -41,7 +41,7 @@ from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
-from trident.backend import dtype as Dtype
+from trident.backend.common import dtype as Dtype
 
 __all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine', 'try_map_args_and_call',
            'print_mem_stack',
@@ -64,7 +64,7 @@ if pt_version.version < base_version.version:
     raise ValueError('Not support Pytorch older then version 1.4')
 elif pt_version.version >= amp_version.version:
     set_session('amp_available', True if torch.cuda.is_available() and pt_version >= amp_version else False)
-    if get_session_value('amp_available') == True:
+    if get_session_value('amp_available'):
         sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(True))
     else:
         sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(False))
@@ -409,14 +409,14 @@ class Layer(nn.Module):
     forward: Callable[..., Any] = _forward_unimplemented
 
     def get_root(self):
-        if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:
+        if not hasattr(self, '_nodes') or self._nodes is None:
             self.is_root = True
             return self
-        elif self._nodes.value_list[0].is_root == True:
+        elif len(self._nodes) > 0 and self._nodes.value_list[0].is_root:
             return self._nodes.value_list[0]
         else:
             for name, node in self._nodes.item_list:
-                if node.is_root == True:
+                if node.is_root :
                     return node
             return self
 
@@ -514,7 +514,7 @@ class Layer(nn.Module):
         else:
             raise ValueError('Not valid module')
 
-    def build(self, input_shape:TensorShape):
+    def build(self, *input_shape:TensorShape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -526,7 +526,7 @@ class Layer(nn.Module):
         """
         pass
 
-    def rebuild(self, input_shape):
+    def rebuild(self, *input_shape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -832,7 +832,7 @@ class Layer(nn.Module):
 
         """
         if self.is_root:
-            if self._signature is None or len(self._signature) == 0 or len(self._signature.outputs) == 0:
+            if self._signature is None or len(self._signature) == 0 or len(self._signature.inputs) == 0:
                 self._signature = Signature(name=self.name)
 
                 if self._input_shape is not None:
@@ -871,7 +871,7 @@ class Layer(nn.Module):
             Output tensor or list of output tensors.
 
         """
-        if self.keep_output == False:
+        if not self.keep_output:
             return None
         return list(self._output_tensor) if isinstance(self._output_tensor, tuple) else self._output_tensor
 
@@ -939,7 +939,7 @@ class Layer(nn.Module):
                 if not isinstance(result, tuple):
                     result = (result,)
                 input = result
-        if self._built == False:
+        if not self._built:
             inp = unpack_singleton(input)
             if is_tensor(inp):
                 shp= tensor_to_shape(inp)
@@ -951,7 +951,7 @@ class Layer(nn.Module):
                 if isinstance(input[0], numbers.Number):
                     self.input_shape = TensorShape(list(input))
                 else:
-                    self.input_shape = tuple([tensor_to_shape(i.copy().detach()) for i in input if not isinstance(i, (list, tuple))])
+                    self.build(*[tensor_to_shape(inp,need_exclude_batch_axis=True) for inp in input])
 
             else:
                 self.input_shape = TensorShape(list(input))
@@ -1193,10 +1193,10 @@ class Sequential(Layer):
         self.__delitem__(idx)
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
-            if isinstance(self._signature ,Signature) and len(self._signature.outputs)>0:
-                self._signature.outputs[self._signature.outputs.key_list[0]]=TensorSpec(shape=self[-1]._output_shape)
-            else:
-                self._signature = None
+            if isinstance(self._signature ,Signature) :
+                self._signature.outputs=OrderedDict()
+                self._signature.outputs['output']=TensorSpec(shape=self[-1]._output_shape)
+
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -1206,6 +1206,26 @@ class Sequential(Layer):
             raise IndexError('index {} is out of range'.format(idx))
         idx %= size
         return next(islice(iterator, idx, None))
+
+    def __getattr__(self, name):
+        if name in ['output','output_shape','_output_shape']:
+            return self[-1].__getattr__(name)
+        if '_parameters' in self.__dict__:
+            _parameters = self.__dict__['_parameters']
+            if name in _parameters:
+                return _parameters[name]
+        if '_buffers' in self.__dict__:
+            _buffers = self.__dict__['_buffers']
+            if name in _buffers:
+                return _buffers[name]
+        if '_modules' in self.__dict__:
+            modules = self.__dict__['_modules']
+            if name in modules:
+                return modules[name]
+        if name in self.__dict__:
+            return self.__dict__[name]
+        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
+
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
@@ -1290,7 +1310,9 @@ class ModuleList(Layer):
         if isinstance(idx, slice):
             return self.__class__(list(self._modules.values())[idx])
         else:
-            return self._modules[self._get_abs_string_index(idx)]
+            layer=self._modules[self._get_abs_string_index(idx)]
+            layer._nodes=OrderedDict()
+            return layer
 
     def __setitem__(self, idx, module):
         idx = self._get_abs_string_index(idx)
@@ -1996,6 +2018,13 @@ def fix_layer(layer: Layer):
     if not hasattr(layer, '_uid_prefixs'):
         layer._uid_prefixs = {}
     reset_name(layer, layer._uid_prefixs)
+
+    if 'ssd' in layer.__class__.__base__.__name__.lower() or  'yolo' in layer.__class__.__base__.__name__.lower():
+        if hasattr(layer,'nms_threshold'):
+            delattr(layer,'nms_threshold')
+        if hasattr(layer,'detection_threshold'):
+            delattr(layer,'detection_threshold')
+
 
     if layer._input_shape is not None and  isinstance(layer._input_shape, tuple):
         layer._input_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._input_shape)])

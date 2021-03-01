@@ -10,7 +10,7 @@ from torch.nn import init
 
 
 
-__all__ = ['uniform','normal','ones','zeros','kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
+__all__ = ['uniform','normal','fill_ones','fill_zeros','kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
 
 from trident.backend.common import get_function, camel2snake
 
@@ -64,7 +64,7 @@ def normal(tensor, mean=0., std=1.):
 
 
 
-def zeros(tensor):
+def fill_zeros(tensor):
     # type: (Tensor) -> Tensor
     r"""Fills the input Tensor with the scalar value `0`.
 
@@ -85,7 +85,7 @@ def zeros(tensor):
             init.zeros_(tensor)
 
 
-def ones(tensor):
+def fill_ones(tensor):
     # type: (Tensor) -> Tensor
     r"""Fills the input Tensor with the scalar value `1`.
 

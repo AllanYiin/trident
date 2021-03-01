@@ -11,7 +11,7 @@ from trident.backend.common import TensorShape
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.backend.common import get_function, camel2snake
-__all__ = ['kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
+__all__ = ['kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal','fill_zeros','fill_ones']
 
 def calculate_gain(nonlinearity, param=None):
     r"""Return the recommended gain value for the given nonlinearity function.
@@ -126,7 +126,7 @@ def normal(tensor, mean=0., std=1.):
 
 
 
-def zeros(tensor):
+def fill_zeros(tensor):
     # type: (Tensor) -> Tensor
     r"""Fills the input Tensor with the scalar value `0`.
 
@@ -146,7 +146,7 @@ def zeros(tensor):
         tensor.assign(zeros_like(tensor))
 
 
-def ones(tensor):
+def fill_ones(tensor):
     # type: (Tensor) -> Tensor
     r"""Fills the input Tensor with the scalar value `1`.
 

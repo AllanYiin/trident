@@ -237,7 +237,7 @@ def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, inpu
     if pretrained == True:
         download_model_from_google_drive('1bxnoDerzoNfiZZLft4ocD3DAgx4v6aTN', dirname, 'efficientnet-b0.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b0.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb0.model = recovery_model
     else:
         effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -256,7 +256,7 @@ def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1F3BtnAjmDz4G9RS9Q0hqU_K7WWXCni1G', dirname, 'efficientnet-b1.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b1.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb1.model = recovery_model
     else:
         effb1.model = _make_recovery_model_include_top( effb1.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -275,7 +275,7 @@ def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1PjqhB7WJasF_hqOwYtSBNSXSGBY-cRLU', dirname, 'efficientnet-b2.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b2.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb2.model = recovery_model
     else:
         effb2.model = _make_recovery_model_include_top( effb2.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -294,7 +294,7 @@ def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, inpu
     if pretrained == True:
         download_model_from_google_drive('11tMxdYdFfaEREwnESO4cwjtcoEB42zB_', dirname, 'efficientnet-b3.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b3.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb3.model = recovery_model
     else:
         effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -313,7 +313,7 @@ def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1X4ZOBR_ETRHZJeffJHvCmWTTy9_aW8SP', dirname, 'efficientnet-b4.pth')
         recovery_model =fix_layer( load(sanitize_path(os.path.join(dirname, 'efficientnet-b4.pth'))))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb4.model = recovery_model
     else:
         effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -332,7 +332,7 @@ def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('17iTD12G9oW3jYAui84MKtdY4gjd9vpgG', dirname, 'efficientnet-b5.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b5.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb5.model = recovery_model
     else:
         effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -351,7 +351,7 @@ def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1XJrKmcmMObN_nnjP2Z-YH_BQ3img58qF', dirname, 'efficientnet-b6.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b6.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb6.model = recovery_model
     else:
         effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -371,7 +371,7 @@ def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,inpu
     if pretrained == True:
         download_model_from_google_drive('1M2DfvsNPRCWSo_CeXnUCQOR46rvOrhLl', dirname, 'efficientnet-b7.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'efficientnet-b7.pth')))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb7.model = recovery_model
     else:
         effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)

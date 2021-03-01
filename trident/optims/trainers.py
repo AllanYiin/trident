@@ -14,6 +14,7 @@ from functools import partial
 import builtins
 
 import numpy as np
+from trident import context
 
 from trident.backend.decorators import deprecated
 from trident.callbacks.lr_schedulers import AdjustLRCallback
@@ -31,9 +32,9 @@ from trident.backend.tensorspec import TensorSpec, assert_spec_compatibility
 from trident.loggers.history import HistoryBase
 __all__ = ['TrainingPlan']
 
-_session = get_session()
+ctx = context._context()
 _backend =get_backend()
-working_directory=_session.working_directory
+working_directory=ctx.working_directory
 
 
 if _backend == 'pytorch':
@@ -70,7 +71,7 @@ class TrainingPlan(object):
         self.execution_id = None
         self.enable_tensorboard=False
         self._is_optimizer_warmup = False
-        self.summary_writer = None
+
 
         self.callbacks = []  # if self.callbacks is None:  #     self.callbacks = [  #
         # NumberOfEpochsStoppingCriterionCallback(1)]  # elif not any([issubclass(type(cb),
@@ -247,11 +248,12 @@ class TrainingPlan(object):
 
     def with_tensorboard(self):
         self.enable_tensorboard = True
+        make_dir_if_need(os.path.join(working_directory, 'Logs'))
         # check weather have tensorboard
         if get_backend() == 'pytorch':
             try:
                 from trident.loggers.pytorch_tensorboard import SummaryWriter
-                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
 
             except Exception as e:
                 print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
@@ -260,7 +262,8 @@ class TrainingPlan(object):
         elif get_backend() == 'tensorflow':
             try:
                 from trident.loggers.tensorflow_tensorboard import SummaryWriter
-                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
+
             except Exception as e:
                 print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
                 print(e)
@@ -441,11 +444,10 @@ class TrainingPlan(object):
                     if hasattr(item,'training_context'):
                         for context_item in list(item.training_context.values()):
                             if isinstance(context_item,HistoryBase):
-                                context_item.enable_tensorboard=True
                                 context_item.training_name=item_name
-                                context_item.summary_writer=self.summary_writer
+
                         item.training_context['training_name'] = item_name
-                        item.training_context['summary_writer']=self.summary_writer
+                        item.training_context['summary_writer']=ctx.summary_writer
 
                 make_dir_if_need(os.path.join(working_directory,'Logs'))
 
@@ -481,8 +483,6 @@ class TrainingPlan(object):
                     collect_data_inteval = self.default_collect_data_inteval
             if only_steps:
                 self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
-
-
 
             for epoch in range(self.num_epochs):
                 try:
@@ -537,19 +537,19 @@ class TrainingPlan(object):
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
                                 trainitem.training_context['data_template'] = data_provider.traindata.data_template
-
+                                trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                                 trainitem.training_context['model_name'] = trainitem_name
                                 if epoch < int(trainitem.start_epoch):
                                     trainitem.training_context['stop_update'] = 1
 
                                 trainitem.train_model(train_data, test_data,
                                                       epoch if only_steps == False else 0,
-                                                      mbs if only_steps == False else  self.steps ,
+                                                      mbs if only_steps == False else  self.steps,
                                                       self.num_epochs if only_steps == False else 1,
                                                       len(data_provider.batch_sampler) if only_steps == False else max_batches,
-                                                      is_collect_data=mbs % collect_data_inteval == 0,
-                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0,
-                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0,
+                                                      is_collect_data=mbs==0 or mbs% collect_data_inteval == 0,
+                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs >0 and mbs  % self.print_progress_frequency == 0,
+                                                      is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch>0 and epoch% self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
                                                       accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
                             self.steps +=1

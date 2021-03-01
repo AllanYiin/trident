@@ -142,8 +142,9 @@ def image2array(img):
             else:
                 raise ValueError('3d image should be 1, 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
         arr = img.astype(_session.floatx)
-    if arr.flags['C_CONTIGUOUS'] == False:
+    if not arr.flags['C_CONTIGUOUS']:
         arr = np.ascontiguousarray(arr)
+    del img
     return arr.astype(np.float32)
 
 

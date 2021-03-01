@@ -169,6 +169,8 @@ class _Context:
         self._module_dict = dict()
         self.trident_dir = self._get_trident_dir()
         self.backend = 'pytorch'
+        self.enable_tensorboard=False
+        self.summary_writer=None
 
         self.image_backend = 'opencv'
         self.epoch_equivalent = 1000
@@ -236,23 +238,23 @@ class _Context:
             class: The corresponding class.
         """
         if module_name not in self._module_dict:
-            raise KeyError(f'{module_name} is not in registry')
+            raise KeyError('{module_name} is not in registry')
         dd = self._module_dict[module_name]
         if cls_name not in dd:
-            raise KeyError(f'{cls_name} is not registered in {module_name}')
+            raise KeyError('{cls_name} is not registered in {module_name}')
 
         return dd[cls_name]
 
     def _register_module(self, cls, module_name):
         if not inspect.isclass(cls):
-            raise TypeError('module must be a class, ' f'but got {type(cls)}')
+            raise TypeError('module must be a class, ' 'but got {type(cls)}')
 
         cls_name = cls.__name__
         self._module_dict.setdefault(module_name, dict())
         dd = self._module_dict[module_name]
         if cls_name in dd:
-            raise KeyError(f'{cls_name} is already registered '
-                           f'in {module_name}')
+            raise KeyError('{cls_name} is already registered '
+                           'in {module_name}')
         dd[cls_name] = cls
 
     def register_module(self, module_name='module'):
@@ -265,6 +267,10 @@ class _Context:
 
     def get_backend(self):
         return self.backend
+
+    def try_enable_tensorboard(self, summary_writer):
+        self.enable_tensorboard=True
+        self.summary_writer = summary_writer
 
     def regist_data_provider(self,data_provider ):
         if not hasattr(self._thread_local_info,'data_providers'):

@@ -4,6 +4,7 @@ import numpy as np
 import threading
 import tensorboard
 from distutils.version import LooseVersion
+
 if not hasattr(tensorboard, '__version__') or LooseVersion(tensorboard.__version__) < LooseVersion('1.15'):
     raise ImportError('TensorBoard logging requires TensorBoard version 1.15 or above')
 del LooseVersion
@@ -97,7 +98,7 @@ def figure_to_image(figures, close=True):
         data = np.frombuffer(canvas.buffer_rgba(), dtype=np.uint8)
         w, h = figure.canvas.get_width_height()
         image_hwc = data.reshape([h, w, 4])[:, :, 0:3]
-        #image_chw = np.moveaxis(image_hwc, source=2, destination=0)
+        # image_chw = np.moveaxis(image_hwc, source=2, destination=0)
         if close:
             plt.close(figure)
         return image_hwc
@@ -250,6 +251,7 @@ class SummaryWriter(object):
 
                     # return the singleton instance
         return cls.__singleton_instance
+
     def __init__(self, log_dir=None, comment='', purge_step=None, max_queue=10,
                  flush_secs=120, filename_suffix=''):
 
@@ -316,8 +318,6 @@ class SummaryWriter(object):
             v *= 1.1
         self.default_bins = neg_buckets[::-1] + [0] + buckets
 
-
-
     def _get_file_writer(self):
         """Returns the default FileWriter instance. Recreates it if closed."""
         if self.all_writers is None or self.file_writer is None:
@@ -336,8 +336,6 @@ class SummaryWriter(object):
     def get_logdir(self):
         """Returns the directory where event files will be written."""
         return self.log_dir
-
-
 
     def add_scalar(self, tag, scalar_value, global_step=None, walltime=None):
         """Add scalar data to summary.
@@ -358,8 +356,7 @@ class SummaryWriter(object):
         .. image:: _static/img/tensorboard/add_scalar.png
            :scale: 50 %
         """
-        self._get_file_writer().add_summary(scalar_value,global_step,walltime)
-
+        self._get_file_writer().add_summary(Summary(value=[Summary.Value(tag=tag, simple_value=scalar_value)]), global_step, walltime)
 
     def add_scalars(self, main_tag, tag_scalar_dict, global_step=None, walltime=None):
         """Adds many scalar data to summary.
@@ -397,7 +394,7 @@ class SummaryWriter(object):
                                 self.filename_suffix)
                 self.all_writers[fw_tag] = fw
 
-            fw.add_summary(Summary(value=[Summary.Value(tag=main_tag, simple_value=scalar_value)]),global_step, walltime)
+            fw.add_summary(Summary(value=[Summary.Value(tag=main_tag, simple_value=scalar_value)]), global_step, walltime)
 
     def add_histogram(self, tag, values, global_step=None, bins='tensorflow', walltime=None):
         """Add histogram to summary.
@@ -421,7 +418,7 @@ class SummaryWriter(object):
         .. image:: _static/img/tensorboard/add_histogram.png
            :scale: 50 %
         """
-        self._get_file_writer().add_summary(summary.histogram(tag, values, step=global_step,buckets=self.default_bins), global_step=global_step, walltime=walltime)
+        self._get_file_writer().add_summary(summary.histogram(tag, values, step=global_step, buckets=self.default_bins), global_step=global_step, walltime=walltime)
 
     def add_histogram_raw(self, tag, min, max, num, sum, sum_squares,
                           bucket_limits, bucket_counts, global_step=None,
@@ -479,7 +476,7 @@ class SummaryWriter(object):
                               bucket_limit=bucket_limits,
                               bucket=bucket_counts)
 
-        self._get_file_writer().add_summary(Summary(value=[Summary.Value(tag=tag, histo=hist)]),global_step,  walltime)
+        self._get_file_writer().add_summary(Summary(value=[Summary.Value(tag=tag, histo=hist)]), global_step, walltime)
 
     def add_image(self, tag, img_tensor, global_step=None, walltime=None):
         """Add image data to summary.
@@ -514,8 +511,7 @@ class SummaryWriter(object):
            :scale: 50 %
         """
 
-
-        self._get_file_writer().add_summary(summary.image(tag, img_tensor,max_outputs=1), global_step, walltime)
+        self._get_file_writer().add_summary(Summary(value=[Summary.Value(tag=tag, image=img_tensor)]), global_step, walltime)
 
     def add_images(self, tag, img_tensor, global_step=None, walltime=None):
         """Add batched image data to summary.
@@ -546,8 +542,7 @@ class SummaryWriter(object):
            :scale: 30 %
         """
 
-
-        self._get_file_writer().add_summary(summary.image(tag, img_tensor,max_outputs=3), global_step, walltime)
+        self._get_file_writer().add_summary(summary.image(tag, img_tensor, max_outputs=3), global_step, walltime)
 
     def add_figure(self, tag, figure, global_step=None, close=True, walltime=None):
         """Render matplotlib figure into an image and add it to summary.
@@ -566,7 +561,6 @@ class SummaryWriter(object):
             self.add_image(tag, figure_to_image(figure, close), global_step, walltime)
         else:
             self.add_image(tag, figure_to_image(figure, close), global_step, walltime)
-
 
     def add_onnx_graph(self, prototxt):
         self._get_file_writer().add_onnx_graph(load_onnx_graph(prototxt))
@@ -600,7 +594,6 @@ class SummaryWriter(object):
         retval = retval.replace("/", "%%%02x" % (ord("/")))
         retval = retval.replace("\\", "%%%02x" % (ord("\\")))
         return retval
-
 
     def flush(self):
         """Flushes the event file to disk.

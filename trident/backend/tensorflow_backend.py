@@ -37,7 +37,7 @@ from tensorflow.python.util import object_identity
 from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException,  TensorShape
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
-from trident.backend import dtype as Dtype
+from trident.backend.common import dtype as Dtype
 
 _FUN_NAMES = [
     ('float', tops.float),
@@ -495,14 +495,14 @@ class Layer(tf.Module):
         raise NotImplementedError
 
     def get_root(self):
-        if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:
+        if not hasattr(self, '_nodes') or self._nodes is None :
             self.is_root = True
             return self
-        elif self._nodes.value_list[0].is_root == True:
+        elif len(self._nodes) > 0 and self._nodes.value_list[0].is_root:
             return self._nodes.value_list[0]
         else:
             for name, node in self._nodes.item_list:
-                if node.is_root == True:
+                if node.is_root :
                     return node
             return self
     @property
@@ -593,7 +593,7 @@ class Layer(tf.Module):
         else:
             raise ValueError('Not valid module')
 
-    def build(self, input_shape:TensorShape):
+    def build(self, *input_shape:TensorShape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -605,7 +605,7 @@ class Layer(tf.Module):
         """
         pass
 
-    def rebuild(self, input_shape:TensorShape):
+    def rebuild(self,* input_shape:TensorShape):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
@@ -1389,7 +1389,7 @@ class Layer(tf.Module):
                 if isinstance(input[0], numbers.Number):
                     self.input_shape = TensorShape(list(input))
                 else:
-                    self.input_shape = tuple([tensor_to_shape(i.copy().detach()) for i in input if not isinstance(i, (list, tuple))])
+                    self.build(*[tensor_to_shape(inp,need_exclude_batch_axis=True) for inp in input])
 
             else:
                 self.input_shape = TensorShape(list(input))
@@ -2762,6 +2762,12 @@ def fix_layer(layer: Layer):
     if not hasattr(layer, '_uid_prefixs'):
         layer._uid_prefixs = {}
     reset_name(layer, layer._uid_prefixs)
+
+    if 'ssd' in layer.__class__.__base__.__name__.lower() or  'yolo' in layer.__class__.__base__.__name__.lower():
+        if hasattr(layer,'nms_threshold'):
+            delattr(layer,'nms_threshold')
+        if hasattr(layer,'detection_threshold'):
+            delattr(layer,'detection_threshold')
 
     if layer._input_shape is not None and isinstance(layer._input_shape, tuple):
         layer._input_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._input_shape)])

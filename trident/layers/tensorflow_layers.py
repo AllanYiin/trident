@@ -1396,7 +1396,6 @@ class GatedConv2d(Conv2d):
         return x
 
 
-
 class Upsampling2d(Layer):
     def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, keep_output=False, name=None):
         super(Upsampling2d, self).__init__(name=name)

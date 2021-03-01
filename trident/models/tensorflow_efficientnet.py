@@ -185,7 +185,7 @@ def EfficientNet(width_coefficient,
         if dropout_rate > 0:
             efficientnet.add_module('top_dropout',Dropout(dropout_rate,name='top_dropout'))
         efficientnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
-        efficientnet.add_module('softmax', SoftMax(name='softmax'))
+        efficientnet.add_module('softmax', SoftMax(axis=-1,name='softmax'))
     if isinstance(default_size,int):
         default_size=(default_size,default_size,3)
     elif len(default_size)==1:
@@ -415,7 +415,7 @@ def EfficientNetB7(include_top=True,
         input_shape=(600, 600,3)
     effb7 =EfficientNet(2.0, 3.1, default_size=input_shape, dropout_rate=0.5, model_name='efficientnet-b7',include_top=include_top,num_classes=classes)
     with tf.device(get_device()):
-        if pretrained == True:
+        if pretrained:
             download_model_from_google_drive('1NcsqfYpnIXme8nk8qrrvNAVQOGK-EOZz', dirname, 'efficientnet-b7_tf.pth')
             recovery_model = load(os.path.join(dirname, 'efficientnet-b7_tf.pth'))
             recovery_model = fix_layer(recovery_model)

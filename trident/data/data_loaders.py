@@ -696,10 +696,10 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'simpsons.tar')
         extract_path = os.path.join(dirname, 'simpsons')
         extract_archive(tar_file_path, extract_path, archive_format='tar')
-        dataset = load_folder_images(dataset_name, extract_path, folder_as_label=False)
-        dataset.traindata.label = RandomNoiseDataset(shape=(100), random_mode='normal')
-        print('get simpsons images :{0}'.format(len(dataset)))
-        return dataset
+        data_provider = load_folder_images(dataset_name, extract_path, folder_as_label=False)
+        data_provider.traindata.unpair = RandomNoiseDataset(shape=(100), random_mode='normal')
+        print('get simpsons images :{0}'.format(len(data_provider)))
+        return data_provider
     elif dataset_name == 'examples_horse2zebra':
         download_file_from_google_drive('1pqj-T90Vh4wVNBV09kYZWgVPsZUA2f7U', dirname, 'horse2zebra.tar')
         tar_file_path = os.path.join(dirname, 'horse2zebra.tar')
@@ -744,8 +744,8 @@ def load_examples_data(dataset_name):
         imgs = glob.glob(os.path.join(dirname, 'images', '*.*g'))
         masks = glob.glob(os.path.join(dirname, 'masks', '*.png'))
 
-        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb)
-        mskdata = MaskDataset(masks=masks, object_type=ObjectType.color_mask)
+        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb,symbol='image')
+        mskdata = MaskDataset(masks=masks, object_type=ObjectType.color_mask,symbol='mask')
 
         def parse_code(l):
             if len(l.strip().split("\t")) == 2:

@@ -122,7 +122,7 @@ def VGG11(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg11.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name='vgg11'
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         vgg11.model = recovery_model
 
     else:
@@ -152,7 +152,7 @@ def VGG13(include_top=True,
     if pretrained==True:
         download_model_from_google_drive('1wx67gmQ8eHWXs2mhJmNl-t-cFNw7dJ7O',dirname,'vgg13.pth')
         recovery_model=load(os.path.join(dirname,'vgg13.pth'))
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         vgg13.model = recovery_model
 
     else:
@@ -181,7 +181,7 @@ def VGG16(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg16.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg16'
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         vgg16.model = recovery_model
 
     else:
@@ -209,7 +209,7 @@ def VGG19(include_top=True,
         recovery_model=load(os.path.join(dirname,'vgg19.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'vgg19'
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         vgg19.model = recovery_model
 
     else:

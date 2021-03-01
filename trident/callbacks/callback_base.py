@@ -1,3 +1,4 @@
+import inspect
 import uuid
 import warnings
 from abc import ABC
@@ -292,10 +293,17 @@ class LambdaCallback(CallbackBase):
     Objects of derived classes inject functionality in several points of the training process.
     """
 
-    def __init__(self,when='on_batch_end',epoch=None,batch=None,epoch_frequency=None,batch_frequency=None,function=None,is_shared=False):
+    def __init__(self,when='on_batch_end',epoch=None,batch=None,epoch_frequency=None,batch_frequency=None,action=None,is_shared=False):
         super(LambdaCallback, self).__init__(is_shared=is_shared)
         self.is_shared=is_shared
-        self.func = function
+        self.action = None
+        if action is None:
+            raise ValueError("action cannot be None")
+        argspec = inspect.getfullargspec(action)
+        if 'training_context' in argspec.args and len(argspec.args)==1:
+            self.action=action
+        else:
+            raise ValueError("action should has only-one argment 'training_context")
         if when in _valid_when:
             self.when=when
         else:
@@ -307,11 +315,11 @@ class LambdaCallback(CallbackBase):
 
         def on_trigger(self, training_context):
             if (('epoch' in when and 'batch' not in when)  and  ((self.epoch is None and self.epoch_frequency is None) or training_context['current_epoch']==self.epoch or (training_context['current_epoch']+1)%self.epoch_frequency==0 )) or ( ('batch' in when and 'epoch' not in when) and ((self.batch is None and self.batch_frequency is None) or training_context['current_batch']==self.batch or (training_context['steps']+1)%self.batch_frequency==0)) :
-                    self.func(training_context)
+                    self.action(training_context)
             elif (('epoch' not  in when and 'batch' not in when)  and ( training_context['current_epoch'] == self.epoch or (
                     training_context['current_epoch'] + 1) % self.epoch_frequency == 0)) or (('epoch' not  in when and 'batch' not in when) and (
                     training_context['current_batch'] == self.batch or (training_context['steps'] + 1) % self.batch_frequency == 0)):
-                self.func(training_context)
+                self.action(training_context)
 
         setattr(self,when,MethodType(on_trigger, self))
 

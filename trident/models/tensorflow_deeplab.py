@@ -14,6 +14,8 @@ from itertools import repeat
 import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import  image_ops
+from tensorflow.python.ops.image_ops_impl import ResizeMethod
+
 from trident.backend.common import *
 from trident.backend.tensorflow_ops  import *
 from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,  summary
@@ -45,44 +47,37 @@ if not os.path.exists(dirname):
 
 
 
+
 def DeepLabHead(classes=20, atrous_rates=(6, 12, 18,24),num_filters=256):
     return Sequential(
         ASPP(atrous_rates,num_filters=num_filters),
         Conv2d_Block((3,3),num_filters,auto_pad=True,use_bias=False,activation='relu',normalization='batch'),
-        Conv2d((1,1),num_filters=classes,strides=1,auto_pad=True,activation='sigmoid',name='classifier')
+        Conv2d((1,1),num_filters=classes,strides=1,auto_pad=True,activation=None,name='classifier'),
+        SoftMax()
         )
 
 
 
-def ASPPPooling(num_filters,size):
-    return Sequential(GlobalAvgPool2d(keepdims=True),
+def ASPPPooling(num_filters):
+    return Sequential(AdaptiveAvgPool2d((1,1)),
                       Conv2d((1,1),num_filters,strides=1,use_bias=False,activation=None),
-                      Upsampling2d(size=size,mode='bilinear', align_corners=False))
+                      Upsampling2d(scale_factor=14,mode='bilinear', align_corners=False))
 
 
 
-class ASPP(Layer):
-    def __init__(self, atrous_rates,num_filters=256):
-        super(ASPP, self).__init__()
-        self.num_filters=num_filters
-        self.convs = ShortCut2d( mode='concate')
-        self.convs.add_module('conv1',Conv2d_Block((1,1),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch'))
-
+def ASPP(atrous_rates=(6,12,18),num_filters=256):
+        layers=OrderedDict()
+        layers['conv1']=Conv2d_Block((1,1),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch')
         for i in range(len(atrous_rates)):
-            self.convs.add_module('aspp_dilation{0}'.format(i),Conv2d_Block((3,3),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch',dilation=atrous_rates[i]))
+            layers['aspp_dilation{0}'.format(i)]=Conv2d_Block((3,3),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch',dilation=atrous_rates[i])
+        layers['aspp_pooling'] =ASPPPooling(num_filters)
+        return Sequential(
+            ShortCut2d(layers,mode='concate'),
+            Conv2d_Block((1, 1), num_filters, strides=1, use_bias=False, bias=False, activation='relu', normalization='batch', dilation=1, dropout_rate=0.5, name='project')
+        )
 
-        self.project =Conv2d_Block( (1,1),num_filters,strides=1,use_bias=False, bias=False,activation='relu',normalization='batch',dilation=1,dropout_rate=0.5)
 
-    def build(self, input_shape:TensorShape):
-        if self._built == False :
-            self.add_module('aspp_pooling',ASPPPooling(self.num_filters, to_list(input_shape[:-1])))
-            self.to(self.device)
-            self._built = True
 
-    def forward(self, x, **kwargs):
-        x=self.convs(x)
-        x=self.project(x)
-        return x
 
 
 
@@ -108,10 +103,10 @@ class _DeeplabV3_plus(Layer):
         low_level_idx=-1
         high_level_idx=-1
         for i in range(len(moduals)):
-            if low_level_idx<0 and moduals[i].output_shape[-2]==backbond.input_shape[-2]//8:
+            if low_level_idx<0 and moduals[i].output_shape[1]==backbond.input_shape[1]//8:
                 low_level_idx=i
 
-            if high_level_idx<0 and moduals[i].output_shape[-2]==backbond.input_shape[-2]//32:
+            if high_level_idx<0 and moduals[i].output_shape[1]==backbond.input_shape[1]//32:
                 high_level_idx=i
                 break
         self.num_filters=num_filters
@@ -124,22 +119,20 @@ class _DeeplabV3_plus(Layer):
         self.decoder=Sequential(
             DepthwiseConv2d_Block((3,3),depth_multiplier=0.5,strides=1,use_bias=False,activation='leaky_relu',normalization='batch',dropout_rate=0.5),
             DepthwiseConv2d_Block((3,3),depth_multiplier=1,strides=1,use_bias=False,activation='leaky_relu',normalization='batch',dropout_rate=0.1),
-            Conv2d((1, 1), num_filters=self.classes, strides=1, use_bias=False, activation='sigmoid'),
+            Conv2d((1, 1), num_filters=self.classes, strides=1, use_bias=False, activation=None),
+            SoftMax(axis=-1)
 
         )
 
-    def forward(self, x, **kwargs):
+    def forward(self, x,**kwargs):
         low_level_feature=self.backbond1(x)
         high_level_feature = self.backbond2(low_level_feature)
         x=self.aspp(high_level_feature)
-        new_shape =list(int_shape(x)[1:])
-        x=Resize_images_v2(x, [new_shape[1]*4,new_shape[0]*4], method=image_ops.ResizeMethod.BILINEAR)
+        x=tf.image.resize(x, [x.shape[2]*4, x.shape[1]*4], method=ResizeMethod.BILINEAR, preserve_aspect_ratio=True,antialias=True)
         low_level_feature=self.low_level_conv(low_level_feature)
-        x=concate([x,low_level_feature],axis=-1)
+        x=tf.concat([x,low_level_feature],axis=-1)
         x=self.decoder(x)
-
-        new_shape =list(int_shape(x)[1:])
-        x=image_ops.resize_images_v2(x, [new_shape[1]*4,new_shape[0]*4], method=image_ops.ResizeMethod.BILINEAR)
+        x=tf.image.resize(x, [x.shape[2]*4, x.shape[1]*4], method=ResizeMethod.BILINEAR, preserve_aspect_ratio=True,antialias=True)
         return x
 
 

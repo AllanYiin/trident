@@ -230,7 +230,7 @@ def ResNet18(include_top=True,
         download_model_from_google_drive(model_urls['resnet18'], dirname, 'resnet18.pth')
         recovery_model = load(os.path.join(dirname, 'resnet18.pth'))
         recovery_model = fix_layer(recovery_model)
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet18.model = recovery_model
     else:
         resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -250,11 +250,12 @@ def ResNet50(include_top=True,
     else:
         input_shape=(3, 224, 224)
     resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
-    if pretrained==True:
+    if pretrained:
         download_model_from_google_drive(model_urls['resnet50'],dirname,'resnet50.pth')
         recovery_model=load(os.path.join(dirname,'resnet50.pth'))
         recovery_model = fix_layer(recovery_model)
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet50.model = recovery_model
     else:
         resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -279,7 +280,7 @@ def ResNet101(include_top=True,
         download_model_from_google_drive(model_urls['resnet101'],dirname,'resnet101.pth')
         recovery_model=load(os.path.join(dirname,'resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet101.model = recovery_model
     else:
         resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=False)
@@ -304,7 +305,7 @@ def ResNet152(include_top=True,
         download_model_from_google_drive(model_urls['resnet152'],dirname,'resnet152.pth')
         recovery_model=load(os.path.join(dirname,'resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet152.model = recovery_model
     else:
         resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=False)

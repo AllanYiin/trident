@@ -5,7 +5,7 @@ from __future__ import print_function
 import inspect
 import random
 import time
-
+import builtins
 import numpy as np
 from PIL import Image, ImageEnhance, ImageOps
 from trident.backend.common import *
@@ -32,22 +32,34 @@ class PreprocessPolicy(object):
         self.policies = []
         for arg in args:
             self.add(arg)
+        self.pass_cnt=0
+        self.pass_time_spend=0.
 
     def add(self, item):
         if isinstance(item, PreprocessPolicyItem):
             if len(item.name) == 0:
                 item.name = 'item_{0}'.format(len(self.policies))
         self.policies.append(item)
+    def reset_statistics(self):
+        self.pass_cnt=0
+        self.pass_time_spend=0
+        for item in self.policies:
+            if isinstance(item, PreprocessPolicyItem):
+                item.reset_statistics()
 
     def print_statistics(self):
+        print('avg. process time: {0:.5f}'.format(self.pass_time_spend/float(builtins.max(1,self.pass_cnt))))
+
         for item in self.policies:
             if isinstance(item,PreprocessPolicyItem):
-                print('policy {0}   hit-rate={1:.3%}'.format(item.name, item.hit_rate))
-                print('avg. time spend (true): {0}'.format(item.time_spend_true/float(item.count_true)))
-                print('avg. time spend (false):{0}'.format(item.time_spend_false/float(item.count_false)))
+                print(' policy {0}   hit-rate={1:.3%}'.format(item.name, item.hit_rate))
+                print(' avg. time spend (true): {0}'.format(item.time_spend_true/float(builtins.max(1,item.count_true))))
+                print(' avg. time spend (false):{0}'.format(item.time_spend_false/float(builtins.max(1,item.count_false))))
+
 
     def __call__(self, img,spec:TensorSpec=None,**kwargs):
         if isinstance(img, np.ndarray):
+            start_time = time.time()
             if spec is None:
                 spec = TensorSpec(shape=to_tensor(img.shape), object_type=object_type_inference(img))
             if spec.object_type==ObjectType.rgb or spec.object_type==ObjectType.rgb or spec.object_type==ObjectType.gray:
@@ -61,6 +73,8 @@ class PreprocessPolicy(object):
                 except Exception as e:
                     print(e)
             img=image_backend_adaption(img)
+            self.pass_cnt+=1
+            self.pass_time_spend+=float(time.time()-start_time)
             return img
 
     def __repr__(self):
@@ -87,8 +101,8 @@ class PreprocessPolicyItem(object):
         self.name = name
         self.count_true = 0
         self.count_false = 0
-        self.time_spend_true = 0
-        self.time_spend_false = 0
+        self.time_spend_true = 0.
+        self.time_spend_false = 0.
 
     @property
     def hit_rate(self):
@@ -119,7 +133,7 @@ class PreprocessPolicyItem(object):
             elif callable(self.then_process) or inspect.isfunction(self.then_process):
                 img = self.then_process(img,spec=spec)
             self.count_true += 1
-            self.time_spend_true+=(time.time()-start_time)
+            self.time_spend_true+=float(time.time()-start_time)
         elif bool_if==False:
             if self.else_process is not None:
                 if isinstance(self.else_process, list):
@@ -128,9 +142,9 @@ class PreprocessPolicyItem(object):
                 elif callable(self.else_process) or inspect.isfunction(self.else_process):
                     img = self.else_process(img,spec=spec)
             self.count_false += 1
-            self.time_spend_false+= (time.time() - start_time)
+            self.time_spend_false+= float(time.time() - start_time)
         else:
             self.count_false += 1
-            self.time_spend_false += (time.time() - start_time)
+            self.time_spend_false += float(time.time() - start_time)
             pass
         return img

@@ -544,6 +544,7 @@ def get_signature(fn, name=None):
 
     signature = Signature()
     func_code = fn.__code__
+
     annotations = fn.__annotations__
     sig = inspect.signature(fn)
     paras = list(sig.parameters.items())
@@ -555,7 +556,10 @@ def get_signature(fn, name=None):
 
     for p in paras:
         if p[0] not in ['kwargs', 'self', 'args'] and p[1].default is inspect._empty:
-            signature.inputs[p[0]] = None
+            if p[0]=='x' and fn.__name__=='forward':
+                signature.inputs['input'] = None
+            else:
+                signature.inputs[p[0]] = None
 
     if name is not None:
         signature.name = name

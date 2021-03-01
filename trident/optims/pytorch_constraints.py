@@ -6,15 +6,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from trident.backend.pytorch_backend import Layer
 
-from trident.backend.common import get_session
+from trident.backend.common import get_session, epsilon
 from trident.backend.pytorch_ops import *
 
 __all__ = ['max_norm', 'non_neg_norm', 'unit_norm', 'min_max_norm', 'maxnorm', 'nonnegnorm', 'unitnorm', 'minmaxnorm', 'get_constraint']
 
 _session=get_session()
 _epsilon=_session.epsilon
-
+@torch.no_grad()
 def max_norm(model, max_value=3,axis=0):
     """
     MaxNorm weight constraint.
@@ -29,8 +30,9 @@ def max_norm(model, max_value=3,axis=0):
         if 'bias' not in name and param is not None  and param.requires_grad==True:
             norm = param.data.norm(2, dim=axis, keepdim=True)
             desired = torch.clamp(norm, 0, max_value)
-            param.data.copy_(param.data * (desired / (_epsilon + norm)))
+            param.data.copy_(param.data * (desired / (epsilon() + norm)))
 
+@torch.no_grad()
 def non_neg_norm(model):
     """
     Constrains the weights to be non-negative.
@@ -42,6 +44,7 @@ def non_neg_norm(model):
         if 'bias' not in name and param is not None  and param.requires_grad==True:
             param.data.copy_(clip(param.data, 0, np.inf))
 
+@torch.no_grad()
 def unit_norm(model,axis=0):
     """
     Constrains the weights incident to each hidden unit to have unit norm.
@@ -50,12 +53,18 @@ def unit_norm(model,axis=0):
         model : the model contains  weights need to setting the constraints.
 
     """
-    for name, param in model.named_parameters():
-        if 'bias' not in name and param is not None  and param.requires_grad==True:
-            norm = param.data.norm(2, dim=axis, keepdim=True)
-            param.data.copy_(param.data / (_epsilon + norm))
+    if isinstance(model,Layer):
+        for name, param in model.named_parameters():
+            if 'bias' not in name and param is not None  and param.requires_grad==True:
+                norm = param.data.norm(2, dim=axis, keepdim=True)
+                param.data.copy_(param.data / (epsilon() + norm))
+    elif is_tensor(model):
+        if  model is not None and model.requires_grad == True:
+            norm = model.data.norm(2, dim=axis, keepdim=True)
+            model.data.copy_(model.data / (epsilon() + norm))
 
-def min_max_norm(model,min_value=1e-8, max_value=1, rate=3.0, axis=0):
+@torch.no_grad()
+def min_max_norm(model,min_value=0, max_value=1, rate=2.0, axis=0):
     """
     MinMaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have the norm between a lower bound and an upper bound.
@@ -73,7 +82,7 @@ def min_max_norm(model,min_value=1e-8, max_value=1, rate=3.0, axis=0):
         if 'bias' not in name and param is not None  and param.requires_grad==True:
             norm = param.data.norm(2, dim=axis, keepdim=True)
             desired = rate *clip(norm, min_value, max_value)+ (1 - rate) * norm
-            param.data.copy_(param.data * (desired / (_epsilon + norm)))
+            param.data.copy_(param.data * (desired / (epsilon() + norm)))
 
 
 

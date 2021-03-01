@@ -59,7 +59,7 @@ class Loss(object):
   ```
   """
 
-  def __init__(self, reduction='mean', sample_weight=None,axis=None,name=None):
+  def __init__(self, reduction='mean', sample_weight=None,axis=None,enable_ohem=False,ohem_ratio=3.5,name=None,**kwargs):
     """Initializes `Loss` class.
     Args:
       reduction: (Optional) Type of `tf.keras.losses.Reduction` to apply to
@@ -78,6 +78,9 @@ class Loss(object):
     self.name = name
     self.sample_weight=sample_weight
     self.axis=axis
+    self.enable_ohem=enable_ohem
+    self.ohem_ratio=ohem_ratio
+
 
   def __call__(self, output: Tensor, target: Tensor,**kwargs):
       target.to(output.device)
@@ -100,11 +103,12 @@ class Loss(object):
     NotImplementedError('Must be implemented in subclasses.')
 
   def _get_reduction(self, loss):
+      reduction_axis=list(range(ndim(loss)))
       if ndim(loss)==0 or self.reduction == 'none':
           return loss
       if ndim(loss)>=2 and self.reduction == 'batch_sum':
           loss=reshape(loss,(int_shape(loss)[0],-1))
-          return loss.mean(1).sum()
+          return loss.sum(1).mean()
       elif ndim(loss)>=2 and self.reduction == 'batch_mean':
           loss = reshape(loss, (int_shape(loss)[0], -1))
           return loss.mean(1).mean()
@@ -120,3 +124,8 @@ class Loss(object):
           sys.stderr.write('{0} has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.name))
           loss = where(is_nan(loss), zeros_like(loss,requires_grad=True), loss)
       return loss
+
+  def _do_ohem(self,output: Tensor, target: Tensor):
+      pass
+
+

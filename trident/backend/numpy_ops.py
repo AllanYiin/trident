@@ -9,7 +9,7 @@ import builtins
 from scipy import special
 from collections import Sized, Iterable
 from functools import partial
-from typing import Tuple, List, Optional, Union
+from typing import Tuple, List, Optional, Union, Sequence
 
 import numpy as np
 from trident.backend.common import *
@@ -1306,7 +1306,7 @@ def reduce_mean(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if axis is None:
-        return x.mean()
+        return np.mean(x)
     elif isinstance(axis, int):
         return np.mean(x,axis=axis,keepdims=keepdims)
     elif isinstance(axis, list):
@@ -1765,6 +1765,31 @@ def smooth_relu(x):
     return np.log(1 + np.exp(x))
 
 
+def crelu(x,axis=1):
+    """Computes Concatenated ReLU.
+
+    Concatenates a ReLU which selects only the positive part of the activation
+    with a ReLU which selects only the *negative* part of the activation.
+    Note that as a result this non-linearity doubles the depth of the activations.
+    Source: [Understanding and Improving Convolutional Neural Networks via
+    Concatenated Rectified Linear Units. W. Shang, et
+    al.](https://arxiv.org/abs/1603.05201)
+
+    Args:
+        x (Tensor): input tensor.
+        axis: The axis that the output values are concatenated along. Default is 1.
+
+    Returns:
+      A `Tensor` with the same type as `x`.
+
+    References:
+      Understanding and Improving Convolutional Neural Networks via Concatenated
+      Rectified Linear Units:
+        [Shang et al., 2016](http://proceedings.mlr.press/v48/shang16)
+        ([pdf](http://proceedings.mlr.press/v48/shang16.pdf))
+    """
+    x=np.concatenate([x,-x],axis=axis)
+    return relu(x)
 
 
 
@@ -2188,6 +2213,7 @@ def moments(x:np.ndarray, axis, keepdims=True):
     """
 
     Args:
+        keepdims ():
         x (np.ndarray): input tensor.
         axis (int) :
 
@@ -2214,7 +2240,7 @@ def l2_normalize(x:np.ndarray, eps=epsilon()):
 
 
     """
-    return x / np.sqrt(reduce_sum(np.square(x)) + eps)
+    return x / np.sqrt(np.square(x).sum() + eps)
 
 
 ############################
@@ -2428,6 +2454,82 @@ def expand_dims(x:np.ndarray, axis=0):
 ############################
 ## tensor generation
 ###########################
+
+def pad(x:np.ndarray, paddings: Sequence[int], mode='constant', value=0):
+    r"""Pads tensor.
+
+    Padding size:
+        The padding size by which to pad some dimensions of :attr:`input`
+        are described starting from the last dimension and moving forward.
+        :math:`\left\lfloor\frac{\text{len(pad)}}{2}\right\rfloor` dimensions
+        of ``input`` will be padded.
+        For example, to pad only the last dimension of the input tensor, then
+        :attr:`pad` has the form
+        :math:`(\text{padding\_left}, \text{padding\_right})`;
+        to pad the last 2 dimensions of the input tensor, then use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom})`;
+        to pad the last 3 dimensions, use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom}`
+        :math:`\text{padding\_front}, \text{padding\_back})`.
+
+    Padding mode:
+        See :class:`torch.nn.ConstantPad2d`, :class:`torch.nn.ReflectionPad2d`, and
+        :class:`torch.nn.ReplicationPad2d` for concrete examples on how each of the
+        padding modes works. Constant padding is implemented for arbitrary dimensions.
+        Replicate padding is implemented for padding the last 3 dimensions of 5D input
+        tensor, or the last 2 dimensions of 4D input tensor, or the last dimension of
+        3D input tensor. Reflect padding is only implemented for padding the last 2
+        dimensions of 4D input tensor, or the last dimension of 3D input tensor.
+
+    Note:
+        When using the CUDA backend, this operation may induce nondeterministic
+        behaviour in its backward pass that is not easily switched off.
+        Please see the notes on :doc:`/notes/randomness` for background.
+
+    Args:
+
+        x (np.ndarray): N-dimensional tensor
+        paddings (tuple): m-elements tuple, where
+            :math:`\frac{m}{2} \leq` input dimensions and :math:`m` is even.
+        mode: ``'constant'``, ``'reflect'``, ``'replicate'`` or ``'circular'``.
+            Default: ``'constant'``
+        value: fill value for ``'constant'`` padding. Default: ``0``
+
+     Examples:
+        >>> t=np.array([[0., 1., 2.],[3., 4., 5.],[6., 7., 8.]])
+        >>> pad(t, ((1, 1),(2, 0)), mode='replicate')
+        array([[0., 0., 1., 2., 2.],
+          [0., 0., 1., 2., 2.],
+          [0., 0., 1., 2., 2.],
+          [3., 3., 4., 5., 5.],
+          [6., 6., 7., 8., 8.]])
+
+    """
+    valid_items=['constant', 'reflect', 'replicate' ,'circular','symmetric','zero']
+    if mode not in valid_items:
+        raise ValueError('{0} is not valid for mode.'.format(mode))
+    if mode=='zero':
+        mode='constant'
+        value=0
+    if mode == 'replicate':
+        mode = 'edge'
+    if mode == 'circular':
+        mode = 'symmetric'
+    if mode=='constant':
+        return np.pad(x,pad_width=paddings,mode=mode,constant_values=value)
+    else:
+        return np.pad(x, pad_width=paddings, mode=mode)
+
+
+############################
+## tensor generation
+###########################
+
+
+
+
 
 def ones(shape, dtype=np.float32):
     """Instantiates an all-ones tensor and returns it.
@@ -2665,6 +2767,20 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     grid = np.stack([grid_y, grid_x], -1)
     return grid
 
+def reverse(x, axis):
+  """Reverse a tensor along the specified axes.
+
+  Arguments:
+      x: Tensor to reverse.
+      axis: Integer or iterable of integers.
+          Axes to reverse.
+
+  Returns:
+      A tensor.
+  """
+  if isinstance(axis, int):
+    axis = [axis]
+  return np.flip(x,axis=axis)
 
 ############################
 ## tensor manipulation

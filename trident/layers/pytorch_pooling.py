@@ -798,7 +798,16 @@ class GlobalAvgPool2d(Layer):
 
 
 class AdaptiveAvgPool2d(Layer):
-    """AdaptiveAverage Pooling Imprementation """
+    r"""
+     Applies a 2D adaptive average pooling over an input signal composed of
+     several input planes.
+
+     See :class:`~torch.nn.AdaptiveAvgPool2d` for details and output shape.
+
+     Args:
+         output_size: (height,width) the target output size (single integer or
+             double-integer tuple)
+     """
     def __init__(self, output_size, name='adaptive_avg_pool'):
         super(AdaptiveAvgPool2d, self).__init__()
         self.output_size = _pair(output_size)

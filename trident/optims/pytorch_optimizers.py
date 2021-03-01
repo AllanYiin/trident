@@ -16,34 +16,7 @@ __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'P
            'Ranger', 'RangerLars','AdaBelief','RangerBelief','DiffGrad','get_optimizer']
 
 
-def _filter_grads(grads, gradient_centralization=None):
-    """Filter out iterable with grad equal to None or abnormal grad and do the gradient centralization."""
-    if gradient_centralization is None:
-        pass
-    elif gradient_centralization == 'all':
-        if len(int_shape(grads)) > 1:
-            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
-    elif gradient_centralization == 'gcc':
-        if len(int_shape(grads)) >3:
-            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
-    elif gradient_centralization == 'gc':
-        if len(int_shape(grads)) > 1:
-            grads.add_(-reduce_mean(grads, axis=list(range(1, len(int_shape(grads)))), keepdims=True))
-    return grads
 
-
-def centralized_gradient(x, gradient_centralization=None):
-    '''credit - https://github.com/Yonghongwei/Gradient-Centralization '''
-    if gradient_centralization is None:
-        pass
-    else:
-        if gradient_centralization in ['all','gcc']:
-            if len(list(x.size())) > 3:
-                x.add_(-reduce_mean(x, axis=list(range(1, len(int_shape(x)))), keepdims=True))
-        if gradient_centralization in ['all', 'gc']:
-            if len(list(x.size())) > 1:
-                x.add_(-reduce_mean(x, axis=list(range(1, len(int_shape(x)))), keepdims=True))
-    return x
 
 
 class Optimizer(optimizer.Optimizer):
@@ -178,12 +151,14 @@ class Adam(Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
+            for p in group['params'] :
+                if p.grad is None or not p.trainable:
                     continue
                 grad = p.grad
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+                if any_abnormal_number(grad):
+                    grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
                 amsgrad = group['amsgrad']
 
                 state = self.state[p]
@@ -195,13 +170,13 @@ class Adam(Optimizer):
                     state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
                     # Exponential moving average of squared gradient values
                     state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-                    if amsgrad:
-                        # Maintains max of all exp. moving avg. of sq. grad. values
-                        state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    #if amsgrad:
+                    # Maintains max of all exp. moving avg. of sq. grad. values
+                    state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                if amsgrad:
-                    max_exp_avg_sq = state['max_exp_avg_sq']
+
+                max_exp_avg_sq = state['max_exp_avg_sq']
                 beta1, beta2 = group['betas']
 
                 state['step'] += 1
@@ -865,13 +840,13 @@ class PlainRAdam(Optimizer):
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                                 N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(_filter_grads(grad,self.gradient_centralization), denom, value=-step_size)
+                    p_data.addcdiv_(grad, denom, value=-step_size)
                     p.data.copy_(p_data)
                 elif self.degenerated_to_sgd:
                     if group['weight_decay'] != 0:
                         p_data.add_(p_data, alpha=-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] / (1 - beta1 ** state['step'])
-                    p_data.add_(_filter_grads(grad,self.gradient_centralization),alpha=-step_size)
+                    p_data.add_(grad,alpha=-step_size)
                     p.data.copy_(p_data)
 
         return loss
@@ -968,7 +943,7 @@ class AdamW(Optimizer):
                 if group['weight_decay'] != 0:
                     p_data.add_(p_data, alpha=-group['weight_decay'] * scheduled_lr)
 
-                p_data.addcdiv_( _filter_grads(grad,self.gradient_centralization), denom,value=-step_size)
+                p_data.addcdiv_( grad, denom,value=-step_size)
 
                 p.data.copy_(p_data)
 
@@ -1099,7 +1074,6 @@ class Ranger(Optimizer):
         # for w in it.chain(*self.slow_weights):
         #    w.requires_grad = False
     def __setstate__(self, state):
-        print("set state called")
         super(Ranger, self).__setstate__(state)
 
     @torch.no_grad()
@@ -1118,7 +1092,7 @@ class Ranger(Optimizer):
         # Evaluate averages and grad, update param tensors
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None and not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
 
@@ -1130,7 +1104,7 @@ class Ranger(Optimizer):
                 state = self.state[p]  # get state dict for this param
 
                 if len(state) == 0:  # if first time to run...init dictionary with our desired entries
-                    state['step'] = 0
+                    state['step'] = 0.0
                     state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
                     state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
 
@@ -1152,9 +1126,8 @@ class Ranger(Optimizer):
 
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
-                # grad=_filter_grads(grad,self.gradient_centralization)
 
-                state['step'] += 1
+                state['step'] += 1.0
                 buffered = self.radam_buffer[int(state['step'] % 10)]
                 if state['step'] == buffered[0]:
                     N_sma, step_size = buffered[1], buffered[2]
@@ -1174,7 +1147,8 @@ class Ranger(Optimizer):
                     buffered[2] = step_size
 
                 if group['weight_decay'] != 0:
-                    p_data.add_(p_data, alpha=-group['weight_decay'] * group['lr'])
+                    p_data = p_data - p.value() * group['weight_decay']* group['lr']
+
 
                 if N_sma > 5:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
@@ -1184,8 +1158,7 @@ class Ranger(Optimizer):
 
                 if any_abnormal_number(p_data):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                    p_data.copy_(where(is_abnormal_number(p_data),p.data,p_data))
-
+                    p_data=where(is_abnormal_number(p_data),p.data,p_data)
 
                 p.data.copy_(p_data)
 
@@ -1199,7 +1172,6 @@ class Ranger(Optimizer):
                         sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                         slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
                     p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
-
 
         return loss
 
@@ -1263,113 +1235,103 @@ class RangerLars(Optimizer):
         if closure is not None:
             loss = closure()
 
-        for group in self.param_groups:
+            for group in self.param_groups:
+                for p in group['params']:
+                    if p.grad is None:
+                        continue
+                    grad = p.grad.data.float()
 
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-                grad = p.grad.data.float()
+                    if grad.is_sparse:
+                        raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
-                if grad.is_sparse:
-                    raise RuntimeError('Ralamb does not support sparse gradients')
+                    p_data = p.data.float()
 
-                p_data = p.data.float()
+                    state = self.state[p]  # get state dict for this param
 
-                state = self.state[p]
+                    if len(state) == 0:  # if first time to run...init dictionary with our desired entries
+                        state['step'] = 0
+                        state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
+                        state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
 
-                if len(state) == 0:
-                    state['step'] = 0
-                    state['exp_avg'] = torch.zeros_like(p_data)
-                    state['exp_avg_sq'] = torch.zeros_like(p_data)
-                    state['slow_buffer'] = torch.empty_like(p.data)
-                    state['slow_buffer'].copy_(p.data)
-                else:
-                    state['exp_avg'] = state['exp_avg'].type_as(p_data)
-                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
-
-                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                beta1, beta2 = group['betas']
-
-                if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
-
-
-                # Decay the first and second moment running average coefficient
-                # m_t
-                exp_avg.mul_(beta1).add_(grad,alpha=1- beta1)
-                # v_t
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad,value=1 - beta2)
-
-                # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
-                # grad_residual = grad - exp_avg
-                # exp_avg_sq.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1 - beta2)
-
-                state['step'] += 1
-                buffered = self.radam_buffer[int(state['step'] % 10)]
-
-                radam_step = None
-                if state['step'] == buffered[0]:
-                    N_sma, radam_step_size = buffered[1], buffered[2]
-                else:
-                    buffered[0] = state['step']
-                    beta2_t = beta2 ** state['step']
-                    N_sma_max = 2.0 / (1 - beta2) - 1.0
-                    N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
-                    buffered[1] = N_sma
-
-                    # more conservative since it's an approximated value
-
-                    if N_sma >= self.N_sma_threshhold:
-                        radam_step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                        # look ahead weight storage now in state dict
+                        state['slow_buffer'] = torch.empty_like(p.data)
+                        state['slow_buffer'].copy_(p.data)
                     else:
-                        radam_step_size = (1 - beta1 ** state['step'])
-                    buffered[2] = radam_step_size
+                        state['exp_avg'] = state['exp_avg'].type_as(p_data)
+                        state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
 
-                update = zeros_like(p_data)
-                denom = exp_avg_sq.sqrt().add_(group['eps'])
-                if  N_sma >= self.N_sma_threshhold:
-                    update.addcdiv_(exp_avg, denom,value=radam_step_size)
-                else:
-                    update.add_(exp_avg,alpha=radam_step_size)
+                    # begin computations
+                    exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                    beta1, beta2 = group['betas']
+                    if self.gradient_centralization in ['all', 'gcc']:
+                        if len(list(grad.size())) > 3:
+                            grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
 
-                if group['weight_decay'] != 0:
-                    update.add_(p_data,alpha=group['weight_decay'])
+                    exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
-                if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(update.size())) > 1:
-                        update.add_(-update.mean(dim=tuple(range(1, update.dim())), keepdim=True))
+                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
-                radam_norm = norm(update,axis=None)
-                weight_norm =norm(p.data.detach(),axis=None)
-                if weight_norm == 0 or radam_norm == 0:
-                    trust_ratio = 1.0
-                else:
-                    trust_ratio = clip(true_divide(weight_norm,radam_norm),0.0,10.0)
+                    # grad=_filter_grads(grad,self.gradient_centralization)
 
-                state['weight_norm'] = weight_norm
-                state['adam_norm'] = radam_norm
-                state['trust_ratio'] = trust_ratio
+                    state['step'] += 1
+                    buffered = self.radam_buffer[int(state['step'] % 10)]
+                    if state['step'] == buffered[0]:
+                        N_sma, step_size = buffered[1], buffered[2]
+                    else:
+                        buffered[0] = state['step']
+                        beta2_t = beta2 ** state['step']
+                        N_sma_max = 2 / (1 - beta2) - 1
+                        N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                        buffered[1] = N_sma
 
-                if N_sma > 5:
-                    denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(update, denom, value=-radam_step_size*trust_ratio * group['lr'])
-                else:
-                    p_data.add_(update, alpha=-radam_step_size*trust_ratio * group['lr'])
+                        # more conservative since it's an approximated value
+                        if N_sma >= self.N_sma_threshhold:
+                            step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
+                                    N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                        else:
+                            step_size = 1.0 / (1 - beta1 ** state['step'])
+                        buffered[2] = step_size
 
-                if any_abnormal_number(p_data):
+                    update = zeros_like(p_data)
+                    if N_sma >= 5:
+                        denom = exp_avg_sq.sqrt().add_(group['eps'])
+                        update.addcdiv_(exp_avg, denom, value=step_size)
+                    else:
+                        update.add_(exp_avg, alpha=step_size)
+
+                    if group['weight_decay'] != 0:
+                        update.add_(group['weight_decay'], p_data)
+
+                    radam_norm = update.pow(2.0).sum().sqrt()
+                    weight_norm = p.data.pow(2.0).sum().sqrt()
+                    if weight_norm == 0 or radam_norm == 0:
+                        trust_ratio = 1.0
+                    else:
+                        trust_ratio = weight_norm / radam_norm
+
+                    trust_ratio = clip(to_tensor(trust_ratio),0.0,10.0)
+
+                    state['weight_norm'] = weight_norm
+                    state['adam_norm'] = radam_norm
+                    state['trust_ratio'] = trust_ratio
+
+                    p_data.add_(-update * trust_ratio * group['lr'])
+
+                    if any_abnormal_number(p_data):
+                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
                     p_data.copy_(where(is_abnormal_number(p_data), p.data, p_data))
 
-                p.data.copy_(p_data)
+                    p.data.copy_(p_data)
 
-                # integrated look ahead...
-                # we do it at the param level instead of group level
-                if state['step'] % group['k'] == 0:
-                    slow_p = state['slow_buffer']  # get access to slow param tensor
-                    slow_p.add_( p_data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
-                    if any_abnormal_number(slow_p):
+                    # integrated look ahead...
+                    # we do it at the param level instead of group level
+                    if state['step'] % group['k'] == 0:
+                        slow_p = state['slow_buffer']  # get access to slow param tensor
+                        slow_p.add_(p.data - slow_p, alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                        if any_abnormal_number(slow_p):
+                            sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                         slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
-                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+                        p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
 
 
         return loss
@@ -1615,13 +1577,13 @@ class AdaBelief(Optimizer):
                     state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
                     # Exponential moving average of squared gradient values
                     state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-                    if amsgrad:
-                        # Maintains max of all exp. moving avg. of sq. grad. values
-                        state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    #if amsgrad:
+                    # Maintains max of all exp. moving avg. of sq. grad. values
+                    state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                if amsgrad:
-                    max_exp_avg_sq = state['max_exp_avg_sq']
+                #if amsgrad:
+                max_exp_avg_sq = state['max_exp_avg_sq']
                 beta1, beta2 = group['betas']
 
                 state['step'] += 1

@@ -11,7 +11,7 @@ from tensorflow.python.ops import nn_ops
 from trident.backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['accuracy','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
+__all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 
 def flatten_check(output, target):
@@ -41,6 +41,7 @@ def accuracy(output, target, topk=1, axis=-1,ignore_index=-100, exclude_mask=Fal
     input_tensor = output.copy().detach()
     target_tensor = target.copy().detach()
     num_classes = int_shape(output)[axis]
+    _dtype=input_tensor.dtype
 
     is_logsoftmax = None
     from_logits = None
@@ -67,18 +68,19 @@ def accuracy(output, target, topk=1, axis=-1,ignore_index=-100, exclude_mask=Fal
         target_tensor = argmax(target_tensor, axis).squeeze()
     if input_tensor.shape != target_tensor.shape and topk == 1:
         raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
-
-    input_mask=ones_like(input_tensor,dtype=input_tensor.dtype)
+    input_tensor_numpy=to_numpy(input_tensor)
+    input_mask=np.ones(int_shape(input_tensor))
     if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
-        input_mask[input_tensor==ignore_index] = 0
+        input_mask[input_tensor_numpy==int(ignore_index)] = 0.
     elif isinstance(ignore_index, (list, tuple)):
         for idx in ignore_index:
             if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
-                input_mask[input_tensor == idx] = 0
+                input_mask[input_tensor_numpy ==int( idx)] = 0.
+    input_mask=to_tensor(input_mask,dtype=_dtype)
 
     batch_size = int_shape(target_tensor)[0]
     if topk == 1:
-        return reduce_sum(cast(tf.equal(input_tensor,target_tensor),output.dtype)*input_mask)/clip(reduce_sum(input_mask),min=1)
+        return reduce_sum(equal(input_tensor,target_tensor,dtype=_dtype)*input_mask)/clip(reduce_sum(input_mask),min=1)
     else:
         _,pred = input_tensor.topk(topk)
         pred = cast(tf.transpose(pred),'float32')
@@ -95,6 +97,7 @@ def recall(output, target, axis=-1,ignore_index=-100):
     input_tensor = output.copy().detach()
     target_tensor = target.copy().detach()
     num_classes = int_shape(output)[axis]
+    _dtype = input_tensor.dtype
 
     is_logsoftmax = None
     from_logits = None
@@ -122,17 +125,19 @@ def recall(output, target, axis=-1,ignore_index=-100):
     if input_tensor.shape != target_tensor.shape :
         raise ValueError('input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
 
-    target_mask=ones_like(target_tensor,dtype=input_tensor.dtype)
+    target_tensor_numpy = to_numpy(target_tensor)
+    target_mask = np.ones(int_shape(target_tensor))
     if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
-        target_mask[target_tensor==ignore_index] = 0
+        target_mask[target_tensor_numpy == int(ignore_index)] = 0.
     elif isinstance(ignore_index, (list, tuple)):
         for idx in ignore_index:
             if isinstance(idx, int) and 0 <= idx < int_shape(output)[axis]:
-                target_mask[target_tensor == idx] = 0
+                target_mask[target_tensor_numpy == int(idx)] = 0.
+    target_mask = to_tensor(target_mask, dtype=_dtype)
 
     batch_size = int_shape(target_tensor)[0]
 
-    return reduce_sum(cast(tf.equal(input_tensor,target_tensor),output.dtype)*target_mask)/clip(reduce_sum(target_mask),min=1)
+    return reduce_sum(equal(input_tensor,target_tensor,dtype=_dtype)*target_mask)/clip(reduce_sum(target_mask),min=1)
 
 
 def pixel_accuracy(output, target):
@@ -164,18 +169,47 @@ def alpha_pixel_accuracy(output,alpha):
 
 
 
-def iou(output, target):
+def iou(output, target,axis=-1):
     output, target = flatten_check(output, target)
     input_tensor = output.copy().detach()
-    target_tensor = target.copy().detach()
-    if input_tensor.dtype != tf.int64:
-        input_tensor = argmax(input_tensor, axis=-1).squeeze()
-    if target_tensor.dtype != tf.int64:
-        target_tensor = argmax(target_tensor, axis=-1).squeeze()
+    target_tensor =target.copy().detach()
 
-    intersection =( greater(input_tensor ,0) * equal(input_tensor ,target_tensor)).sum()
-    union=greater(( greater(input_tensor ,0) + greater(target_tensor ,0) ),0).sum()
+    num_classes = int_shape(input_tensor)[axis]
+    sample_weight=np.ones(num_classes)
+    sample_weight[0]=0
+    sample_weight = to_tensor(sample_weight)
+    reshape_shape = [1] * ndim(input_tensor)
+    reshape_shape[-1] = num_classes
+    sample_weight=reshape(sample_weight,reshape_shape)
 
+    is_logsoftmax = None
+    from_logits = None
+    is_target_onehot=None
+    output_exp = exp(input_tensor)
+    if (ndim(input_tensor) >= 1 and 'float' in str(input_tensor.dtype) and input_tensor.min() >= 0 and input_tensor.max() <= 1):
+        is_logsoftmax = False
+        from_logits = True
+        input_tensor = clip(input_tensor, min=1e-8, max=1 - 1e-8)
+
+    elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+        is_logsoftmax = True
+        from_logits = True
+        input_tensor = clip(exp(input_tensor), min=1e-8, max=1 - 1e-8)
+    else:
+        is_logsoftmax = False
+        from_logits = False
+
+    if target_tensor.dtype == str2dtype('long'):
+        is_target_onehot = False
+    elif target_tensor.dtype != str2dtype('long') and (target_tensor.min() >= 0 and target_tensor.max() <= 1 and abs(target_tensor.sum(-1).mean() - 1) < 1e-4):
+        target_tensor = clip(target_tensor, min=1e-8, max=1 - 1e-8)
+        is_target_onehot = True
+
+    if target_tensor.dtype == tf.int64 and is_target_onehot == False:
+        target_tensor = cast(make_onehot(target_tensor, num_classes=num_classes, axis=axis),output.dtype)
+
+    intersection = reduce_sum(input_tensor * target_tensor *greater_equal(input_tensor,0.5,dtype=output.dtype)* sample_weight)
+    union = reduce_sum((input_tensor *greater_equal(input_tensor,0.5,dtype=output.dtype)+ target_tensor) * sample_weight) - intersection
     return intersection/maximum(union,1)
 
 def psnr(output, target):

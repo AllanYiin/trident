@@ -9,10 +9,13 @@ import locale
 import os
 import random
 import string
+import uuid
 import warnings
 from typing import List
 
 import numpy as np
+from trident import context
+
 from trident.misc.ipython_utils import is_in_ipython
 
 from trident.data.vision_transforms import Unnormalize, Normalize
@@ -48,7 +51,7 @@ class ImageDataProvider(object):
 
     def __init__(self, dataset_name='', traindata=None, testdata=None, minibatch_size=8, mode='tuple', **kwargs):
         self.__name__ = dataset_name
-
+        self.uuid = uuid.uuid4().node
         self.traindata = traindata
         self.testdata = testdata
         self.annotations = {}
@@ -81,6 +84,8 @@ class ImageDataProvider(object):
         self._label_transform_funcs = []
         self._paired_transform_funcs = []
         self.spatial_transform_funcs = []
+        cxt=context._context()
+        cxt.regist_data_provider(self)
 
     @property
     def signature(self):
@@ -140,13 +145,11 @@ class ImageDataProvider(object):
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
             self.traindata.data.transform_funcs =copy.deepcopy(value)
-            if len(self.traindata.unpair) > 0:
-                self.traindata.unpair.transform_funcs =copy.deepcopy(value)
+
             self.traindata.update_data_template()
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
             self.testdata.data.transform_funcs =copy.deepcopy(value)
-            if len(self.testdata.unpair) > 0:
-                self.testdata.unpair.transform_funcs = copy.deepcopy(value)
+
             self.testdata.update_data_template()
 
     def image_transform(self, img_data):
@@ -223,6 +226,7 @@ class ImageDataProvider(object):
     def class_names(self):
         return self._class_names
 
+
     @class_names.setter
     def class_names(self, value):
         self._class_names = value
@@ -270,11 +274,13 @@ class ImageDataProvider(object):
                 return array2image(img)
 
     def label_statistics(self):
-        if self.traindata.label is LabelDataset:
+        if isinstance(self.traindata.label,LabelDataset):
             unique, counts = np.unique(np.array(self.traindata.label.items), return_counts=True)
+            max_len=builtins.max([get_string_actual_length(item) for item in self.class_names[self.__default_language__]])+5
             for i in range(len(unique)):
+                class_names=''.join([' ']*max_len) if self.class_names is None or len(self.class_names) == 0 else self.index2label(unique[i])+''.join([' ']*(max_len-get_string_actual_length(self.index2label(unique[i]))))
                 bar=['█']*int(builtins.round(50*counts[i] / float(len(self.traindata.label.items))))
-                print('{0:<10} {1} {2} {3:.3%}'.format(unique[i],''.join(bar),counts[i],counts[i]/float(len(self.traindata.label.items))))
+                print('{0:<10} {1} {2:<50} {3:,} ({4:.3%})'.format(unique[i],class_names,''.join(bar),counts[i],counts[i]/float(len(self.traindata.label.items))))
 
 
 
@@ -323,15 +329,18 @@ class ImageDataProvider(object):
         else:
             return None
 
-    def get_all_data(self, is_shuffle=False, topk=-1):
+    def get_all_data(self, is_shuffle=False,topk=-1):
         idxes = np.arange(len(self.traindata.data))
         if is_shuffle :
             np.random.shuffle(idxes)
         data = []
         if topk == -1:
             topk = len(self.traindata.data)
+
         for i in range(topk):
             data.append(self.traindata.data.__getitem__(idxes[i]))
+
+
         return data
 
     def binding_class_names(self, class_names=None, language=None):

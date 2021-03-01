@@ -81,7 +81,7 @@ class PolicyBase(Model):
         objecttype = None
         if isinstance(self.model.input_spec, TensorSpec):
             objecttype = self.model.input_spec.object_type
-        super()._initial_graph(inputs=to_tensor(self.get_observation()).repeat_elements(2, 0), output=deepcopy(self.network))
+        #super()._initial_graph(inputs=to_tensor(self.get_observation()).repeat_elements(2, 0), output=deepcopy(self.network))
         self.setting_network()
         if objecttype is not None:
             self.inputs.value_list[0].object_type = objecttype
@@ -108,6 +108,15 @@ class PolicyBase(Model):
             return img_data
         else:
             return img_data
+
+    def do_on_batch_end(self):
+        self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
+        self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
+        self.training_context['steps']+=1
+        if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
+            if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
+                self.adjust_learning_rate(self.training_context['base_lr'])
+                self.warmup = 0
 
 
 class Dqn(PolicyBase):

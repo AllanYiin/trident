@@ -20,6 +20,10 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
+from trident.data.transform import Transform
+
+from trident.backend.tensorspec import ObjectType, TensorSpec
+
 from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.opencv_backend import image2array, array2image
@@ -428,19 +432,26 @@ class YoloDetectionModel(ImageDetectionModel):
             try:
                 self._model.to(self.device)
                 self._model.eval()
+                if self._model.input_spec is None:
+                    self._model.input_spec=TensorSpec(shape=TensorShape([None,3,608,608]),object_type=ObjectType.rgb)
+                if self._model.input_spec.object_type is None:
+                    self._model.input_spec.object_type = ObjectType.rgb
                 img = image2array(img)
                 if img.shape[-1] == 4:
                     img = img[:, :, :3]
                 img_orig = img.copy()
 
+                rescale_scale = 1
                 for func in self.preprocess_flow:
-                    if inspect.isfunction(func):
-                        img = func(img)
-                        if func.__qualname__ == 'Resize.<locals>.img_op':
-                            scale = func.scale
+                    if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
+                        img = func(img, spec=self._model.input_spec)
+                        if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                            rescale_scale = func.scale
 
                 img = image_backend_adaption(img)
-                inp = to_tensor(np.expand_dims(img, 0)).to(self.device).to(self._model.weights[0].data.dtype)
+                inp = to_tensor(np.expand_dims(img, 0)).to(
+                    torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
+                    self._model.weights[0].data.dtype)
 
                 if verbose:
                     print("======== data preprocess time:{0:.5f}".format((time.time() - time_time)))

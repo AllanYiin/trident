@@ -176,10 +176,10 @@ def Onet(pretrained=True,
 
 
 class DetectorHead(Layer):
-    def __init__(self, cellsize=12,threshould=0.5, min_size=5,**kwargs):
+    def __init__(self, cellsize=12,threshold=0.5, min_size=5,**kwargs):
         super(DetectorHead, self).__init__(**kwargs)
         self.cellsize=cellsize
-        self.threshould=threshould
+        self.threshold=threshold
         self.min_size=min_size
 
         self._built =True
@@ -196,7 +196,7 @@ class DetectorHead(Layer):
         grid=meshgrid(boxprobs.size(1),boxprobs.size(2))
         grid=grid.view(2,-1)
         score = boxprobs[0]
-        y,x = torch.where(score>= self.threshould)
+        y,x = torch.where(score>= self.threshold)
         boxregs = boxregs.permute(1,2,0)
 
         score = score[(y,x )]
@@ -285,10 +285,10 @@ def calibrate_box(bboxes, offsets):
 #         self.signature = get_signature(self._model.forward)
 #         #data preprocess
 #         self.preprocess_flow =[Normalize(0,255)]
-#         self.nms_threshould = [0.9, 0.9, 0.3]
-#         self.detection_threshould = [0.5, 0.6, 0.9]
+#         self.nms_threshold = [0.9, 0.9, 0.3]
+#         self.detection_threshold = [0.5, 0.6, 0.9]
 #
-#         pnet.add_module('pnet_detector', DetectorHead(cellsize=12, threshould=0.5, min_size=self.min_size))
+#         pnet.add_module('pnet_detector', DetectorHead(cellsize=12, threshold=0.5, min_size=self.min_size))
 #
 #
 #     def get_image_pyrimid(self,img,min_size=None,factor= 0.709):
@@ -439,7 +439,7 @@ def calibrate_box(bboxes, offsets):
 #
 #                 #print('total {0} boxes in pnet in all scale '.format(len(boxes)))
 #                 boxes=clip_boxes_to_image(boxes,(img.shape[0],img.shape[1]))
-#                 boxes =self.boxes_nms(boxes, overlap_threshold=self.detection_threshould[0])
+#                 boxes =self.boxes_nms(boxes, overlap_threshold=self.detection_threshold[0])
 #                 if self.verbose:
 #                     print('pnet:{0} boxes '.format(len(boxes)))
 #                 #print('total {0} boxes after nms '.format(len(boxes)))
@@ -475,7 +475,7 @@ def calibrate_box(bboxes, offsets):
 #                         r_out1, r_out2, r_out3 = self.rnet(new_arr)
 #
 #                     probs =r_out1
-#                     keep =probs[:, 0] > self.detection_threshould[1]
+#                     keep =probs[:, 0] > self.detection_threshold[1]
 #                     r_out1=r_out1[keep]
 #
 #                     boxes = boxes[keep]
@@ -489,7 +489,7 @@ def calibrate_box(bboxes, offsets):
 #                     #######################################
 #                     #########rnet finish
 #                     #######################################
-#                     boxes=self.boxes_nms(boxes, overlap_threshold=self.detection_threshould[1])
+#                     boxes=self.boxes_nms(boxes, overlap_threshold=self.detection_threshold[1])
 #                     if self.verbose:
 #                         print('rnet:{0} boxes '.format(len(boxes)))
 #                     #print('total {0} boxes after nms '.format(len(boxes)))
@@ -509,7 +509,7 @@ def calibrate_box(bboxes, offsets):
 #                     new_arr=to_tensor(new_arr)
 #                     o_out1, o_out2,o_out3  = self.onet(new_arr)
 #                     probs = o_out1
-#                     keep = probs[:, 0] > self.detection_threshould[2]
+#                     keep = probs[:, 0] > self.detection_threshold[2]
 #                     o_out1 = o_out1[keep]
 #                     boxes = boxes[keep]
 #                     if len(boxes)==0:
@@ -528,7 +528,7 @@ def calibrate_box(bboxes, offsets):
 #                     #######################################
 #                     #########onet finish
 #                     #######################################
-#                     boxes = self.boxes_nms(boxes, overlap_threshold=self.detection_threshould[2])
+#                     boxes = self.boxes_nms(boxes, overlap_threshold=self.detection_threshold[2])
 #                     if self.verbose:
 #                         print('onet:{0} boxes '.format(len(boxes)))
 #                     return to_numpy(boxes)
@@ -538,7 +538,7 @@ def calibrate_box(bboxes, offsets):
 #
 #         else:
 #             raise  ValueError('the model is not built yet.')
-#     def generate_bboxes(self,*outputs,threshould=0.5,scale=1):
+#     def generate_bboxes(self,*outputs,threshold=0.5,scale=1):
 #         raise NotImplementedError
 #     def nms(self,bboxes):
 #         raise NotImplementedError
@@ -548,14 +548,14 @@ def calibrate_box(bboxes, offsets):
 class mtcnn(ModuleList):
     def __init__(self, pretrained=True, name='mtcnn'):
         super().__init__(name)
-        self.nms_threshould = [0.9, 0.9, 0.3]
-        self.detection_threshould = [0.5, 0.6, 0.9]
+        self.nms_threshold = [0.9, 0.9, 0.3]
+        self.detection_threshold = [0.5, 0.6, 0.9]
         self.min_size=10
 
         self.add_module('pnet',Pnet(pretrained=pretrained).model)
         self.add_module('rnet', Rnet(pretrained=pretrained).model)
         self.add_module('onet', Onet(pretrained=pretrained).model)
-        self.add_module('pnet_detector', DetectorHead(cellsize=12, threshould=0.5, min_size=self.min_size))
+        self.add_module('pnet_detector', DetectorHead(cellsize=12, threshold=0.5, min_size=self.min_size))
 
 
     #adjust bbox like square
@@ -591,7 +591,7 @@ class mtcnn(ModuleList):
 
             # print('total {0} boxes in pnet in all scale '.format(len(boxes)))
             boxes = clip_boxes_to_image(boxes, (x.shape[0], x.shape[1]))
-            boxes = nms(boxes, threshold=self.detection_threshould[0])
+            boxes = nms(boxes, threshold=self.detection_threshold[0])
             print('pnet:{0} boxes '.format(len(boxes)))
             # print('total {0} boxes after nms '.format(len(boxes)))
             # score = to_numpy(boxes[:, 4]).reshape(-1)
@@ -626,7 +626,7 @@ class mtcnn(ModuleList):
                     r_out1, r_out2, r_out3 = self.rnet(new_arr)
 
                 probs = to_numpy(r_out1)
-                keep = np.where(probs[:, 0] > self.detection_threshould[1])[0]
+                keep = np.where(probs[:, 0] > self.detection_threshold[1])[0]
                 r_out1 = r_out1[keep]
                 boxes = boxes[keep]
                 boxes[:, 4] = r_out1[:, 0]
@@ -637,7 +637,7 @@ class mtcnn(ModuleList):
                 #########rnet finish
                 #######################################
 
-                boxes = nms(boxes, threshold=self.detection_threshould[1], image_size=(x.shape[0], x.shape[1]), min_size=self.min_size)
+                boxes = nms(boxes, threshold=self.detection_threshold[1], image_size=(x.shape[0], x.shape[1]), min_size=self.min_size)
                 print('rnet:{0} boxes '.format(len(boxes)))
                 # print('total {0} boxes after nms '.format(len(boxes)))
                 boxes = clip_boxes_to_image(boxes, (x.shape[0], x.shape[1]))
@@ -655,7 +655,7 @@ class mtcnn(ModuleList):
                 new_arr = to_tensor(new_arr)
                 o_out1, o_out2, o_out3 = self.onet(new_arr)
                 probs = to_numpy(o_out1)
-                keep = np.where(probs[:, 0] > self.detection_threshould[2])[0]
+                keep = np.where(probs[:, 0] > self.detection_threshold[2])[0]
                 o_out1 = o_out1[keep]
                 boxes = boxes[keep]
 
@@ -728,13 +728,13 @@ class Mtcnn(ImageDetectionModel):
                 boxes_list.append(boxes)
             boxes=concate(boxes_list,axis=0)
             #idx=int(np.argmax(result,-1)[0])
-            boxes = nms(boxes, threshold=self.detection_threshould[2], image_size=(img.shape[0], img.shape[1]), min_size=self.min_size)
+            boxes = nms(boxes, threshold=self.detection_threshold[2], image_size=(img.shape[0], img.shape[1]), min_size=self.min_size)
             print('onet:{0} boxes '.format(len(boxes)))
             return boxes
         else:
             return img
 
-    def generate_bboxes(self,*outputs,threshould=0.5,scale=1):
+    def generate_bboxes(self,*outputs,threshold=0.5,scale=1):
         raise NotImplementedError
     def nms(self,bboxes):
         raise NotImplementedError

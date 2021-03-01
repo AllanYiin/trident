@@ -10,18 +10,20 @@ import sys
 import warnings
 
 import numpy as np
+from trident.reinforcement.utils import ReplayBuffer
 
 from trident.backend.common import *
 from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
-from trident.data.image_common import *
+from trident.data.vision_transforms import *
+from trident.data.dataset import *
 from trident.misc.visualization_utils import *
 
 if get_backend() == 'pytorch':
     import torch
     import torch.nn as nn
-    from trident.backend.pytorch_backend import ReplayBuffer
-    from trident.backend.pytorch_ops import to_numpy, to_tensor,  shuffle, random_choice
+
+    from trident.backend.pytorch_ops import to_numpy, to_tensor, shuffle, random_choice
     from trident.optims.pytorch_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss
     from trident.optims.pytorch_constraints import min_max_norm
     from trident.optims.pytorch_trainer import *
@@ -29,12 +31,11 @@ if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
     from trident.models.pytorch_efficientnet import EfficientNetB0
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_backend import  ReplayBuffer
+
     from trident.backend.tensorflow_ops import to_numpy, to_tensor
     from trident.optims.tensorflow_losses import CrossEntropyLoss, MSELoss
     from trident.optims.tensorflow_constraints import min_max_norm
     from trident.optims.tensorflow_trainer import *
-
 
 __all__ = ['GanCallbacksBase', 'GanCallback', 'CycleGanCallback']
 
@@ -60,7 +61,7 @@ class GanCallback(GanCallbacksBase):
     def __init__(self, generator=None, discriminator=None, gan_type='gan', label_smoothing=False, noisy_labels=False,
                  noised_real=True, noise_intensity=0.05, weight_clipping=False, tile_image_frequency=100,
                  experience_replay=False, use_total_variation=False, use_ttur=False,  # two timel-scale update rule
-                 g_train_frequency=1, d_train_frequency=1, noised_lr=False,diversity_constraint=False, teacher_distill=False, **kwargs):
+                 g_train_frequency=1, d_train_frequency=1, noised_lr=False, diversity_constraint=False, teacher_distill=False, **kwargs):
         _available_gan_type = ['gan', 'began', 'ebgan', 'wgan', 'wgan-gp', 'lsgan', 'lsgan1', 'rasgan']
         super(GanCallback, self).__init__()
         if isinstance(generator, ImageGenerationModel):
@@ -69,8 +70,8 @@ class GanCallback(GanCallbacksBase):
             self.discriminator = discriminator.model
         self.training_items = None
         self.data_provider = None
-        self.data_feed=OrderedDict()
-        self.train_data=OrderedDict()
+        self.data_feed = OrderedDict()
+        self.train_data = OrderedDict()
         # self.z_noise = None
         # self.D_real = None
         # self.D_fake = None
@@ -94,8 +95,8 @@ class GanCallback(GanCallbacksBase):
         self.use_total_variation = use_total_variation
         self.generator_first = None
         self.cooldown_counter = 0
-        self.beginning_repository = ReplayBuffer(max_size=250)
-        self.latter_repository = ReplayBuffer(max_size=250)
+        self.beginning_repository = ReplayBuffer(capacity=250)
+        self.latter_repository = ReplayBuffer(capacity=250)
         self.generator_worse_metric = None
         self.discriminator_worse_metric = None
         self.generator_best_metric = None
@@ -104,58 +105,47 @@ class GanCallback(GanCallbacksBase):
         self.discriminator_best_metric = None
         self.noise_end_epoch = 20
         self.noised_lr = noised_lr
-        self.diversity_constraint=diversity_constraint
-        self.teacher_distill=teacher_distill
-        if self.diversity_constraint==True or self.teacher_distill==True:
-            self.effnetb0=EfficientNetB0(pretrained=True,include_top=False)
+        self.diversity_constraint = diversity_constraint
+        self.teacher_distill = teacher_distill
+        if self.diversity_constraint == True or self.teacher_distill == True:
+            self.effnetb0 = EfficientNetB0(pretrained=True, include_top=False)
             self.effnetb0.eval()
-            self.effnetb0.model.trainable=False
+            self.effnetb0.model.trainable = False
 
     def on_training_start(self, training_context):
         self.training_items = training_context['training_items']
         self.data_provider = training_context['_dataloaders'].value_list[0]
+        dses = self.data_provider.traindata.get_datasets()
         for k, training_item in self.training_items.items():
-            if self.generator is not None and training_item.model.uuid.item() == self.generator.uuid.item() :
+            if self.generator is not None and training_item.model.uuid == self.generator.uuid:
                 training_item.training_context['gan_role'] = 'generator'
-            elif self.discriminator is not None and training_item.model.uuid.item()  == self.discriminator.uuid.item() :
+            elif self.discriminator is not None and training_item.model.uuid == self.discriminator.uuid:
                 training_item.training_context['gan_role'] = 'discriminator'
             elif self.generator is None:
                 raise ValueError('You need generator in gan model')
             elif self.discriminator is None:
                 raise ValueError('You need discriminator in gan model')
 
-            self.data_feed['z_noise']=None
-            self.data_feed['img_real'] = None
-            self.data_feed['img_fake'] = None
-            self.data_feed['d_real'] = None
-            self.data_feed['d_fake'] = None
             model = training_item.model
-            if  training_item.training_context['gan_role'] == 'generator':
-                model.update_signature(['z_noise','img_fake'])
+            if training_item.training_context['gan_role'] == 'generator':
+                if not 'data_feed' in training_item.training_context:
+                    training_item.training_context['data_feed'] = OrderedDict()
+                for ds in dses:
+                    if isinstance(ds, RandomNoiseDataset):
+                        training_item.training_context['data_feed']['input'] = ds.symbol
+                training_item.training_context['data_feed']['output'] = 'd_fake'
+                training_item.training_context['data_feed']['target'] = 'label_fake'
 
-                data_keys = self.data_provider.signature.key_list
-                inp_shape = model.input_shape.tolist()
-                out_shape = model.output_shape.tolist()
-
-                new_data_signature=OrderedDict()
-                for n in len(self.data_provider.signature):
-                    k=data_keys[n]
-                    if 'noise' in k.lower() or self.data_provider.signature[k].tolist()==inp_shape or len(self.data_provider.signature[k].tolist())==1:
-                        self.data_feed['z_noise']=k
-                        new_data_signature['z_noise']=self.data_provider.signature[k]
-
-                    elif 'real'  in k.lower()  or self.data_provider.signature[k].tolist()==out_shape or len(self.data_provider.signature[k].tolist())==3:
-                        self.data_feed['img_real'] = k
-                        new_data_signature['img_real'] = self.data_provider.signature[k]
-                    else:
-                        new_data_signature[k] = self.data_provider.signature[k]
-                if self.data_provider.signature!=new_data_signature:
-                    self.data_provider.signature=new_data_signature
-            training_item.training_context['data_feed'] = self.data_feed
-            training_item.training_context['train_data'] =self.train_data
+            elif training_item.training_context['gan_role'] == 'discriminator':
+                if not 'data_feed' in training_item.training_context:
+                    training_item.training_context['data_feed'] = OrderedDict()
+                training_item.training_context['data_feed']['input'] = 'd_input'
+                training_item.training_context['data_feed']['output'] = 'd_output'
+                training_item.training_context['data_feed']['target'] = 'd_label'
 
         if self.training_items.value_list[0].training_context['gan_role'] == 'generator':
             self.generator_first = True
+            self.discriminator.training_context['retain_graph'] = True
             print('generator first')
         else:
             self.generator_first = False
@@ -163,50 +153,52 @@ class GanCallback(GanCallbacksBase):
 
     def on_data_received(self, training_context):
         try:
-            if training_context['gan_role'] == 'generator':
-                self.z_noise = training_context['current_input']
-                if self.gan_type in ['rasgan','wgan-div']:
-                    self.img_real = training_context['current_target']
-                    self.D_real = self.discriminator(self.img_real).detach()
+            traindata = training_context['train_data']
+            traindata['img_real'] = traindata[self.data_provider.traindata.data.symbol]
+            if self.generator_first == True:
+                traindata['d_fake'] = self.discriminator(to_tensor(to_numpy(self.img_fake)))
+            else:
 
-                self.img_fake = self.generator(self.z_noise)
+                if 'img_fake' not in traindata or traindata['img_fake'] is None:
+                    traindata['img_fake'] = random_normal_like(traindata['img_real'])
 
-                self.D_fake = self.discriminator(self.img_fake)
+                traindata['img_fake']
 
-
-            elif training_context['gan_role'] == 'discriminator':
-                training_context['img_real'] = training_context['current_input']
-
-                curr_epochs = training_context['current_epoch']
-                tot_epochs = training_context['total_epoch']
-                self.img_real = training_context['current_input']
-
-                if self.img_fake is None or self.generator_first == False:
-                    noise_shape = self.generator.input_shape.tolist()
-                    noise_shape.insert(0, self.img_real.size(0))
-                    self.z_noise = to_tensor(np.random.standard_normal(noise_shape))
-                    self.img_fake = self.generator(self.z_noise)
-
-                if self.experience_replay:
-                    self.img_fake = self.beginning_repository.push_and_pop(self.img_fake)
-
-                if self.noisy_labels and training_context['current_epoch'] < self.noise_end_epoch:
-                    exchange_real = random_choice(self.img_real).clone()
-                    exchange_fake = random_choice(self.img_fake).clone()
-                    self.img_fake[random.choice(range(self.img_fake.size(0)))] = exchange_real
-
-                if self.noised_real and training_context['current_epoch'] < self.noise_end_epoch and random.randint(0,100) % 10 < training_context['current_epoch']:
-                    self.img_real = (training_context['current_input'] + to_tensor(
-                        0.2 * (1 - float(curr_epochs) / self.noise_end_epoch) * np.random.standard_normal(
-                            list(self.img_real.size())))).clamp_(-1, 1)
-
-                self.D_real = self.discriminator(self.img_real)
-                if not self.generator_first:
-                    self.D_fake = self.discriminator(to_tensor(to_numpy(self.img_fake)))
-                else:
-                    self.D_fake = self.discriminator(self.img_fake)
+                #
+                # if self.experience_replay:
+                #     self.img_fake = self.beginning_repository.push_and_pop(self.img_fake)
+                #
+                # if self.noisy_labels and training_context['current_epoch'] < self.noise_end_epoch:
+                #     exchange_real = random_choice(self.img_real).clone()
+                #     exchange_fake = random_choice(self.img_fake).clone()
+                #     self.img_fake[random.choice(range(self.img_fake.size(0)))] = exchange_real
+                #
+                # if self.noised_real and training_context['current_epoch'] < self.noise_end_epoch and random.randint(0,100) % 10 < training_context['current_epoch']:
+                #     self.img_real = (training_context['current_input'] + to_tensor(
+                #         0.2 * (1 - float(curr_epochs) / self.noise_end_epoch) * np.random.standard_normal(
+                #             list(self.img_real.size())))).clamp_(-1, 1)
+                #
+                # self.D_real = self.discriminator(self.img_real)
+                # if not self.generator_first:
+                #     self.D_fake = self.discriminator(to_tensor(to_numpy(self.img_fake)))
+                # else:
+                #     self.D_fake = self.discriminator(self.img_fake)
         except:
             PrintException()
+
+    def on_loss_calculation_start(self, training_context):
+        traindata = training_context['train_data']
+
+        if training_context['gan_role'] == 'generator':
+            data_feed = training_context['data_feed']
+            traindata['img_fake'] = traindata[data_feed['output']]
+            traindata['d_fake'] = self.discriminator(traindata['img_fake'])
+            traindata['d_real'] = self.discriminator(traindata['img_real'])
+        elif training_context['gan_role'] == 'discriminator':
+            traindata['d_fake'] = self.discriminator(traindata['img_fake'])
+            if not self.generator_first:
+                traindata['d_real'] = self.discriminator(traindata['img_real'])
+                traindata['d_fake'] = self.discriminator(traindata['img_fake'])
 
     def on_loss_calculation_end(self, training_context):
         is_collect_data = training_context['is_collect_data']
@@ -228,12 +220,12 @@ class GanCallback(GanCallbacksBase):
 
         if training_context['gan_role'] == 'generator':
 
-            if self.diversity_constraint == True or  self.teacher_distill == True:
+            if self.diversity_constraint == True or self.teacher_distill == True:
                 try:
-                    embedded_fake=self.effnetb0.model(self.img_fake)
+                    embedded_fake = self.effnetb0.model(self.img_fake)
                     embedded_fake = reshape(embedded_fake, [embedded_fake.shape[0], -1])
                     if self.diversity_constraint == True:
-                        pl_loss= 0.1*pullaway_loss(embedded_fake)
+                        pl_loss = 0.1 * pullaway_loss(embedded_fake)
                         training_context['current_loss'] = training_context['current_loss'] + pl_loss
                         if is_collect_data:
                             if 'pullaway_loss' not in training_context['losses']:
@@ -256,7 +248,6 @@ class GanCallback(GanCallbacksBase):
 
                 except:
                     PrintException()
-
 
             try:
 
@@ -287,7 +278,7 @@ class GanCallback(GanCallbacksBase):
                 elif self.gan_type == 'rasgan':
                     D_fake_logit = sigmoid(self.D_fake - self.D_real.mean(0, True))
 
-                    self.G_metric = ((1-D_fake_logit)**2).mean()
+                    self.G_metric = ((1 - D_fake_logit) ** 2).mean()
                     if 'D_fake_logit' not in training_context['tmp_metrics']:
                         training_context['tmp_metrics']['D_fake_logit'] = []
                         training_context['metrics']['D_fake_logit'] = []
@@ -323,7 +314,8 @@ class GanCallback(GanCallbacksBase):
                     self.D_fake = self.D_fake.clamp(min=-1, max=1)
                 this_loss = 0
                 if self.gan_type == 'gan':
-                    adversarial_loss = torch.nn.BCELoss()
+
+                    adversarial_loss = BCELoss
                     real_loss = adversarial_loss(self.D_real, true_label)
                     fake_loss = adversarial_loss(self.D_fake, false_label)
                     this_loss = (real_loss + fake_loss).mean() / 2
@@ -333,7 +325,7 @@ class GanCallback(GanCallbacksBase):
                     fake_loss = adversarial_loss(self.D_fake, false_label)
                     this_loss = (real_loss + fake_loss).mean() / 2
                 elif self.gan_type == 'wgan':
-                    this_loss =(self.D_fake-self.D_real).mean()
+                    this_loss = (self.D_fake - self.D_real).mean()
                 elif self.gan_type == 'wgan-gp':
                     def compute_gradient_penalty():
                         """Calculates the gradient penalty loss for WGAN GP"""
@@ -344,8 +336,8 @@ class GanCallback(GanCallbacksBase):
                         out = self.discriminator(interpolates)
                         fake = to_tensor(np.ones(out.size()))
                         # Get gradient w.r.t. interpolates
-                        gradients =torch.autograd.grad(outputs=out, inputs=interpolates, grad_outputs=fake, create_graph=True,
-                                                retain_graph=True, only_inputs=True, )[0]
+                        gradients = torch.autograd.grad(outputs=out, inputs=interpolates, grad_outputs=fake, create_graph=True,
+                                                        retain_graph=True, only_inputs=True, )[0]
                         gradients = gradients.view(gradients.size(0), -1)
                         return ((gradients.norm(2, dim=1) - 1) ** 2).mean()
 
@@ -355,13 +347,13 @@ class GanCallback(GanCallbacksBase):
                             training_context['losses']['gradient_penalty'] = []
                         training_context['losses']['gradient_penalty'].append(float(to_numpy(gp)))
 
-                    this_loss = gp + (self.D_fake-self.D_real).mean()
+                    this_loss = gp + (self.D_fake - self.D_real).mean()
                 elif self.gan_type == 'wgan-div':
                     k = 2
                     p = 6
                     # Compute W-div gradient penalty
 
-                    real_grad=torch.autograd.grad(outputs=self.D_real, inputs=self.img_real, grad_outputs=true_label, create_graph=True, retain_graph=True, only_inputs=True, )[0]
+                    real_grad = torch.autograd.grad(outputs=self.D_real, inputs=self.img_real, grad_outputs=true_label, create_graph=True, retain_graph=True, only_inputs=True, )[0]
                     real_grad_norm = real_grad.view(real_grad.size(0), -1).pow(2).sum(1) ** (p / 2)
 
                     fake_grad = torch.autograd.grad(outputs=self.D_fake, inputs=self.img_fake, grad_outputs=true_label, create_graph=True, retain_graph=True, only_inputs=True, )[0]
@@ -371,13 +363,13 @@ class GanCallback(GanCallbacksBase):
                         if 'gradient_penalty' not in training_context['losses']:
                             training_context['losses']['div_loss'] = []
                         training_context['losses']['div_loss'].append(float(to_numpy(div_gp)))
-                    this_loss =  (self.D_fake-self.D_real).mean() + div_gp
+                    this_loss = (self.D_fake - self.D_real).mean() + div_gp
                 elif self.gan_type == 'lsgan':
                     this_loss = 0.5 * (torch.mean((self.D_real - true_label) ** 2) + torch.mean(self.D_fake ** 2))
                 elif self.gan_type == 'rasgan':
-                    D_real_logit = sigmoid(self.D_real-to_tensor(to_numpy(self.D_fake.mean(0, True))))
+                    D_real_logit = sigmoid(self.D_real - to_tensor(to_numpy(self.D_fake.mean(0, True))))
                     D_fake_logit = sigmoid(self.D_fake - to_tensor(to_numpy(self.D_real.mean(0, True))))
-                    this_loss = ((1-D_real_logit)**2+(0-D_fake_logit)**2) .mean()/ 2
+                    this_loss = ((1 - D_real_logit) ** 2 + (0 - D_fake_logit) ** 2).mean() / 2
                     self.D_metric = D_real_logit
                     if 'D_real_logit' not in training_context['tmp_metrics']:
                         training_context['tmp_metrics']['D_real_logit'] = []
@@ -408,7 +400,7 @@ class GanCallback(GanCallbacksBase):
 
         if training_context['gan_role'] == 'generator':
             pass
-            #self.img_fake = to_tensor(to_numpy(self.img_fake))
+            # self.img_fake = to_tensor(to_numpy(self.img_fake))
 
 
         elif training_context['gan_role'] == 'discriminator':
@@ -464,22 +456,21 @@ class GanCallback(GanCallbacksBase):
         try:
             if training_context['gan_role'] == 'discriminator':
                 pass
-                idx=0 if self.generator_first else 1
-                generator_metrics=self.training_items.value_list[idx].training_context['metrics'].value_list[0]
-                discremnent_metrics = self.training_items.value_list[1-idx].training_context['metrics'].value_list[0]
-                clipping_range=0.1
+                idx = 0 if self.generator_first else 1
+                generator_metrics = self.training_items.value_list[idx].training_context['metrics'].value_list[0]
+                discremnent_metrics = self.training_items.value_list[1 - idx].training_context['metrics'].value_list[0]
+                clipping_range = 0.1
 
-
-                if training_context['current_epoch']>5 and np.array(generator_metrics[-5:]).mean()<0.25 and np.array(discremnent_metrics[-5:]).mean()>0.75:
+                if training_context['current_epoch'] > 5 and np.array(generator_metrics[-5:]).mean() < 0.25 and np.array(discremnent_metrics[-5:]).mean() > 0.75:
                     if 'clipping_range' not in training_context:
                         training_context['clipping_range'] = 0.3
                         self.g_train_frequency = 0.6
 
-                    elif np.array(generator_metrics[-5:]).mean()<0.2 or  np.array(discremnent_metrics[-5:]).mean()>0.8:
+                    elif np.array(generator_metrics[-5:]).mean() < 0.2 or np.array(discremnent_metrics[-5:]).mean() > 0.8:
                         training_context['clipping_range'] = 0.1
                         self.g_train_frequency = 0.75
 
-                    elif np.array(generator_metrics[-5:]).mean()<0.15 or  np.array(discremnent_metrics[-5:]).mean()>0.85:
+                    elif np.array(generator_metrics[-5:]).mean() < 0.15 or np.array(discremnent_metrics[-5:]).mean() > 0.85:
                         training_context['clipping_range'] = 0.05
                         self.g_train_frequency = 1
 
@@ -487,8 +478,7 @@ class GanCallback(GanCallbacksBase):
                         training_context['clipping_range'] = 0.01
 
                     for p in training_context['current_model'].parameters():
-                        p.data.clamp_(-1*training_context['clipping_range'], training_context['clipping_range'])
-
+                        p.data.clamp_(-1 * training_context['clipping_range'], training_context['clipping_range'])
 
                 # self.training_items.value_list[0].optimizer.lr / 2, True)  #
                 # self.training_items.value_list[1].optimizer.adjust_learning_rate(  #

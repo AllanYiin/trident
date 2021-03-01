@@ -7,6 +7,7 @@ import os
 import random
 import re
 import builtins
+import string
 import time
 from itertools import repeat
 from functools import partial
@@ -28,6 +29,43 @@ elif get_backend()== 'tensorflow':
     from trident.backend.tensorflow_backend import to_numpy, to_tensor,ObjectType
     from trident.backend.tensorflow_ops import int_shape
 
+
+
+def chinese_full2half():
+    """Convert all fullwidth Chinese characters to halfwidth .
+
+    Returns:
+
+    """
+    def string_op(input_str:str):
+        rstring = ""
+        for uchar in input_str:
+            u_code = ord(uchar)
+            if u_code == 0x3000 or u_code == 12288 or uchar == string.whitespace:
+                u_code = 32
+            elif 65281 <= u_code <= 65374:
+                u_code -= 65248
+            rstring += chr(u_code)
+        return rstring
+    return string_op
+
+def chinese_half2full():
+    """Convert all halfwidth Chinese characters to fullwidth .
+
+    Returns:
+
+    """
+    def string_op(input_str:str):
+        rstring = ""
+        for uchar in input_str:
+            u_code = ord(uchar)
+            if u_code == 32:
+                u_code = 12288
+            elif 33 <= u_code <= 126:
+                u_code += 65248
+            rstring += chr(u_code)
+        return rstring
+    return string_op
 
 def text_backend_adaption(text):
     if  get_backend() == 'tensorflow':

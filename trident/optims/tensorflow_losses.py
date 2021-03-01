@@ -11,6 +11,8 @@ from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops.losses import loss_reduction
 from tensorflow.python.ops.losses import util as tf_losses_utils
+
+
 from trident import context
 
 from trident.backend.common import camel2snake, get_class, epsilon, PrintException
@@ -18,7 +20,7 @@ from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.optims.losses import Loss
-from trident.backend.common import dtype as Dtype
+from trident.backend.common import dtype
 
 # def cosine_similarity(target, output):
 #     assert target.ndim == 2
@@ -36,7 +38,7 @@ from trident.backend.common import dtype as Dtype
 #             [0 ] *0, axis=-1)
 
 
-__all__ = ['get_loss','_ClassificationLoss', 'CrossEntropyLoss', 'MSELoss', 'EdgeLoss', 'NLLLoss', 'F1ScoreLoss', '_ClassificationLoss',
+__all__ = ['get_loss','_ClassificationLoss', 'CrossEntropyLoss','BCELoss', 'MSELoss', 'EdgeLoss', 'NLLLoss', 'F1ScoreLoss', '_ClassificationLoss',
            'FocalLoss','DiceLoss','L1Loss','L2Loss','SmoothL1Loss','WingLoss','AdaptiveWingLoss','IoULoss','SoftIoULoss']
 
 
@@ -154,7 +156,9 @@ class _ClassificationLoss(Loss):
             if ndim(target) > 2 :
                 target = target.reshape((shp[0], -1, shp[-1]))
             return output, target
-        elif ndim(output) == 2 and ndim(output) == ndim(target):
+        elif ndim(output) <= 2 and ndim(output) == ndim(target):
+            return output, target
+        elif ndim(output) <= 2 and ndim(output) == ndim(target)+1:
             return output, target
         else:
             raise ValueError('output and target have diffent elements.')
@@ -176,7 +180,7 @@ class _ClassificationLoss(Loss):
         output, target = self.flatten_check(output, target)
 
         if self.sample_weight is None:
-            self.sample_weight = ones(self.num_classes, requires_grad=False)
+            self.sample_weight = ones(self.num_classes)
         elif len(self.sample_weight) != self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
         else:
@@ -201,6 +205,10 @@ class _ClassificationLoss(Loss):
             self.is_logsoftmax = False
             self.from_logits = False
 
+
+        if (ndim(target) == ndim(output)  and 'float' in str(target.dtype) and target.min() >= 0 and target.max() <= 1 ):
+            self.is_target_onehot = True
+
         self.ignore_index_weight=np.ones_like(self.sample_weight)
         # ignore_index
 
@@ -223,7 +231,7 @@ class _ClassificationLoss(Loss):
         if  target.dtype==tf.int64 and self.need_target_onehot == True and self.is_target_onehot == False:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis)
             if self.label_smooth:
-                target = target #* (torch.Tensor(target.size()).uniform_(0.9, 1))
+                target = target +random_normal_like(target)
                 self.is_target_onehot = True
 
         return output, target
@@ -393,7 +401,7 @@ class _PairwiseLoss(Loss):
             hard_mask = None
             reduce_axis = list(range(output_.ndim))[1:]
             base_losses = pow(output_ - target, 2).mean(axis=reduce_axis) if len(reduce_axis) > 0 else pow(output_ - target, 2)
-            if target.dtype == Dtype.int64:
+            if target.dtype == dtype.int64:
                 hard_mask = target < 0
                 num_hard = reduce_sum(hard_mask).numpy()
                 num_easy = int(self.ohem_ratio * num_hard)
@@ -449,21 +457,27 @@ class CrossEntropyLoss(_ClassificationLoss):
 
     Examples:
     >>> output=to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]])
-    >>> print(output.shape)
+    >>> print(int_shape(output))
     (4, 3)
     >>> target=make_onehot([1,0,1,2],3,axis=-1)
     >>> print(target.shape)
     (4, 3)
     >>> CrossEntropyLoss(reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305244>
+    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305245>
     >>> CrossEntropyLoss(reduction='sum')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=4.5220976>
+    <tf.Tensor: shape=(), dtype=float32, numpy=4.522098>
     >>> CrossEntropyLoss(label_smooth=True,reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305244>
+    <tf.Tensor: shape=(), dtype=float32, numpy=1.1305245>
     >>> CrossEntropyLoss(sample_weight=to_tensor([1.0,1.0,0.5]),reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=0.9888908>
+    <tf.Tensor: shape=(), dtype=float32, numpy=0.98889095>
     >>> CrossEntropyLoss(ignore_index=2,reduction='mean')(output,target)
-    <tf.Tensor: shape=(), dtype=float32, numpy=0.84725726>
+    <tf.Tensor: shape=(), dtype=float32, numpy=0.8472573>
+    >>> target = to_tensor([[1., 0., 0.],[ 0., 1., 0.],[ 0., 0., 1.]])
+    >>> out = to_tensor([[.9, .05, .05],[ .05, .89, .06],[ .05, .01, .94]])
+    >>> CrossEntropyLoss(reduction='mean',axis=-1)(out,target)
+    tf.Tensor(0.33333334, shape=(), dtype=float32)
+    >>> CrossEntropyLoss(reduction='mean',axis=-1)(out,argmax(target,-1))
+    tf.Tensor(0.33333334, shape=(), dtype=float32)
 
 
 
@@ -474,8 +488,7 @@ class CrossEntropyLoss(_ClassificationLoss):
                  reduction='mean' , enable_ohem=False, ohem_ratio=3.5, name='CrossEntropyLoss'):
         super().__init__(axis, sample_weight,auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction, enable_ohem,ohem_ratio,name)
         self._built = True
-        self.need_target_onehot=True
-
+        self.need_target_onehot =None
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -504,24 +517,44 @@ class CrossEntropyLoss(_ClassificationLoss):
             n_=ndim(output)-ndim(sample_weight)
             for n in range(n_):
                 sample_weight=expand_dims(sample_weight,1)
+            loss=None
+            if  self.is_target_onehot :
+                # -sum([p[i] * log2(q[i]) for i in range(len(p))])
+                if not self.is_logsoftmax:
+                    loss = -reduce_sum(target * log_softmax(output, axis=self.axis,keepdims=True) * sample_weight,axis=-self.axis)
+
+                else:
+
+                    loss = -reduce_sum(target * output * sample_weight,axis=self.axis)
+
+                if ndim(loss)>1:
+                    reduce_axes = list(range(loss.ndim))
+                    reduce_axes.remove(0)
+                    if len(reduce_axes) == 0:
+                        reduce_axes = None
+                    return reduce_mean(loss,axis=reduce_axes)
+                else:
+                    return loss
+            elif not self.is_target_onehot and ndim(target)==ndim(output)-1:
+                if not self.is_logsoftmax:
+                    output=log_softmax(output,axis=self.axis,keepdims=True)
+                target=expand_dims(cast(target,cast_dtype=dtype.int64),axis=self.axis)
+
+                loss=gather(-1*output,gather_axis=self.axis,indices=target)
+
+                loss = reduce_sum(loss, self.axis)
+                if ndim(loss)>1:
+                    reduce_axes = list(range(ndim(loss)))
+                    reduce_axes.remove(0)
+                    if len(reduce_axes) == 0:
+                        reduce_axes = None
+                    return reduce_mean(loss,axis=reduce_axes)
+                else:
+                    return loss
 
 
 
 
-            # -sum([p[i] * log2(q[i]) for i in range(len(p))])
-            if not self.is_logsoftmax:
-                loss = -reduce_sum(target * log_softmax(output, axis=self.axis,keepdims=True) * sample_weight,axis=-self.axis)
-            else:
-
-                loss = -reduce_sum(target * output * sample_weight,axis=self.axis)
-            if ndim(loss)>1:
-                reduce_axes = list(range(loss.ndim))
-                reduce_axes.remove(0)
-                if len(reduce_axes) == 0:
-                    reduce_axes = None
-                return reduce_mean(loss,axis=reduce_axes)
-            else:
-                return loss
 
 
 class NLLLoss(_ClassificationLoss):
@@ -697,6 +730,38 @@ class FocalLoss(_ClassificationLoss):
 
             return loss
 
+
+
+class BCELoss(_ClassificationLoss):
+    def __init__(self, axis=-1, sample_weight=None,auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean' , enable_ohem=False, ohem_ratio=3.5, name='BCELoss'):
+        super().__init__(axis=axis, sample_weight=sample_weight,auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff, label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem,ohem_ratio=ohem_ratio,name=name)
+        self._built = True
+        self.num_classes = 1
+        self.is_logsoftmax = False
+        self.need_target_onehot = True
+        self.is_target_onehot = False
+
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
+        with self._name_scope:
+            if self.is_logsoftmax:
+                output = exp(output)
+            # Compute cross entropy from probabilities.
+            bce = target * log(output + epsilon())
+            bce += (1 - target) * log(1 - output + epsilon())
+            return -bce
+
+
+
 class DiceLoss(_ClassificationLoss):
     r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
 
@@ -769,19 +834,24 @@ class DiceLoss(_ClassificationLoss):
         Returns:
 
         """
-        with self._name_scope:
-            if self.is_logsoftmax:
-                output=clip(exp(output),max=-1e-8)
-            sample_weight = expand_dims(cast(self.sample_weight,output.dtype)*cast( self.ignore_index_weight,output.dtype),0)
-            reduce_axes=list(range(target.ndim))
-            axis=self.axis if self.axis>=0 else target.ndim+self.axis
-            reduce_axes.remove(0)
+        #with self._name_scope:
+        if self.is_logsoftmax:
+            output = exp(output)
+        reduce_axes = list(range(ndim(output)))
+        axis = self.axis if self.axis >= 0 else target.ndim + self.axis
+        reduce_axes.remove(0)
+        sample_weight =cast(expand_dims( self.sample_weight* self.ignore_index_weight,0),output.dtype)
+        n_ = ndim(output) - ndim(sample_weight)
+        for n in range(n_):
+            sample_weight = expand_dims(sample_weight, 0)
 
-            intersection = reduce_sum(target * output*sample_weight, axis=reduce_axes)
-            denominator = reduce_sum((output+target)*sample_weight, axis=reduce_axes)
+        target=cast(target,output.dtype)
+        pred=greater_equal(output[:,:,1:],0.5,dtype=output.dtype)
 
-            dice = 1.0 - 2.0 * (intersection + self.smooth) / (denominator+ self.smooth)
-            return dice
+        intersection = reduce_sum(target *pred* sample_weight, axis=reduce_axes)
+        den = reduce_sum((pred+target)* sample_weight, axis=reduce_axes)
+        dice = 1.0 - math_ops.div_no_nan((2.0 * intersection + self.smooth), (den+ self.smooth))
+        return dice
 
 
 
@@ -952,7 +1022,7 @@ class WingLoss(_PairwiseLoss):
         c = self.omega * (1.0 - log(1.0 + self.omega / self.epsilon))
 
         losses = where(
-            greater(delta_y, self.omega, dtype=Dtype.bool),
+            greater(delta_y, self.omega, dtype=dtype.bool),
             self.omega * log(1.0 + delta_y / self.epsilon),
             delta_y- c
         )

@@ -712,6 +712,148 @@ class ShortCut2d(Layer):
         return s.format(**self.__dict__)
 
 
+
+class ShortCut(Layer):
+    """ShortCut2d Layer """
+
+    def __init__(self, *args, axis=-1, branch_from=None, activation=None, mode='add', name=None, keep_output=False,
+                 **kwargs):
+        """
+
+        Args:
+            *args ():
+            axis ():
+            branch_from ():
+            activation ():
+            mode (str):  'add' 'dot' 'concate'
+            name (str):
+            keep_output (bool):
+            **kwargs ():
+
+        """
+        super(ShortCut, self).__init__(name=name, keep_output=keep_output)
+        valid_mode = ['add', 'subtract', 'concate', 'dot','maxout']
+        if mode in valid_mode:
+            self.mode = mode
+        else:
+            raise ValueError('{0} is not valid mode. please use one of {1}'.format(mode, valid_mode))
+        self.activation = get_activation(activation)
+        self.has_identity = False
+
+        self.axis = axis
+        self.branch_from = branch_from
+        self.branch_from_uuid = None
+
+        self.keep_output = keep_output
+
+        for i in range(len(args)):
+            arg = args[i]
+            if isinstance(arg, (Layer, Tensor, list, dict)):
+                if isinstance(arg, list):
+                    arg = Sequential(*arg)
+                elif isinstance(arg, OrderedDict) and len(args) == 1:
+                    for k, v in arg.items():
+                        if isinstance(v, Identity):
+                            self.has_identity = True
+                            self.add_module('Identity', v)
+                        else:
+                            self.add_module(k, v)
+                elif isinstance(arg, dict) and len(args) == 1:
+                    keys = sorted(list(arg.keys()))
+                    for k in keys:
+                        v = arg[k]
+                        if isinstance(v, Identity):
+                            self.has_identity = True
+                            self.add_module('Identity', v)
+                        else:
+                            self.add_module(str(k), v)
+                elif isinstance(arg, (dict, OrderedDict)) and len(args) > 1:
+                    raise ValueError('more than one dict argument is not support.')
+
+                elif isinstance(arg, Identity):
+                    self.has_identity = True
+                    self.add_module('Identity', arg)
+                elif isinstance(arg, Layer):
+                    if len(arg.name) > 0 and arg.name != arg.default_name:
+                        self.add_module(arg.name, arg)
+                    else:
+                        self.add_module('branch{0}'.format(i + 1), arg)
+                else:
+                    raise ValueError('{0} is not support.'.format(arg.__class__.__name))
+        if len(self._modules) == 1 and self.has_identity == False and self.branch_from is None and mode != 'concate':
+            self.has_identity = True
+            self.add_module('Identity', Identity())
+        self.to(self.device)
+
+    def build(self, input_shape: TensorShape):
+        if self._built == False:
+            if self.branch_from is not None:
+                for k, v in self.nodes.item_list:
+                    if v.name == self.branch_from:
+                        v.keep_output = True
+                        self.branch_from_uuid = k
+                        self.register_buffer('branch_from_tensor', v._output_tensor)
+                        print('get {0} output info...'.format(self.branch_from))
+                        break
+                if self.branch_from_uuid is None:
+                    raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
+            self._built = True
+
+    def forward(self, x, **kwargs):
+
+        current = None
+        concate_list = []
+
+        for k, v in self._modules.items():
+            new_item = v(x)  # if not isinstance(v, Identity) else x
+            if current is None:
+                current = new_item
+                concate_list.append(current)
+            else:
+                if self.mode == 'add':
+                    current = current + new_item
+                elif self.mode == 'subtract':
+                    current = current -new_item
+                elif self.mode == 'dot':
+                    current = current * new_item
+                elif self.mode == 'concate':
+                    concate_list.append(new_item)
+                else:
+                    raise ValueError('Not valid shortcut mode')
+
+        if hasattr(self,
+                   'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
+            self.branch_from_tensor = self.nodes.get(self.branch_from_uuid)._output_tensor
+
+            if self.mode == 'add':
+                current = current + self.branch_from_tensor
+            elif self.mode == 'subtract':
+                current = current -  self.branch_from_tensor
+            elif self.mode == 'dot':
+                current = current * self.branch_from_tensor
+            elif self.mode == 'concate':
+                concate_list.append(self.branch_from_tensor)
+
+        if self.mode == 'concate':
+            x = concate(concate_list, axis=self.axis)
+        else:
+            x = current
+        if self.activation is not None:
+            x = self.activation(x)
+        return x
+
+    def extra_repr(self):
+        s = ('mode={mode}, keep_output={keep_output},axis={axis}')
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], Layer):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        if hasattr(self, 'branch_from') and self.branch_from is not None:
+            s += (', branch_from={branch_from}, branch_from_uuid={branch_from_uuid}')
+        return s.format(**self.__dict__)
+
+
 class ConcateBlock(Layer):
     def __init__(self, *args, axis=1, activation='relu'):
         """

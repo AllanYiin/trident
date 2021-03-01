@@ -125,7 +125,7 @@ def color2label(color_label,palette):
         color_label=color_label[:,:,0]*256*256+color_label[:,:,1]*256+color_label[:,:,2]
         for i in range(num_classes):
             label_mask[color_label == palette[i]] = i
-        return label_mask
+        return label_mask.astype(np.int64)
     elif color_label.ndim==4:
         results=[]
         for m in range(color_label.shape[0]):

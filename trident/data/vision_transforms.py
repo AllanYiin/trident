@@ -705,18 +705,6 @@ RandomTransform=RandomTransformAffine
 
 
 class RandomMultiScaleImage(VisionTransform):
-    r"""
-    Resize the input data.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
-        * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
-        * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
-        * cv2.INTER_AREA – resampling using pixel area relation.
-        * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
-        * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
-    """
-
     def __init__(self, output_size,scale_range=(0.8, 1.2), interpolation=cv2.INTER_LANCZOS4,name='random_center_crop',**kwargs):
         super().__init__(name)
         self.is_spatial = True

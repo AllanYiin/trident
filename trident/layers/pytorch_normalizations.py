@@ -740,6 +740,8 @@ def get_normalization(fn_name):
             return InstanceNorm()
         elif  fn_name.lower().strip() in ['batch_norm','batch','bn','b']:
             return BatchNorm()
+        elif fn_name.lower().strip() in ['layer_norm', 'layer', 'ln', 'l']:
+            return BatchNorm()
         elif  fn_name.lower().strip() in ['group_norm','group','gn','g']:
             return GroupNorm(num_groups=16)
         elif fn_name.lower().strip() in ['evo_normb0', 'evo-b0', 'evob0']:
@@ -748,9 +750,9 @@ def get_normalization(fn_name):
             return EvoNormS0()
         elif fn_name.lower().strip() in ['spectral_norm','spectral','spec','sp' ,'s']:
             return SpectralNorm
+        elif fn_name.lower().strip() in ['l2_norm','l2']:
+            return L2Norm()
 
-    elif inspect.isclass(fn_name):
-        return fn_name
     fn_modules = ['trident.layers.pytorch_normalizations']
     normalization_fn_ = get_class(fn_name, fn_modules)
     normalization_fn = normalization_fn_

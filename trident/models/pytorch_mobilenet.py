@@ -139,7 +139,7 @@ def MobileNetV2(include_top=True,
         download_model_from_google_drive('1ULenXTjOO5PdT3fHv6N8bPXEfoJAn5yL',dirname,'mobilenet_v2.pth')
         recovery_model=load(os.path.join(dirname,'mobilenet_v2.pth'))
         recovery_model = fix_layer(recovery_model)
-        recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         mob.model = recovery_model
 
     else:

@@ -72,7 +72,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather', 'index_select','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
-           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial' ,'get_rotation_matrix2d', 'warp_affine', 'binary_crossentropy']
+           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy']
 
 Tensor=torch.Tensor
 
@@ -249,9 +249,9 @@ def to_numpy(*x) -> np.ndarray:
             x = x.data
         return x.clone().cpu().detach().numpy()
     elif isinstance(x, list):
-        return np.asarray(x)
+        return np.array(x)
     elif isinstance(x, tuple):
-        return np.asarray(list(x))
+        return np.array(list(x))
     elif isinstance(x,numbers.Number):
         return np.asarray([x])
     else:
@@ -1838,8 +1838,8 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
             axis = 0
         elif ndim(x) > 1:
             axis =tuple(list(range(ndim(x))))
-        arr, idx = torch.sum(x, dim=axis, keepdim=keepdims)
-        return arr
+
+        return torch.sum(x,dim=axis,keepdim=keepdims)
     elif isinstance(axis, int):
         return torch.sum(x,dim=axis,keepdim=keepdims)
     elif isinstance(axis, list):
@@ -2833,7 +2833,7 @@ def l2_normalize(x: Tensor,axis=1, keepdims=True, eps=epsilon()):
     # if pt_version>version1_7:
     #     return x / (torch.linalg.norm(x,dim=axis, keepdim=keepdims) + eps)
     # else:
-        return x / (x.norm(dim=axis, keepdim=keepdims) + eps)
+    return x / (x.norm(dim=axis, keepdim=keepdims) + eps)
 
 ############################
 ## tensor shape operation
@@ -3498,6 +3498,9 @@ def index_select(x:Tensor, axis:int, indices:Tensor):
         >>>gather(arr,0,idx)
 
     """
+    num_class=int_shape(x)[axis]
+    if reduce_sum(greater_equal(indices,num_class,dtype=dtype.float32)):
+        raise  ValueError('Number of class are {0}, indices should not out of the range.'.format(num_class))
     return torch.index_select(x, dim=axis, index=indices)
 
 
@@ -3854,12 +3857,33 @@ def multinomial(x:Tensor,num_samples: int=1):
     return  torch.multinomial(x,num_samples)
 
 
+def random_bernoulli(x: Tensor):
+    return torch.bernoulli(x)
+
+
+############################
+## probability distribution
+###########################
+
+
+
+
 ############################
 ## loss
 ###########################
 
 
-def binary_crossentropy(output,target, from_logits=False):
+def binary_cross_entropy(output,target, from_logits=False):
+    if not from_logits:
+        output = output.sigmoid()
+    output = output.clamp(epsilon(), 1.0 - epsilon())
+    target = target.clamp(epsilon(), 1.0 - epsilon())
+    loss = -target * torch.log(output) # (1.0 - target) * torch.log(1.0 - output)
+    return loss
+
+
+
+def cross_entropy(output,target, from_logits=False):
     if not from_logits:
         output = output.sigmoid()
     output = output.clamp(epsilon(), 1.0 - epsilon())

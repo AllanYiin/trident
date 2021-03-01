@@ -8,6 +8,11 @@ import warnings
 import builtins
 import numpy as np
 import os
+
+from trident.data.vision_transforms import Unnormalize
+
+from trident.backend.opencv_backend import array2image
+
 from trident.backend.common import *
 from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
@@ -100,12 +105,12 @@ class MixupCallback(RegularizationCallbacksBase):
         if training_context['current_batch']==0:
             for item in mixed_x:
                 if self.save_path is None and not is_in_colab():
-                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                    item = unnormalize(0, 255)(item)
+                    item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = Unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path,'mixup_{0}.jpg'.format(get_time_suffix())))
                 elif self.save_path is not None:
-                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                    item = unnormalize(0, 255)(item)
+                    item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = Unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
         mixed_x=None
         x=None
@@ -219,14 +224,14 @@ class CutMixCallback(RegularizationCallbacksBase):
         if training_context['current_batch'] == 0:
             if self.save_path is None and not is_in_colab():
                 for item in x:
-                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                    item = unnormalize(0, 255)(item)
+                    item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = Unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
 
             elif self.save_path is not None:
                 for item in x:
-                    item = unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                    item = unnormalize(0, 255)(item)
+                    item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
+                    item = Unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path,'cutmix_{0}.jpg'.format(get_time_suffix())))
         x=None
         y=None

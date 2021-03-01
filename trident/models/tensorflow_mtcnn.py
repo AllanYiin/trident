@@ -165,10 +165,10 @@ def Onet(pretrained=True,
 
 
 class DetectorHead(Layer):
-    def __init__(self, cellsize=12,threshould=0.5, min_size=10,**kwargs):
+    def __init__(self, cellsize=12,threshold=0.5, min_size=10,**kwargs):
         super(DetectorHead, self).__init__(**kwargs)
         self.cellsize=cellsize
-        self.threshould=threshould
+        self.threshold=threshold
         self.min_size=min_size
         self._built =True
 
@@ -184,7 +184,7 @@ class DetectorHead(Layer):
         grid=meshgrid(boxprobs.size(1),boxprobs.size(2))
         grid=grid.view(2,-1)
         score = boxprobs[0]
-        y,x = where(score>= self.threshould)
+        y,x = where(score>= self.threshold)
         boxregs = boxregs.permute(1,2,0)
 
         score = score[(y,x )]
@@ -270,9 +270,9 @@ class Mtcnn(ImageDetectionModel):
         self.pnet=pnet
         self._model=pnet
         self.preprocess_flow =[Normalize(0,255)]
-        self.nms_threshould = [0.9, 0.9, 0.3]
-        self.detection_threshould = [0.5, 0.6, 0.9]
-        pnet.add_module('pnet_detector', DetectorHead(cellsize=12, threshould=0.5, min_size=self.min_size))
+        self.nms_threshold = [0.9, 0.9, 0.3]
+        self.detection_threshold = [0.5, 0.6, 0.9]
+        pnet.add_module('pnet_detector', DetectorHead(cellsize=12, threshold=0.5, min_size=self.min_size))
 
 
     def get_image_pyrimid(self,img,min_size=None,factor= 0.709):
@@ -346,7 +346,7 @@ class Mtcnn(ImageDetectionModel):
 
                 #print('total {0} boxes in pnet in all scale '.format(len(boxes)))
                 boxes=clip_boxes_to_image(boxes,(img.shape[0],img.shape[1]))
-                boxes =nms(boxes, threshold=self.detection_threshould[0])
+                boxes =nms(boxes, threshold=self.detection_threshold[0])
                 print('pnet:{0} boxes '.format(len(boxes)))
                 #print('total {0} boxes after nms '.format(len(boxes)))
                 #score = to_numpy(boxes[:, 4]).reshape(-1)
@@ -381,7 +381,7 @@ class Mtcnn(ImageDetectionModel):
                         r_out1, r_out2, r_out3 = self.rnet(new_arr)
 
                     probs = to_numpy(r_out1)
-                    keep = np.where(probs[:, 0] > self.detection_threshould[1])[0]
+                    keep = np.where(probs[:, 0] > self.detection_threshold[1])[0]
                     r_out1=r_out1[keep]
                     boxes = boxes[keep]
                     boxes[:, 4] = r_out1[:, 0]
@@ -393,7 +393,7 @@ class Mtcnn(ImageDetectionModel):
                     #########rnet finish
                     #######################################
 
-                    boxes=nms(boxes,  threshold=self.detection_threshould[1],image_size=(img.shape[0],img.shape[1]),min_size=self.min_size)
+                    boxes=nms(boxes,  threshold=self.detection_threshold[1],image_size=(img.shape[0],img.shape[1]),min_size=self.min_size)
                     print('rnet:{0} boxes '.format(len(boxes)))
                     #print('total {0} boxes after nms '.format(len(boxes)))
                     boxes = clip_boxes_to_image(boxes, (img.shape[0], img.shape[1]))
@@ -412,7 +412,7 @@ class Mtcnn(ImageDetectionModel):
                     new_arr=to_tensor(new_arr)
                     o_out1, o_out2,o_out3  = self.onet(new_arr)
                     probs = to_numpy(o_out1)
-                    keep = np.where(probs[:, 0] > self.detection_threshould[2])[0]
+                    keep = np.where(probs[:, 0] > self.detection_threshold[2])[0]
                     o_out1 = o_out1[keep]
                     boxes = boxes[keep]
 
@@ -430,7 +430,7 @@ class Mtcnn(ImageDetectionModel):
                     #######################################
                     #########onet finish
                     #######################################
-                    boxes=nms(boxes, threshold=self.detection_threshould[2],image_size=(img.shape[0],img.shape[1]),min_size=self.min_size)
+                    boxes=nms(boxes, threshold=self.detection_threshold[2],image_size=(img.shape[0],img.shape[1]),min_size=self.min_size)
                     print('onet:{0} boxes '.format(len(boxes)))
                     return boxes
             else:
@@ -439,7 +439,7 @@ class Mtcnn(ImageDetectionModel):
 
         else:
             raise  ValueError('the model is not built yet.')
-    def generate_bboxes(self,*outputs,threshould=0.5,scale=1):
+    def generate_bboxes(self,*outputs,threshold=0.5,scale=1):
         raise NotImplementedError
     def nms(self,bboxes):
         raise NotImplementedError

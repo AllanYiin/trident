@@ -19,6 +19,7 @@ from tensorflow.python.eager import context
 from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
+
 from tensorflow.python.ops import math_ops
 from trident.backend.common import dtype as Dtype
 
@@ -384,7 +385,7 @@ def int_shape(x):
     [3, 3, 7]
 
     """
-    return tuple(x.get_shape().as_list())
+    return tuple(x.shape.as_list())
 
 
 
@@ -3936,6 +3937,9 @@ def multinomial(x:Tensor,num_samples: int=1):
     The drawn samples of shape `[batch_size, num_samples]`.
   """
     return  tf.random.categorical(x,num_samples)
+
+def random_bernoulli(x: Tensor):
+    return tf.distributions.Bernoulli
 
 
 @numpy_compatible

@@ -23,6 +23,8 @@ from typing import List, TypeVar, Tuple, Union, Optional, Generic, Iterable, Ite
 import cv2
 import numpy as np
 from skimage import color
+
+from trident.backend.opencv_backend import file2array
 from trident.data.vision_transforms import Unnormalize
 
 from trident.data.transform import Transform
@@ -39,7 +41,6 @@ from trident.data.samplers import *
 from trident.backend.common import *
 from trident.backend.tensorspec import TensorSpec, assert_input_compatibility
 
-
 try:
     import Queue
 except ImportError:
@@ -47,13 +48,13 @@ except ImportError:
 
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
-    from trident.backend.pytorch_ops import int_shape, str2dtype, tensor_to_shape,expand_dims,cast
+    from trident.backend.pytorch_ops import int_shape, str2dtype, tensor_to_shape, expand_dims, cast
     import torch
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import to_numpy, to_tensor, ObjectType
-    from trident.backend.tensorflow_ops import int_shape,str2dtype,tensor_to_shape,expand_dims,cast
+    from trident.backend.tensorflow_ops import int_shape, str2dtype, tensor_to_shape, expand_dims, cast
 
-__all__ = ['Dataset','ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
+__all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
            'NumpyDataset', 'RandomNoiseDataset']
 
 _UID_PREFIX = collections.defaultdict(int)
@@ -91,27 +92,26 @@ class DatasetBase(ABC):
 
 
 class Dataset(DatasetBase):
-    def __init__(self, args,symbol=None, object_type: Optional[ObjectType] = None, **kwargs):
+    def __init__(self, args, symbol=None, object_type: Optional[ObjectType] = None, **kwargs):
         super().__init__()
         if args is None:
-            self.items=[]
+            self.items = []
         else:
-            self.items =args
+            self.items = args
         self._element_spec = None
 
-        if symbol==None:
+        if symbol == None:
             prefix = camel2snake(symbol) if symbol is not None else camel2snake(self.__class__.__name__.replace("Dataset", ""))
             uid = _get_global_uid(camel2snake(prefix))
             if uid == 0:
                 self.symbol = prefix
             else:
                 self.symbol = camel2snake(prefix) + '_' + str(uid)
-        self.symbol=symbol
+        self.symbol = symbol
         self.is_spatial = False
         self.is_paired_process = False
         self.object_type = kwargs.get("expect_data_type", object_type)
         self.transform_funcs = []
-
 
     def __getitem__(self, index: int) -> Tuple:
         return self.items[index]
@@ -214,21 +214,19 @@ class ZipDataset(Dataset):
         return len(self._datasets[0])
 
 
-
 class NumpyDataset(Dataset):
     def __init__(self, data=None, object_type=ObjectType.array_data, symbol="array", **kwargs):
-        super().__init__( data,symbol=symbol, object_type=object_type,  **kwargs)
+        super().__init__(data, symbol=symbol, object_type=object_type, **kwargs)
         if data is not None:
-            self._element_spec = TensorSpec(shape=tensor_to_shape(self.items[0],need_exclude_batch_axis=True,is_singleton=True), dtype=self.items[0].dtype, name=self.symbol, object_type=self.object_type)
-
-
+            self._element_spec = TensorSpec(shape=tensor_to_shape(self.items[0], need_exclude_batch_axis=True, is_singleton=True), dtype=self.items[0].dtype, name=self.symbol,
+                                            object_type=self.object_type)
 
     def __getitem__(self, index: int) -> Tuple:
         return None if self.items is None else self.items[index]
 
-
     def __len__(self) -> int:
-        return None if self.items is None else  len(self.items)
+        return None if self.items is None else len(self.items)
+
 
 class StreamDataset(Dataset):
     r"""
@@ -271,44 +269,42 @@ class ArrayDataset(Dataset):
 
 
 class ImageDataset(Dataset):
-    def __init__(self, images, object_type: ObjectType = ObjectType.rgb,symbol="image",**kwargs):
-        super().__init__(images,symbol=symbol, object_type=object_type, **kwargs)
+    def __init__(self, images, object_type: ObjectType = ObjectType.rgb, symbol="image", **kwargs):
+        super().__init__(images, symbol=symbol, object_type=object_type, **kwargs)
         self.is_spatial = True
         self.is_paired_process = False
 
     def __getitem__(self, index: int):
         img = self.items[index]  # self.pop(index)
         if isinstance(img, str):
-            img = image2array(img)
-
+            img = file2array(img)
 
         if not isinstance(img, np.ndarray):
             raise ValueError('image data should be ndarray')
         elif isinstance(img, np.ndarray) and img.ndim not in [2, 3]:
             raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(img.ndim))
         elif self.object_type == ObjectType.gray:
-            if img.ndim==2:
-                img=np.expand_dims(img,-1)
-            elif ( img.ndim==3 and img.shape[-1]==1):
+            if img.ndim == 2:
+                img = np.expand_dims(img, -1)
+            elif (img.ndim == 3 and img.shape[-1] == 1):
                 pass
             else:
-                img = cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
                 img = np.expand_dims(img, -1)
         elif self.object_type == ObjectType.rgb and img.ndim == 2:
-            img = cv2.cvtColor(img,cv2.COLOR_GRAY2RGB)
+            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         elif self.object_type == ObjectType.rgb and img.ndim == 3:
-            if img.shape[-1]==1:
-                img = cv2.cvtColor(img[:,:,0], cv2.COLOR_GRAY2RGB)
+            if img.shape[-1] == 1:
+                img = cv2.cvtColor(img[:, :, 0], cv2.COLOR_GRAY2RGB)
             img = img[:, :, :3]
         elif self.object_type == ObjectType.rgba:
             if img.ndim == 2:
-                img =cv2.cvtColor(img,cv2.COLOR_GRAY2RGBA)
+                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGBA)
             if img.shape[2] == 3:
-                img =cv2.cvtColor(img,cv2.COLOR_RGB2RGBA)
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
         elif self.object_type == ObjectType.multi_channel:
             img = img.astype(np.float32)
         return img
-
 
     def data_transform(self, img_data):
         if len(self.transform_funcs) == 0:
@@ -316,7 +312,7 @@ class ImageDataset(Dataset):
         if isinstance(img_data, np.ndarray):
             for fc in self.transform_funcs:
                 if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
-                    img_data = fc(img_data,spec=self.element_spec)
+                    img_data = fc(img_data, spec=self.element_spec)
             img_data = image_backend_adaption(img_data)
 
             return img_data
@@ -336,8 +332,7 @@ class ImageDataset(Dataset):
 
     @property
     def reverse_image_transform_funcs(self):
-        return_list = []
-        return_list.append(reverse_image_backend_adaption)
+        return_list = [reverse_image_backend_adaption]
         for i in range(len(self.transform_funcs)):
             fn = self.transform_funcs[-1 - i]
             if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
@@ -363,11 +358,10 @@ class ImageDataset(Dataset):
 class MaskDataset(Dataset):
     def __init__(self, masks, class_names=None, object_type: ObjectType = ObjectType.label_mask,
                  get_image_mode: GetImageMode = GetImageMode.processed, symbol="mask", **kwargs):
-        super().__init__(masks,symbol=symbol, object_type=object_type,  **kwargs)
+        super().__init__(masks, symbol=symbol, object_type=object_type, **kwargs)
         if object_type not in [ObjectType.label_mask, ObjectType.binary_mask, ObjectType.alpha_mask,
                                ObjectType.color_mask]:
             raise ValueError('Only mask is valid expect image type. ')
-
 
         self.get_image_mode = get_image_mode
         self.palette = OrderedDict()
@@ -382,54 +376,47 @@ class MaskDataset(Dataset):
         self._element_spec = TensorSpec(shape=TensorShape(self[0]), name=self.symbol, object_type=self.object_type, is_spatial=True)
 
     def __getitem__(self, index: int):
-        img = self.list[index]  # self.pop(index)
-        if isinstance(img, str) and self.get_image_mode == GetImageMode.path:
-            return img
-        elif self.get_image_mode == GetImageMode.path:
-            return None
+        mask = self.items[index]  # self.pop(index)
 
-        if isinstance(img, str):
+        if isinstance(mask, str):
             if self.object_type == ObjectType.binary_mask:
-                img = mask2array(img).astype(np.int64)
-                img[img > 0] =1
-                img[img <=0] = 0
-                img.astype(np.int64)
+                mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
+                mask[mask > 0] = 1
+                mask[mask <= 0] = 0
+                mask.astype(np.int64)
             elif self.object_type == ObjectType.alpha_mask:
-                img = mask2array(img).astype(np.float32)
+                mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
             elif self.object_type == ObjectType.label_mask:
-                if '.png' in img:
-                    img = image2array(img)
-                    img = img[:, :, 1]
+                if '.png' in mask:
+                    mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
+                    mask = mask[:, :, 1]
                 else:
-                    img = mask2array(img).astype(np.int64)
+                    mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
 
             elif self.object_type == ObjectType.color_mask:
-                img = image2array(img)
-                if img.ndim == 2:
+                mask = file2array(mask, flag=cv2.IMREAD_COLOR)
+                if mask.ndim == 2:
                     pass
-                elif img.ndim == 3:
-                    img = img[:, :, :3]
+                elif mask.ndim == 3:
+                    mask = mask[:, :, :3]
                     if len(self.palette) > 0:
-                        img = color2label(img, self.palette).astype(np.int64)
+                        mask = color2label(mask, self.palette).astype(np.int64)
 
-        if not isinstance(img, np.ndarray):
+        if not isinstance(mask, np.ndarray):
             raise ValueError('image data should be ndarray')
-        elif isinstance(img, np.ndarray) and img.ndim not in [2, 3]:
-            raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(img.ndim))
+        elif isinstance(mask, np.ndarray) and mask.ndim not in [2, 3]:
+            raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(mask.ndim))
 
-
-        return img
-
-
+        return mask
 
     def mask_transform(self, mask_data):
         if len(self.transform_funcs) == 0:
-            return mask_backend_adaptive(mask_data, label_mapping=self.class_names,object_type=self.object_type)
+            return mask_backend_adaptive(mask_data, label_mapping=self.class_names, object_type=self.object_type)
         else:
             if isinstance(mask_data, np.ndarray):
                 for fc in self.transform_funcs:
-                        mask_data = fc(mask_data,spec=self.element_spec)
-                mask_data = mask_backend_adaptive(mask_data, label_mapping=self.class_names,object_type=self.object_type)
+                    mask_data = fc(mask_data, spec=self.element_spec)
+                mask_data = mask_backend_adaptive(mask_data, label_mapping=self.class_names, object_type=self.object_type)
                 return mask_data
             else:
                 return mask_data
@@ -440,32 +427,31 @@ class MaskDataset(Dataset):
     @property
     def reverse_image_transform_funcs(self):
         return_list = []
-        return_list.append(reverse_image_backend_adaption)
         for i in range(len(self.transform_funcs)):
             fn = self.transform_funcs[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op':
-                return_list.append(unnormalize(fn.mean, fn.std))
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
+                return_list.append(Unnormalize(fn.mean, fn.std))
         return_list.append(array2image)
         return return_list
 
-    def reverse_image_transform(self, img_data):
+    def reverse_image_transform(self, mask_data):
         if len(self.reverse_image_transform_funcs) == 0:
-            return reverse_image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
+            return mask_data
+        if isinstance(mask_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
-                img_data = fc(img_data)
-            img_data = reverse_image_backend_adaption(img_data)
+                mask_data = fc(mask_data)
+            # img_data = reverse_image_backend_adaption(img_data)
 
-            return img_data
+            return mask_data
         else:
-            return img_data
+            return mask_data
 
 
 class LabelDataset(Dataset):
     def __init__(self, labels, object_type=ObjectType.classification_label, class_names=None, symbol="label",
                  **kwargs):
-        super().__init__(labels,symbol=symbol, object_type=object_type,  **kwargs)
+        super().__init__(labels, symbol=symbol, object_type=object_type, **kwargs)
         self.dtype = np.int64
 
         self.class_names = {}
@@ -476,12 +462,12 @@ class LabelDataset(Dataset):
 
         self.transform_funcs = []
 
-        shp=None
-        if isinstance(self.items[0],numbers.Number):
-            shp=TensorShape([0])
+        shp = None
+        if isinstance(self.items[0], numbers.Number):
+            shp = TensorShape([0])
         else:
             shp = TensorShape(self.items)
-        self._element_spec = TensorSpec(shape=shp, name=self.symbol, object_type=self.object_type,dtype=self.dtype)
+        self._element_spec = TensorSpec(shape=shp, name=self.symbol, object_type=self.object_type, dtype=self.dtype)
 
     def binding_class_names(self, class_names=None, language=None):
         if class_names is not None and hasattr(class_names, '__len__'):
@@ -495,8 +481,7 @@ class LabelDataset(Dataset):
 
     def __getitem__(self, index: int):
         label = self.items[index]
-        return   label
-
+        return label
 
     def data_transform(self, label_data):
         label_data = label_backend_adaptive(label_data, self.class_names)
@@ -505,7 +490,7 @@ class LabelDataset(Dataset):
         if isinstance(label_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.transform_funcs:
-                label_data = fc(label_data,spec=self.element_spec)
+                label_data = fc(label_data, spec=self.element_spec)
             return label_data
         else:
             return label_data
@@ -517,9 +502,9 @@ class LabelDataset(Dataset):
 class BboxDataset(Dataset):
     def __init__(self, boxes, image_size=None, object_type=ObjectType.absolute_bbox, class_names=None,
                  symbol="bbox", **kwargs):
-        super().__init__(boxes,symbol=symbol, object_type=object_type,**kwargs)
+        super().__init__(boxes, symbol=symbol, object_type=object_type, **kwargs)
 
-        self._element_spec = TensorSpec(shape=TensorShape([None,5]), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=TensorShape([None, 5]), name=self.symbol, object_type=self.object_type, is_spatial=True)
         self.is_paired_process = False
         self.is_spatial = True
         self.dtype = np.int64
@@ -561,7 +546,7 @@ class BboxDataset(Dataset):
         if isinstance(bbox, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.transform_funcs:
-                bbox = fc(bbox,spec=self.element_spec)
+                bbox = fc(bbox, spec=self.element_spec)
             return bbox
         else:
             return bbox
@@ -572,10 +557,11 @@ class BboxDataset(Dataset):
 
 class LandmarkDataset(Dataset):
     def __init__(self, landmarks, image_size=None, object_type=ObjectType.landmarks, symbol="landmark", **kwargs):
-        super().__init__(landmarks,symbol=symbol, object_type=object_type,  **kwargs)
+        super().__init__(landmarks, symbol=symbol, object_type=object_type, **kwargs)
 
         self.image_size = image_size
-        self._element_spec = TensorSpec(shape=tensor_to_shape(self.items[0],need_exclude_batch_axis=True,is_singleton=True), dtype=self.items[0].dtype,name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=tensor_to_shape(self.items[0], need_exclude_batch_axis=True, is_singleton=True), dtype=self.items[0].dtype, name=self.symbol,
+                                        object_type=self.object_type, is_spatial=True)
         self.is_paired_process = False
         self.is_spatial = True
         self.transform_funcs = []
@@ -589,13 +575,13 @@ class LandmarkDataset(Dataset):
         # #     landmarks[:, 1] = landmarks[:, 1] / height
         # #     return np.array(landmarks).astype(np.float32)
         # else:
-        return  self.items[index]
+        return self.items[index]
 
     def landmark_transform(self, *landmarks):
         if isinstance(landmarks, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.transform_funcs:
-                landmarks = fc(landmarks,spec=self.element_spec)
+                landmarks = fc(landmarks, spec=self.element_spec)
             return landmarks
         else:
             return landmarks
@@ -606,12 +592,21 @@ class LandmarkDataset(Dataset):
 
 class RandomNoiseDataset(Dataset):
     def __init__(self, shape, object_type=ObjectType.random_noise, random_mode='normal', symbol="noise", **kwargs):
-        super().__init__(symbol=symbol, object_type=object_type,  **kwargs)
+        super().__init__([], symbol=symbol, object_type=object_type, **kwargs)
 
         self.dtype = np.float32
-        self.shape = shape
+        if isinstance(shape, numbers.Integral):
+            self.shape = (shape,)
+        else:
+            self.shape = shape
         self.random_mode = random_mode
         self._element_spec = TensorSpec(shape=TensorShape(shape), name=self.symbol, object_type=self.object_type)
+        self.is_paired_process = False
+        self.is_spatial = False
+        self.transform_funcs = []
+
+    def data_transform(self, noise_data):
+        return noise_data
 
     def __getitem__(self, index: int):
         if self.random_mode == 'normal':
@@ -626,9 +621,9 @@ class RandomNoiseDataset(Dataset):
 class TextSequenceDataset(Dataset):
     def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
                  object_type=ObjectType.corpus, symbol=None, **kwargs):
-        super().__init__(symbol=symbol, object_type=object_type,  **kwargs)
+        super().__init__(symbol=symbol, object_type=object_type, **kwargs)
         self.sequence_start_at = sequence_start_at
-        self.transform_funcs=[]
+        self.transform_funcs = []
         if len(section_delimiter) == 2:
             self.section_delimiter = section_delimiter
         else:
@@ -778,7 +773,7 @@ class TextSequenceDataset(Dataset):
             return text_backend_adaption(text_data)
         if isinstance(text_data, np.ndarray):
             for fc in self.transform_funcs:
-                text_data =fc(text_data,spec=self.element_spec)
+                text_data = fc(text_data, spec=self.element_spec)
             text_data = text_backend_adaption(text_data)
 
     def text_transform(self, text_data):
@@ -810,7 +805,7 @@ class TextSequenceDataset(Dataset):
 
 
 class Iterator(object):
-    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, minibatch_size=8,mode='tuple',is_shuffe=True,buffer_size=None,workers=2,**kwargs):
+    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, minibatch_size=8, mode='tuple', is_shuffe=True, buffer_size=None, workers=2, **kwargs):
         self.is_paired_process = False
         self.signature = None
         self._data = None
@@ -818,12 +813,13 @@ class Iterator(object):
         self._unpair = None
         self.paired_process_symbols = []
         self.data_template = None
-        self.is_shuffe=is_shuffe
+        self.is_shuffe = is_shuffe
         self.datasets_dict = OrderedDict()
-        self.mode=mode
+        self.mode = mode
 
         self.workers = workers
-        self.itr = 0
+        self.pass_cnt = 0
+        self.pass_time_spend = 0
         if data is not None and isinstance(data, tuple):
             self._data = Dataset.zip(*data)
         elif data is not None and isinstance(data, (Dataset, ZipDataset, TextSequenceDataset)):
@@ -850,8 +846,8 @@ class Iterator(object):
         data_symbols = iteration_tools.flatten([self.data.symbol], iterable_types=(list, tuple))
         label_symbols = iteration_tools.flatten([self.label.symbol], iterable_types=(list, tuple))
         # check pair_process
-        data_ds = [ds for ds in datasets if len(ds)>0 and ds.symbol in data_symbols and ds.is_spatial == True]
-        label_ds = [ds for ds in datasets if len(ds)>0 and ds.symbol in label_symbols and ds.is_spatial == True]
+        data_ds = [ds for ds in datasets if len(ds) > 0 and ds.symbol in data_symbols and ds.is_spatial == True]
+        label_ds = [ds for ds in datasets if len(ds) > 0 and ds.symbol in label_symbols and ds.is_spatial == True]
 
         if len(data_ds) > 0 and len(label_ds) > 0:
             for ds in data_ds:
@@ -868,18 +864,16 @@ class Iterator(object):
             ds = datasets[k]
             if len(ds) > 0:
                 dataitem = ds[k]
-                ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem,0),object_type=ds.object_type,name=ds.symbol)
+                ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
                 self.data_template[ds.element_spec] = None
-                self.signature.outputs[ds.symbol]=ds.element_spec
-
-
+                self.signature.outputs[ds.symbol] = ds.element_spec
 
         self._minibatch_size = minibatch_size
         self.paired_transform_funcs = []
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         if buffer_size is None:
-            buffer_size=8*minibatch_size
+            buffer_size = 8 * minibatch_size
         self.buffer_size = buffer_size
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)
         self.sample_filter = None
@@ -894,6 +888,17 @@ class Iterator(object):
     @data.setter
     def data(self, value):
         self._data = value
+
+        if isinstance(value, ZipDataset):
+            for ds in value._datasets:
+                self.data_template[ds.element_spec] = None
+                self.signature.outputs[ds.symbol] = ds.element_spec
+                self.datasets_dict[ds.symbol] = ds
+        else:
+            self.data_template[value.element_spec] = None
+            self.signature.outputs[value.symbol] = value.element_spec
+            self.datasets_dict[value.symbol] = value
+
         if self._label is not None and isinstance(self._label, (MaskDataset, BboxDataset, ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(
                 self._data):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
@@ -911,6 +916,16 @@ class Iterator(object):
     @label.setter
     def label(self, value):
         self._label = value
+        if isinstance(value, ZipDataset):
+            for ds in value._datasets:
+                self.data_template[ds.element_spec] = None
+                self.signature.outputs[ds.symbol] = ds.element_spec
+                self.datasets_dict[ds.symbol] = ds
+        else:
+            self.data_template[value.element_spec] = None
+            self.signature.outputs[value.symbol] = value.element_spec
+            self.datasets_dict[value.symbol] = value
+
         if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(
                 self._label) == len(self._data):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
@@ -927,6 +942,15 @@ class Iterator(object):
     @unpair.setter
     def unpair(self, value):
         self._unpair = value
+        if isinstance(value, ZipDataset):
+            for ds in value._datasets:
+                self.data_template[ds.element_spec] = None
+                self.signature.outputs[ds.symbol] = ds.element_spec
+                self.datasets_dict[ds.symbol] = ds
+        else:
+            self.data_template[value.element_spec] = None
+            self.signature.outputs[value.symbol] = value.element_spec
+            self.datasets_dict[value.symbol] = value
 
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
@@ -949,28 +973,31 @@ class Iterator(object):
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
-        self.buffer_size =8*value
+        self.buffer_size = 8 * value
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)
+        self.pass_cnt = 0
+        self.pass_time_spend = 0.
 
     def update_signature(self, arg_names):
 
-        if len(arg_names)!=len(self.datasets_dict):
-            warnings.warn('arg_names should have same length with datasets, expect {0} got {1}'.format(len(arg_names),len(self.datasets_dict)))
+        if len(arg_names) != len(self.datasets_dict):
+            warnings.warn('arg_names should have same length with datasets, expect {0} got {1}'.format(len(arg_names), len(self.datasets_dict)))
         else:
             iterdata = self.next()
             if self.signature is None or not isinstance(self.signature, Signature):
                 self.signature = Signature()
                 self.signature.name = 'data_provider'
             if isinstance(arg_names, (list, tuple)) and len(iterdata) == len(arg_names):
-                new_dict=OrderedDict()
+                new_dict = OrderedDict()
                 for i in range(len(arg_names)):
                     arg = arg_names[i]
                     data = iterdata[i]
-                    self.signature.outputs[arg] =   TensorSpec(shape=TensorShape((None,)+tuple(tensor_to_shape(data).dims)),dtype=data.dtype,object_type=self.datasets_dict.value_list[i].object_type,name=arg)
-                    ds= self.datasets_dict.value_list[i]
-                    new_dict[arg]=ds
-                self.datasets_dict=None
-                self.datasets_dict=new_dict
+                    self.signature.outputs[arg] = TensorSpec(shape=TensorShape((None,) + tuple(tensor_to_shape(data).dims)), dtype=data.dtype,
+                                                             object_type=self.datasets_dict.value_list[i].object_type, name=arg)
+                    ds = self.datasets_dict.value_list[i]
+                    new_dict[arg] = ds
+                self.datasets_dict = None
+                self.datasets_dict = new_dict
 
     def paired_transform(self, datadict: Dict[TensorSpec, np.ndarray]):
         # if isinstance(img_data, list) and all(isinstance(elem, np.ndarray) for elem in img_data):
@@ -991,7 +1018,7 @@ class Iterator(object):
 
     def get_datasets(self):
         datasets = []
-        if self._data and isinstance(self._data, Dataset) and not  isinstance(self._data, ZipDataset) and len(self._data) > 0:
+        if self._data and isinstance(self._data, Dataset) and not isinstance(self._data, ZipDataset) and len(self._data) > 0:
             datasets.append(self._data)
         elif self._data and isinstance(self._data, ZipDataset):
             for ds in self._data._datasets:
@@ -1016,27 +1043,27 @@ class Iterator(object):
 
     def update_data_template(self):
         data_template = OrderedDict()
-        self.signature = Signature(name='data_provider')
+        if self.signature is None:
+            self.signature = Signature(name='data_provider')
         dataitems = self[0]
         for k in range(len(self.datasets_dict)):
             ds = self.datasets_dict.value_list[k]
             if len(ds) > 0:
-                dataitem =dataitems.value_list[k]
-                ds.element_spec = TensorSpec.tensor_to_spec(dataitem,need_exclude_batch_axis=True, is_singleton=True,object_type=ds.object_type,name=ds.symbol)
+                dataitem = dataitems.value_list[k]
+                ds.element_spec = TensorSpec.tensor_to_spec(dataitem, need_exclude_batch_axis=True, is_singleton=True, object_type=ds.object_type, name=ds.symbol)
                 data_template[ds.element_spec] = None
                 self.signature.outputs[ds.symbol] = ds.element_spec
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
-        self.data_template=data_template
+        self.data_template = data_template
 
-
-
-
+    def print_statistics(self):
+        print('avg. process time: {0:.5f}'.format(self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
+        print('avg. batch time: {0:.5f}'.format(self._minibatch_size * self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
 
     def __getitem__(self, index: int):
-        # start = time.time()
+        start_time = time.time()
 
-        t1 = time.time()
         try:
             bbox = None
             mask = None
@@ -1060,11 +1087,11 @@ class Iterator(object):
 
             def process_data_transform(i):
                 ds = self.datasets_dict[returnData.key_list[i].name]
-                returnData[returnData.key_list[i]] =unpack_singleton(ds.data_transform(returnData.value_list[i]))
+                returnData[returnData.key_list[i]] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
 
             threads = []
             for i in range(len(returnData)):
-                threads.append(threading.Thread(target=process_data_transform, args=(i, )))
+                threads.append(threading.Thread(target=process_data_transform, args=(i,)))
                 threads[i].start()
             for i in range(len(returnData)):
                 threads[i].join()
@@ -1074,14 +1101,12 @@ class Iterator(object):
                 for spec in returnData.key_list:
                     self.signature.outputs[spec.name] = spec
 
-            # stop = time.time()
-            # print('prepare tuple:{0}'.format(stop - start))
-            # start = stop
+            self.pass_cnt += 1
+            self.pass_time_spend += float(time.time() - start_time)
+
             return returnData
         except:
             PrintException()
-
-
 
     def _next_index(self):
         return next(self._sample_iter)
@@ -1142,7 +1167,8 @@ class MetricIterator(Iterator):
             self._label = LabelDataset(labels=label)
         self._unpair = ImageDataset()
         self.workers = 2
-        self.itr = 0
+        self.pass_cnt = 0
+        self.pass_time_spend = 0
 
         self._minibatch_size = minibatch_size
         self.paired_transform_funcs = []

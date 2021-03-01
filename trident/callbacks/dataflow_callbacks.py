@@ -36,6 +36,7 @@ class DataProcessCallback(CallbackBase):
         try:
             train_data = training_context['train_data']
             test_data = training_context['test_data']
+            data_provider
 
             input = train_data[train_data.key_list[0]]
             new_input = []

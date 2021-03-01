@@ -23,7 +23,7 @@ else:
 
 
 
-__all__ = ['nms', 'xywh2xyxy', 'xyxy2xywh','bbox_iou','bbox_diou','bbox_giou','bbox_giou_numpy','plot_one_box']
+__all__ = ['nms', 'xywh2xyxy', 'xyxy2xywh','bbox_iou','bbox_diou','bbox_giou','bbox_giou_numpy','plot_one_box','convert_to_square']
 
 
 def plot_one_box(box, img, color=None, label=None, line_thickness=None):
@@ -472,11 +472,21 @@ def bbox_diou(bboxes1, bboxes2):
     diou = expand_dims(diou, -1)
     return diou
 
-#
-# def soft_nms(boxes, sigma=0.5, overlap_threshold=0.3, score_threshold=0.001, method='linear'):
-#     """Apply the soft NMS algorithm from https://arxiv.org/abs/1704.04503."""
-#     if boxes.shape[0] == 0:
-#         return boxes, []
-#
-#     methods = {'hard': 0, 'linear': 1, 'gaussian': 2}
-#     assert method in methods, 'Unknown soft_nms method: {}'.format(met
+def convert_to_square(bboxes):
+    """Convert bounding boxes to a square form.
+    Arguments:
+        bboxes: a float numpy array of shape [n, 5].
+    Returns:
+        a float numpy array of shape [n, 5],
+            squared bounding boxes.
+    """
+
+    h = bboxes[:, 3] - bboxes[:, 1]
+    w = bboxes[:, 2] - bboxes[:, 0]
+    max_len = maximum(w, h)
+
+    bboxes[:, 0] = np.round(bboxes[:, 0] - 0.5 * (max_len - w))
+    bboxes[:, 1] = np.round(bboxes[:, 1] - 0.5 * (max_len - h))
+    bboxes[:, 2] = bboxes[:, 0] + max_len
+    bboxes[:, 3] = bboxes[:, 1] + max_len
+    return bboxes

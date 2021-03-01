@@ -60,35 +60,26 @@ def DeepLabHead(classes=20, atrous_rates=(6, 12, 18,24),num_filters=256):
 
 
 
-def ASPPPooling(num_filters,size):
+def ASPPPooling(num_filters):
     return Sequential(AdaptiveAvgPool2d((1,1)),
                       Conv2d((1,1),num_filters,strides=1,use_bias=False,activation=None),
-                      Upsampling2d(size=(size[-2], size[-1]),mode='bilinear', align_corners=False))
+                      Upsampling2d(scale_factor=14,mode='bilinear', align_corners=False))
 
 
 
-class ASPP(Layer):
-    def __init__(self, atrous_rates,num_filters=256):
-        super(ASPP, self).__init__()
-        self.num_filters=num_filters
-        self.convs = ShortCut2d( mode='concate')
-        self.convs.add_module('conv1',Conv2d_Block((1,1),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch'))
-
+def ASPP(atrous_rates=(6,12,18),num_filters=256):
+        layers=OrderedDict()
+        layers['conv1']=Conv2d_Block((1,1),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch')
         for i in range(len(atrous_rates)):
-            self.convs.add_module('aspp_dilation{0}'.format(i),Conv2d_Block((3,3),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch',dilation=atrous_rates[i]))
+            layers['aspp_dilation{0}'.format(i)]=Conv2d_Block((3,3),num_filters=num_filters,strides=1,use_bias=False,activation=None,normalization='batch',dilation=atrous_rates[i])
+        layers['aspp_pooling'] =ASPPPooling(num_filters)
+        return Sequential(
+            ShortCut2d(layers,mode='concate'),
+            Conv2d_Block((1, 1), num_filters, strides=1, use_bias=False, bias=False, activation='relu', normalization='batch', dilation=1, dropout_rate=0.5, name='project')
+        )
 
-        self.project =Conv2d_Block( (1,1),num_filters,strides=1,use_bias=False, bias=False,activation='relu',normalization='batch',dilation=1,dropout_rate=0.5)
 
-    def build(self, input_shape:TensorShape):
-        if self._built == False :
-            self.convs.add_module('aspp_pooling',ASPPPooling(self.num_filters, to_list(input_shape[-2:])))
-            self.to(self.device)
-            self._built = True
 
-    def forward(self, x,**kwargs):
-        x=self.convs(x)
-        x=self.project(x)
-        return x
 
 
 

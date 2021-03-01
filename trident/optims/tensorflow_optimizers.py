@@ -1687,7 +1687,7 @@ class Ranger(Optimizer):
             if any_abnormal_number(grad):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
-            p_data = p.value().detach()
+            p_data=p.value().detach()
             state = self.state[p.ref()]
 
             # State initialization
@@ -1696,7 +1696,10 @@ class Ranger(Optimizer):
                 state['exp_avg'] =zeros_like(p_data)
                 state['exp_avg_sq'] = zeros_like(p_data)
                 # look ahead weight storage now in state dict
-                state['slow_buffer'] =p_data.copy().detach()
+                state['slow_buffer'] = p_data.copy()
+            else:
+                state['exp_avg'] = cast(state['exp_avg'],p_data.dtype)
+                state['exp_avg_sq'] =  cast(state['exp_avg_sq'],p_data.dtype)
 
 
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
@@ -1708,10 +1711,10 @@ class Ranger(Optimizer):
 
 
             exp_avg=beta1 * exp_avg + (1.0 - beta1) * grad
-            exp_avg_sq=beta2 * exp_avg_sq + (1.0 - beta2) * square(grad)
-            state['step'] += 1
+            exp_avg_sq=beta2 * exp_avg_sq + (1.0 - beta2) * (grad**2)
 
 
+            state['step'] += 1.0
             buffered = self.radam_buffer[int(state['step'] % 10)]
 
             if state["step"] == buffered[0]:
@@ -1739,11 +1742,11 @@ class Ranger(Optimizer):
                 buffered[2] = step_size
 
             if group['weight_decay'] != 0:
-                p_data+=(p_data*-group['weight_decay'] * group['lr'])
+                p_data = p_data - p.value() * group['weight_decay'] * group['lr']
 
             if N_sma >= 5:
                 denom = sqrt(exp_avg_sq) + group["eps"]
-                p_data +=  (exp_avg / denom)*-step_size * group['lr']
+                p_data +=  (exp_avg / denom)*(-step_size * group['lr'])
             else:
                 p_data +=  exp_avg*-step_size * group['lr']
 
@@ -1769,8 +1772,6 @@ class Ranger(Optimizer):
                     slow_p = where(is_abnormal_number(slow_p), p_data, slow_p)
                 p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
                 state['slow_buffer']=slow_p
-
-            del grad
 
         return True
 
