@@ -4,7 +4,7 @@
 
 | version| pytorch| tensorflow |
 |-------------|-------------|---------------|
-| [![version](https://img.shields.io/static/v1?label=&message=0.7.0&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | ![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge)| ![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge) |
+| [![version](https://img.shields.io/static/v1?label=&message=0.7.1&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.5.4&color=377EF0&style=for-the-badge) | ![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge)| ![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge) |
 
 **Trident** is a deep learning dynamic calculation graph api based on PyTorch and TensorFlow (pure Eager mode, no Keras dependency). Through Trident, not only you can use the same develope experient (more than 99% of the same code) within PyTorch and Tensorflow, it is designed for simplify deep learning developers routine work,it's functions not only cover computing vision, natural language understanding and reinforcement learning, but also including more simpler network structure declaration, more powerful but easier training process control, intuitive data access and  data augmentation.
 
