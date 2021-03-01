@@ -24,7 +24,7 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 from trident.data.transform import VisionTransform
 
-__all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomTransform','RandomTransformAffine',
+__all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomMultiScaleImage','RandomTransform','RandomTransformAffine',
            'AdjustBrightness','AdjustContrast','AdjustSaturation','AddNoise','AdjustHue','RandomAdjustHue','RandomAdjustBrightness','RandomAdjustContrast','RandomAdjustSaturation',
            'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip','RandomMirror','AdjustGamma','RandomBlur','RandomAdjustGamma','Blur','InvertColor','RandomInvertColor','GrayScale','RandomGrayScale',
            'ImageDilation','ImageErosion','ErosionThenDilation','DilationThenErosion','AdaptiveBinarization','SaltPepper','RandomErasing','ToRGB']
@@ -145,10 +145,10 @@ class Resize(VisionTransform):
         h, w, th, tw,pad_vert,pad_horz = self._shape_info
 
         if not self.keep_aspect:
-            return cv2.resize(image, (tw,th), self.interpolation)
+            return cv2.resize(image, (tw,th), interpolation=self.interpolation)
         else:
 
-            image=cv2.resize(image, (tw,th), self.interpolation)
+            image=cv2.resize(image, (tw,th), interpolation=self.interpolation)
             output=np.zeros((*self.output_size,1 if spec is not None and spec.object_type==ObjectType.gray else 3))
             if self.align_corner:
                 output[:th,:tw,:]=image
@@ -171,23 +171,32 @@ class Resize(VisionTransform):
         h, w, th, tw,pad_vert,pad_horz = self._shape_info
         if h == th and w == tw:
             return mask
-
+        mask_dtype=mask.dtype
+        mask=mask.astype(np.float32)
         if not self.keep_aspect:
-            return cv2.resize(mask, (tw, th), cv2.INTER_NEAREST)
+            mask=cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST)
+            return mask.astype(mask_dtype)
         else:
 
-            mask = cv2.resize(mask, (tw, th),cv2.INTER_NEAREST)
-            output = np.zeros((*self.output_size, 3))
+            mask = cv2.resize(mask, (tw, th),interpolation=cv2.INTER_NEAREST).astype(np.float32)
+            output = np.zeros((*self.output_size, 3)).astype(np.float32)
             if mask.ndim==2:
-                output = np.zeros((*self.output_size, 1))
+                output = np.zeros(self.output_size).astype(np.float32)
             elif mask.ndim==3 :
-                output = np.zeros((*self.output_size, mask.shape[-1]))
+                output = np.zeros((*self.output_size, mask.shape[-1])).astype(np.float32)
 
             if self.align_corner:
-                output[:th, :tw, :] = mask
+                if mask.ndim == 2:
+                    output[:th, :tw] = mask
+                elif mask.ndim == 3:
+                    output[:th, :tw, :] = mask
             else:
-                output[pad_vert // 2:th + pad_vert , pad_horz // 2:tw + pad_horz , :] = mask
-            return np.squeeze(output)
+                if mask.ndim == 2:
+                    output[pad_vert // 2:th + pad_vert , pad_horz // 2:tw + pad_horz] = mask
+                elif mask.ndim == 3:
+                    output[pad_vert // 2:th + pad_vert , pad_horz // 2:tw + pad_horz , :] = mask
+            mask = np.squeeze(output)
+            return mask.astype(mask_dtype)
 
     def _get_shape(self, image):
         if isinstance(self.output_size, int):
@@ -338,7 +347,7 @@ class RandomRescaleCrop(VisionTransform):
     def _apply_image(self, image,spec:TensorSpec):
         self._shape_info = self._get_shape(image)
         x, y, th,tw,eh, ew,target_scale= self._shape_info
-        image=cv2.resize(image, (tw, th), self.interpolation)
+        image=cv2.resize(image, (tw, th), interpolation=self.interpolation)
         cropped_img = image[y: builtins.min(y + eh, th), x: builtins.min(x + ew, tw)]
         if cropped_img.shape[0]==eh and cropped_img.shape[1]==ew:
             return cropped_img
@@ -355,10 +364,18 @@ class RandomRescaleCrop(VisionTransform):
         return coords
 
     def _apply_mask(self, mask,spec:TensorSpec):
-        x, y, w, h, eh, ew = self._shape_info
-
-        cropped_mask = mask[y: y + h, x: x + w]
-        return cv2.resize(cropped_mask, (ew, eh), cv2.INTER_NEAREST)
+        x, y, th,tw,eh, ew,target_scale= self._shape_info
+        mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST)
+        mask_shape=list(int_shape(mask))
+        mask_shape[0]=eh
+        mask_shape[1] = ew
+        cropped_mask = mask[y: builtins.min(y + eh, th), x: builtins.min(x + ew, tw)]
+        if cropped_mask.shape[0]==eh and cropped_mask.shape[1]==ew:
+            return cropped_mask
+        else:
+            background=np.zeros(tuple(mask_shape))
+            background[builtins.max(eh-cropped_mask.shape[0],0)//2:builtins.max(eh-cropped_mask.shape[0],0)//2+cropped_mask.shape[0],builtins.max(ew-cropped_mask.shape[1],0)//2:builtins.max(ew-cropped_mask.shape[1],0)//2+cropped_mask.shape[1]]=cropped_mask
+            return background
 
 
     def _get_shape(self, image):
@@ -368,7 +385,7 @@ class RandomRescaleCrop(VisionTransform):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
 
-        target_scale= np.random.uniform(*self.scale_range)
+        target_scale= np.random.uniform(self.scale_range[0],self.scale_range[1])
         th,tw=int(round(height*target_scale)),int(round(width*target_scale))
         x,y=0,0
 
@@ -405,7 +422,7 @@ class RandomCenterCrop(VisionTransform):
     def _apply_image(self, image,spec:TensorSpec):
         self._shape_info = self._get_shape(image)
         x, y, th, tw, eh, ew,h,w = self._shape_info
-        image=cv2.resize(image, (tw,th), self.interpolation)
+        image=cv2.resize(image, (tw,th), interpolation=self.interpolation)
         crop_image = image[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
         if crop_image.shape[0]<eh or crop_image.shape[1]<ew:
             background=np.zeros((eh,ew,1 if spec is not None and spec.object_type==ObjectType.gray else 3))
@@ -426,7 +443,7 @@ class RandomCenterCrop(VisionTransform):
 
     def _apply_mask(self, mask,spec:TensorSpec):
         x, y, th, tw, eh, ew, h, w = self._shape_info
-        mask = cv2.resize(mask, (tw,th), cv2.INTER_NEAREST)
+        mask = cv2.resize(mask, (tw,th), interpolation=cv2.INTER_NEAREST)
         crop_mask =  mask[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
         if crop_mask.shape[0] < eh or crop_mask.shape[1] < ew:
             background = np.zeros((eh, ew))
@@ -683,6 +700,47 @@ class RandomTransformAffine(VisionTransform):
         return np.array(matrix).reshape((2,3)),h, w,rr< self.random_flip
 
 RandomTransform=RandomTransformAffine
+
+
+
+
+class RandomMultiScaleImage(VisionTransform):
+    r"""
+    Resize the input data.
+    :param output_size: target size of image, with (height, width) shape.
+    :param interpolation: interpolation method. All methods are listed below:
+        * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
+        * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
+        * cv2.INTER_AREA – resampling using pixel area relation.
+        * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
+        * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
+    :param order: the same with :class:`VisionTransform`.
+    """
+
+    def __init__(self, output_size,scale_range=(0.8, 1.2), interpolation=cv2.INTER_LANCZOS4,name='random_center_crop',**kwargs):
+        super().__init__(name)
+        self.is_spatial = True
+        self.output_size = output_size
+        self.scale_range=scale_range
+        self.interpolation = interpolation
+        self.idx = 0
+        self.resize_funs=[Resize(output_size,True,align_corner=True,interpolation=interpolation),
+                          Resize(output_size, True,align_corner=False, interpolation=interpolation),
+                          Resize(output_size, False, interpolation=interpolation),
+                          RandomRescaleCrop(output_size=output_size,scale_range=scale_range,interpolation=interpolation),
+                          RandomCrop(output_size=output_size),
+                          RandomCenterCrop(output_size=output_size,scale_range=scale_range,interpolation=interpolation)]
+
+    def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], **kwargs):
+        idx =random.randint(0,5)
+        fn = self.resize_funs[idx]
+        spec = kwargs.get('spec')
+        return fn.apply_batch(inputs, spec)
+
+
+
+
+
 
 
 class HorizontalFlip(VisionTransform):
