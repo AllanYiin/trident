@@ -1,6 +1,8 @@
 include *.md
 
-include LICENSE.txt
+include LICENSE
 recursive-exclude * __pycache__
 recursive-exclude optimizers *.pth *.h5
 recursive-include models *.txt
+recursive-exclude * onnx_*.py
+recursive-exclude * graph_tools.py
