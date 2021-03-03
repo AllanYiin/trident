@@ -141,7 +141,8 @@ class Resize(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        self._shape_info = self._get_shape(image)
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         h, w, th, tw,pad_vert,pad_horz = self._shape_info
 
         if not self.keep_aspect:
@@ -244,7 +245,8 @@ class ShortestEdgeResize(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        self._shape_info = self._get_shape(input)
+        if  self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         h, w, th, tw = self._shape_info
         if h == th and w == tw:
             return image
@@ -283,6 +285,7 @@ class ShortestEdgeResize(VisionTransform):
         th = int(round(th))
         tw = int(round(tw))
         return h, w, th, tw
+
 
 class Rescale(VisionTransform):
     r"""
@@ -345,7 +348,8 @@ class RandomRescaleCrop(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        self._shape_info = self._get_shape(image)
+        if  self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         x, y, th,tw,eh, ew,target_scale= self._shape_info
         image=cv2.resize(image, (tw, th), interpolation=self.interpolation)
         cropped_img = image[y: builtins.min(y + eh, th), x: builtins.min(x + ew, tw)]
@@ -420,7 +424,8 @@ class RandomCenterCrop(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        self._shape_info = self._get_shape(image)
+        if  self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         x, y, th, tw, eh, ew,h,w = self._shape_info
         image=cv2.resize(image, (tw,th), interpolation=self.interpolation)
         crop_image = image[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
@@ -490,7 +495,8 @@ class RandomCrop(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        self._shape_info = self._get_shape(image)
+        if  self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         h,w,eh, ew,offset_x,offset_y,offset_x1,offset_y1 = self._shape_info
         if image.ndim == 2:
             output = np.zeros(self.output_size)
@@ -585,7 +591,8 @@ class RandomTransformAffine(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         image=unpack_singleton(image)
-        self._shape_info = self._get_shape(image)
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         mat_img, height, width,is_flip = self._shape_info
 
         if self.rn % 5 > 0:
@@ -741,7 +748,8 @@ class HorizontalFlip(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         image=unpack_singleton(image)
-        self._shape_info = self._get_shape(image)
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         height, width = self._shape_info
         return image[:,::-1]
 

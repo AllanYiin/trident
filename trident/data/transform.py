@@ -81,20 +81,27 @@ class VisionTransform(Transform):
     def __init__(self, name=None):
         super().__init__(name=name)
         self.output_size=None
+        self._shape_info = None
 
 
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
         r"""Apply transform on batch input data."""
         if not isinstance(inputs,OrderedDict) :
             if spec is None and self.is_spatial==True:
+                self._shape_info =None
                 spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.rgb)
             return self.apply(inputs, spec)
         else:
             results=OrderedDict()
-            for spec, data in inputs.items():
-                if (isinstance(data,Iterable) and not isinstance(data,np.ndarray)) or (is_tensor_like(data) and spec.ndim==data.ndim):
-                    results[spec] = [self.apply(d, spec) for d in data]
-                else:
+            sampledata= list(inputs.values())[0]
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+                for i in range(sampledata):
+                    self._shape_info = None
+                    for spec, data in inputs.items():
+                        results[spec] = self.apply(data[i], spec)
+            else:
+                self._shape_info = None
+                for spec, data in inputs.items():
                     results[spec]=self.apply(data, spec)
             return results
 
