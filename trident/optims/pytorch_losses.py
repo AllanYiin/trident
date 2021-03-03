@@ -1232,6 +1232,7 @@ def gaussian(window_size, sigma=1.5):
     return gauss / gauss.sum()
 
 
+
 def create_window(window_size, channel):
     _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
     _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
@@ -1239,7 +1240,8 @@ def create_window(window_size, channel):
     return window
 
 
-def ssim(img1, img2, window_size=11, window=None, full=False, val_range=None):
+
+def ssim(img1, img2, window_size=11, window=None, val_range=None):
     # Value range can be different from 255. Other common ranges are 1 (sigmoid) and 2 (tanh).
     if val_range is None:
         if torch.max(img1) > 128:
@@ -1282,39 +1284,26 @@ def ssim(img1, img2, window_size=11, window=None, full=False, val_range=None):
     ssim_map = ((2 * mu1_mu2 + C1) * v1) / ((mu1_sq + mu2_sq + C1) * v2)
 
     ret = ssim_map.mean()
-
-    if full:
-        return ret, cs
-    return ret
+    return ret, cs
 
 
-def msssim(img1, img2, window_size=11, val_range=None, normalize=False):
-    device = img1.device
-    weights = torch.FloatTensor([0.0448, 0.2856, 0.3001, 0.2363, 0.1333]).to(device)
-    levels = weights.size()[0]
-    mssim = []
-    mcs = []
-    for _ in range(levels):
-        sim, cs = ssim(img1, img2, window_size=window_size, full=True, val_range=val_range)
-        mssim.append(sim)
-        mcs.append(cs)
 
-        img1 = F.avg_pool2d(img1, (2, 2))
-        img2 = F.avg_pool2d(img2, (2, 2))
 
-    mssim = torch.stack(mssim)
-    mcs = torch.stack(mcs)
+def msssim( img1, img2, levels=5):
+    weight = torch.FloatTensor([0.0448, 0.2856, 0.3001, 0.2363, 0.1333]).to(get_device())
+    mssim = torch.Tensor(levels, ).to(get_device())
+    mcs =torch.Tensor(levels, ).to(get_device())
+    for i in range(levels):
+        ssim_map, mcs_map = ssim(img1, img2)
+        mssim[i] = ssim_map
+        mcs[i] = mcs_map
+        filtered_im1 = F.avg_pool2d(img1, kernel_size=2, stride=2)
+        filtered_im2 = F.avg_pool2d(img2, kernel_size=2, stride=2)
+        img1 = filtered_im1
+        img2 = filtered_im2
 
-    # Normalize (to avoid NaNs during training unstable models, not compliant with original definition)
-    if normalize:
-        mssim = (mssim + 1) / 2
-        mcs = (mcs + 1) / 2
-
-    pow1 = mcs ** weights
-    pow2 = mssim ** weights
-    # From Matlab implementation https://ece.uwaterloo.ca/~z70wang/research/iwssim/
-    output = torch.prod(pow1[:-1] * pow2[-1])
-    return output
+    value = (torch.prod(mcs[0:levels - 1] ** weight[0:levels - 1]) *(mssim[levels - 1] ** weight[levels - 1]))
+    return value
 
 
 class MS_SSIMLoss(_Loss):
@@ -1325,7 +1314,7 @@ class MS_SSIMLoss(_Loss):
         self.channel = 3
 
     def forward(self, output, target) -> 'loss':
-        return 1 - msssim(output, target, window_size=self.window_size, normalize=True)
+        return 1 - msssim(output, target, levels=5)
 
 
 class IoULoss(_ClassificationLoss):
