@@ -1058,11 +1058,17 @@ class Layer(tf.Module):
                 if self._signature is None:
                     self._signature = Signature(name=self.name)
                 self._signature.outputs = OrderedDict()
-                if is_tensor(self._output_shape):
+                if isinstance(self._output_shape, TensorShape):
                     self._signature.outputs['output'] = TensorSpec(shape=self._output_shape, name='output')
+
+                elif is_tensor(self._output_shape):
+                    self._signature.outputs['output'] = TensorSpec(shape=TensorShape(to_list(to_numpy(self._output_shape))), name='output')
                 else:
                     for k in range(len(self._output_shape)):
                         self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k], name='output_{0}'.format(k))
+
+
+
     @property
     def signature(self) -> Signature:
         if self.is_root:
