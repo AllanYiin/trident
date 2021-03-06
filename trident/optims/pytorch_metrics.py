@@ -148,7 +148,7 @@ def psnr(output, target):
         raise ValueError(
             'input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
     rmse = ((input_tensor - target_tensor) ** 2).mean().sqrt()
-    psnr = 20 * (1 / rmse).log10_()
+    psnr = 20 * ((255.0 / rmse).log10_())
     return psnr
 
 @torch.no_grad()

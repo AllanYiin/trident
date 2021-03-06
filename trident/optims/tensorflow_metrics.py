@@ -213,10 +213,10 @@ def iou(output, target,axis=-1):
     return intersection/maximum(union,1)
 
 def psnr(output, target):
-    if target.get_shape()!=output.get_shape() :
+    if int_shape(target)!=int_shape(output) :
         raise ValueError('output shape {0} is not competable with target shape {1}'.format(output.shape,target.shape))
-    diff =tf.math.reduce_mean(tf.math.square(output - target),[1,2,3])
-    return tf.math.reduce_mean( (10 * tf.math.log(255**2 / diff)/tf.math.log(10)))
+    rmse = tf.math.sqrt(tf.math.reduce_mean((output - target) ** 2))
+    return 20.0 * (tf.math.log(tf.math.divide_no_nan(255.0 , rmse))-tf.math.log(10.0))
 
 
 def mean_absolute_error(output, target):
