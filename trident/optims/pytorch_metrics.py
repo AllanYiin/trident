@@ -147,8 +147,17 @@ def psnr(output, target):
     if input_tensor.shape != target_tensor.shape :
         raise ValueError(
             'input shape {0} is not competable with target shape {1}'.format(input_tensor.shape, target_tensor.shape))
+
+    max_value = 255
+    target_np = to_numpy(target_tensor)
+    if -1 < target_np.min() < 0 and 0 <= target_np.max() <= 1:
+        target_tensor = (target_tensor + 1) * 0.5
+        input_tensor = (input_tensor + 1) * 0.5
+        max_value = 1
+    elif 0 <= target_np.min() <= 1 and 0 <= target_np.max() <= 1:
+        max_value = 1
     rmse = ((input_tensor - target_tensor) ** 2).mean().sqrt()
-    psnr = 20 * ((255.0 / rmse).log10_())
+    psnr = 20 * ((max_value/ rmse).log10_())
     return psnr
 
 @torch.no_grad()

@@ -215,8 +215,17 @@ def iou(output, target,axis=-1):
 def psnr(output, target):
     if int_shape(target)!=int_shape(output) :
         raise ValueError('output shape {0} is not competable with target shape {1}'.format(output.shape,target.shape))
+
+    max_value=255
+    target_np=to_numpy(target)
+    if -1<target_np.min()<0 and 0<=target_np.max()<=1:
+        target=(target+1)*0.5
+        output=(output+1)*0.5
+        max_value=1
+    elif 0 <=  target_np.min() <=1 and 0 <= target_np.max() <= 1:
+        max_value = 1
     rmse = tf.math.sqrt(tf.math.reduce_mean((output - target) ** 2))
-    return 20.0 * (tf.math.log(tf.math.divide_no_nan(255.0 , rmse))-tf.math.log(10.0))
+    return 20.0 * (tf.math.log(tf.math.divide_no_nan(max_value , rmse))-tf.math.log(10.0))
 
 
 def mean_absolute_error(output, target):
