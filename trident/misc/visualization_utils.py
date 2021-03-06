@@ -5,6 +5,8 @@ from __future__ import print_function
 import builtins
 import sys
 
+from trident.backend.pytorch_ops import element_cosine_distance, argmax
+
 from trident.backend.opencv_backend import array2image
 
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
@@ -12,7 +14,6 @@ import math
 
 if is_in_ipython():
     from IPython import display
-
 
 if not is_in_colab:
     import matplotlib
@@ -28,16 +29,15 @@ import matplotlib.font_manager
 
 fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
 fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
-default_font=None
-
+default_font = None
 
 if sys.platform == 'win32':
     if 'Microsoft Sans Serif' in fontnames:
-        default_font=matplotlib.rc('font', family='Microsoft Sans Serif' )
+        default_font = matplotlib.rc('font', family='Microsoft Sans Serif')
     else:
         for name in fontnames:
             if 'heiti' in name.lower():
-                default_font=matplotlib.rc('font', family=name)
+                default_font = matplotlib.rc('font', family=name)
                 break
 
 import PIL
@@ -54,7 +54,7 @@ from trident.data.image_common import *
 __all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram', 'generate_palette', 'plot_bbox', 'plot_3d_histogram', 'plot_centerloss']
 
 
-def generate_palette(num_classes:int,format:str='rgb'):
+def generate_palette(num_classes: int, format: str = 'rgb'):
     """Generate palette used in visualization.
 
     Args:
@@ -73,16 +73,17 @@ def generate_palette(num_classes:int,format:str='rgb'):
 
     def hex_format(rgb_tuple):
         return '#{:02X}{:02X}{:02X}'.format(rgb_tuple[0], rgb_tuple[1], rgb_tuple[2])
-    hsv_tuples = [(x / num_classes,1.0, 1.0) for x in range(num_classes)]
+
+    hsv_tuples = [(x / num_classes, 1.0, 1.0) for x in range(num_classes)]
     colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
     colors = list(map(lambda x: (int(builtins.round(x[0] * 255.)), int(builtins.round(x[1] * 255.)), int(builtins.round(x[2] * 255.))), colors))
-    if format=='rgb':
+    if format == 'rgb':
         return colors
     elif format == 'hex':
         return [hex_format(color) for color in colors]
 
 
-def plot_bbox(x, img, color=None, label=None, line_thickness=None,**kwargs):
+def plot_bbox(x, img, color=None, label=None, line_thickness=None, **kwargs):
     img_shape = (img.height, img.width, 3)
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     # img = array2image(img)
@@ -105,15 +106,15 @@ def plot_bbox(x, img, color=None, label=None, line_thickness=None,**kwargs):
     return img
 
 
-def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
+def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **kwargs):
     make_dir_if_need(save_path)
-    distinct_row=list(set([ len(ims) for ims in imgs]))
-    if len(distinct_row)>1:
+    distinct_row = list(set([len(ims) for ims in imgs]))
+    if len(distinct_row) > 1:
         raise ValueError('imgs should have same length, but got {0}'.format(distinct_row))
     else:
-        distinct_row=unpack_singleton(distinct_row)
-    if 1<=row<distinct_row:
-        distinct_row=row
+        distinct_row = unpack_singleton(distinct_row)
+    if 1 <= row < distinct_row:
+        distinct_row = row
     suffix = get_time_suffix()
     if len(imgs) == 1 and distinct_row == 1:
         img = array2image(imgs[0][0])
@@ -133,20 +134,23 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
         return plt
     else:
         fig = plt.gcf()
-        #fig.set_size_inches(len(imgs) * 2, row * 2)
+        figure, ax = plt.subplots(2, 2)
+        # fig.set_size_inches(len(imgs) * 2, row * 2)
         plt.clf()
         plt.ion()  # is not None:
 
         for m in range(distinct_row * len(imgs)):
             plt.subplot(distinct_row, len(imgs), m + 1)
+            if m < len(imgs) and len(legend) == len(imgs):
+                plt.gca().set_title(legend[m])
             img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
             plt.imshow(img, interpolation="nearest", animated=True)
             plt.axis("off")
         filename = save_path.format(suffix)
         plt.savefig(filename, bbox_inches='tight')
-        if imshow == True:
-            #plSize = fig.get_size_inches()
-            #fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
+        if imshow:
+            # plSize = fig.get_size_inches()
+            # fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
             if is_in_ipython():
                 plt.ioff()
                 display.display(plt.gcf())
@@ -156,71 +160,146 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False,**kwargs):
         return fig
 
 
-def loss_metric_curve(losses, metrics,  legend=None, calculate_base='epoch', max_iteration=None,
+def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_iteration=None,
                       save_path=None, imshow=False, **kwargs):
-    colors=[]
-    line_type=['-','--','-.',':']
+    colors = []
+    line_type = ['-', '--', '-.', ':']
     fig = plt.gcf()
     fig.set_size_inches(18, 8)
     plt.clf()
     plt.ion()  # is not None:
 
-    plt.subplot(2, 2, 1)
-    if losses.__class__.__name__=='HistoryBase':
-        steps,values=losses.get_series('total_losses')
-        plt.plot(steps,values)
-        plt.legend(['loss'], loc='upper left')
-    elif isinstance(losses, list):
-        for item in losses:
-            if  item.__class__.__name__=='HistoryBase':
-                steps, values = item.get_series('total_losses')
-                p=plt.plot(steps,values)
-                colors.append(p[-1].get_color())
-        if legend is not None:
-            plt.legend(['{0}'.format(lg) for lg in legend], loc='upper right')
-        else:
-            plt.legend(['{0}'.format(i) for i in range(len(losses))], loc='upper right')
+    fig = plt.figure()
+    loss_ax1 = fig.add_subplot(2, 2, 1)
 
-    plt.title('model loss')
-    plt.ylabel('loss')
-    plt.xlabel(calculate_base)
+    if losses.__class__.__name__ == 'HistoryBase':
+        steps, values = losses.get_series('total_losses')
+        loss_ax1.plot(steps, values, label='total_losses')
+
+    elif isinstance(losses, list):
+        for n in range(len(losses)):
+            item = losses[n]
+            legend_label = 'total_losses' + str(n)
+            if legend is not None and len(legend) == len(losses):
+                legend_label = legend[n]
+
+            if item.__class__.__name__ == 'HistoryBase':
+                steps, values = item.get_series('total_losses')
+                p = loss_ax1.plot(steps, values, label=legend_label)
+                colors.append(p[-1].get_color())
+
+    loss_ax1.set_title('model loss', fontsize=14, fontweight='bold')
+    loss_ax1.set_ylabel('loss')
+    loss_ax1.set_xlabel(calculate_base)
+    loss_ax1.legend()
+    plt.legend(loc=2)
 
     if max_iteration is not None:
-        plt.xlim(0, max_iteration)
+        loss_ax1.set_xlim(0, max_iteration)
 
-    plt.subplot(2, 2, 2)
-    if  metrics.__class__.__name__=='HistoryBase':
-        for k, v in metrics.items():
+    metric_ax1 = fig.add_subplot(2, 2, 2)
+    metric_ax2 = metric_ax1.twinx()
+    first_axis_range = None
+    second_axis_range = None
+    first_axis_keys = []
+    second_axis_keys = []
+    if metrics.__class__.__name__ == 'HistoryBase':
+        for n in range(len(metrics)):
+            k, v = list(metrics.items())[n]
+            legend_label = k
+            if legend is not None and len(legend) == len(metrics):
+                legend_label = legend[n]
 
             steps, values = metrics.get_series(k)
-            plt.plot(steps, values)
-        plt.legend(list(metrics.keys()), loc='upper left')
+            values_np = np.array(values)
+            if first_axis_range is None:
+                first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                metric_ax1.plot(steps, values, label=legend_label)
+            else:
+                if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
+                    second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                    metric_ax2.plot(steps, values, label=legend_label)
+                    second_axis_keys.append(k)
+                elif second_axis_range is not None:
+                    compare_array = np.array([list(first_axis_range), list(second_axis_range)])
+                    this_array = np.array([values_np.min(), values_np.mean(), values_np.max()])
+                    result = argmax(element_cosine_distance(this_array, compare_array))
+                    if result == 0:
+                        metric_ax1.plot(steps, values, label=legend_label)
+                    else:
+                        metric_ax2.plot(steps, values, label=legend_label)
+                        second_axis_keys.append(k)
+                else:
+                    metric_ax1.plot(steps, values, label=legend_label)
+
+        metric_ax1.legend()
+        if len(second_axis_keys) > 0:
+            metric_ax2.legend()
+        #plt.legend(loc='upper left')
+
     elif isinstance(metrics, list):
-        legend_list = []
+        legend_list=[]
         for i in range(len(metrics)):
             item = metrics[i]
-            line_color=colors[i]
-            if  item.__class__.__name__=='HistoryBase':
+            line_color = colors[i]
+            if item.__class__.__name__ == 'HistoryBase':
                 for j in range(len(item.items())):
-                    k=list(item.keys())[j]
+                    k = list(item.keys())[j]
+                    legend_label = k+str(i)
+                    if legend is not None and len(legend) == len(metrics):
+                        legend_label = legend[i]+' '+k
+
                     steps, values = item.get_series(k)
-                    plt.plot(steps, values,color=line_color,linestyle =line_type[j%4],linewidth=int((j//4)%4)+1)
+                    values_np = np.array(values)
+                    if first_axis_range is None:
+                        first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                        first_axis_keys.append(k)
+                        metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                    else:
+                        if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
+                            second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                            second_axis_keys.append(k)
+                            metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                        elif k in first_axis_keys:
+                            metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                        elif k in second_axis_keys:
+                            metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                        elif second_axis_range is not None:
+                            compare_array = np.array([list(first_axis_range), list(second_axis_range)])
+                            this_array = np.array([values_np.min(), values_np.mean(), values_np.max()])
+                            result = argmax(element_cosine_distance(this_array, compare_array))
+                            if result == 0:
+                                first_axis_keys.append(k)
+                                metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                            else:
+                                second_axis_keys.append(k)
+                                metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                        else:
+                            first_axis_keys.append(k)
+                            metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                     if len(values) > 0 and legend is not None:
                         legend_list.append(['{0} {1}'.format(k, legend[i])])
                     elif len(values) > 0:
                         legend_list.append(['{0} {1}'.format(k, i)])
-        plt.legend(legend_list, loc='upper left')
 
-    plt.title('model metrics')
-    plt.ylabel('metrics')
-    plt.xlabel(calculate_base)
+        metric_ax1.legend()
+        if len(second_axis_keys) > 0:
+            metric_ax2.legend()
+        #plt.legend(legend_list,loc='upper left')
+
+    metric_ax1.set_title('model metrics', fontsize=14, fontweight='bold')
+    metric_ax1.set_ylabel('metrics')
+    metric_ax1.set_xlabel(calculate_base)
+    if len(second_axis_keys) > 0:
+        metric_ax2.set_ylabel(','.join(second_axis_keys))
+        #metric_ax2.cla()
 
     if max_iteration is not None:
-        plt.xlim(0, max_iteration)
+        metric_ax1.set_xlim(0, max_iteration)
 
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
-
+    plt.tight_layout()
     if imshow:
         if is_in_ipython():
             plt.ioff()
@@ -248,7 +327,7 @@ default_bins.extend(np.arange(-0.0002, 0.0002, 0.00002).tolist())
 default_bins = sorted(list(set(default_bins)))
 
 
-def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, title='',**kwargs):
+def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, title='', **kwargs):
     global default_bins
     from mpl_toolkits.mplot3d import Axes3D
     if bins is None:
@@ -294,7 +373,7 @@ def plot_3d_histogram(ax, grads, sample_collected=None, bins=None, inteval=1, ti
 
 
 def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=(18, 8), inteval=1, title='', save_path=None,
-                    imshow=False, enable_tensorboard=False,**kwargs):
+                    imshow=False, enable_tensorboard=False, **kwargs):
     global default_bins
     from mpl_toolkits.mplot3d import Axes3D
     if bins is None:
@@ -390,9 +469,9 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
     return fig
 
 
-def plot_centerloss(plt, feat, labels, num_class=10, title='', enable_tensorboard=False,**kwargs):
+def plot_centerloss(plt, feat, labels, num_class=10, title='', enable_tensorboard=False, **kwargs):
     c = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#990000', '#999900', '#009900', '#009999']
-    fig= plt.figure()
+    fig = plt.figure()
     for i in range(num_class):
         plt.plot(feat[labels == i, 0], feat[labels == i, 1], '.', c=c[i])
     plt.legend(range(num_class), loc='upper right')
@@ -403,7 +482,7 @@ def plot_centerloss(plt, feat, labels, num_class=10, title='', enable_tensorboar
 
 
 def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, title="Confusion matrix", fname=None,
-                          noshow=False , enable_tensorboard=False,**kwargs):
+                          noshow=False, enable_tensorboard=False, **kwargs):
     """Render the confusion matrix and return matplotlib's figure with it.
     Normalization can be applied by setting `normalize=True`.
     """
