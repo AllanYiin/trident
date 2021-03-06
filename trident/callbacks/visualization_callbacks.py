@@ -14,17 +14,18 @@ from trident.backend.common import *
 from trident.backend.load_backend import *
 from trident.backend.pillow_backend import image2array
 from trident.callbacks.callback_base import CallbackBase
+from trident.data.dataset import MaskDataset,ImageDataset,ZipDataset
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
 from trident.data.bbox_common import *
 
 if get_backend() == 'pytorch':
-    from trident.backend.pytorch_backend import try_map_args_and_call
+    from trident.backend.pytorch_backend import try_map_args_and_call,Layer
     from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp, expand_dims
 
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_backend import try_map_args_and_call
+    from trident.backend.tensorflow_backend import try_map_args_and_call,Layer
     from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, any_abnormal_number, ndim, exp, not_equal, reduce_any, expand_dims
 
 if is_in_ipython() or is_in_colab():
@@ -74,69 +75,62 @@ class TileImageCallback(VisualizationCallbackBase):
         input = None
         target = None
         output = None
+        mask=None
+        legend=[]
 
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
+        dataprovider=enforce_singleton(ctx.get_data_provider())
+        input = to_numpy(data[dataprovider.traindata.data.symbol].copy())
+        if  'tensor' in model.__class__.__name__.lower():
+            output = to_numpy(model.clone())
+        elif isinstance(model,Layer) and  input is not None:
+            output = to_numpy(model(input))
+        target = to_numpy(data[dataprovider.traindata.label.symbol].copy())
 
-        if len(data_feed) == 3 and len(data) <= 3:
-            input = data[data_feed.value_list[0]]
-            output = data[data_feed.value_list[1]]
-            target = data[data_feed.value_list[2]]
-            # loss function signature  loss(output,target)
+        if isinstance(dataprovider.traindata.label,MaskDataset):
+            mask = to_numpy(data[dataprovider.traindata.label.symbol])
+        elif isinstance(dataprovider.traindata.label,ZipDataset):
+            for ds in  dataprovider.traindata.label._datasets:
+                if isinstance(ds, MaskDataset):
+                    mask = to_numpy(data[ds.symbol])
 
-        else:
-            for data_key in data.key_list:
-                if self.include_input and data_key == model.signature.inputs.key_list[0]:
-                    input = data[data_key]
-                elif self.include_output and data_key == model.signature.outputs.key_list[0]:
-                    output = data[data_key]
-                elif self.include_input and model.signature.inputs.key_list[0] in data_feed and data_feed[model.signature.inputs.key_list[0]] == data_key:
-                    input = data[data_key]
-                elif self.include_output and model.signature.outputs.key_list[0] in data_feed and data_feed[model.signature.outputs.key_list[0]] == data_key:
-                    output = data[data_key]
-                elif self.include_target and data_key == 'target':
-                    output = data['target']
-                elif 'output' in data_key or 'pred' in data_key:
-                    output = data[data_key]
-                elif ('target' in data_key or 'label' in data_key or 'mask' in data_key):
-                    target = data[data_key]
-        if output is None and 'tensor' in model.__class__.__name__.lower():
-            output = model.clone()
-        elif output is None and input is not None:
-            output = model(input)
-
+        reverse_image_transform = dataprovider.reverse_image_transform
         if self.include_input and input is not None:
-            if self.reverse_image_transform is not None:
+            if reverse_image_transform is not None:
                 input_arr = []
                 for i in range(len(input)):
-                    input_arr.append(self.reverse_image_transform(to_numpy(input[i])))
+                    input_arr.append(reverse_image_transform(input[i]))
                 tile_images_list.append(input_arr)
             else:
                 input_arr = to_numpy(input).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(input)
                 tile_images_list.append(input_arr * 127.5 + 127.5)
+            legend.append('input')
         if self.include_target and target is not None:
-            if self.reverse_image_transform is not None:
+            if reverse_image_transform is not None:
                 target_arr = []
                 for i in range(len(target)):
-                    target_arr.append(self.reverse_image_transform(to_numpy(target[i])))
+                    target_arr.append(reverse_image_transform(target[i]))
                 tile_images_list.append(target_arr)
             else:
                 target_arr = to_numpy(target).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(target)
                 tile_images_list.append(target_arr * 127.5 + 127.5)
+            legend.append('target')
         if self.include_output and output is not None:
-            if self.reverse_image_transform is not None:
+            if reverse_image_transform is not None:
                 output_arr = []
                 for i in range(len(output)):
-                    output_arr.append(self.reverse_image_transform(to_numpy(output[i])))
+                    output_arr.append(reverse_image_transform(output[i]))
                 tile_images_list.append(output_arr)
             else:
                 output_arr = to_numpy(output).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(output)
                 tile_images_list.append(output_arr * 127.5 + 127.5)
+            legend.append('output')
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
+        fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True,legend=legend)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True,  walltime=time.time())
 
