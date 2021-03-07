@@ -5,6 +5,7 @@ import importlib
 import datetime
 import inspect
 import builtins
+import copy
 import json
 import linecache
 import math
@@ -284,9 +285,9 @@ def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None,value_typ
     format_string= '.3f'
     if value_type=='metric':
         format_string = '.3%'
-        if num>3:
+        if builtins.abs(num)>2:
             format_string = '.3f'
-    if value_type!='loss' and ((prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2):
+    elif value_type!='loss' and ((prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2):
         format_string ='.3%'
     elif  (prev_value is None or prev_value==num) and builtins.abs(num)<1e-3:
         format_string = '.3e'
@@ -294,10 +295,10 @@ def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None,value_typ
         diff=builtins.min(builtins.max(3,-1*math.log10(builtins.abs(builtins.abs(prev_value)-builtins.abs(num)))),8)
         format_string = '.{0}e'.format(diff)
     elif prev_value is not None:
-        diff=builtins.abs(prev_value-num)
-        if  1e-3 < diff < 1.2:
+        diff=prev_value-num
+        if  1e-3 < builtins.abs(diff) < 1.2:
             format_string = '.3%'
-        elif diff <= 1e-3:
+        elif builtins.abs(diff) <= 1e-3:
             format_string = '.3e'
     return '{0:{1}}'.format(num, format_string)
 
@@ -595,6 +596,9 @@ class TensorShape(object):
             return functools.reduce(operator.mul, self.to_list(), 1)
         else:
             return None
+
+    def copy(self):
+        return copy.deepcopy(self)
 
 
 
