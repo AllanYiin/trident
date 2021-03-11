@@ -764,11 +764,12 @@ class Layer(nn.Module):
         """ Setting the input_shape, means the layer get shape information and start to do the shape inferrence """
 
         if is_tensor(value) and value.ndim == 1 and value.dtype == torch.int32:
-            value = TensorShape(value)
+            value = TensorShape( [None,]+to_list(to_numpy(value)))
         elif isinstance(value, torch.Size):
-            value = TensorShape(value)
+            dims = [None,]+[d for d in value]
+            value = TensorShape(dims)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-            value = TensorShape(value)
+            value = TensorShape((None,)+value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
             value = [TensorShape(sh) for sh in value]
         else:
@@ -796,11 +797,12 @@ class Layer(nn.Module):
     @output_shape.setter
     def output_shape(self, value):
         if is_tensor(value) and value.ndim == 1 and value.dtype == torch.int32:
-            value = TensorShape(value)
+            value = TensorShape( [None,]+to_list(to_numpy(value)))
         elif isinstance(value, torch.Size):
-            value = TensorShape(value)
+            dims = [None, ] + [d for d in value]
+            value = TensorShape(dims)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
-            value = TensorShape(value)
+            value = TensorShape((None,) + value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
             value = [TensorShape(sh) for sh in value]
         else:
@@ -1178,6 +1180,7 @@ class Sequential(Layer):
             out = module(dummay_input)
             self._modules[name] = module
             self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
+            self.get_root().signature.outputs.value_list[0].shape=self._output_shape.copy()
         else:
             super(Sequential, self).add_module(name, module)
 
