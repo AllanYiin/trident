@@ -123,10 +123,10 @@ class BatchSampler(Sampler):
         self.is_shuffle = is_shuffle
 
 
-        idxes = np.arange(len(self.data_source))
+        idxes = np.arange(len(self.data_source.data))
         if len(self.data_source) % self.batch_size > 0:
-            idxes = idxes[:-(len(self.data_source) % self.batch_size)]
-        if self.is_shuffle == True:
+            idxes = idxes[:-(len(self.data_source.data) % self.batch_size)]
+        if self.is_shuffle:
             np.random.shuffle(idxes)
         idxes = list(idxes)
 
@@ -181,7 +181,7 @@ class BatchSampler(Sampler):
         idxes = np.arange(len(self.data_source))
         if len(self.data_source) % self.batch_size > 0:
             idxes = idxes[:-(len(self.data_source) % self.batch_size)]
-        if self.is_shuffle == True:
+        if self.is_shuffle:
             np.random.shuffle(idxes)
         idxes = list(idxes)
         self.sampler = iter(idxes)
