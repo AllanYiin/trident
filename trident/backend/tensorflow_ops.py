@@ -405,12 +405,14 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
         TensorShape([None, 64, 32, 32])
 
     """
-    if isinstance(x,numbers.Number):
+    if isinstance(x, numbers.Number):
         return TensorShape((None,))
-    if need_exclude_batch_axis and is_singleton==False:
-        return TensorShape((None,)+int_shape(x)[1:])
-    elif need_exclude_batch_axis and is_singleton==True:
-        return TensorShape((None,)+int_shape(x))
+    if need_exclude_batch_axis and is_singleton == False:
+        shp = (int_shape(x))
+        shp[0] = None
+        return TensorShape(shp)
+    elif need_exclude_batch_axis and is_singleton == True:
+        return TensorShape(list((None,) + int_shape(x)))
     else:
         return TensorShape(int_shape(x))
 

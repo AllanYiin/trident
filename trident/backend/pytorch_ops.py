@@ -343,9 +343,9 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
                 if dtype is None:
                     dtype = Dtype.float32
                 x = x.type(dtype)
-            if requires_grad == False:
+            if not requires_grad:
                 x.requires_grad = False
-            elif requires_grad == True:
+            elif requires_grad:
                 x.requires_grad = True
             return x
         else:
@@ -415,9 +415,11 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
     if isinstance(x,numbers.Number):
         return TensorShape((None,))
     if need_exclude_batch_axis and is_singleton==False:
-        return TensorShape((None,)+int_shape(x)[1:])
+        shp=(int_shape(x))
+        shp[0]=None
+        return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton==True:
-        return TensorShape((None,)+int_shape(x))
+        return TensorShape(list((None,)+int_shape(x)))
     else:
         return TensorShape(int_shape(x))
 
@@ -3890,6 +3892,23 @@ def cross_entropy(output,target, from_logits=False):
     target = target.clamp(epsilon(), 1.0 - epsilon())
     loss = -target * torch.log(output) # (1.0 - target) * torch.log(1.0 - output)
     return loss
+
+
+def binary_hinge(output, target, margin=1, pos_weight=1.0):
+    """
+    Implements Hinge loss.
+    Args:
+        output (torch.Tensor): of shape `Nx*` where * means any number
+             of additional dimensions
+        target (torch.Tensor): same shape as target
+        margin (float): margin for y_pred after which loss becomes 0.
+        pos_weight (float): weighting factor for positive class examples. Useful in case
+            of class imbalance.
+    """
+    target_shifted = 2 * target - 1  # [0, 1] -> [-1, 1]
+    hinge = (margin - output * target_shifted).relu()
+    hinge *= target * pos_weight + (1 - target)
+    return hinge  # reduction == mean
 
 
 
