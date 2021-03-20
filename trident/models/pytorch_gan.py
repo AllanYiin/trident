@@ -26,7 +26,7 @@ from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_file_from_google_drive
-from trident.layers.pytorch_activations import get_activation, Identity, LeakyRelu
+from trident.layers.pytorch_activations import get_activation, Identity, LeakyRelu,Sigmoid
 from trident.layers.pytorch_blocks import *
 from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, BatchNorm
@@ -157,7 +157,7 @@ def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', gener
                                       name='transconv_block{0}'.format(i)))
             elif upsample_mode == UpsampleMode.pixel_shuffle.value:
                 if i > 0:
-                    layers.append(DepthwiseConv2d((3, 3), depth_multiplier=4, strides=1, auto_pad=True, use_spectral=use_spectral,
+                    layers.append(Conv2d_Block((3, 3), depth_multiplier=4, strides=1, auto_pad=True, use_spectral=use_spectral,
                                         use_bias=False, activation=activation, normalization=generator_norm,
                                         padding_mode='replicate'))
                     filter = filter * 4
@@ -167,7 +167,7 @@ def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', gener
             else:
                 if i > 0:
                     layers.append(
-                        DepthwiseConv2d((3, 3), depth_multiplier=2, strides=1, auto_pad=True, use_spectral=use_spectral,
+                        Conv2d_Block((3, 3), depth_multiplier=2, strides=1, auto_pad=True, use_spectral=use_spectral,
                                         use_bias=False, activation=activation, normalization=generator_norm,
                                         padding_mode='replicate'))
 
@@ -230,8 +230,9 @@ def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', gener
         if use_dropout :
             layers.insert(-1, Dropout(0.2))
         layers.append(Conv2d_Block((3, 3), 128, strides=1, auto_pad=True, use_bias=False, activation='leaky_relu', use_spectral=use_spectral,normalization=discriminator_norm,name='depthwise_conv'))
-        layers.append(Conv2d((1, 1), 1, strides=1, auto_pad=True, use_bias=False, activation='leaky_relu', name='features'))
-        layers.append(GlobalAvgPool2d())
+        layers.append(Flatten()),
+        layers.append(Dense(1, use_bias=False, name='fc'))
+        layers.append(Sigmoid())
         return Sequential(layers, name='discriminator')
 
     def build_autoencoder(gan_role='generator'):
@@ -307,15 +308,14 @@ def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', gener
         layers.append(Conv2d((3, 3), 3, strides=1, auto_pad=True, use_bias=False, activation='tanh', name='last_layer'))
         return Sequential(layers, name='autoencoder')
 
-    gen = ImageGenerationModel(
+    gen = Model(
         input_shape=(3, image_width, image_width) if generator_network_type == 'autoencoder' else (noise_shape),
         output=build_autoencoder('generator') if generator_network_type == 'autoencoder' else build_generator())
     gen.model.name = 'generator'
-    gen.signature = get_signature(gen.model.forward)
+
     dis = ImageClassificationModel(input_shape=(3, image_width, image_width), output=build_autoencoder(
         'discriminator') if discriminator_build_block == 'autoencoder' else build_discriminator())
     dis.model.name = 'discriminator'
-    dis.signature = get_signature(dis.model.forward)
 
     gen.model.apply(weights_init_normal)
     dis.model.apply(weights_init_normal)
