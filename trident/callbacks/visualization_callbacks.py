@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import matplotlib.pyplot as plt
 import math
 import os
 import sys
@@ -35,7 +35,7 @@ ctx =context._context()
 _backend = get_backend()
 
 __all__ = ['VisualizationCallbackBase', 'TileImageCallback', 'PrintGradientsCallback', 'SegTileImageCallback',
-           'PlotLossMetricsCallback', 'DetectionPlotImageCallback']
+           'PlotLossMetricsCallback', 'DetectionPlotImageCallback','GanTileImageCallback']
 
 
 class VisualizationCallbackBase(CallbackBase):
@@ -133,13 +133,80 @@ class TileImageCallback(VisualizationCallbackBase):
         fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True,legend=legend)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True,  walltime=time.time())
-
+        plt.close()
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
         if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0):
+            self.plot_tile_image(training_context)
+
+
+class GanTileImageCallback(VisualizationCallbackBase):
+    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results',
+                 name_prefix: str = 'tile_image_{0}.png', row=3,
+                 include_mask=None, reverse_image_transform=None, imshow=False):
+        super(GanTileImageCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        self.is_in_ipython = is_in_ipython()
+        self.is_in_colab = is_in_colab()
+        self.tile_image_name_prefix = name_prefix
+        self.reverse_image_transform = reverse_image_transform
+        self.row = row
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        self.accumulate_sample = False
+        self.sample_enough = False
+        if dataprovider.minibatch_size < row * row:
+            self.accumulate_sample = True
+        self.tile_images_list = []
+        self.output_arr = []
+
+
+    def plot_tile_image(self, training_context):
+
+        output = None
+        legend = []
+
+        data_feed = training_context['data_feed']
+        data = training_context['train_data']
+        model = training_context['current_model'].eval()
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        output = to_numpy(model(data[data_feed['input']])) if data_feed['input'] in data else to_numpy(data['output'])
+        model.train()
+        reverse_image_transform = dataprovider.reverse_image_transform
+
+        if reverse_image_transform is not None:
+            for i in range(len(output)):
+                self.output_arr.append(reverse_image_transform(output[i]))
+                if len(self.output_arr)==self.row:
+                    self.tile_images_list.append(self.output_arr)
+                    if len(self.tile_images_list)==self.row:
+                        self.sample_enough = True
+                        break
+                    self.output_arr=[]
+
+        legend.append('output')
+
+        if self.sample_enough:
+            fig = tile_rgb_images(*self.tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=None)
+            if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
+            plt.close()
+
+    def on_batch_end(self, training_context):
+        if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0 or not self.sample_enough):
+            if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0) :
+                self.tile_images_list=[]
+                self.output_arr=[]
+                self.sample_enough=False
+            self.plot_tile_image(training_context)
+
+    def on_epoch_end(self, training_context):
+        if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0 or not self.sample_enough):
+            if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0) :
+                self.tile_images_list=[]
+                self.output_arr=[]
+                self.sample_enough=False
             self.plot_tile_image(training_context)
 
 
@@ -238,6 +305,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/segtile_image', fig, global_step=training_context['steps'], close=True,
                                                           walltime=time.time())
+        plt.close()
 
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['steps']) % self.batch_inteval == 0:
@@ -298,6 +366,7 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/detection_plot', fig, global_step=training_context['steps'], close=True,
                                                           walltime=time.time())
+        plt.close()
 
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['steps']) % self.batch_inteval == 0:
@@ -342,9 +411,10 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                                         legend=training_context['training_names'].value_list, calculate_base='batch',
                                         max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
                                         imshow=self.imshow)
+
                 if ctx.enable_tensorboard and ctx.summary_writer is not None:
                     ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
-
+                plt.close()
                 # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
 
     # def on_batch_end(self, training_context):
