@@ -24,6 +24,7 @@ from torch.nn.parameter import Parameter
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential,get_device
+from trident.backend.pytorch_ops import *
 from trident.data.image_common import *
 from trident.data.utils import download_file_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, LeakyRelu,Sigmoid
@@ -33,7 +34,7 @@ from trident.layers.pytorch_normalizations import get_normalization, BatchNorm
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 
-__all__ = ['gan_builder', 'UpsampleMode', 'BuildBlockMode']
+__all__ = ['gan_builder', 'UpsampleMode', 'BuildBlockMode','MinibatchDiscrimination']
 
 _session = get_session()
 _device =get_device()
@@ -94,6 +95,37 @@ def weights_init_normal(m):
         torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
 
 
+
+class MinibatchDiscrimination(Layer):
+    def __init__(self, num_filters=None, hidden_filters=None, use_mean=False,name=None):
+        super().__init__(name=name)
+        self.num_filters = num_filters
+        self.hidden_filters = hidden_filters
+        self.use_mean = use_mean
+    def build(self, *input_shape: TensorShape):
+        if not self._built:
+            if  self.num_filters is None:
+                self.num_filters=self.input_filters//2
+            if  self.hidden_filters is None:
+                self.hidden_filters=self.num_filters//2
+            self.register_parameter('weight',Parameter(random_normal((self.input_filters, self.num_filters, self.hidden_filters))))
+
+    def forward(self, x):
+        # x is NxA
+        # T is AxBxC
+        matrices = x.mm(self.weight.view(self.input_filters, -1))
+        matrices = matrices.view(-1, self.num_filters, self.hidden_filters)
+        M = matrices.unsqueeze(0)  # 1xNxBxC
+        M_T = M.permute(1, 0, 2, 3)  # Nx1xBxC
+        norm = torch.abs(M - M_T).sum(3)  # NxNxB
+        expnorm = torch.exp(-norm)
+        o_b = (expnorm.sum(0) - 1)   # NxB, subtract self distance
+        if self.use_mean:
+            o_b /= x.size(0) - 1
+        x = torch.cat([x, o_b], 1)
+        return x
+
+
 class UpsampleMode(Enum):
     pixel_shuffle = 'pixel_shuffle'
     transpose = 'transpose'
@@ -117,7 +149,7 @@ class NetworkType(Enum):
 def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', generator_build_block='resnet',
         discriminator_build_block='resnet', generator_network_type='decoder', discriminator_network_type='encoder',
         use_spectral=False, activation='leaky_relu', generator_norm='batch', discriminator_norm='batch',
-        use_dilation=False, use_dropout=False, use_self_attention=False):
+        use_dilation=False, use_dropout=False, use_self_attention=False,use_minibatch_discrimination=False):
     noise_input = torch.tensor(data=np.random.normal(0, 1, size=(2, noise_shape)))
 
     def build_generator():
@@ -231,6 +263,8 @@ def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', gener
             layers.insert(-1, Dropout(0.2))
         layers.append(Conv2d_Block((3, 3), 128, strides=1, auto_pad=True, use_bias=False, activation='leaky_relu', use_spectral=use_spectral,normalization=discriminator_norm,name='depthwise_conv'))
         layers.append(Flatten()),
+        if use_minibatch_discrimination:
+            layers.append(MinibatchDiscrimination(name='minibatch_dis'))
         layers.append(Dense(1, use_bias=False, name='fc'))
         layers.append(Sigmoid())
         return Sequential(layers, name='discriminator')
