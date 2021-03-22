@@ -116,6 +116,8 @@ class Model(ModelBase):
         self.summary_writer = None
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
+        if isinstance(input_shape,numbers.Integral):
+            input_shape=(input_shape,)
         if output is None:
             raise ValueError('There is at least one output')
 
@@ -211,7 +213,12 @@ class Model(ModelBase):
                     output.eval()
                     out = output(dummay_input)
                     if len(output.signature.outputs)==0:
-                        output.signature.outputs['output'] =TensorSpec(shape=tensor_to_shape(out), name='output')
+                        if is_tensor(out):
+                            output.signature.outputs['output'] =TensorSpec(shape=tensor_to_shape(out), name='output')
+                        elif isinstance(out,OrderedDict):
+                            for k,v in out.items():
+                                output.signature.outputs[k] = TensorSpec(shape=tensor_to_shape(v,need_exclude_batch_axis=True), name=k)
+
 
 
 
@@ -895,8 +902,10 @@ class Model(ModelBase):
                 elif isinstance(self._model, nn.Module):
                     self._model.zero_grad()
 
-            elif self.training_context['stop_update'] > 1:
+            elif self.training_context['stop_update'] >= 1:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
+                if not self.training_context['retain_graph']:
+                    self._model.zero_grad()
 
             for callback in self.training_context['callbacks']:
                 callback.on_optimization_step_end(self.training_context)
@@ -1513,8 +1522,7 @@ class ImageGenerationModel(Model):
             result = to_numpy(result)[0]
 
             for func in self.reverse_preprocess_flow:
-                if inspect.isfunction(func):
-                    result = func(result)
+                result = func(result)
             result = array2image(result)
             return result
 
