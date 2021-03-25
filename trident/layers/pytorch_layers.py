@@ -128,6 +128,8 @@ class Dense(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
+        if ndim(x)>2:
+            x=squeeze(x)
         if hasattr(self, 'weights_norm') and self.weights_norm is not None:
             x = F.linear(x, self.weights_norm(self.weight) , self.bias)
         else:
@@ -677,8 +679,8 @@ class _ConvNd(Layer):
                      'groups', 'transposed']
 
     def __init__(self, rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias, dilation, groups,
-                 transposed=False, name=None, depth_multiplier=1, depthwise=False, separable=False, **kwargs):
-        super(_ConvNd, self).__init__(name=name)
+                 transposed=False, name=None, depth_multiplier=1, depthwise=False, separable=False, keep_output=False,**kwargs):
+        super(_ConvNd, self).__init__(keep_output=keep_output,name=name)
         self.rank = rank
         self.num_filters = num_filters
         self.depth_multiplier = depth_multiplier
@@ -884,7 +886,7 @@ class Conv1d(_ConvNd):
         """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -903,7 +905,7 @@ class Conv1d(_ConvNd):
         elif isinstance(padding, tuple):
             pass
         super(Conv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias, dilation,
-                                     groups, transposed=False, name=name, depth_multiplier=depth_multiplier, depthwise=False, separable=False, **kwargs)
+                                     groups, transposed=False, name=name, depth_multiplier=depth_multiplier, depthwise=False, separable=False, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1012,7 +1014,7 @@ class Conv2d(_ConvNd):
         """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1036,7 +1038,7 @@ class Conv2d(_ConvNd):
             pass
         super(Conv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                      dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                     depthwise=False, separable=False, **kwargs)
+                                     depthwise=False, separable=False, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
         self.rank = 2
@@ -1062,7 +1064,7 @@ class Conv2d(_ConvNd):
 
 class Conv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1079,7 +1081,7 @@ class Conv3d(_ConvNd):
             pass
         super(Conv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                      dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                     depthwise=False, separable=False, **kwargs)
+                                     depthwise=False, separable=False, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1103,7 +1105,7 @@ class Conv3d(_ConvNd):
 
 class TransConv1d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None,keep_output=False, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -1120,7 +1122,7 @@ class TransConv1d(_ConvNd):
             pass
         super(TransConv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                           dilation, groups, transposed=True, name=name, depth_multiplier=depth_multiplier,
-                                          depthwise=False, separable=False, **kwargs)
+                                          depthwise=False, separable=False, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
         self.output_padding = _single(0)
@@ -1154,7 +1156,7 @@ class TransConv2d(_ConvNd):
     """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1171,7 +1173,7 @@ class TransConv2d(_ConvNd):
             pass
         super(TransConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                           dilation, groups, transposed=True, name=name, depth_multiplier=depth_multiplier,
-                                          depthwise=False, separable=False, **kwargs)
+                                          depthwise=False, separable=False, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
         self.output_padding = _pair(0)
@@ -1213,7 +1215,7 @@ class TransConv2d(_ConvNd):
 
 class TransConv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1230,7 +1232,7 @@ class TransConv3d(_ConvNd):
             pass
         super(TransConv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                           dilation, groups, transposed=True, name=name, depth_multiplier=depth_multiplier,
-                                          depthwise=False, separable=False, **kwargs)
+                                          depthwise=False, separable=False,keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.output_padding = _triple(0)
@@ -1262,7 +1264,7 @@ class TransConv3d(_ConvNd):
 
 class SeparableConv1d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False,**kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -1279,7 +1281,7 @@ class SeparableConv1d(_ConvNd):
             pass
         super(SeparableConv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=True, separable=True, **kwargs)
+                                              depthwise=True, separable=True, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
         self.conv1 = None
@@ -1295,7 +1297,7 @@ class SeparableConv1d(_ConvNd):
 
 class SeparableConv2d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero',
-                 activation=None, use_bias=False, dilation=1, groups=1, name=None, **kwargs):
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, keep_output=False,**kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1312,7 +1314,7 @@ class SeparableConv2d(_ConvNd):
             pass
         super(SeparableConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=True, separable=True, **kwargs)
+                                              depthwise=True, separable=True, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
         self.pointwise = None
@@ -1339,7 +1341,7 @@ class SeparableConv2d(_ConvNd):
 
 class SeparableConv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None,keep_output=False, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1356,7 +1358,7 @@ class SeparableConv3d(_ConvNd):
             pass
         super(SeparableConv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=True, separable=True, **kwargs)
+                                              depthwise=True, separable=True, keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
         self.pointwise = None
@@ -1383,7 +1385,7 @@ class SeparableConv3d(_ConvNd):
 
 class DepthwiseConv1d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, name=None, **kwargs):
+                 use_bias=False, dilation=1, name=None, keep_output=False,**kwargs):
 
         rank = 1
         kernel_size = _single(kernel_size)
@@ -1403,7 +1405,7 @@ class DepthwiseConv1d(_ConvNd):
         super(DepthwiseConv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode,
                                               use_bias, dilation, groups, transposed=False, name=name,
                                               depth_multiplier=depth_multiplier, depthwise=True, separable=False,
-                                              **kwargs)
+                                              keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1494,7 +1496,7 @@ class DepthwiseConv2d(_ConvNd):
      """
 
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, name=None, **kwargs):
+                 use_bias=False, dilation=1, name=None, keep_output=False,**kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1513,7 +1515,7 @@ class DepthwiseConv2d(_ConvNd):
         super(DepthwiseConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode,
                                               use_bias, dilation, groups, transposed=False, name=name,
                                               depth_multiplier=depth_multiplier, depthwise=True, separable=False,
-                                              **kwargs)
+                                              keep_output=keep_output,**kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1538,7 +1540,7 @@ class DepthwiseConv2d(_ConvNd):
 
 class DepthwiseConv3d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False,**kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1555,7 +1557,7 @@ class DepthwiseConv3d(_ConvNd):
             pass
         super(DepthwiseConv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=False, separable=False, **kwargs)
+                                              depthwise=False, separable=False, keep_output=False,**kwargs)
 
         self.activation = get_activation(activation)
         self._built = False
@@ -1604,8 +1606,8 @@ class DepthwiseConv3d(_ConvNd):
 
 class DeformConv2d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, offset_group=2, auto_pad=True, padding_mode='zero',
-                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, **kwargs):
-        super(DeformConv2d, self).__init__()
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+        super(DeformConv2d, self).__init__(keep_output=keep_output,name=name)
         self.rank = 2
         self.kernel_size = _pair(kernel_size)
         self.num_filters = kwargs.get('num_filters')
@@ -1706,8 +1708,8 @@ class DeformConv2d(Layer):
 class GcdConv1d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, divisor_rank=0, self_norm=True, is_shuffle=False, name=None,
-                 depth_multiplier=None, **kwargs):
-        super(GcdConv1d, self).__init__()
+                 depth_multiplier=None,keep_output=False, **kwargs):
+        super(GcdConv1d, self).__init__(keep_output=keep_output,name=name)
         self.rank = 1
         self.kernel_size = _single(kernel_size)
         self.num_filters = num_filters
@@ -1836,7 +1838,7 @@ class GatedConv2d(Conv2d):
     """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, norm=l2_normalize, name=None, **kwargs):
+                 use_bias=False, dilation=1, groups=1, depth_multiplier=None, norm=l2_normalize, name=None, keep_output=False, **kwargs):
         """
         Extra keyword arguments supported in addition to those in `torch.nn.Conv2d`:
         Args:
@@ -1847,7 +1849,7 @@ class GatedConv2d(Conv2d):
         super(GatedConv2d, self).__init__(kernel_size=kernel_size, num_filters=num_filters, strides=strides, auto_pad=auto_pad, padding=padding, padding_mode=padding_mode,
                                           activation=activation,
                                           use_bias=use_bias, dilation=dilation, groups=groups, name=name, depth_multiplier=depth_multiplier,
-                                          **kwargs)
+                                          keep_output=False, **kwargs)
 
         self.norm = norm
 
@@ -1868,7 +1870,7 @@ class GatedConv2d(Conv2d):
 class GcdConv2d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, divisor_rank=0, self_norm=True, is_shuffle=False, crossgroup_fusion=True,
-                 name=None, depth_multiplier=None, **kwargs):
+                 name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1887,7 +1889,7 @@ class GcdConv2d(_ConvNd):
         super(GcdConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode,
                                         use_bias, dilation, groups, transposed=False, name=name,
                                         depth_multiplier=depth_multiplier, depthwise=True, separable=False,
-                                        **kwargs)
+                                        keep_output=False, **kwargs)
 
         self.activation = get_activation(activation)
 
@@ -2035,14 +2037,14 @@ class Lambda(Layer):
         return self.apply_lambd(x)
 
 class Reshape(Layer):
-    def __init__(self, target_shape, name=None):
+    def __init__(self, target_shape, keep_output=False, name=None):
         """
         Reshape the input volume
         Args:
             *target_shape (ints): new shape, WITHOUT specifying batch size as first
             dimension, as it will remain unchanged.
         """
-        super(Reshape, self).__init__(name=name)
+        super(Reshape, self).__init__(keep_output=keep_output, name=name)
         if isinstance(target_shape,numbers.Integral):
             self.target_shape=(target_shape,)
         elif isinstance(target_shape,list):
@@ -2077,8 +2079,8 @@ class Permute(Layer):
 class SelfAttention(Layer):
     """ Self attention Laye"""
 
-    def __init__(self, reduction_factor=8, name=None):
-        super(SelfAttention, self).__init__(name=name)
+    def __init__(self, reduction_factor=8, keep_output=False, name=None):
+        super(SelfAttention, self).__init__(keep_output=keep_output, name=name)
         self.rank = 2
         # self.activation = activation
         self.reduction_factor = reduction_factor
@@ -2093,11 +2095,9 @@ class SelfAttention(Layer):
         self.softmax = nn.Softmax(dim=-1)  #
 
     def build(self, input_shape:TensorShape):
-        self.query_conv = nn.Conv2d(in_channels=self.input_filters,
-                                    out_channels=self.input_filters // self.reduction_factor, kernel_size=1)
-        self.key_conv = nn.Conv2d(in_channels=self.input_filters,
-                                  out_channels=self.input_filters // self.reduction_factor, kernel_size=1)
-        self.value_conv = nn.Conv2d(in_channels=self.input_filters, out_channels=self.input_filters, kernel_size=1)
+        self.query_conv =Conv2d((1,1),depth_multiplier=1.0/self.reduction_factor)
+        self.key_conv = Conv2d((1,1),depth_multiplier=1.0/self.reduction_factor)
+        self.value_conv = Conv2d((1,1),depth_multiplier=1)
         self.to(self.device)
 
     def forward(self, x, **kwargs):
@@ -2138,8 +2138,8 @@ class CoordConv2d(Layer):
     """
 
     def __init__(self, kernel_size, num_filters, strides, auto_pad=True, activation=None, use_bias=False, group=1,
-                 dilation=1, with_r=False, image_size=None, name=None, **kwargs):
-        super().__init__(name=name)
+                 dilation=1, with_r=False, image_size=None, name=None, keep_output=False, **kwargs):
+        super().__init__(keep_output=keep_output, name=name)
         self.rank = 2
         self.kernel_size = kernel_size
         self.num_filters = num_filters
@@ -2194,8 +2194,8 @@ class CoordConv2d(Layer):
 
 
 class Upsampling2d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None):
-        super(Upsampling2d, self).__init__(name=name)
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None,keep_output=False, **kwargs):
+        super(Upsampling2d, self).__init__(keep_output=keep_output, name=name)
         self.rank = 2
         self.size = size
         if isinstance(scale_factor, tuple):
@@ -2227,8 +2227,8 @@ class Upsampling2d(Layer):
 
 
 class Dropout(Layer):
-    def __init__(self, dropout_rate=0, name=None):
-        super(Dropout, self).__init__(name=name)
+    def __init__(self, dropout_rate=0, name=None,keep_output=False, **kwargs):
+        super(Dropout, self).__init__(keep_output=keep_output, name=name)
         self.inplace = True
         if dropout_rate < 0 or dropout_rate > 1:
             raise ValueError("dropout probability has to be between 0 and 1, ""but got {}".format(dropout_rate))
@@ -2253,8 +2253,8 @@ class AlphaDropout(Layer):
      .. _Self-Normalizing Neural Networks: https://arxiv.org/abs/1706.02515
     """
 
-    def __init__(self, dropout_rate=0, name=None):
-        super(AlphaDropout, self).__init__(name=name)
+    def __init__(self, dropout_rate=0, name=None,keep_output=False,**kwargs ):
+        super(AlphaDropout, self).__init__(keep_output=keep_output, name=name)
         self.inplace = True
         if dropout_rate < 0 or dropout_rate > 1:
             raise ValueError("dropout probability has to be between 0 and 1, ""but got {}".format(dropout_rate))
@@ -2291,8 +2291,8 @@ class DropBlock2d(Layer):
        https://arxiv.org/abs/1810.12890
     """
 
-    def __init__(self, dropout_rate=0.1, block_size=7):
-        super(DropBlock2d, self).__init__()
+    def __init__(self, dropout_rate=0.1, block_size=7,name=None,keep_output=False,**kwargs ):
+        super(DropBlock2d, self).__init__(keep_output=keep_output,name=name )
         self.dropout_rate = dropout_rate
         self.block_size = block_size
 
@@ -2314,8 +2314,8 @@ class DropBlock2d(Layer):
 
 
 class SingleImageLayer(Layer):
-    def __init__(self, image, is_recursive=False, name=None):
-        super(SingleImageLayer, self).__init__(name=name)
+    def __init__(self, image, is_recursive=False, name=None,keep_output=False,**kwargs ):
+        super(SingleImageLayer, self).__init__(keep_output=keep_output, name=name)
         self.rank = 2
         if isinstance(image, (np.ndarray, torch.Tensor)):
             self.origin_image = to_tensor(image, requires_grad=True).squeeze()
