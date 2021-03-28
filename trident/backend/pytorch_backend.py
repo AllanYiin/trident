@@ -43,6 +43,9 @@ from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
 from trident.backend.common import dtype as Dtype
+from trident import context
+ctx = context._context()
+_backend = ctx.get_backend()
 
 __all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine',
            'try_map_args_and_call',
@@ -772,6 +775,8 @@ class Layer(nn.Module):
             value = TensorShape((None,)+value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
             value = [TensorShape(sh) for sh in value]
+        elif isinstance(value, TensorShape):
+            pass
         else:
             value = TensorShape(value)
 
@@ -805,6 +810,8 @@ class Layer(nn.Module):
             value = TensorShape((None,) + value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
             value = [TensorShape(sh) for sh in value]
+        elif isinstance(value, TensorShape):
+            pass
         else:
             value = TensorShape(value)
 
@@ -938,7 +945,7 @@ class Layer(nn.Module):
         if not self._built:
             inp = unpack_singleton(input)
             if is_tensor(inp):
-                shp = tensor_to_shape(inp)
+                shp = tensor_to_shape(inp,need_exclude_batch_axis=True)
                 self.input_filters = shp[self.filter_index]
                 self.input_shape = shp
                 self.input_spec = TensorSpec.tensor_to_spec(inp)
@@ -1520,9 +1527,9 @@ class ModuleDict(Layer):
         """
         if self._built == False and len(self._modules) > 0:
             if self.is_root:
-                self.input_shape = input_shape
+                self._input_shape = input_shape
 
-                dummay_input = self.input_shape.get_dummy_tensor().to(self.device)
+                dummay_input = to_tensor(self.input_shape.get_dummy_tensor()).to(self.device)
 
                 for name, module in self.items():
                     out = module(dummay_input)
@@ -1907,7 +1914,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                     else:
                         raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
                 # print('arg_map',arg_map.key_list)
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device() == 'cuda':
+                if ctx.amp_available== True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         out = fn(*arg_map.value_list)
                 else:
@@ -1920,7 +1927,8 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                 for arg in fn.signature.inputs.key_list:
 
                     if arg in data_feed:
-                        arg_map[arg] = data[data_feed[arg]].to(get_device())
+                        if data_feed[arg] in data:
+                            arg_map[arg] = data[data_feed[arg]].to(get_device())
                     elif arg in data:
                         arg_map[arg] = data[arg].to(get_device())
 
@@ -1928,7 +1936,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
 
                         raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
                 # print('arg_map', arg_map.key_list)
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device() == 'cuda':
+                if ctx.amp_available== True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         out = fn(*arg_map.value_list)
                 else:
@@ -1948,7 +1956,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                     else:
                         arg_map[arg] = ''
                 # print('arg_map', arg_map.key_list)
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device() == 'cuda':
+                if ctx.amp_available== True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         out = fn(*arg_map.value_list)
                 else:

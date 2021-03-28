@@ -276,6 +276,9 @@ class _Context:
         if not hasattr(self._thread_local_info,'data_providers'):
             self._thread_local_info.data_providers=OrderedDict()
         self._thread_local_info.data_providers[getattr(data_provider,'uuid')]=data_provider
+    def get_data_provider(self):
+        return list(self._thread_local_info.data_providers.values())
+
 
 
 

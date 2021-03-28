@@ -9,6 +9,13 @@ from tqdm.auto import tqdm
 
 __all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','LambdaCallback','UnfreezeModelCallback']
 
+from trident import context
+ctx = context._context()
+_backend = ctx.get_backend()
+if _backend=="pytorch":
+    import torch
+    from trident.backend.pytorch_backend import *
+
 
 _valid_when=["on_training_start"
  ,"on_training_end"
@@ -314,12 +321,37 @@ class LambdaCallback(CallbackBase):
         self.batch_frequency=batch_frequency
 
         def on_trigger(self, training_context):
-            if (('epoch' in when and 'batch' not in when)  and  ((self.epoch is None and self.epoch_frequency is None) or training_context['current_epoch']==self.epoch or (training_context['current_epoch']+1)%self.epoch_frequency==0 )) or ( ('batch' in when and 'epoch' not in when) and ((self.batch is None and self.batch_frequency is None) or training_context['current_batch']==self.batch or (training_context['steps']+1)%self.batch_frequency==0)) :
+            if (('epoch' in when and 'batch' not in when)  and
+                ((self.epoch is None and self.epoch_frequency is None)
+                 or training_context['current_epoch']==self.epoch
+                 or (training_context['current_epoch']+1)%self.epoch_frequency==0 ))  :
+                if ctx.amp_available== True and ctx.is_autocast_enabled  == True and get_device() == 'cuda':
+                    with torch.cuda.amp.autocast():
+                        self.action(training_context)
+                else:
                     self.action(training_context)
-            elif (('epoch' not  in when and 'batch' not in when)  and ( training_context['current_epoch'] == self.epoch or (
-                    training_context['current_epoch'] + 1) % self.epoch_frequency == 0)) or (('epoch' not  in when and 'batch' not in when) and (
-                    training_context['current_batch'] == self.batch or (training_context['steps'] + 1) % self.batch_frequency == 0)):
-                self.action(training_context)
+
+            elif  (('batch' in when and 'epoch' not in when) and
+                   ((self.batch is None and self.batch_frequency is None)
+                or training_context['current_batch']==self.batch
+                or (training_context['steps']+1)%self.batch_frequency==0)):
+                if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                    with torch.cuda.amp.autocast():
+                        self.action(training_context)
+                else:
+                    self.action(training_context)
+
+            else:
+                if ctx.amp_available== True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                    with torch.cuda.amp.autocast():
+                        self.action(training_context)
+                else:
+                    self.action(training_context)
+            # elif (('epoch' not  in when and 'batch' not in when)  and ( training_context['current_epoch'] == self.epoch or (
+            #         training_context['current_epoch'] + 1) % self.epoch_frequency == 0)) or (('epoch' not  in when and 'batch' not in when) and (
+            #         training_context['current_batch'] == self.batch or (training_context['steps'] + 1) % self.batch_frequency == 0)):
+            #     self.action(training_context)
+
 
         setattr(self,when,MethodType(on_trigger, self))
 

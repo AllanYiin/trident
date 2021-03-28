@@ -65,11 +65,14 @@ from trident.layers.pytorch_layers import *
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
 from trident.data.image_common import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
+from trident import context
 
 __all__ = ['Model', 'ImageClassificationModel','ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel','FaceLandmarkModel', 'FaceRecognitionModel']
-_session = get_session()
-working_directory = _session.working_directory
+
+ctx=context._context()
+
+working_directory = ctx.working_directory
 _, term_width = get_terminal_size()
 term_width = int(term_width)
 TOTAL_BAR_LENGTH = 65.
@@ -206,7 +209,7 @@ class Model(ModelBase):
 
                 else:
 
-                    output.input_shape = input_shape
+                    #output.input_shape = input_shape
                     dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device())
                     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                     output.to(get_device())
@@ -642,8 +645,8 @@ class Model(ModelBase):
             the model self
 
         """
-        if get_session_value('amp_available') == True:
-            set_session('is_amp_enable', True)
+        if ctx.amp_available == True:
+            ctx.is_autocast_enabled=True
             self.gradscaler = torch.cuda.amp.GradScaler()
             sys.stdout.write('Automatic Mixed Precision:{0}.\n'.format('Turn On'))
         else:
@@ -719,8 +722,8 @@ class Model(ModelBase):
         self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
         self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
         self.training_context['steps']+=1
-        if (self.training_context['steps']+1) % _session.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
+        if (self.training_context['steps']+1) % ctx.epoch_equivalent == 0:
+            if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // ctx.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
                 self.warmup = 0
         if self.training_context['current_batch'] == 0 :
@@ -856,7 +859,7 @@ class Model(ModelBase):
                 self._model.train()
             self.optimizer.zero_grad()
             if self.training_context['stop_update'] < 1:
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device() == 'cuda':
+                if ctx.amp_available and ctx.is_autocast_enabled== True and get_device() == 'cuda':
                     if self.gradscaler is None:
                         self.gradscaler = torch.cuda.amp.GradScaler()
                     self.gradscaler.scale(self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
@@ -869,7 +872,7 @@ class Model(ModelBase):
 
                 if isinstance(self._model, nn.Module) and self.grad_clipping_by_norm:
 
-                    if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device() == 'cuda':
+                    if ctx.amp_available and ctx.is_autocast_enabled== True and get_device() == 'cuda':
                         self.gradscaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
@@ -889,7 +892,7 @@ class Model(ModelBase):
 
             if self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update']):
                 # amp support
-                if get_session_value('amp_available') == True and get_session_value('is_amp_enable') == True and get_device() == 'cuda':
+                if ctx.amp_available and ctx.is_autocast_enabled== True and get_device() == 'cuda':
                     self.gradscaler.step(self.optimizer)
                     self.gradscaler.update()
                 else:
