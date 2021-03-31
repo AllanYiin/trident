@@ -116,6 +116,12 @@ class Dataset(DatasetBase):
     def __getitem__(self, index: int) -> Tuple:
         return self.items[index]
 
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        if name=='symbol' and isinstance(self._element_spec,TensorSpec):
+            self._element_spec._name=value
+
+
     def __len__(self) -> int:
         return len(self.items)
 
@@ -604,24 +610,25 @@ class RandomNoiseDataset(Dataset):
         self.is_paired_process = False
         self.is_spatial = False
         self.transform_funcs = []
+        self.length=sys.maxsize
 
     def data_transform(self, noise_data):
         return noise_data
 
     def __getitem__(self, index: int):
         if self.random_mode == 'normal':
-            return np.random.standard_normal(self.shape)
+            return (np.random.standard_normal(self.shape)-0.5)*2
         elif self.random_mode == 'uniform':
             return np.random.uniform(-1, 1, self.shape)
 
     def __len__(self):
-        return sys.maxsize
+        return self.length
 
 
 class TextSequenceDataset(Dataset):
     def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
                  object_type=ObjectType.corpus, symbol=None, **kwargs):
-        super().__init__(symbol=symbol, object_type=object_type, **kwargs)
+        super().__init__(None,symbol=symbol, object_type=object_type, **kwargs)
         self.sequence_start_at = sequence_start_at
         self.transform_funcs = []
         if len(section_delimiter) == 2:
@@ -671,11 +678,11 @@ class TextSequenceDataset(Dataset):
 
             if self.sequence_start_at == 'random':
                 for sect in new_corpus:
-                    self.__add__(sect)
-                    self.__add__('\n')
-                    self.__add__('\n')
+                    self.items.extend(sect)
+                    self.items.append('\n')
+                    self.items.append('\n')
             else:
-                self.__add__(new_corpus)
+                self.items.extend(new_corpus)
 
             chars = sorted(list(set(corpus)))
 
@@ -689,6 +696,7 @@ class TextSequenceDataset(Dataset):
             self.index2text = dict((i, c) for i, c in enumerate(chars))
         else:
             raise ValueError('corpus should be a collection.')
+
 
         self.sequence_offset = sequence_offset
         self.dtype = np.float32 if self.is_onehot else np.int64
@@ -707,7 +715,7 @@ class TextSequenceDataset(Dataset):
 
     def __getitem__(self, index: int):
         sequencetext = None
-        seq_base = list(self.__iter__())
+        seq_base = list(self.items)
         if isinstance(self.sequence_offset, int):
             if self.sequence_start_at == 'random':
                 sequencetext = seq_base[index + self.sequence_offset:builtins.min(index + self.sequence_offset + self.sequence_length, self.len())]
@@ -807,7 +815,6 @@ class TextSequenceDataset(Dataset):
 class Iterator(object):
     def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, minibatch_size=8, mode='tuple', is_shuffe=True, buffer_size=None, workers=2, **kwargs):
         self.is_paired_process = False
-        self.signature = None
         self._data = None
         self._label = None
         self._unpair = None
@@ -858,7 +865,7 @@ class Iterator(object):
                 self.paired_process_symbols.append(ds.symbol)
 
         self.data_template = OrderedDict()
-        self.signature = Signature(name='data_provider')
+
 
         for k in range(len(datasets)):
             ds = datasets[k]
@@ -866,8 +873,8 @@ class Iterator(object):
                 dataitem = ds[k]
                 ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
                 self.data_template[ds.element_spec] = None
-                self.signature.outputs[ds.symbol] = ds.element_spec
 
+        self._signature=None
         self._minibatch_size = minibatch_size
         self.paired_transform_funcs = []
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
@@ -889,15 +896,6 @@ class Iterator(object):
     def data(self, value):
         self._data = value
 
-        if isinstance(value, ZipDataset):
-            for ds in value._datasets:
-                self.data_template[ds.element_spec] = None
-                self.signature.outputs[ds.symbol] = ds.element_spec
-                self.datasets_dict[ds.symbol] = ds
-        else:
-            self.data_template[value.element_spec] = None
-            self.signature.outputs[value.symbol] = value.element_spec
-            self.datasets_dict[value.symbol] = value
 
         if self._label is not None and isinstance(self._label, (MaskDataset, BboxDataset, ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(
                 self._data):
@@ -916,15 +914,6 @@ class Iterator(object):
     @label.setter
     def label(self, value):
         self._label = value
-        if isinstance(value, ZipDataset):
-            for ds in value._datasets:
-                self.data_template[ds.element_spec] = None
-                self.signature.outputs[ds.symbol] = ds.element_spec
-                self.datasets_dict[ds.symbol] = ds
-        else:
-            self.data_template[value.element_spec] = None
-            self.signature.outputs[value.symbol] = value.element_spec
-            self.datasets_dict[value.symbol] = value
 
         if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(
                 self._label) == len(self._data):
@@ -942,15 +931,7 @@ class Iterator(object):
     @unpair.setter
     def unpair(self, value):
         self._unpair = value
-        if isinstance(value, ZipDataset):
-            for ds in value._datasets:
-                self.data_template[ds.element_spec] = None
-                self.signature.outputs[ds.symbol] = ds.element_spec
-                self.datasets_dict[ds.symbol] = ds
-        else:
-            self.data_template[value.element_spec] = None
-            self.signature.outputs[value.symbol] = value.element_spec
-            self.datasets_dict[value.symbol] = value
+
 
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
@@ -978,26 +959,59 @@ class Iterator(object):
         self.pass_cnt = 0
         self.pass_time_spend = 0.
 
-    def update_signature(self, arg_names):
+    @property
+    def signature(self):
+        datasets = self.get_datasets()
+        for ds in datasets:
+            if self._signature is not None and ds.symbol not in self._signature.outputs:
+                self._signature =None
+        if self._signature is None:
+            self._signature = Signature(name='data_provider')
+            self.data_template=OrderedDict()
+            self.datasets_dict=OrderedDict()
+            for k in range(len(datasets)):
+                ds = datasets[k]
+                if isinstance(ds, ZipDataset):
+                    for dsitem in ds._datasets:
+                        if len(dsitem) > 0:
+                            dataitem = dsitem[k]
+                            dsitem.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
+                            self.datasets_dict[dsitem.symbol] = dsitem
+                            self.data_template[dsitem.element_spec] = None
+                            self._signature.outputs[dsitem.symbol] = ds.element_spec
+                else:
 
-        if len(arg_names) != len(self.datasets_dict):
-            warnings.warn('arg_names should have same length with datasets, expect {0} got {1}'.format(len(arg_names), len(self.datasets_dict)))
-        else:
-            iterdata = self.next()
-            if self.signature is None or not isinstance(self.signature, Signature):
-                self.signature = Signature()
-                self.signature.name = 'data_provider'
-            if isinstance(arg_names, (list, tuple)) and len(iterdata) == len(arg_names):
-                new_dict = OrderedDict()
-                for i in range(len(arg_names)):
-                    arg = arg_names[i]
-                    data = iterdata[i]
-                    self.signature.outputs[arg] = TensorSpec(shape=TensorShape((None,) + tuple(tensor_to_shape(data).dims)), dtype=data.dtype,
-                                                             object_type=self.datasets_dict.value_list[i].object_type, name=arg)
-                    ds = self.datasets_dict.value_list[i]
-                    new_dict[arg] = ds
-                self.datasets_dict = None
-                self.datasets_dict = new_dict
+                    if len(ds) > 0:
+                        dataitem = ds[k]
+                        ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
+                        self.datasets_dict[ds.symbol] = ds
+                        self.data_template[ds.element_spec] = None
+                        self._signature.outputs[ds.symbol] = ds.element_spec
+
+            self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+            self._sample_iter = iter(self.batch_sampler)
+        return self._signature
+
+    # def update_signature(self, arg_names):
+    #
+    #     if len(arg_names) != len(self.datasets_dict):
+    #         warnings.warn('arg_names should have same length with datasets, expect {0} got {1}'.format(len(arg_names), len(self.datasets_dict)))
+    #     else:
+    #         iterdata = self.next()
+    #         if self.signature is None or not isinstance(self.signature, Signature):
+    #             self.signature = Signature()
+    #             self.signature.name = 'data_provider'
+    #         if isinstance(arg_names, (list, tuple)) and len(iterdata) == len(arg_names):
+    #             new_dict = OrderedDict()
+    #             for i in range(len(arg_names)):
+    #                 arg = arg_names[i]
+    #                 data = iterdata[i]
+    #                 self.signature.outputs[arg] = TensorSpec(shape=TensorShape((None,) + tuple(tensor_to_shape(data).dims)), dtype=data.dtype,
+    #                                                          object_type=self.datasets_dict.value_list[i].object_type, name=arg)
+    #                 ds = self.datasets_dict.value_list[i]
+    #                 new_dict[arg] = ds
+    #             self.datasets_dict = None
+    #             self.datasets_dict = new_dict
 
     def paired_transform(self, datadict: Dict[TensorSpec, np.ndarray]):
         # if isinstance(img_data, list) and all(isinstance(elem, np.ndarray) for elem in img_data):
@@ -1042,20 +1056,9 @@ class Iterator(object):
                 return ds
 
     def update_data_template(self):
-        data_template = OrderedDict()
-        if self.signature is None:
-            self.signature = Signature(name='data_provider')
-        dataitems = self[0]
-        for k in range(len(self.datasets_dict)):
-            ds = self.datasets_dict.value_list[k]
-            if len(ds) > 0:
-                dataitem = dataitems.value_list[k]
-                ds.element_spec = TensorSpec.tensor_to_spec(dataitem, need_exclude_batch_axis=True, is_singleton=True, object_type=ds.object_type, name=ds.symbol)
-                data_template[ds.element_spec] = None
-                self.signature.outputs[ds.symbol] = ds.element_spec
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
-        self._sample_iter = iter(self.batch_sampler)
-        self.data_template = data_template
+        self._signature=None
+
+
 
     def print_statistics(self):
         print('avg. process time: {0:.5f}'.format(self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
@@ -1107,6 +1110,16 @@ class Iterator(object):
             return returnData
         except:
             PrintException()
+
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        if name in ['_data','_label', '_unpair']:
+            self._signature = None
+        if name=='_unpair':
+            self._signature=None
+            if isinstance(value,RandomNoiseDataset):
+                value.length=len(self.data)
+
 
     def _next_index(self):
         return next(self._sample_iter)
