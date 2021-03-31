@@ -109,7 +109,7 @@ class RNNBase(Layer):
         if self._built == False:
             for layer in range(self.num_layers):
                 for direction in range(self.num_directions):
-                    layer_input_size = input_shape[-1].item() if layer == 0 else self.hidden_size * self.num_directions
+                    layer_input_size = input_shape[-1] if layer == 0 else self.hidden_size * self.num_directions
 
                     w_ih = Parameter(torch.Tensor(self.gate_size, layer_input_size).to(get_device()))
                     w_hh = Parameter(torch.Tensor(self.gate_size, self.hidden_size).to(get_device()))
@@ -576,13 +576,13 @@ class LSTM(RNNBase):
         num_directions = 2 if self.bidirectional else 1
         zeros = torch.zeros(self.num_layers * num_directions,
                                 max_batch_size, self.hidden_size,
-                                dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
+                                dtype=dtype.float32, requires_grad=False).to(get_device())
         self.hidden_state=zeros
         self.cell_state = zeros
 
     def clear_state(self):
-        self.hidden_state= zeros_like(self.hidden_state,dtype=self.weights[0].dtype, requires_grad=False ).to(self.weights[0].device)
-        self.cell_state= zeros_like(self.cell_state,dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
+        self.hidden_state= zeros_like(self.hidden_state,dtype=dtype.float32, requires_grad=False ).to(get_device())
+        self.cell_state= zeros_like(self.cell_state,dtype=dtype.float32, requires_grad=False).to(get_device())
 
     def check_forward_args(self, input: Tensor, hidden: Tuple[Tensor, Tensor], batch_sizes: Optional[Tensor]):
         self.check_input(input, batch_sizes)
