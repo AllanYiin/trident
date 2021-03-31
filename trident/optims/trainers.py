@@ -408,7 +408,8 @@ class TrainingPlan(object):
             if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
                 # if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_provider.traindata.data.element_spec.shape):
                 data_feed[trainingitem.signature.inputs.key_list[0]] = data_provider.traindata.data.symbol
-                available_items.remove(data_provider.traindata.data.symbol)
+                if data_provider.traindata.data.symbol in available_items:
+                    available_items.remove(data_provider.traindata.data.symbol)
 
             if len(trainingitem.signature.outputs) == 1 and len(label_symbols) == 0:
                 data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_provider.traindata.data.symbol
@@ -1038,7 +1039,11 @@ class GanTrainingPlan(TrainingPlan):
 
         def g_get_dreal(training_context):
             traindata = training_context['train_data']
-            traindata['d_real'] = self.discriminator(traindata['img_real']).detach()
+            if (self.is_generator_first and 'output' not in self.discriminator.training_context['train_data']) or self.use_feature_matching:
+                traindata['d_real'] = self.discriminator(traindata['img_real']).detach()
+            else:
+                traindata['d_real'] = self.discriminator.training_context['train_data']['output'].detach()
+
             if self.use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
                 traindata['real_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
@@ -1052,7 +1057,11 @@ class GanTrainingPlan(TrainingPlan):
             #     traindata['img_fake'] = self.generator.training_context['train_data']['output']
             #     traindata['d_fake'] = self.discriminator(traindata['img_fake'] )
             # else:
-            traindata['img_fake'] = self.generator(traindata['noise']).detach()
+            # traindata['img_fake'] = self.generator(traindata['noise']).detach()
+            if not self.is_generator_first and 'output' not in self.generator.training_context['train_data']:
+                traindata['img_fake'] = self.generator(traindata['noise']).detach()
+            else:
+                traindata['img_fake'] = self.generator.training_context['train_data']['output'].detach()
             traindata['d_fake'] = self.discriminator(traindata['img_fake'])
 
             traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
