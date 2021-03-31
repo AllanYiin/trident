@@ -105,6 +105,8 @@ class BatchNorm(Layer):
 
         super().__init__(name=name)
         self.in_sequence=in_sequence
+        if self.in_sequence:
+            self.filter_index=-1
         self.eps = eps
         self.momentum = momentum
         self.affine = affine
@@ -140,7 +142,7 @@ class BatchNorm(Layer):
             missing_keys, unexpected_keys, error_msgs)
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             if self.affine:
                 self.register_parameter('weight', Parameter(ones(self.input_filters)))
                 self.register_parameter('bias', Parameter(zeros(self.input_filters)))
@@ -276,7 +278,9 @@ class GroupNorm(Layer):
 
         """
         super().__init__(name=name)
-        self.in_sequence=in_sequence
+        self.in_sequence = in_sequence
+        if self.in_sequence:
+            self.filter_index = -1
         self.affine=affine
         self.num_groups = num_groups
         self.eps = eps
@@ -377,7 +381,9 @@ class InstanceNorm(Layer):
 
         """
         super().__init__(name=name)
-        self.in_sequence=in_sequence
+        self.in_sequence = in_sequence
+        if self.in_sequence:
+            self.filter_index = -1
         self.eps = _epsilon
         self.momentum = momentum
         self.affine = affine
@@ -395,8 +401,8 @@ class InstanceNorm(Layer):
     def build(self, input_shape:TensorShape):
         if self._built == False:
             if self.affine:
-                self.weight = Parameter(torch.Tensor(self.input_filters))
-                self.bias = Parameter(torch.Tensor(self.input_filters))
+                self.weight = Parameter(torch.Tensor(self.input_filters)).to(get_device())
+                self.bias = Parameter(torch.Tensor(self.input_filters)).to(get_device())
                 init.ones_(self.weight)
                 init.zeros_(self.bias)
             else:
@@ -404,9 +410,9 @@ class InstanceNorm(Layer):
                 self.register_parameter('bias', None)
 
             if self.track_running_stats:
-                self.register_buffer('running_mean', torch.zeros(self.input_filters))
-                self.register_buffer('running_var', torch.ones(self.input_filters))
-                self.register_buffer('num_batches_tracked', torch.tensor(0, dtype=torch.long))
+                self.register_buffer('running_mean', torch.zeros(self.input_filters).to(get_device()))
+                self.register_buffer('running_var', torch.ones(self.input_filters).to(get_device()))
+                self.register_buffer('num_batches_tracked', torch.tensor(0, dtype=torch.long).to(get_device()))
             else:
                 self.register_parameter('running_mean', None)
                 self.register_parameter('running_var', None)
@@ -495,6 +501,7 @@ class LayerNorm(Layer):
         """
         super().__init__(name=name)
         self.in_sequence=in_sequence
+        self.filter_index = -1
         self.eps = eps
         self.elementwise_affine = elementwise_affine
 
@@ -502,16 +509,14 @@ class LayerNorm(Layer):
 
     def build(self, input_shape:TensorShape):
         if self._built == False :
-            self.register_parameter('weight',Parameter(ones((self.input_filters))))
-            self.register_parameter('bias', Parameter(zeros((self.input_filters))))
+            self.normalized_shape=(input_shape[-1],)
+            self.register_parameter('weight',Parameter(ones(*self.normalized_shape)))
+            self.register_parameter('bias', Parameter(zeros(*self.normalized_shape)))
             self._built=True
     def forward(self, x, **kwargs):
 
-        if hasattr(self,'in_sequence') and self.in_sequence:
-            x = x.permute(0, 2, 1)
-        x= F.layer_norm(x, int_shape( self.weight), self.weight, self.bias, self.eps)
-        if hasattr(self,'in_sequence') and self.in_sequence:
-            x=x.permute(0, 2, 1)
+
+        x= F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         return x
         # mean = x.mean(dim=self.axis, keepdim=True).detach()
         # std = x.std(dim=self.axis, keepdim=True).detach()
@@ -524,7 +529,9 @@ LayerNorm3d=LayerNorm
 class L2Norm(Layer):
     def __init__(self,in_sequence=False, axis=1,name=None, **kwargs):
         super().__init__(name=name)
-        self.in_sequence=in_sequence
+        self.in_sequence = in_sequence
+        if self.in_sequence:
+            self.filter_index = -1
         self.eps=epsilon()
         self.axis=axis
 
@@ -545,6 +552,9 @@ class L2Norm(Layer):
 class PixelNorm(Layer):
     def __init__(self,in_sequence=False,name=None, **kwargs):
         super(PixelNorm, self).__init__(in_sequence=in_sequence,name=name)
+        self.in_sequence = in_sequence
+        if self.in_sequence:
+            self.filter_index = -1
 
     def forward(self, x, **kwargs):
         x = enforce_singleton(x)
@@ -635,11 +645,11 @@ class SpectralNorm(Layer):
         height = w.data.shape[0]
         width = w.view(height, -1).data.shape[1]
 
-        u = Parameter(w.data.new(height).normal_(0, 1), requires_grad=False)
-        v = Parameter(w.data.new(width).normal_(0, 1), requires_grad=False)
+        u = Parameter(w.data.new(height).normal_(0, 1), requires_grad=False).to(get_device())
+        v = Parameter(w.data.new(width).normal_(0, 1), requires_grad=False).to(get_device())
         u.data = l2_normalize(u.data)
         v.data = l2_normalize(v.data)
-        w_bar = Parameter(w.data)
+        w_bar = Parameter(w.data).to(get_device())
 
         del self.module._parameters[self.name]
 
@@ -663,8 +673,11 @@ class SpectralNorm(Layer):
 
 
 class EvoNormB0(Layer):
-    def __init__(self,rank=2,nonlinear=True,momentum=0.9,eps = 1e-5):
+    def __init__(self,rank=2,nonlinear=True,momentum=0.9,eps = 1e-5,in_sequence=False):
         super(EvoNormB0, self).__init__()
+        self.in_sequence = in_sequence
+        if self.in_sequence:
+            self.filter_index = -1
         self.rank=rank
         self.nonlinear = nonlinear
         self.momentum = momentum
