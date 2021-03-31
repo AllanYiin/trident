@@ -415,7 +415,7 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
     if isinstance(x,numbers.Number):
         return TensorShape((None,))
     if need_exclude_batch_axis and is_singleton==False:
-        shp=(int_shape(x))
+        shp=list(int_shape(x))
         shp[0]=None
         return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton==True:
@@ -1458,7 +1458,14 @@ def clip(x: Tensor, min=-np.inf, max=np.inf):
     Returns:
 
     """
-    return x.clamp(min, max)
+    if min!=-np.inf and  max!=np.inf:
+        return x.clamp(min, max)
+    elif min!=-np.inf :
+        return x.clamp(min=min)
+    elif max!=np.inf:
+        return x.clamp(max=max)
+    else:
+        return x
 
 @numpy_compatible
 def sin(x: Tensor):
@@ -3607,7 +3614,7 @@ def random_choice(x: Tensor,n:int=1):
 
 
 
-def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype=dtype.float32, seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3652,7 +3659,7 @@ def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
 
 
 @numpy_compatible
-def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
+def random_normal_like(x, mean=0.0, std=1.0, dtype=dtype.float32, seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3697,7 +3704,7 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
 
 
 
-def random_uniform(shape, min_value=0.0, max_value=None, dtype='float32', seed=None):
+def random_uniform(shape, min_value=0.0, max_value=None, dtype=dtype.float32, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3776,7 +3783,7 @@ def random_uniform(shape, min_value=0.0, max_value=None, dtype='float32', seed=N
 
 
 @numpy_compatible
-def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype='float32', seed=None):
+def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=dtype.float32, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3845,11 +3852,11 @@ def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype='float32', seed=N
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is not None:
-        t=zeros(shape=int_shape(x),dtype=dtype)
+        t=torch.zeros(int_shape(x),dtype=dtype)
         t.uniform_(min_value, max_value)
         return t
     else:
-        t = zeros(shape=int_shape(x), dtype=torch.float32)
+        t = torch.zeros(int_shape(x), dtype=torch.float32)
         t.uniform_(min_value, max_value)
         return t
 
