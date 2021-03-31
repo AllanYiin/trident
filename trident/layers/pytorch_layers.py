@@ -93,9 +93,10 @@ class Dense(Layer):
         torch.Size([2, 30])
     """
 
-    def __init__(self, num_filters, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None, **kwargs):
+    def __init__(self, num_filters, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None,filter_index=-1, **kwargs):
         super(Dense, self).__init__(name=name, keep_output=keep_output)
         self.rank = 0
+        self.filter_index=-1
         if isinstance(num_filters, int):
             self.num_filters = num_filters
         elif isinstance(num_filters, tuple):
@@ -130,10 +131,17 @@ class Dense(Layer):
     def forward(self, x, **kwargs):
         if ndim(x)>2:
             x=squeeze(x)
+        shp=None
+        # if hasattr(self, 'in_sequence') and self.in_sequence:
+        #     x=x.permute(0,2,1)
+
         if hasattr(self, 'weights_norm') and self.weights_norm is not None:
             x = F.linear(x, self.weights_norm(self.weight) , self.bias)
         else:
             x = F.linear(x, self.weight, self.bias)
+
+        # if hasattr(self, 'in_sequence') and self.in_sequence:
+        #     x = x.permute(0, 2, 1)
 
         if self.activation is not None:
             x = self.activation(x)
@@ -631,6 +639,8 @@ def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None,
     """
     if input_shape is None:
         input_shape = [224] * rank
+    elif len(input_shape)%2==1:
+        input_shape=input_shape[1:]
     if isinstance(kernal_shape, int):
         kernal_shape = _ntuple(rank)(kernal_shape)
     if isinstance(strides, int):
@@ -750,9 +760,9 @@ class _ConvNd(Layer):
             #channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
 
             if self.transposed:
-                self.weight = Parameter(torch.Tensor(int(self.input_filters), int(self.num_filters // self.groups), *self.kernel_size))
+                self.weight = Parameter(torch.Tensor(int(self.input_filters), self.num_filters // self.groups, *self.kernel_size))
             else:
-                self.weight = Parameter(torch.Tensor(int(self.num_filters), int(self.input_filters // self.groups), *self.kernel_size))  #
+                self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters // self.groups, *self.kernel_size))  #
 
                 if self.separable:
                     self.pointwise = Parameter(torch.Tensor(int(self.input_filters * self.depth_multiplier), int(self.num_filters), 1, 1))
@@ -2054,7 +2064,10 @@ class Reshape(Layer):
 
     def forward(self, x, **kwargs):
         shp = self.target_shape
-        return torch.reshape(x,(int_shape(x)[0],)+ tuple(shp))
+        if -1 in shp:
+            return torch.reshape(x,(int_shape(x)[0],)+ tuple(shp))
+        else:
+            return torch.reshape(x, (-1,) + tuple(shp))
 
 
 class Permute(Layer):
