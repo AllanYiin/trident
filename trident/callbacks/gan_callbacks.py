@@ -24,7 +24,7 @@ if get_backend() == 'pytorch':
     import torch.nn as nn
 
     from trident.backend.pytorch_ops import to_numpy, to_tensor, shuffle, random_choice
-    from trident.optims.pytorch_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss
+    from trident.optims.pytorch_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss, BCELoss
     from trident.optims.pytorch_constraints import min_max_norm
     from trident.optims.pytorch_trainer import *
     from trident.layers.pytorch_activations import *
@@ -33,7 +33,7 @@ if get_backend() == 'pytorch':
 elif get_backend() == 'tensorflow':
 
     from trident.backend.tensorflow_ops import to_numpy, to_tensor
-    from trident.optims.tensorflow_losses import CrossEntropyLoss, MSELoss
+    from trident.optims.tensorflow_losses import CrossEntropyLoss, MSELoss, L1Loss, L2Loss, BCELoss
     from trident.optims.tensorflow_constraints import min_max_norm
     from trident.optims.tensorflow_trainer import *
 

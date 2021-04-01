@@ -5,10 +5,9 @@ from __future__ import print_function
 import builtins
 import sys
 
-from trident.backend.pytorch_ops import element_cosine_distance, argmax
+
 
 from trident.backend.opencv_backend import array2image
-
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 import math
 
@@ -48,7 +47,24 @@ from PIL import ImageFont
 import colorsys
 import itertools
 import numpy as np
+from trident import context
 from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton
+
+ctx = context._context()
+_backend =ctx.get_backend()
+working_directory=ctx.working_directory
+
+
+if _backend == 'pytorch':
+    import torch
+    import torch.nn as nn
+    from trident.backend.pytorch_backend import *
+    from trident.backend.pytorch_ops import element_cosine_distance, argmin,sqrt,reduce_sum,expand_dims
+
+elif _backend == 'tensorflow':
+    import tensorflow as tf
+    from trident.backend.tensorflow_backend import *
+    from trident.backend.tensorflow_ops import element_cosine_distance, argmin,sqrt,reduce_sum,expand_dims
 from trident.data.image_common import *
 
 __all__ = ['tile_rgb_images', 'loss_metric_curve', 'steps_histogram', 'generate_palette', 'plot_bbox', 'plot_3d_histogram', 'plot_centerloss']
@@ -141,7 +157,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
 
         for m in range(distinct_row * len(imgs)):
             plt.subplot(distinct_row, len(imgs), m + 1)
-            if m < len(imgs) and len(legend) == len(imgs):
+            if m < len(imgs) and legend is not None and  len(legend) == len(imgs):
                 plt.gca().set_title(legend[m])
             img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
             plt.imshow(img, interpolation="nearest", animated=True)
@@ -169,7 +185,6 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
     plt.clf()
     plt.ion()  # is not None:
 
-    fig = plt.figure()
     loss_ax1 = fig.add_subplot(2, 2, 1)
 
     if losses.__class__.__name__ == 'HistoryBase':
@@ -214,6 +229,7 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
             values_np = np.array(values)
             if first_axis_range is None:
                 first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                first_axis_keys.append(k)
                 metric_ax1.plot(steps, values, label=legend_label)
             else:
                 if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
@@ -222,15 +238,18 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
                     second_axis_keys.append(k)
                 elif second_axis_range is not None:
                     compare_array = np.array([list(first_axis_range), list(second_axis_range)])
-                    this_array = np.array([values_np.min(), values_np.mean(), values_np.max()])
-                    result = argmax(element_cosine_distance(this_array, compare_array))
+                    this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
+                    distance=expand_dims(sqrt(reduce_sum((compare_array-this_array)**2,axis=-1)),0)
+                    result = argmin(distance,axis=-1)[0]
                     if result == 0:
                         metric_ax1.plot(steps, values, label=legend_label)
+                        first_axis_keys.append(k)
                     else:
                         metric_ax2.plot(steps, values, label=legend_label)
                         second_axis_keys.append(k)
                 else:
                     metric_ax1.plot(steps, values, label=legend_label)
+                    first_axis_keys.append(k)
 
         metric_ax1.legend()
         if len(second_axis_keys) > 0:
@@ -266,8 +285,9 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
                             metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                         elif second_axis_range is not None:
                             compare_array = np.array([list(first_axis_range), list(second_axis_range)])
-                            this_array = np.array([values_np.min(), values_np.mean(), values_np.max()])
-                            result = argmax(element_cosine_distance(this_array, compare_array))
+                            this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
+                            distance = expand_dims(sqrt(reduce_sum((compare_array - this_array) ** 2, axis=-1)), 0)
+                            result = argmin(distance, axis=-1)[0]
                             if result == 0:
                                 first_axis_keys.append(k)
                                 metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
@@ -288,7 +308,7 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
         #plt.legend(legend_list,loc='upper left')
 
     metric_ax1.set_title('model metrics', fontsize=14, fontweight='bold')
-    metric_ax1.set_ylabel('metrics')
+    metric_ax1.set_ylabel(','.join(first_axis_keys))
     metric_ax1.set_xlabel(calculate_base)
     if len(second_axis_keys) > 0:
         metric_ax2.set_ylabel(','.join(second_axis_keys))

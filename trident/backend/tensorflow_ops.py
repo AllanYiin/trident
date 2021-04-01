@@ -408,7 +408,7 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
     if isinstance(x, numbers.Number):
         return TensorShape((None,))
     if need_exclude_batch_axis and is_singleton == False:
-        shp = (int_shape(x))
+        shp = list(int_shape(x))
         shp[0] = None
         return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton == True:

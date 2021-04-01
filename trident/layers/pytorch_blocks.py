@@ -852,7 +852,12 @@ class ShortCut2d(Layer):
                 concate_list.append(self.branch_from_tensor)
 
         if self.mode == 'concate':
-            x = concate(concate_list, axis=self.axis)
+            try:
+                x = concate(concate_list, axis=self.axis)
+            except Exception as e:
+                print('Layer {0} relative name:{1} concate fails. The input shapes:{2} '.format(self.name, self.relative_name, [int_shape(item) for item in concate_list]))
+
+
         else:
             x = current
         if self.activation is not None:

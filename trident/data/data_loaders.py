@@ -382,10 +382,12 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
             imgs = []
             for i in range(len(class_names)):
                 class_name = class_names[i]
-                class_imgs = glob.glob(base_folder + '/{0}/*.*g'.format(class_name))
+                class_imgs = list_images(base_folder + '/{0}'.format(class_name))
                 if len(class_imgs)==0:
                     class_imgs = glob.glob(base_folder + '/{0}/*/*.*g'.format(class_name))
-                print(base_folder + '/{0}/*.*g'.format(class_name))
+
+                else:
+                    print(base_folder + '/{0}/*.*g'.format(class_name))
                 print(len(class_imgs))
                 labels.extend([i] * len(class_imgs))
                 imgs.extend(class_imgs)
@@ -698,7 +700,7 @@ def load_examples_data(dataset_name):
         extract_archive(tar_file_path, extract_path, archive_format='tar')
         data_provider = load_folder_images(dataset_name, extract_path, folder_as_label=False)
         data_provider.traindata.unpair = RandomNoiseDataset(shape=(100), random_mode='normal')
-        print('get simpsons images :{0}'.format(len(data_provider)))
+        print('get simpsons images :{0}'.format(len(data_provider.traindata.data.items)))
         return data_provider
     elif dataset_name == 'examples_horse2zebra':
         download_file_from_google_drive('1pqj-T90Vh4wVNBV09kYZWgVPsZUA2f7U', dirname, 'horse2zebra.tar')

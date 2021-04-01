@@ -152,7 +152,7 @@ class Adam(Optimizer):
 
         for group in self.param_groups:
             for p in group['params'] :
-                if p.grad is None or not p.trainable:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad
                 if grad.is_sparse:
@@ -803,7 +803,7 @@ class PlainRAdam(Optimizer):
         for group in self.param_groups:
 
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
                 if grad.is_sparse:
@@ -903,7 +903,7 @@ class AdamW(Optimizer):
         for group in self.param_groups:
 
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
                 if grad.is_sparse:
@@ -1237,7 +1237,7 @@ class RangerLars(Optimizer):
 
             for group in self.param_groups:
                 for p in group['params']:
-                    if p.grad is None:
+                    if p.grad is None or not p.requires_grad:
                         continue
                     grad = p.grad.data.float()
 
@@ -1431,7 +1431,7 @@ class LARS(Optimizer):
             lr = group["lr"]
 
             for p in group["params"]:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
 
                 param = p.data
@@ -1561,7 +1561,7 @@ class AdaBelief(Optimizer):
 
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad
                 if grad.is_sparse:
@@ -1690,7 +1690,7 @@ class RangerBelief(Optimizer):
         # Evaluate averages and grad, update param tensors
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
 
@@ -1839,7 +1839,7 @@ class DiffGrad(Optimizer):
 
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data
                 if grad.is_sparse:

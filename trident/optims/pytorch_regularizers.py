@@ -44,9 +44,12 @@ def total_variation_norm_reg(output:torch.Tensor,reg_weight=1):
     b,c,h,w=int_shape(output)
     total_variation_norm_reg.reg_weight=reg_weight
     assert len(output.size())==4
+    count_w = output.size()[2] * (output.size()[3] - 1)
+    count_h = (output.size()[2] - 1) * output.size()[3]
+
     diff_i = torch.sum(torch.pow(output[:, :, :, 1:] - output[:, :, :, :-1], 2))
     diff_j = torch.sum(torch.pow(output[:, :, 1:, :] - output[:, :, :-1, :], 2))
-    tv_loss = true_divide(0.5*(true_divide(diff_i,w) + true_divide(diff_j,h)),b)
+    tv_loss = true_divide(2*(true_divide(diff_i,count_w) + true_divide(diff_j,count_h)),b)
     return reg_weight * tv_loss
 
 

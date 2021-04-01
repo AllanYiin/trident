@@ -179,7 +179,7 @@ class ImageDataProvider(object):
 
     def reverse_image_transform(self, img_data: np.ndarray):
         if img_data.ndim == 4:
-            return np.asarray([self.reverse_image_transform(im) for im in img_data])
+            return np.array([self.reverse_image_transform(im) for im in img_data])
         if len(self.reverse_image_transform_funcs) == 0:
             return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):

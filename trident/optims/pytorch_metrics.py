@@ -150,7 +150,7 @@ def psnr(output, target):
 
     max_value = 255
     target_np = to_numpy(target_tensor)
-    if -1 < target_np.min() < 0 and 0 <= target_np.max() <= 1:
+    if  target_np.min() <0 :
         target_tensor = (target_tensor + 1) * 0.5
         input_tensor = (input_tensor + 1) * 0.5
         max_value = 1

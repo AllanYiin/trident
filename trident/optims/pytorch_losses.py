@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.modules.loss import _Loss
+from trident.layers.pytorch_layers import Dense
+
 from trident import context
 
 from trident.backend.common import dtype as Dtype
@@ -79,13 +81,14 @@ class _ClassificationLoss(Loss):
             self.label_statistics = None
             ctx=context._context()
             if hasattr(ctx._thread_local_info,'data_providers') and len(ctx._thread_local_info.data_providers)>0:
-                dp=list(ctx._thread_local_info.data_providers.values())[0]
-                if dp.traindata.label.__class__.__name__=='LabelDataset':
-                    unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
-                    reweights=np.clip(counts,1,np.inf)/np.sum(counts).astype(np.float32)
+                with torch.no_grad():
+                    dp=list(ctx._thread_local_info.data_providers.values())[0]
+                    if dp.traindata.label.__class__.__name__=='LabelDataset':
+                        unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
+                        reweights=np.clip(counts,1,np.inf)/np.sum(counts).astype(np.float32)
 
-                    reweights1=np.max(reweights)/reweights
-                    self.label_statistics=reweights1
+                        reweights1=np.max(reweights)/reweights
+                        self.label_statistics=reweights1
 
 
 
@@ -1882,6 +1885,49 @@ class GPLoss(nn.Module):
         gradients = gradients.view(gradients.size(0), -1)
         gradients_norm = torch.sqrt(torch.sum(gradients ** 2, dim=1) + 1e-12)
         gradient_penalty = ((gradients_norm - 1) ** 2).mean() * self.l
+
+
+
+class AdaCos(_ClassificationLoss):
+    def __init__(self, num_features,  m=0.50):
+        super(AdaCos, self).__init__()
+        self.num_features = num_features
+        self.num_classes = None
+        self.fc=None
+        self.m = m
+        self.need_target_onehot=True
+
+
+    def calculate_loss(self, output, target, **kwargs):
+        output,target=self.flatten_check(output,target)
+        shp=int_shape(output)
+        batch=shp[0]
+        if  self.num_classes is None or self.fc is None:
+            self.num_classes = shp[1]
+            self.s = math.sqrt(2) * math.log(self.num_classes - 1)
+            self.fc = Dense(num_filters=self.num_classes, weights_norm='l2',use_bias=False)
+            self.fc.build(tensor_to_shape(output,need_exclude_batch_axis=True,is_singleton=False))
+            self.W = self.fc.weight
+            nn.init.xavier_uniform_(self.fc.weight)
+
+        # dot product
+        logits = self.fc(F.normalize(output))
+        if target is None:
+            return logits
+        # feature re-scale
+        theta = torch.acos(torch.clamp(logits, -1.0 + 1e-7, 1.0 - 1e-7))
+        one_hot = torch.zeros_like(logits)
+        one_hot.scatter_(1, target.view(-1, 1).long(), 1)
+        with torch.no_grad():
+            B_avg = torch.where(one_hot < 1, torch.exp(self.s * logits), torch.zeros_like(logits))
+            B_avg = torch.sum(B_avg) / output.size(0)
+            # print(B_avg)
+            theta_med = torch.median(theta[one_hot == 1])
+            self.s = torch.log(B_avg) / torch.cos(torch.min(math.pi/4 * torch.ones_like(theta_med), theta_med))
+        output = self.s * logits
+
+        return output
+
 
 
 def get_loss(loss_name):

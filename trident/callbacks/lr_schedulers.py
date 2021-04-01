@@ -24,7 +24,7 @@ elif get_backend()=='tensorflow':
 
 
 
-__all__ = ['AdjustLRCallback','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr','CosineLR','cosine_lr']
+__all__ = ['AdjustLRCallback','ReduceLROnPlateau','reduce_lr_on_plateau','LambdaLR','lambda_lr','RandomCosineLR','random_cosine_lr','CosineLR','cosine_lr','OnceCycleLR','StepLR']
 
 
 
@@ -60,6 +60,7 @@ class AdjustLRCallback(AdjustLRCallbackBase):
     def on_epoch_end(self, training_context):
         if self.unit == 'epoch' and training_context['current_epoch'] == self.index :
             self.adjust_learning_rate(training_context,self.new_lr)
+
 
 class LRFinder(AdjustLRCallbackBase):
     """
@@ -194,6 +195,29 @@ class OnceCycleLR(AdjustLRCallbackBase):
         training_context['optimizer'].param_groups[0]['lr'] = lr
         if momentum:
             training_context['optimizer'].param_groups[0]['momentum'] = momentum
+
+
+class StepLR(AdjustLRCallbackBase):
+    def __init__(self,frequency: int, unit='batch', gamma=0.5):
+        super().__init__()
+        self.frequency=frequency
+        if unit not in ['batch','epoch']:
+            raise ValueError('Only {0} is valid unit value.'.format( ['batch','epoch']))
+        else:
+            self.unit=unit
+        self.gamma=gamma
+
+    def on_epoch_end(self, training_context):
+        current_epoch = training_context['current_epoch']
+        if current_epoch > 0 and self.unit == 'epoch' and (current_epoch + 1) % self.frequency == 0:
+            self.adjust_learning_rate(training_context,training_context['optimizer'].lr*self.gamma,verbose=True)
+
+    def on_batch_end(self, training_context):
+        current_step =training_context['steps']
+        if current_step>0 and self.unit=='batch' and (current_step+1)%self.frequency==0:
+            self.adjust_learning_rate(training_context, training_context['optimizer'].lr* self.gamma, verbose=True)
+
+
 
 
 class ReduceLROnPlateau(AdjustLRCallbackBase):
@@ -517,4 +541,5 @@ def get_lr_scheduler(lr_scheduler_name):
             lr_scheduler_fn = get_function(snake2camel(lr_scheduler_name), lr_scheduler_modules)
     return lr_scheduler_fn
 
-
+import torch
+torch.optim.lr_scheduler.StepLR

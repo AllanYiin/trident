@@ -94,6 +94,7 @@ class VisionTransform(Transform):
         else:
             results=OrderedDict()
             sampledata= list(inputs.values())[0]
+            spec=inputs.key_list[0]
             if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
                 for i in range(sampledata):
                     self._shape_info = None
@@ -202,76 +203,67 @@ class TextTransform(Transform):
         _apply_*() methods, otherwise ``NotImplementedError`` will be raised.
     """
 
-    def __init__(self, order=None):
-        super().__init__()
-        if order is None:
-            order = ("image",)
-        elif not isinstance(order, collections.abc.Sequence):
-            raise ValueError(
-                "order should be a sequence, but got order={}".format(order)
-            )
-        for k in order:
-            if k in ("batch",):
-                raise ValueError("{} is invalid data type".format(k))
-            elif k.endswith("category") or k.endswith("info"):
-                # when the key is *category or info, we should do nothing
-                # if the corresponding apply methods are not implemented.
-                continue
-            elif self._get_apply(k) is None:
-                raise NotImplementedError("{} is unsupported data type".format(k))
-        self.order = order
+    def __init__( name=None):
+        super().__init__(name=name)
 
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
         r"""Apply transform on batch input data."""
-        if spec is None:
-            spec = TensorSpec(shape=tensor_to_shape(inputs[0]), object_type=object_type_inference(inputs[0]))
-        return [self.apply(input, spec) for input in inputs]
+        if not isinstance(inputs,OrderedDict) :
+            if spec is None and self.is_spatial==True:
+                self._shape_info =None
+                spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.rgb)
+            return self.apply(inputs, spec)
+        else:
+            results=OrderedDict()
+            sampledata= list(inputs.values())[0]
+            spec=inputs.key_list[0]
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+                for i in range(sampledata):
+                    self._shape_info = None
+                    for spec, data in inputs.items():
+                        results[spec] = self.apply(data[i], spec)
+            else:
+                self._shape_info = None
+                for spec, data in inputs.items():
+                    results[spec]=self.apply(data, spec)
+            return results
+
 
 
     def apply(self, input: Tuple,spec:TensorSpec):
         r"""Apply transform on single input data."""
-        if not isinstance(input, tuple):
-            input = (input,)
-
-        output = []
-        for i in range(min(len(input), len(self.order))):
-            apply_func = self._get_apply(self.order[i])
-            if apply_func is None:
-                output.append(input[i])
-            else:
-                output.append(apply_func(input[i]))
-        if len(input) > len(self.order):
-            output.extend(input[len(self.order):])
-
-        if len(output) == 1:
-            output = output[0]
+        if spec is None:
+            return self._apply_corpus(input,None)
+        apply_func = self._get_apply(spec.object_type.value)
+        if apply_func is None:
+            return input
         else:
-            output = tuple(output)
-        return output
+            return apply_func(input,spec)
 
     def _get_apply(self, key):
-        return getattr(self, "_apply_{}".format(key), None)
+        if key is None or 'corpus' in key  :
+            return getattr(self, "_apply_{}".format('corpus'), None)
+        elif 'sequence_label' in key:
+            return getattr(self, "_apply_{}".format('sequence_label'), None)
+        elif 'sequence_mask' in key:
+            return getattr(self, "_apply_{}".format('sequence_mask'), None)
+        return None
 
-    def _get_corpus(self, input: Tuple):
-        if not isinstance(input, tuple):
-            input = (input,)
-        return input[self.order.index("image")]
-
-    def _apply_corpus(self, image):
+    def _apply_corpus(self, corpus,spec:TensorSpec):
         raise NotImplementedError
 
-    def _apply_sequence(self, coords):
+    def _apply_sequence(self, sequence,spec:TensorSpec):
         raise NotImplementedError
 
-    def _apply_sequence_labels(self, labels):
+    def _apply_sequence_labels(self, labels,spec:TensorSpec):
         raise NotImplementedError
 
-    def _apply_sequence_mask(self, mask):
+    def _apply_sequence_mask(self, mask,spec:TensorSpec):
         raise NotImplementedError
+    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
+        spec=kwargs.get('spec')
+        return self.apply_batch(inputs,spec)
 
-
-    def _apply_labels(self, labels):
-        raise NotImplementedError
 
 
 

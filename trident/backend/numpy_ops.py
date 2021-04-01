@@ -2854,19 +2854,26 @@ def shuffle(t:np.ndarray):
     return  np.random.shuffle(t)
 
 
-def random_choice(t:np.ndarray):
+def random_choice(t:np.ndarray,n:int=1):
     """Generates a random sample from a given 1-D array
 
     Args:
         t (np.ndarray): input tensor (1-D  tensor).
+        n (int): how many items
 
     Returns:
         (np.ndarray) : single item ,the generated random samples
 
     """
 
+    idxes = np.arange(len(t))
+    np.random.shuffle(idxes)
+    idx =idxes[:n]
 
-    return np.random.choice(t)
+    if isinstance(t, (list, tuple)):
+        return unpack_singleton([t[idx] for idx in idxes[:n]])
+    else:
+        return unpack_singleton(t[idx])
 
 
 def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):

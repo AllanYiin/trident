@@ -39,16 +39,18 @@ class RNNBase(Layer):
     input_filters: int
     hidden_size: int
     num_layers: int
-    bias: bool
+    use_bias: bool
     batch_first: bool
     dropout_rate: float
     bidirectional: bool
+    in_sequence: bool
+    filter_index: int
 
     def __init__(self, mode: str, hidden_size: int,
                  num_layers: int = 1,stateful=False, use_bias: bool = True, batch_first: bool = False,
-                 dropout_rate: float = 0., bidirectional: bool = False,name=None) -> None:
-        super(RNNBase, self).__init__(name=name)
-        self.in_sequence=True
+                 dropout_rate: float = 0., bidirectional: bool = False,name=None,keep_output=False,in_sequence=True,filter_index=-1) -> None:
+        super(RNNBase, self).__init__(name=name,keep_output=keep_output)
+
         self.mode = mode
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -106,7 +108,7 @@ class RNNBase(Layer):
         pass
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             for layer in range(self.num_layers):
                 for direction in range(self.num_directions):
                     layer_input_size = input_shape[-1] if layer == 0 else self.hidden_size * self.num_directions
@@ -126,7 +128,12 @@ class RNNBase(Layer):
                     param_names = [x.format(layer, suffix) for x in param_names]
 
                     for name, param in zip(param_names, layer_params):
-                        setattr(self, name, param)
+                        if hasattr(self, "_flat_weights_names") and name in self._flat_weights_names:
+                            # keep self._flat_weights up to date if you do self.weight = ...
+                            idx = self._flat_weights_names.index(name)
+                            self._flat_weights[idx] = param
+                        self.register_parameter(name, param)
+
                     self._flat_weights_names.extend(param_names)
                     self._all_weights.append(param_names)
 
@@ -135,12 +142,13 @@ class RNNBase(Layer):
             self.reset_parameters()
 
 
-    def __setattr__(self, attr, value):
-        if hasattr(self, "_flat_weights_names") and attr in self._flat_weights_names:
-            # keep self._flat_weights up to date if you do self.weight = ...
-            idx = self._flat_weights_names.index(attr)
-            self._flat_weights[idx] = value
-        super(RNNBase, self).__setattr__(attr, value)
+    # def __setattr__(self, attr, value):
+    #     if hasattr(self, "_flat_weights_names") and attr in self._flat_weights_names:
+    #         # keep self._flat_weights up to date if you do self.weight = ...
+    #         self.register_parameter(attr, value)
+    #         idx = self._flat_weights_names.index(attr)
+    #         self._flat_weights[idx] = value
+    #     #super(RNNBase, self).__setattr__(attr, value)
 
     def flatten_parameters(self) -> None:
         """Resets parameter data pointer so that they can use faster code paths.
@@ -555,12 +563,11 @@ class LSTM(RNNBase):
         >>> output, (hn, cn) = rnn(input, (h0, c0))
     """
 
-    def __init__(self, hidden_size,num_layers:int =2,activation=None,stateful=False,use_bias=False,batch_first=False,dropout_rate=0,bidirectional=False,name=None,  **kwargs):
-        super(LSTM, self).__init__('LSTM', hidden_size,
-                 num_layers, stateful,use_bias, batch_first,
-                 dropout_rate, bidirectional,name)
+    def __init__(self, hidden_size,num_layers:int =2,activation=None,stateful=False,use_bias=False,batch_first=False,dropout_rate=0,bidirectional=False,name=None,keep_output=False, in_sequence=True,filter_index=-1, **kwargs):
+        super(LSTM, self).__init__(mode='LSTM', hidden_size=hidden_size,
+                 num_layers=num_layers, stateful=stateful,use_bias=use_bias, batch_first=batch_first,
+                 dropout_rate=dropout_rate, bidirectional=bidirectional,name=name,keep_output=keep_output,in_sequence=in_sequence,filter_index=filter_index)
 
-        self.filter_index = -1
         self.mode = 'LSTM'
 
         self.hidden_state=None
@@ -597,6 +604,8 @@ class LSTM(RNNBase):
         if permutation is None:
             return hx
         return apply_permutation(self.hidden_state, permutation), apply_permutation(self.cell_state, permutation)
+
+
 
     @overload
     @torch._jit_internal._overload_method  # noqa: F811

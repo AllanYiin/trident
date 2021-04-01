@@ -535,7 +535,7 @@ def extract_archive(file_path, target_folder=None, archive_format='auto'):
   _h = _read_h(target_folder)
   filename=file+ext
   is_extracted = _h[filename].get('is_extracted', False) if filename in _h else _h.get('is_extracted', False)
-  if _h != {} and is_extracted== True and os.path.exists(filename) :
+  if _h != {} and is_extracted== True and os.path.exists(file_path) :
       print('extraction is finished, donnot need extract again.')
       return True
   if archive_format is None:

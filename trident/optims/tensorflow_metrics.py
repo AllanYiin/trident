@@ -218,7 +218,7 @@ def psnr(output, target):
 
     max_value=255
     target_np=to_numpy(target)
-    if -1<target_np.min()<0 and 0<=target_np.max()<=1:
+    if -1<=target_np.min()<=0 and -1<=target_np.max()<=1:
         target=(target+1)*0.5
         output=(output+1)*0.5
         max_value=1

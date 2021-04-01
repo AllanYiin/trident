@@ -1010,6 +1010,8 @@ class Layer(tf.Module):
             value = TensorShape((None,) + value)
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
             value = [TensorShape(to_list(to_numpy(sh))) for sh in value]
+        elif isinstance(value, TensorShape):
+            pass
         else:
             value =  TensorShape(list(value))
 
@@ -1049,6 +1051,8 @@ class Layer(tf.Module):
                 value = TensorShape((None,) + value)
             elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
                 value =[TensorShape(to_list(to_numpy(sh))) for sh in value]
+            elif isinstance(value, TensorShape):
+                pass
             else:
                 value = TensorShape(list(value))
 

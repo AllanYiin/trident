@@ -703,7 +703,7 @@ class RNNBase(Layer):
         pass
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             for layer in range(self.num_layers):
                 for direction in range(self.num_directions):
                     layer_input_size = input_shape[-1].item() if layer == 0 else self.hidden_size * self.num_directions
@@ -723,7 +723,11 @@ class RNNBase(Layer):
                     param_names = [x.format(layer, suffix) for x in param_names]
 
                     for name, param in zip(param_names, layer_params):
-                        setattr(self, name, param)
+                        if hasattr(self, "_flat_weights_names") and name in self._flat_weights_names:
+                            # keep self._flat_weights up to date if you do self.weight = ...
+                            idx = self._flat_weights_names.index(name)
+                            self._flat_weights[idx] = param
+                        self.register_parameter(name, param)
                     self._flat_weights_names.extend(param_names)
                     self._all_weights.append(param_names)
 
@@ -732,12 +736,7 @@ class RNNBase(Layer):
             self.reset_parameters()
 
 
-    def __setattr__(self, attr, value):
-        if hasattr(self, "_flat_weights_names") and attr in self._flat_weights_names:
-            # keep self._flat_weights up to date if you do self.weight = ...
-            idx = self._flat_weights_names.index(attr)
-            self._flat_weights[idx] = value
-        super(RNNBase, self).__setattr__(attr, value)
+
 
     def flatten_parameters(self) -> None:
         """Resets parameter data pointer so that they can use faster code paths.
@@ -1009,12 +1008,7 @@ class RNN(RNNBase):
 
     .. include:: ../cudnn_persistent_rnn.rst
 
-    Examples::
 
-        >>> rnn = nn.RNN(10, 20, 2)
-        >>> input = torch.randn(5, 3, 10)
-        >>> h0 = torch.randn(2, 3, 20)
-        >>> output, hn = rnn(input, h0)
     """
 
     def __init__(self, *args, **kwargs):
@@ -1124,30 +1118,17 @@ class LSTM(RNNBase):
 
     .. include:: ../cudnn_persistent_rnn.rst
 
-    Examples::
 
-        >>> rnn = nn.LSTM(10, 20, 2)
-        >>> input = torch.randn(5, 3, 10)
-        >>> h0 = torch.randn(2, 3, 20)
-        >>> c0 = torch.randn(2, 3, 20)
-        >>> output, (hn, cn) = rnn(input, (h0, c0))
     """
 
     def __init__(self, hidden_size,num_layers:int =2,activation=None,stateful=False,use_bias=False,batch_first=False,dropout_rate=0,bidirectional=False,name=None,  **kwargs):
-        super(LSTM, self).__init__('LSTM', hidden_size,
-                 num_layers, stateful,use_bias, batch_first,
-                 dropout_rate, bidirectional,name)
+        super(LSTM, self).__init__(mode='LSTM', hidden_size=hidden_size,
+        num_layers= num_layers, stateful = stateful, use_bias= use_bias, batch_first= batch_first,
+        dropout_rate= dropout_rate, bidirectional=bidirectional, name = name )
 
         self.filter_index = -1
-        self.mode = 'LSTM'
-
         self.hidden_state=None
         self.cell_state=None
-
-
-        self.stateful=stateful
-
-
 
     def initial_state(self,input) :
         max_batch_size = int_shape(input)[0] if self.batch_first else int_shape(input)[1]
@@ -1174,16 +1155,51 @@ class LSTM(RNNBase):
             return hx
         return apply_permutation(self.hidden_state, permutation), apply_permutation(self.cell_state, permutation)
 
-    def build(self,input_shape):
-        u_shape = (self.output_size, self.output_size)
-        self.mat_u_i = tf.Variable(name="recurrent_kernel_i", shape=u_shape)
-        self.mat_u_o =tf.Variable(name="recurrent_kernel_o", shape=u_shape)
-        self.mat_u_j = tf.Variable(name="recurrent_kernel_j", shape=u_shape)
-        self.mat_u_f =tf.Variable(name="recurrent_kernel_f", shape=u_shape)
-        self.mat_u = tf.concat([self.mat_u_i, self.mat_u_o, self.mat_u_j, self.mat_u_f], axis=-1)
-        # get weights for concatenated tensor.
-        self.mat_w = tf.Variable(name='input_kernel', shape=(input_size, self.output_size * 4))
-        self.bias = tf.Variable(name='bias', shape=(self.output_size * 4), initializer=tf.constant_initializer(0.))
+    def lstm_forward(self,x, init_h, init_c, mask=None , sequence_lengths=None, zero_output_for_mask=None):
+        def step(x, hidden_state, cell_state,weight_ih, weight_hh,bias_ih,bias_hh,is_goback=False):
+            if is_goback:
+                x=reverse(x,axis=1 if self.batch_first else 0)
+            h_tm1 = hidden_state # previous memory state
+            c_tm1 = cell_state# previous carry state
+            proj = dot(x, weight_ih)
+            if self.use_bias:
+                proj += bias_ih
+            proj += dot(h_tm1, weight_hh)
+            if self.use_bias:
+                proj += bias_hh
+
+            proj0, proj1, proj2, proj3 = split(proj, 4, axis=-1)
+
+            input_t = sigmoid(proj0)
+            forget_t = sigmoid(proj1)
+            cell_state= forget_t * c_tm1 + input_t * tanh(proj2)
+            output_t = sigmoid(proj3)
+            hidden_state = output_t * tanh(cell_state)
+            return hidden_state, [hidden_state, cell_state]
+
+        self.cell_state=init_c
+        self.hidden_state=init_h
+        for layer in range(self.num_layers):
+            output_list=[]
+            hidden_list=[]
+            cell_list=[]
+            for direction in range(self.num_directions):
+                weight_ih=self._parameters['weight_ih_l{}{}'.format(layer,'_reverse' if direction == 1 else '')]
+                weight_hh = self._parameters['weight_hh_l{}{}'.format(layer, '_reverse' if direction == 1 else '')]
+
+                bias_ih = 0
+                bias_hh = 0
+                if self.use_bias:
+                    bias_ih = self._parameters['bias_ih_l{}{}'.format(layer, '_reverse' if direction == 1 else '')]
+                    bias_hh = self._parameters['bias_hh_l{}{}'.format(layer, '_reverse' if direction == 1 else '')]
+                result=step(x,  self.hidden_state, self.cell_state, weight_ih, weight_hh, bias_ih, bias_hh,is_goback=direction == 1)
+                x = result[0]
+                self.hidden_state = result[1:][0]
+                self.cell_state = result[1:][1]
+                output_list.append(x)
+                hidden_list.append(self.hidden_state)
+        #state num_layers * num_directions, batch, hidden_size
+        return x, [self.hidden_state, self.cell_state]
 
     def forward(self, x, **kwargs):  # noqa: F811
         orig_input = x
@@ -1226,10 +1242,10 @@ class LSTM(RNNBase):
         return output, self.permute_hidden((self.hidden_state, self.cell_state), unsorted_indices)
 
 
-    def lstm(x, init_h, init_c, kernel, recurrent_kernel=None, bias=self.use_bias,
-                      mask=None, time_major=not self.batch_first, go_backwards=self.bidirectional, sequence_lengths=None,
-                      zero_output_for_mask=None):
-
+    def lstm(self,x, init_h, init_c, kernel, recurrent_kernel=None,  mask=None , sequence_lengths=None, zero_output_for_mask=None):
+        use_bias = self.use_bias
+        batch_first = self.batch_first
+        bidirectional = self.bidirectional
         # Check if the input size exist.
         input_size = x.shape.with_rank(2)[1].value
         if input_size is None:
@@ -1237,7 +1253,7 @@ class LSTM(RNNBase):
 
 
         # calculate gates and input's info.
-        i_o_j_f_x = tf.matmul(x, mat_w) + b
+        i_o_j_f_x = tf.matmul(x, self.mat_w) + self.bias
         i_o_j_f_h = tf.matmul(init_h, kernel)
         i_o_j_f = i_o_j_f_x + i_o_j_f_h
         i, o, j, f = tf.split(i_o_j_f, num_or_size_splits=4, axis=-1)

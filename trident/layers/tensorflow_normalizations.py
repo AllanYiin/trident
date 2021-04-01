@@ -9,8 +9,8 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import variables as tf_variables
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
-    format_time, get_terminal_size, snake2camel, camel2snake,Signature,epsilon,TensorShape
-from trident.backend.tensorflow_backend import Layer, Sequential
+    format_time, get_terminal_size, snake2camel, camel2snake,Signature,epsilon,TensorShape,dtype
+from trident.backend.tensorflow_backend import Layer, Sequential, Parameter
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_initializers import *
 
@@ -383,7 +383,7 @@ class InstanceNorm(GroupNorm):
         https://arxiv.org/abs/1607.08022
     """
 
-    def __init__(self,num_groups=16,affine=True,eps=1e-5, axis=-1,**kwargs):
+    def __init__(self, momentum=0.1, affine=True, track_running_stats=True, eps=1e-5, in_sequence=False, axis=1, name=None, **kwargs):
         """
         Args:
             num_features: :math:`C` from an expected input of size
@@ -400,26 +400,55 @@ class InstanceNorm(GroupNorm):
 
         Examples:
             >>> innorm=InstanceNorm(affine=False)
-            >>> input = to_tensor(np.random.standard_normal((2, 128, 128,64)))
+            >>> input = torch.randn(2, 64, 128, 128)
             >>> print(int_shape(innorm(input)))
             (2, 64, 128, 128)
 
         """
-        super().__init__(self, num_groups=1,affine=affine,axis=axis, eps=eps, **kwargs)
+        super().__init__(name=name)
+        self.in_sequence = in_sequence
+        self.eps = _epsilon
+        self.momentum = momentum
+        self.affine = affine
+        self.track_running_stats = track_running_stats
+        self.axis = axis
 
 
+    def reset_running_stats(self):
+        if self.track_running_stats:
+            fill_zeros(self.running_mean)
+            fill_ones(self.running_var)
+            self.num_batches_tracked=to_tensor(0,dtype=dtype.long)
+        if self.affine :
+            fill_ones(self.weight)
+            fill_zeros(self.bias)
     def build(self, input_shape:TensorShape):
-        if self._built == False:
-            self.num_groups=self.input_filters
+        if not self._built:
             if self.affine:
-                self.weight = tf.Variable(ones((self.input_filters)))
-                self.bias = tf.Variable(zeros((self.input_filters)))
-
+                self.weight = Parameter(random_normal(self.input_filters,std=0.02))
+                self.bias = Parameter(random_normal(self.input_filters,std=0.02))
+                fill_ones(self.weight)
+                fill_zeros(self.bias)
             else:
                 self.register_parameter('weight', None)
                 self.register_parameter('bias', None)
 
-                self._built = True
+            if self.track_running_stats:
+                self.register_buffer('running_mean', zeros(self.input_filters))
+                self.register_buffer('running_var', ones(self.input_filters))
+                self.register_buffer('num_batches_tracked', to_tensor(0,dtype=dtype.long))
+            else:
+                self.register_parameter('running_mean', None)
+                self.register_parameter('running_var', None)
+                self.register_parameter('num_batches_tracked', None)
+            self.reset_running_stats()
+
+            self._built = True
+    def forward(self, x, **kwargs):
+        x= tf.nn.batch_normalization(x, self.running_mean, self.running_var, self.weight, self.bias,
+            self.training or not self.track_running_stats, self.momentum, self.eps)
+        return x
+
 
 
 

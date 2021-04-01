@@ -1,3 +1,4 @@
+import copy
 import inspect
 import numbers
 import sys
@@ -35,6 +36,7 @@ class ObjectType(Enum):
     classification_label = 'classification_label'
     corpus = 'corpus'
     sequence_label='sequence_label'
+    sequence_mask = 'sequence_mask'
     embedding='embedding'
 
 
@@ -105,6 +107,8 @@ def object_type_inference(data):
         else:
             sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape,data.dtype,data.min(),data.max())+'\n')
             return ObjectType.array_data
+    elif isinstance(data,str):
+        return ObjectType.corpus
 
 
 
@@ -202,6 +206,17 @@ class TensorSpec(object):
             if max_axis > max_dim:
                 raise ValueError('Axis {} is greater than the maximum allowed value: {}'
                                  .format(max_axis, max_dim))
+
+    def __setattr__(self, name, value):
+        object.__setattr__(self, name, value)
+        if name in ['shape']:
+            self.ndim = self.shape.ndims
+            self._shape_tuple = tuple(self.shape.dims)
+    def copy(self):
+        return copy.deepcopy(self)
+
+
+
     @classmethod
     def tensor_to_spec(cls, t:Tensor, object_type:ObjectType=None,need_exclude_batch_axis=True, is_singleton=False, name=None):
         if isinstance(t,numbers.Number):

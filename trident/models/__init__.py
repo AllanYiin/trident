@@ -19,6 +19,8 @@ if get_backend()=='pytorch':
     from . import pytorch_ssd as ssd
     from . import pytorch_yolo as yolo
     from . import pytorch_embedded as embedded
+    from . import pytorch_inception as inception
+    from . import pytorch_visual_transformer as visual_transformer
 elif get_backend()=='tensorflow':
     from . import tensorflow_vgg as vgg
     from . import tensorflow_resnet as resnet

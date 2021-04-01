@@ -74,6 +74,8 @@ class Model(ModelBase):
         self.summary_writer = None
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
+        if isinstance(input_shape,numbers.Integral):
+            input_shape=(input_shape,)
         if output is None:
             raise ValueError('There is at least one output')
 
@@ -1104,7 +1106,8 @@ class Model(ModelBase):
 
                     # confirm singleton
                     # output=unpack_singleton(output)
-
+                    for callback in self.callbacks:
+                        callback.on_loss_calculation_start(self.training_context)
                     # losss
                     for k, v in self._losses.items():
                         if not hasattr(v, 'start_epoch') or (hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):

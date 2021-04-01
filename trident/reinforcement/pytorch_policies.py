@@ -1,5 +1,6 @@
 import copy
 import time
+import os
 from copy import deepcopy
 import math
 import random
@@ -9,6 +10,8 @@ import numpy as np
 from matplotlib.pylab import plt
 from torch import nn
 from typing import Any, List, Union, Mapping, Optional, Callable
+
+from trident.data.utils import pickle_it, unpickle
 
 from trident.backend.tensorspec import TensorSpec, ObjectType
 from trident.misc.visualization_utils import loss_metric_curve
@@ -57,7 +60,7 @@ class PolicyBase(Model):
 
     def get_rewards(self, action):
         observation_, reward, done, info = self.env.step(action.item())
-        return reward
+        return observation_, reward, done, info
 
     def experience_replay(self):
         train_data = OrderedDict()
@@ -121,6 +124,10 @@ class PolicyBase(Model):
             if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // _session.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
                 self.warmup = 0
+
+
+
+
 
 
 class DqnPolicy(PolicyBase):

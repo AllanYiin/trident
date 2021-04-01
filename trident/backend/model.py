@@ -101,7 +101,8 @@ class ModelBase(object):
                                  'tmp_metrics': HistoryBase('tmp_metrics'),
                                  'out_sample_metrics': HistoryBase('out_sample_metrics'),
                                  'print_progress_frequency': 10,
-                                'print_progress_unit': 'batch',
+                                  'collect_data_inteval':1,
+                                  'print_progress_unit': 'batch',
                                 'optimizer':None,
                                  'warmup':0,
                                  'grads': None,
@@ -110,7 +111,10 @@ class ModelBase(object):
                                  'total_batch': -1,  # current_batch
                                  'current_epoch': -1,  # current_epoch
                                  'current_batch': -1,  # current_batch
+                                 'data_feed':None,
                                  'current_model': None,  # current model
+                                'train_data':OrderedDict(),
+                                'test_data': OrderedDict(),
                                  'current_input': None,  # current input
                                  'current_target': None,  # current target
                                  'steps': 0,
@@ -298,9 +302,9 @@ class ModelBase(object):
     @property
     def reverse_preprocess_flow(self):
         return_list = [reverse_image_backend_adaption]
-        for i in range(len(self.preprocess_flow)):
-            fn = self.preprocess_flow[-1 - i]
-            if fn.__qualname__ == 'normalize.<locals>.img_op' or fn.__class__.__name__=='Normalize':
+        for i in range(len(self._preprocess_flow)):
+            fn = self._preprocess_flow[-1 - i]
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (fn.__class__.__name__ == 'Normalize'):
                 return_list.append(Unnormalize(fn.mean, fn.std))
         return_list.append(array2image)
         return return_list
@@ -377,6 +381,9 @@ class ModelBase(object):
     def __getattr__(self, name):
         if name in ['_input_shape','_output_shape','_class_names','class_names','output_fn']:
             return self.__dict__[name]
+        elif name in ['reverse_preprocess_flow']:
+            return self.__getattribute__(name)
+
         if name == 'signature' or name == '_signature':
             _model = self.__dict__['_model']
             if _model is not None and isinstance(_model, Layer):
@@ -443,9 +450,13 @@ class ModelBase(object):
                 object.__setattr__(self, name, value)
 
     def __call__(self, *input, **kwargs):
-        input=enforce_singleton(input)
-        input=self.data_preprocess(input)
-        return self._model(input, **kwargs)
+        if self._model.training:
+            input = enforce_singleton(input)
+            return self._model(input, **kwargs)
+        else:
+            input=enforce_singleton(input)
+            input=self.data_preprocess(input)
+            return self._model(input, **kwargs)
 
     def with_optimizer(self, optimizer, **kwargs):
         return self
@@ -511,37 +522,40 @@ class ModelBase(object):
 
     def reset_training_context(self):
         self.training_context = {
-            'losses': HistoryBase('losses'),  # loss_wrapper
-            'metrics': HistoryBase('metrics'),  # loss_wrapper
-            'epoch_losses': HistoryBase('epoch_losses'),  # loss_wrapper
-            'epoch_metrics': HistoryBase('epoch_metrics'),  # loss_wrapper
-            'grads_state': OrderedDict(),  # loss_wrapper
-            'tmp_losses': HistoryBase('tmp_losses'),  # loss_wrapper
-            'tmp_metrics': HistoryBase('tmp_metrics'),  # loss_wrapper
-            'out_sample_metrics': HistoryBase('out_sample_metrics'),
-            'print_progress_frequency': 10,
-            'print_progress_unit': 'batch',
-            'optimizer': None,
-            'warmup': 0,
-            'grads': None,
-            'stop_training': False,  # stop training
-            'total_epoch': -1,  # current_epoch
-            'total_batch': -1,  # current_batch
-            'current_epoch': -1,  # current_epoch
-            'current_batch': -1,  # current_batch
-            'current_model': None,  # current model
-            'current_input': None,  # current input
-            'current_target': None,  # current target
-            'steps': 0,
-            'current_output': None,  # current output
-            'current_loss': None,  # current loss
-            'best_metric': None,  # current loss
-            'best_model': None,  # current model
-            'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
-            'current_lr': None,  # current loss
-            'save_path': os.path.join(working_directory,'Models'), 'is_collect_data': True, 'callbacks': [],
-            'stop_update': 0, 'retain_graph': False,
-            'skip_generate_output': False}
+                                 'losses': HistoryBase('losses'),
+                                 'metrics': HistoryBase('metrics'),
+                                 'epoch_losses': HistoryBase('epoch_losses'),
+                                 'epoch_metrics': HistoryBase('epoch_metrics'),
+                                 'grads_state': OrderedDict(),
+                                 'tmp_losses': HistoryBase('tmp_losses'),
+                                 'tmp_metrics': HistoryBase('tmp_metrics'),
+                                 'out_sample_metrics': HistoryBase('out_sample_metrics'),
+                                 'print_progress_frequency': 10,
+                                  'collect_data_inteval':1,
+                                  'print_progress_unit': 'batch',
+                                'optimizer':None,
+                                 'warmup':0,
+                                 'grads': None,
+                                 'stop_training': False,  # stop training
+                                 'total_epoch': -1,  # current_epoch
+                                 'total_batch': -1,  # current_batch
+                                 'current_epoch': -1,  # current_epoch
+                                 'current_batch': -1,  # current_batch
+                                 'data_feed':None,
+                                 'current_model': None,  # current model
+                                 'current_input': None,  # current input
+                                 'current_target': None,  # current target
+                                 'steps': 0,
+                                 'current_output': None,  # current output
+                                 'current_loss': None,  # current loss
+                                 'best_metric': None,  # current loss
+                                 'best_model': None,  # current model
+                                'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
+                                'current_lr': None,  # current loss
+                                'save_path': os.path.join(working_directory,'Models'), 'is_collect_data': True, 'callbacks': [],
+                                 'stop_update': 0, 'retain_graph': False,
+                                 'skip_generate_output':False}
+
 
     def adjust_learning_rate(self, lr):
         raise NotImplementedError
@@ -672,10 +686,10 @@ class ModelBase(object):
         if 'max_name_length' not in self.training_context:
             self.training_context['max_name_length']=len(self.name)+1
         metric_strings=[]
-
+        slice_length = print_batch_progress_frequency // self.training_context['collect_data_inteval']
         for k in  self.batch_metric_history.key_list:
             collect_history =True
-            slice_length = print_batch_progress_frequency // self.training_context['collect_data_inteval']
+
             if k in self._metrics:
                 collect_history=self._metrics[k].collect_history
             metric_value=None
@@ -827,6 +841,8 @@ class ModelBase(object):
 
             # confirm singleton
             # output=unpack_singleton(output)
+            for callback in self.callbacks:
+                callback.on_loss_calculation_start(self.training_context)
 
             # losss
             for k, v in self._losses.items():
