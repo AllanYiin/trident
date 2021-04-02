@@ -2134,6 +2134,8 @@ def fix_layer(layer: Layer):
                 for i in range(len(layer._output_shape)):
                     layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=TensorShape(layer._output_shape[i]), name="output_{0}".format(i))
         layer.signature = layer._signature
+    if not hasattr(layer,'input_spec') or layer.input_spec is None:
+        layer.input_spec=TensorSpec(shape=TensorShape(layer._input_shape), name="input")
 
     return layer
 
