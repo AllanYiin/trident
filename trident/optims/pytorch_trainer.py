@@ -226,7 +226,7 @@ class Model(ModelBase):
 
 
                 self._model = output
-                self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
+                #self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
                 if isinstance(out, torch.Tensor):
                     self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
                     self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
@@ -1119,7 +1119,7 @@ class Model(ModelBase):
     def summary(self):
         # self.rebinding_input_output(self._model.input_shape)
 
-        summary(self._model, [item.shape if isinstance(item.shape,TensorShape) else TensorShape(to_numpy(item.shape)) for item in self.inputs.value_list])
+        summary(self._model, [item for item in self.inputs.value_list])
         return self
 
     def predict(self, input):
@@ -1281,8 +1281,7 @@ class ImageClassificationModel(Model):
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1320,7 +1319,8 @@ class ImageClassificationModel(Model):
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
@@ -1363,6 +1363,8 @@ class ImageRegressionModel(Model):
 
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             rescale_scale=1.0
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
@@ -1386,8 +1388,7 @@ class ImageDetectionModel(Model):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
         object.__setattr__(self, 'detection_threshold',  0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
@@ -1401,6 +1402,8 @@ class ImageDetectionModel(Model):
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             rescale_scale=1
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
@@ -1435,8 +1438,7 @@ class ImageSegmentationModel(Model):
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
-        if self.input_spec is not None and self.input_spec.object_type is None:
-            self.input_spec.object_type=ObjectType.rgb
+
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
@@ -1475,7 +1477,8 @@ class ImageSegmentationModel(Model):
 
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
-
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
@@ -1500,8 +1503,7 @@ class ImageSegmentationModel(Model):
 class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1513,6 +1515,8 @@ class ImageGenerationModel(Model):
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             rescale_scale=1.0
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
@@ -1532,8 +1536,7 @@ class ImageGenerationModel(Model):
 class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1548,6 +1551,8 @@ class FaceLandmarkModel(Model):
 
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             rescale_scale=1.0
             img_shape=int_shape(img)
             for func in self.preprocess_flow:
@@ -1574,8 +1579,7 @@ class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
 
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+
         if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1591,6 +1595,8 @@ class FaceRecognitionModel(Model):
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
+            if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+                self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             rescale_scale=1.0
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:

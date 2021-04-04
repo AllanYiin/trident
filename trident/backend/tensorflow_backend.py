@@ -2457,7 +2457,7 @@ def calculate_flops(gen: Layer):
     return np.array(param_nums).sum()
 
 
-def summary(model, input_size, batch_size=1):
+def summary(model, input_specs, batch_size=1):
     def register_hook(module):
         def hook(module, input, output):
 
@@ -2506,7 +2506,7 @@ def summary(model, input_size, batch_size=1):
     # multiple inputs to the network
     for name, module in model.named_modules():
         module.relative_name = name
-    x = [to_tensor(shape.get_dummy_tensor()).to(get_device()) for shape in input_size]
+    x = [to_tensor(spec.shape.get_dummy_tensor(), dtype=spec.dtype).to(get_device()) for spec in input_specs]
 
     # p    rint(type(x[0]))
 
@@ -2565,7 +2565,7 @@ def summary(model, input_size, batch_size=1):
 
         total_output += np.prod(to_numpy(list(summary[layer]["output_shape"])[1:]))
         if "trainable" in summary[layer]:
-            if summary[layer]["trainable"] == True:
+            if summary[layer]["trainable"] :
                 trainable_params += summary[layer]["nb_params"]
         # print(line_new)
 
@@ -2573,7 +2573,7 @@ def summary(model, input_size, batch_size=1):
 
     # assume 4 bytes/number (float on cuda).
 
-    total_input_size =  np.array([np.prod(np.array(shp.dims[1:]) * 1 * 4. / (1024 ** 2.)) for shp in input_size]).sum()
+    total_input_size =  np.array([np.prod(np.array(spec.shape.dims[1:]) * 1 * 4. / (1024 ** 2.)) for spec in input_specs]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
@@ -2752,9 +2752,13 @@ def fix_layer(layer: Layer):
     Returns: fixed layer
 
     """
+    if not hasattr(layer, 'is_root'):
+        layer.is_root = True
+    if not hasattr(layer, '_device'):
+        layer._device = get_device()
 
     def get_root(self):
-        if not hasattr(self,'_nodes') or self._nodes is None or  len(self._nodes)<2:
+        if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:
             return self
         if hasattr(list(self._nodes.values())[0], 'is_root') and list(self._nodes.values())[0].is_root == True:
             return list(self._nodes.values())[0]
@@ -2766,58 +2770,80 @@ def fix_layer(layer: Layer):
 
     layer.to(get_device())
     if not hasattr(layer, '_nodes'):
-        layer._nodes=OrderedDict()
-    if not hasattr(layer, 'is_root'):
-        layer.is_root = True
+        layer._nodes = OrderedDict()
+
     if not hasattr(layer, '_uid_prefixs'):
         layer._uid_prefixs = {}
     reset_name(layer, layer._uid_prefixs)
 
-    if 'ssd' in layer.__class__.__base__.__name__.lower() or  'yolo' in layer.__class__.__base__.__name__.lower():
-        if hasattr(layer,'nms_threshold'):
-            delattr(layer,'nms_threshold')
-        if hasattr(layer,'detection_threshold'):
-            delattr(layer,'detection_threshold')
+    if 'ssd' in layer.__class__.__base__.__name__.lower() or 'yolo' in layer.__class__.__base__.__name__.lower():
+        if hasattr(layer, 'nms_threshold'):
+            delattr(layer, 'nms_threshold')
+        if hasattr(layer, 'detection_threshold'):
+            delattr(layer, 'detection_threshold')
 
-    if layer._input_shape is not None and isinstance(layer._input_shape, tuple):
+    if layer._input_shape is not None and isinstance(layer._input_shape, tuple) and all([isinstance(d,numbers.Integral) for d in layer._input_shape]):
+        dims = [d for d in layer._input_shape]
+        dims.insert(0, None)
+        layer._input_shape =TensorShape(dims)
+    elif layer._input_shape is not None and isinstance(layer._input_shape, tuple) :
         layer._input_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._input_shape)])
-    elif layer._input_shape is not None and isinstance(layer._input_shape, tf.TensorShape) :
-        layer._input_shape = TensorShape(layer._input_shape.tolist())
+    elif layer._input_shape is not None and is_tensor(layer._input_shape):
+        dims=[d.item() for d in layer._input_shape]
+        dims.insert(0,None)
+        buffers = layer.__dict__.get('_buffers')
+        if '_input_shape' in buffers:
+            del buffers['_input_shape']
+        object.__setattr__(layer,'_input_shape',  TensorShape(dims))
     elif layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
         layer._input_shape = TensorShape(to_numpy(layer._input_shape))
+    elif layer._input_shape is not None and isinstance(layer._input_shape, TensorShape) and is_tensor(layer._input_shape.dims[0]):
+        layer._input_shape = TensorShape([d.item() for d in layer._input_shape.dims])
 
 
-    if layer._output_shape is not None and isinstance(layer._output_shape, tuple):
+    if layer._output_shape is not None and isinstance(layer._output_shape, tuple) and all([isinstance(d,numbers.Integral) for d in layer._output_shape]):
+        dims = [d for d in layer._input_shape]
+        dims.insert(0, None)
+        layer._input_shape = TensorShape(dims)
+    elif layer._output_shape is not None and isinstance(layer._output_shape, tuple):
         layer._output_shape = tuple([TensorShape(to_numpy(item)) for item in TensorShape(layer._output_shape)])
-    elif layer._output_shape is not None and isinstance(layer._output_shape, tf.TensorShape) :
-        layer._output_shape =TensorShape(layer._output_shape.tolist())
+    elif layer._output_shape is not None and is_tensor(layer._output_shape):
+        dims = [d.item() for d in layer._output_shape]
+        dims.insert(0, None)
+        buffers = layer.__dict__.get('_buffers')
+        if '_input_shape' in buffers:
+            del buffers['_output_shape']
+        object.__setattr__(layer,'_output_shape',  TensorShape(dims))
     elif layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
         layer._output_shape = TensorShape(layer._output_shape)
-    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], tf.TensorShape) and len(
-            layer._output_shape.dims[0]) == 1:
-        layer._output_shape = TensorShape([d[0] for d in layer._output_shape.dims])
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], tf.TensorShape) and len( layer._output_shape.dims[0]) == 1:
+        layer._output_shape = TensorShape([None if d is None else d[0] for d in layer._output_shape.dims])
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0],tf.TensorShape):
+        layer._output_shape = tuple([TensorShape(to_numpy(d)) for d in layer._output_shape.dims])
 
-
-    if not (hasattr(layer, 'get_toot')):
+    if not hasattr(layer, 'get_root'):
         setattr(layer, 'get_root', MethodType(get_root, layer))
 
     for module in layer.modules():
         class_name = module.__class__.__name__
+        if not hasattr(layer, 'get_root'):
+            setattr(layer, 'get_root', MethodType(get_root, layer))
+        if not hasattr(module, 'uuid'):
+            module.uuid =  uuid.uuid4().node
+        # check for root
         if module.uuid == layer.uuid:
             module.is_root = True
         else:
             module.is_root = False
         if not hasattr(module, 'relative_name'):
-            module.relative_name=''
+            module.relative_name = ''
+        if not hasattr(module, '_uid_prefixs'):
+            module._uid_prefixs = layer.get_root()._uid_prefixs
 
         if not hasattr(module, '_default_name') or (module._default_name is None or len(module._default_name) == 0):
             module_prefix = module.__class__.__name__
             module._default_name = camel2snake(module_prefix) + '_' + str(get_global_uid(camel2snake(module_prefix)))
-        if not (hasattr(module, 'get_toot') and inspect.ismethod(getattr(module, 'get_toot'))):
-            setattr(module, 'get_root', MethodType(get_root, module))
 
-        if not hasattr(module, '_uid_prefixs'):
-            module._uid_prefixs = layer.get_root()._uid_prefixs
         if not hasattr(module, '_name'):
             module._name = None
         reset_name(module, layer.get_root()._uid_prefixs)
@@ -2836,21 +2862,18 @@ def fix_layer(layer: Layer):
         if not hasattr(module, '_non_persistent_buffers_set'):
             module._non_persistent_buffers_set = set()
 
-        if not hasattr(module, 'input_spec'):
-            module.input_spec = None
-            if module.input_shape is not None:
-                module.input_spec = TensorSpec(shape=TensorShape(module._input_shape))
-            # fix for shape definition
-        if not isinstance(module._input_shape, TensorShape):
-            module._input_shape = TensorShape(to_numpy(module._input_shape))
-        if not isinstance(module._output_shape, TensorShape):
-            module._output_shape = TensorShape(to_numpy(module._output_shape))
 
+        # fix for shape definition
+        # if not isinstance(module._input_shape, TensorShape):
+        #     module._input_shape = TensorShape(to_numpy(module._input_shape))
+        #
+        # if not isinstance(module._output_shape, TensorShape):
+        #     module._output_shape = TensorShape(to_numpy(module._output_shape))
 
         if not hasattr(module, 'batch_index'):
             setattr(module, 'batch_index', 0)
         if not hasattr(module, 'filter_index'):
-            setattr(module, 'filter_index', -1)
+            setattr(module, 'filter_index', 1)
         if not hasattr(module, 'in_sequence'):
             setattr(module, 'in_sequence', False)
 
@@ -2873,28 +2896,22 @@ def fix_layer(layer: Layer):
             if not hasattr(module, 'use_spectral'):
                 module.use_spectral = False
 
-    if layer.is_root == True and (hasattr(layer, 'signature') or  layer._signature  is None or (is_tensor( layer._signature.inputs[0].shape))):
+    if layer.is_root == True and (not hasattr(layer, '_signature') or layer._signature is None or len(layer._signature.inputs)==0 ):
         layer._signature = Signature()
         if layer._input_shape is not None:
-            if is_tensor(layer._input_shape):
-                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._input_shape))), name="input")
-            elif isinstance(layer._input_shape, tuple) and isinstance(layer._input_shape[0], int):
-                layer._signature.inputs["input"] = TensorSpec(shape=TensorShape(list(layer._input_shape)), name="input")
+            if isinstance(layer._input_shape, TensorSpec):
+                layer._signature.inputs["input"] = TensorSpec(shape=layer._input_shape, name="input")
             elif isinstance(layer._input_shape, tuple):
                 for i in range(len(layer._input_shape)):
-                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._input_shape[i]))), name="input_{0}".format(i))
+                    layer._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=layer._input_shape[i], name="input_{0}".format(i))
         if layer._output_shape is not None:
-            if is_tensor(layer._output_shape):
-                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._output_shape))), name="output")
-            elif isinstance(layer._output_shape, tuple) and isinstance(layer._output_shape[0], int):
-                layer._signature.outputs["output"] = TensorSpec(shape=TensorShape(list(layer._output_shape)), name="output")
+
+            if isinstance(layer._output_shape, TensorSpec) :
+                layer._signature.outputs["output"] = TensorSpec(shape=layer._output_shape, name="output")
             elif isinstance(layer._output_shape, tuple):
                 for i in range(len(layer._output_shape)):
-                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=TensorShape(to_list(to_numpy(layer._output_shape[i]))), name="output_{0}".format(i))
+                    layer._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=layer._output_shape[i], name="output_{0}".format(i))
         layer.signature = layer._signature
-    if not hasattr(layer,'input_spec') or layer.input_spec is None:
-        layer.input_spec=TensorSpec(shape=TensorShape(layer._input_shape), name="input")
-
 
     return layer
 

@@ -1337,7 +1337,7 @@ class Model(ModelBase):
 
     def summary(self):
         if self._model.built:
-            summary(self._model, [TensorShape(item.shape) for item in self.inputs.value_list])
+            summary(self._model, [item for item in self.inputs.value_list])
             return self
         else:
             raise ValueError('This model has not yet been built. ')

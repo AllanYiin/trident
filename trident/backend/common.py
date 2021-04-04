@@ -721,7 +721,7 @@ class TensorShape(object):
             shape[0]=2
         else:
             shape=[2,]+shape
-        return np.random.standard_normal(shape)
+        return np.clip(np.abs(np.random.standard_normal(shape)))
 
 
 
@@ -850,10 +850,11 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def import_or_install(package_name:str)->None:
-    """Import [package_name] if possibile, or install it
+def import_or_install(package_name:str,install_package_name:str=None)->None:
+    """Import [package_name] if possibile, or install [install_package_name] and then import it
 
     Args:
+        install_package_name (str): install package_name
         package_name (str): package_name
 
     Returns:
@@ -867,19 +868,24 @@ def import_or_install(package_name:str)->None:
         # If Module it is already installed, try to Import it
         importlib.import_module(package_name)
     except ImportError:
+        if install_package_name is None:
+            install_package_name=package_name
         if os.system('PIP --version') == 0:
             # No error from running PIP in the Command Window, therefor PIP.exe is in the %PATH%
-            os.system('PIP install {package_name}')
+            os.system('PIP install {0}'.format(install_package_name))
+            importlib.import_module(package_name)
         else:
             # Error, PIP.exe is NOT in the Path!! So I'll try to find it.
             pip_location_attempt_1 = sys.executable.replace("python.exe", "") + "pip.exe"
             pip_location_attempt_2 = sys.executable.replace("python.exe", "") + "scripts\pip.exe"
             if os.path.exists(pip_location_attempt_1):
                 # The Attempt #1 File exists!!!
-                os.system(pip_location_attempt_1 + " install " + package_name)
+                os.system(pip_location_attempt_1 + " install " + install_package_name)
+                importlib.import_module(package_name)
             elif os.path.exists(pip_location_attempt_2):
                 # The Attempt #2 File exists!!!
-                os.system(pip_location_attempt_2 + " install " + package_name)
+                os.system(pip_location_attempt_2 + " install " + install_package_name)
+                importlib.import_module(package_name)
             else:
                 # Neither Attempts found the PIP.exe file, So i Fail...
                 exit()
