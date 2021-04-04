@@ -284,7 +284,11 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
                         elif k in second_axis_keys:
                             metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                         elif second_axis_range is not None:
-                            compare_array = np.array([list(first_axis_range), list(second_axis_range)])
+                            _, first_values = item.get_series(first_axis_keys[0])
+                            first_values=np.array(first_values)
+                            _, second_values = item.get_series(second_axis_keys[0])
+                            second_values = np.array(second_values)
+                            compare_array = np.array([[first_values.min(), first_values.mean(), first_values.max()], [second_values.min(), second_values.mean(), second_values.max()]])
                             this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
                             distance = expand_dims(sqrt(reduce_sum((compare_array - this_array) ** 2, axis=-1)), 0)
                             result = argmin(distance, axis=-1)[0]
