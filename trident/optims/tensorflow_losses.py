@@ -230,10 +230,9 @@ class _ClassificationLoss(Loss):
         # need target onehot but currently not
         if  target.dtype==tf.int64 and self.need_target_onehot == True and self.is_target_onehot == False:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis)
+            self.is_target_onehot = True
             if self.label_smooth:
                 target = target +random_normal_like(target)
-                self.is_target_onehot = True
-
         return output, target
 
     def calculate_loss(self, output, target, **kwargs):
@@ -488,7 +487,7 @@ class CrossEntropyLoss(_ClassificationLoss):
                  reduction='mean' , enable_ohem=False, ohem_ratio=3.5, name='CrossEntropyLoss'):
         super().__init__(axis, sample_weight,auto_balance, from_logits, ignore_index, cutoff, label_smooth, reduction, enable_ohem,ohem_ratio,name)
         self._built = True
-        self.need_target_onehot =None
+        self.need_target_onehot =False
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -536,21 +535,22 @@ class CrossEntropyLoss(_ClassificationLoss):
                 else:
                     return loss
             elif not self.is_target_onehot and ndim(target)==ndim(output)-1:
-                if not self.is_logsoftmax:
-                    output=log_softmax(output,axis=self.axis,keepdims=True)
-                target=expand_dims(cast(target,cast_dtype=dtype.int64),axis=self.axis)
+                if  not self.is_logsoftmax:
+                    output=log_softmax(output)
+                target=cast(target,cast_dtype=dtype.int64)
 
-                loss=gather(-1*output,gather_axis=self.axis,indices=target)
+                loss=tf.nn.sparse_softmax_cross_entropy_with_logits(target,output)
+                return loss
 
-                loss = reduce_sum(loss, self.axis)
-                if ndim(loss)>1:
-                    reduce_axes = list(range(ndim(loss)))
-                    reduce_axes.remove(0)
-                    if len(reduce_axes) == 0:
-                        reduce_axes = None
-                    return reduce_mean(loss,axis=reduce_axes)
-                else:
-                    return loss
+                # loss = reduce_sum(loss, self.axis)
+                # if ndim(loss)>1:
+                #     reduce_axes = list(range(ndim(loss)))
+                #     reduce_axes.remove(0)
+                #     if len(reduce_axes) == 0:
+                #         reduce_axes = None
+                #     return reduce_mean(loss,axis=reduce_axes)
+                # else:
+                #     return loss
 
 
 
