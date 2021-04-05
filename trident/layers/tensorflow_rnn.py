@@ -29,7 +29,7 @@ def _rnn(step_function,
         constants=None,
         unroll=False,
         input_length=None,
-        time_major=False,
+        batch_first=True,
         zero_output_for_mask=False):
   """Iterates over the time dimension of a tensor.
 
@@ -97,7 +97,7 @@ def _rnn(step_function,
     axes[0], axes[1] = 1, 0
     return array_ops.transpose(input_t, axes)
 
-  if not time_major:
+  if batch_first:
     inputs = nest.map_structure(swap_batch_timestep, inputs)
 
   flatted_inputs = nest.flatten(inputs)
@@ -113,7 +113,7 @@ def _rnn(step_function,
       mask = math_ops.cast(mask, dtypes_module.bool)
     if len(mask.shape) == 2:
       mask = expand_dims(mask)
-    if not time_major:
+    if batch_first:
       mask = swap_batch_timestep(mask)
 
   if constants is None:
@@ -236,185 +236,24 @@ def _rnn(step_function,
     # input_ta due to TensorArray clear_after_read default to True.
     input_time_zero = nest.pack_sequence_as(inputs, [inp[0] for inp in flatted_inputs])
     # output_time_zero is used to determine the cell output shape and its dtype.
+    output_time_zero, states = step_function(input_time_zero, tuple(initial_states) + tuple(constants))
+    output_lists=[output_time_zero]
     # the value is discarded.
-    output_time_zero, _ = step_function(
-        input_time_zero, tuple(initial_states) + tuple(constants))
-    output_ta = tuple(
-        tensor_array_ops.TensorArray(
-            dtype=out.dtype,
-            size=time_steps_t,
-            element_shape=out.shape,
-            tensor_array_name='output_ta_%s' % i)
-        for i, out in enumerate(nest.flatten(output_time_zero)))
+    #start
+    for seq in range(1,time_steps):
+        input_timet= nest.pack_sequence_as(inputs, [inp[seq] for inp in flatted_inputs])
+        output_timet, states = step_function(input_timet, tuple(states) + tuple(constants))
+        output_lists.append(output_timet)
 
-    time = constant_op.constant(0, dtype='int32', name='time')
+    outputs=stack(output_lists,axis=0)
+    if batch_first:
+        outputs = nest.map_structure(swap_batch_timestep, outputs)
 
-    # We only specify the 'maximum_iterations' when building for XLA since that
-    # causes slowdowns on GPU in TF.
-    if (not context.executing_eagerly() and
-        control_flow_util.GraphOrParentsInXlaContext(ops.get_default_graph())):
-      max_iterations = math_ops.reduce_max(input_length)
-    else:
-      max_iterations = None
-
-    while_loop_kwargs = {
-        'cond': lambda time, *_: time < time_steps_t,
-        'maximum_iterations': max_iterations,
-        'parallel_iterations': 32,
-        'swap_memory': True,
-    }
-    if mask is not None:
-      if go_backwards:
-        mask = reverse(mask, 0)
-
-      mask_ta = tensor_array_ops.TensorArray(
-          dtype=dtypes_module.bool,
-          size=time_steps_t,
-          tensor_array_name='mask_ta')
-      mask_ta = mask_ta.unstack(mask)
-
-      def masking_fn(time):
-        return mask_ta.read(time)
-
-      def compute_masked_output(mask_t, flat_out, flat_mask):
-        tiled_mask_t = tuple(
-            _expand_mask(mask_t, o, fixed_dim=len(mask_t.shape))
-            for o in flat_out)
-        return tuple(
-            array_ops.where_v2(m, o, fm)
-            for m, o, fm in zip(tiled_mask_t, flat_out, flat_mask))
-    elif isinstance(input_length, ops.Tensor):
-      if go_backwards:
-        max_len = math_ops.reduce_max(input_length, axis=0)
-        rev_input_length = math_ops.subtract(max_len - 1, input_length)
-
-        def masking_fn(time):
-          return math_ops.less(rev_input_length, time)
-      else:
-
-        def masking_fn(time):
-          return math_ops.greater(input_length, time)
-
-      def compute_masked_output(mask_t, flat_out, flat_mask):
-        return tuple(
-            array_ops.where(mask_t, o, zo)
-            for (o, zo) in zip(flat_out, flat_mask))
-    else:
-      masking_fn = None
-
-    if masking_fn is not None:
-      # Mask for the T output will be base on the output of T - 1. In the case
-      # T = 0, a zero filled tensor will be used.
-      flat_zero_output = tuple(array_ops.zeros_like(o)
-                               for o in nest.flatten(output_time_zero))
-      def _step(time, output_ta_t, prev_output, *states):
-        """RNN step function.
-
-        Arguments:
-            time: Current timestep value.
-            output_ta_t: TensorArray.
-            prev_output: tuple of outputs from time - 1.
-            *states: List of states.
-
-        Returns:
-            Tuple: `(time + 1, output_ta_t, output) + tuple(new_states)`
-        """
-        current_input = tuple(ta.read(time) for ta in input_ta)
-        # maybe set shape.
-        current_input = nest.pack_sequence_as(inputs, current_input)
-        mask_t = masking_fn(time)
-        output, new_states = step_function(current_input,
-                                           tuple(states) + tuple(constants))
-        # mask output
-        flat_output = nest.flatten(output)
-        flat_mask_output = (flat_zero_output if zero_output_for_mask
-                            else nest.flatten(prev_output))
-        flat_new_output = compute_masked_output(mask_t, flat_output,
-                                                flat_mask_output)
-
-        # mask states
-        flat_state = nest.flatten(states)
-        flat_new_state = nest.flatten(new_states)
-        for state, new_state in zip(flat_state, flat_new_state):
-          if isinstance(new_state, ops.Tensor):
-            new_state.set_shape(state.shape)
-        flat_final_state = compute_masked_output(mask_t, flat_new_state,
-                                                 flat_state)
-        new_states = nest.pack_sequence_as(new_states, flat_final_state)
-
-        output_ta_t = tuple(
-            ta.write(time, out)
-            for ta, out in zip(output_ta_t, flat_new_output))
-        return (time + 1, output_ta_t,
-                tuple(flat_new_output)) + tuple(new_states)
-
-      final_outputs = control_flow_ops.while_loop(
-          body=_step,
-          loop_vars=(time, output_ta, flat_zero_output) + states,
-          **while_loop_kwargs)
-      # Skip final_outputs[2] which is the output for final timestep.
-      new_states = final_outputs[3:]
-    else:
-      def _step(time, output_ta_t, *states):
-        """RNN step function.
-
-        Arguments:
-            time: Current timestep value.
-            output_ta_t: TensorArray.
-            *states: List of states.
-
-        Returns:
-            Tuple: `(time + 1,output_ta_t) + tuple(new_states)`
-        """
-        current_input = tuple(ta.read(time) for ta in input_ta)
-        current_input = nest.pack_sequence_as(inputs, current_input)
-        output, new_states = step_function(current_input,
-                                           tuple(states) + tuple(constants))
-        flat_state = nest.flatten(states)
-        flat_new_state = nest.flatten(new_states)
-        for state, new_state in zip(flat_state, flat_new_state):
-          if isinstance(new_state, ops.Tensor):
-            new_state.set_shape(state.shape)
-
-        flat_output = nest.flatten(output)
-        output_ta_t = tuple(
-            ta.write(time, out) for ta, out in zip(output_ta_t, flat_output))
-        new_states = nest.pack_sequence_as(initial_states, flat_new_state)
-        return (time + 1, output_ta_t) + tuple(new_states)
-
-      final_outputs = control_flow_ops.while_loop(
-          body=_step,
-          loop_vars=(time, output_ta) + states,
-          **while_loop_kwargs)
-      new_states = final_outputs[2:]
-
-    output_ta = final_outputs[1]
-
-    outputs = tuple(o.stack() for o in output_ta)
-    last_output = tuple(o[-1] for o in outputs)
-
-    outputs = nest.pack_sequence_as(output_time_zero, outputs)
-    last_output = nest.pack_sequence_as(output_time_zero, last_output)
-
-  # static shape inference
-  def set_shape(output_):
-    if isinstance(output_, ops.Tensor):
-      shape = output_.shape.as_list()
-      shape[0] = time_steps
-      shape[1] = batch
-      output_.set_shape(shape)
-    return output_
-
-  outputs = nest.map_structure(set_shape, outputs)
-
-  if not time_major:
-    outputs = nest.map_structure(swap_batch_timestep, outputs)
-
-  return last_output, outputs, new_states
+  return outputs, states[0],states[1]
 
 
 def standard_lstm(inputs, init_h, init_c, kernel, recurrent_kernel, bias,
-                  mask, time_major, go_backwards, sequence_lengths,
+                  mask, batch_first, go_backwards, sequence_lengths,
                   zero_output_for_mask):
   """LSTM with standard kernel implementation.
 
@@ -439,7 +278,7 @@ def standard_lstm(inputs, init_h, init_c, kernel, recurrent_kernel, bias,
     bias: weights for cell kernel bias and recurrent bias. Only recurrent bias
       is used in this case.
     mask: Boolean tensor for mask out the steps within sequence.
-    time_major: boolean, whether the inputs are in the format of
+    batch_first: boolean, whether the inputs are in the format of
       [time, batch, feature] or [batch, time, feature].
     go_backwards: Boolean (default False). If True, process the input sequence
       backwards and return the reversed sequence.
@@ -459,39 +298,47 @@ def standard_lstm(inputs, init_h, init_c, kernel, recurrent_kernel, bias,
       value is for testing purpose and should be used by user.
   """
   input_shape = int_shape(inputs)
-  timesteps = input_shape[0] if time_major else input_shape[1]
+  timesteps = input_shape[0] if not batch_first else input_shape[1]
 
   def step(cell_inputs, cell_states):
     """Step function that will be used by Keras RNN backend."""
-    h_tm1 = cell_states[0]  # previous memory state
-    c_tm1 = cell_states[1]  # previous carry state
+    # if ndim(cell_inputs)==2:
+    #     cell_inputs=expand_dims(cell_inputs,0)
+    hidden_list=[]
+    cell_list=[]
 
-    z = dot(cell_inputs, kernel)
-    z += dot(h_tm1, recurrent_kernel)
-    z +=bias
+    for layer in range(len(kernel)):
+        h_tm1 = cell_states[0][layer].detach()  # previous memory state
+        c_tm1 = cell_states[1][layer].detach()   # previous carry state
+        z = tf.matmul(cell_inputs, kernel[layer])
+        z=z+tf.matmul(h_tm1, recurrent_kernel[layer])
+        # if self.use_bias:
+        #     z +=bias
 
-    z0, z1, z2, z3 = array_ops.split(z, 4, axis=1)
+        z0, z1, z2, z3 = array_ops.split(z, 4, axis=-1)
 
-    i = sigmoid(z0)
-    f = sigmoid(z1)
-    c = f * c_tm1 + i * tanh(z2)
-    o = sigmoid(z3)
+        input_gate = sigmoid(z0)
+        forget_gate = sigmoid(z1)
+        cell_state = forget_gate * c_tm1 + input_gate * tanh(z2)
+        output_gate = sigmoid(z3)
+        h=output_gate * tanh(cell_state)
+        hidden_list.append(h)
+        cell_list.append(cell_state)
+        cell_inputs=h
+    return  cell_inputs , [stack(hidden_list,0), stack(cell_list,0)]
 
-    h = o * tanh(c)
-    return h, [h, c]
-
-  last_output, outputs, new_states = _rnn(
+  outputs, hidden_state,cell_state= _rnn(
       step,
       inputs, [init_h, init_c],
       constants=None,
       unroll=False,
-      time_major=time_major,
+      batch_first=batch_first,
       mask=mask,
       go_backwards=go_backwards,
       input_length=(sequence_lengths
                     if sequence_lengths is not None else timesteps),
       zero_output_for_mask=zero_output_for_mask)
-  return (last_output, outputs, new_states[0], new_states[1])
+  return (outputs, hidden_state,cell_state)
 
 #
 # def gpu_lstm(inputs, init_h, init_c, kernel, recurrent_kernel, bias, mask,
@@ -704,16 +551,18 @@ class RNNBase(Layer):
 
     def build(self, input_shape:TensorShape):
         if not self._built:
+            self.kernals=[]
+            self.recurrent_kernels=[]
             for layer in range(self.num_layers):
                 for direction in range(self.num_directions):
-                    layer_input_size = input_shape[-1].item() if layer == 0 else self.hidden_size * self.num_directions
+                    layer_input_size = input_shape[-1] if layer == 0 else self.hidden_size * self.num_directions
 
-                    w_ih = Parameter(random_normal((self.gate_size, layer_input_size)).to(get_device()))
-                    w_hh = Parameter(random_normal((self.gate_size, self.hidden_size)).to(get_device()))
-                    b_ih = Parameter(random_normal((self.gate_size)).to(get_device()))
+                    w_ih = Parameter(random_normal((layer_input_size,self.gate_size)).to(get_device()),name='weight_ih_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
+                    w_hh = Parameter(random_normal((self.hidden_size,self.gate_size)).to(get_device()),name='weight_hh_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
+                    b_ih = Parameter(random_normal((self.gate_size)).to(get_device()),name='bias_ih_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
                     # Second bias vector included for CuDNN compatibility. Only one
                     # bias vector is needed in standard definition.
-                    b_hh = Parameter(random_normal(self.gate_size).to(get_device()))
+                    b_hh = Parameter(random_normal(self.gate_size).to(get_device()),name='bias_hh_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
                     layer_params = (w_ih, w_hh, b_ih, b_hh)
 
                     suffix = '_reverse' if direction == 1 else ''
@@ -728,6 +577,11 @@ class RNNBase(Layer):
                             idx = self._flat_weights_names.index(name)
                             self._flat_weights[idx] = param
                         self.register_parameter(name, param)
+                        if 'weight_ih' in name:
+                            self.kernals.append(param)
+                        elif 'weight_hh' in name:
+                            self.recurrent_kernels.append(param)
+
                     self._flat_weights_names.extend(param_names)
                     self._all_weights.append(param_names)
 
@@ -801,10 +655,10 @@ class RNNBase(Layer):
 
     def check_input(self, input: Tensor, batch_sizes: Optional[Tensor]) -> None:
         expected_input_dim = 2 if batch_sizes is not None else 3
-        if input.dim() != expected_input_dim:
+        if len(int_shape(input)) != expected_input_dim:
             raise RuntimeError(
                 'input must have {} dimensions, got {}'.format(
-                    expected_input_dim, input.dim()))
+                    expected_input_dim, len(int_shape(input))))
         if self.input_filters != int_shape(input)[-1]:
             raise RuntimeError(
                 'int_shape(input)[-1] must be equal to input_filters. Expected {}, got {}'.format(
@@ -822,7 +676,7 @@ class RNNBase(Layer):
 
     def check_hidden_size(self, hx: Tensor, expected_hidden_size: Tuple[int, int, int],
                           msg: str = 'Expected hidden size {}, got {}') -> None:
-        if hx.size() != expected_hidden_size:
+        if int_shape(hx) != expected_hidden_size:
             raise RuntimeError(msg.format(expected_hidden_size, tuple(hx.size())))
 
     def check_forward_args(self, input: Tensor, hidden: Tensor, batch_sizes: Optional[Tensor]):
@@ -1133,7 +987,8 @@ class LSTM(RNNBase):
     def initial_state(self,input) :
         max_batch_size = int_shape(input)[0] if self.batch_first else int_shape(input)[1]
         num_directions = 2 if self.bidirectional else 1
-        zeros_para = zeros((self.num_layers * num_directions,max_batch_size, self.hidden_size), dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
+
+        zeros_para = zeros((self.num_layers * num_directions, max_batch_size, self.hidden_size), dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
         self.hidden_state=zeros_para
         self.cell_state = zeros_para
 
@@ -1157,8 +1012,8 @@ class LSTM(RNNBase):
 
     def lstm_forward(self,x, init_h, init_c, mask=None , sequence_lengths=None, zero_output_for_mask=None):
         def step(x, hidden_state, cell_state,weight_ih, weight_hh,bias_ih,bias_hh,is_goback=False):
-            if is_goback:
-                x=reverse(x,axis=1 if self.batch_first else 0)
+            # if is_goback:
+            #     x=reverse(x,axis=1 if self.batch_first else 0)
             h_tm1 = hidden_state # previous memory state
             c_tm1 = cell_state# previous carry state
             proj = dot(x, weight_ih)
@@ -1192,7 +1047,7 @@ class LSTM(RNNBase):
                 if self.use_bias:
                     bias_ih = self._parameters['bias_ih_l{}{}'.format(layer, '_reverse' if direction == 1 else '')]
                     bias_hh = self._parameters['bias_hh_l{}{}'.format(layer, '_reverse' if direction == 1 else '')]
-                result=step(x,  self.hidden_state, self.cell_state, weight_ih, weight_hh, bias_ih, bias_hh,is_goback=direction == 1)
+                result=step(x,  self.hidden_state, self.cell_state, self.kernals, self.recurrent_kernels, bias_ih, bias_hh,is_goback=direction == 1)
                 x = result[0]
                 self.hidden_state = result[1:][0]
                 self.cell_state = result[1:][1]
@@ -1207,9 +1062,10 @@ class LSTM(RNNBase):
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
 
         if not self.batch_first:
-            x = x.transpose(1,0)
-        batch_sizes = None
-        max_batch_size = x.size(0) if self.batch_first else x.size(1)
+            x = x.transpose([1,0,2])
+        shp = int_shape(x)
+        batch_sizes =None
+        max_batch_size = shp[0] if self.batch_first else shp[1]
         sorted_indices = None
         unsorted_indices = None
 
@@ -1224,51 +1080,21 @@ class LSTM(RNNBase):
         self.check_forward_args(x, (self.hidden_state, self.cell_state), batch_sizes)
         if isinstance(x, ragged_tensor.RaggedTensor):
             return x.to_tensor()
-       # inputs, row_lengths = K.convert_inputs_if_ragged(x)
-       #  timesteps = int_shape(x)[1] if self.batch_first else int_shape(x)[0]
-       #  row_lengths if row_lengths is not None else timesteps
-       #  result = _VF.lstm(x, (self.hidden_state, self.cell_state), self._flat_weights, self.use_bias, self.num_layers,
-       #                    self.dropout_rate, self.training, self.bidirectional, self.batch_first)
-        result =standard_lstm(x, init_h=self.hidden_state, init_c= self.cell_state, kernel= self._flat_weights, recurrent_kernel=None, bias=self.use_bias,
-                      mask=None, time_major=not self.batch_first, go_backwards=self.bidirectional, sequence_lengths=None,
+
+        result =standard_lstm(x, init_h=self.hidden_state, init_c= self.cell_state, kernel= self.kernals, recurrent_kernel=self.recurrent_kernels, bias=self.use_bias,
+                      mask=None, batch_first=self.batch_first, go_backwards=self.bidirectional, sequence_lengths=None,
                       zero_output_for_mask=None)
 
 
-        output = result[0].permute(1, 0, 2) if self.batch_first == False else result[0]
+        output = result[0].permute([1, 0, 2]) if self.batch_first == False else result[0]
         #hidden = result[1:]
         self.hidden_state=result[1:][0].detach()
         self.cell_state=result[1:][1].detach()
-        # xxx: isinstance check needs to be in conditional for TorchScript to compile
-        return output, self.permute_hidden((self.hidden_state, self.cell_state), unsorted_indices)
+
+        self.permute_hidden((self.hidden_state, self.cell_state), unsorted_indices)
+        return output
 
 
-    def lstm(self,x, init_h, init_c, kernel, recurrent_kernel=None,  mask=None , sequence_lengths=None, zero_output_for_mask=None):
-        use_bias = self.use_bias
-        batch_first = self.batch_first
-        bidirectional = self.bidirectional
-        # Check if the input size exist.
-        input_size = x.shape.with_rank(2)[1].value
-        if input_size is None:
-            raise ValueError("Expecting input_size to be set.")
-
-
-        # calculate gates and input's info.
-        i_o_j_f_x = tf.matmul(x, self.mat_w) + self.bias
-        i_o_j_f_h = tf.matmul(init_h, kernel)
-        i_o_j_f = i_o_j_f_x + i_o_j_f_h
-        i, o, j, f = tf.split(i_o_j_f, num_or_size_splits=4, axis=-1)
-
-        # activate them!
-        i, o = tf.tanh(i), self._gate_activation(o)
-        j, f = self._gate_activation(j), self._gate_activation(f + self._forget_bias)
-
-        # calculate candidate.
-        new_c = f * init_c + j * i
-
-        # final cal.
-        new_h = o * tf.tanh(new_c)
-
-        return new_h, tuple([new_h, new_c])
 
 
 
