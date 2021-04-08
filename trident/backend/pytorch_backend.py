@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 import gc
 import shutil
+import builtins
 import subprocess
 import functools
 import os
@@ -1678,18 +1679,24 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
             params = 0
             summary[m_key]["flops"] = np.array([0], dtype=np.float64)
             summary[m_key]["macc"] = np.array([0], dtype=np.float64)
-            if hasattr(module, "weight") and hasattr(module.weight, "size"):
-                params += torch.prod(torch.LongTensor(list(module.weight.shape)))
-                summary[m_key]["weight"] = list(module.weight.shape)
-                summary[m_key]["trainable"] = module.weight.requires_grad
-                summary[m_key]["flops"] += (2 * np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) - 1) * np.prod(
-                    np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
-                summary[m_key]["macc"] += np.prod(np.array(summary[m_key]["weight"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
+            summary[m_key]["trainable"] = np.array([0], dtype=np.float64)
+            summary[m_key][ "weight"]=OrderedDict()
+            summary[m_key]["bias"] =OrderedDict()
+            for name, para in module._parameters.items():
+                para_type= "weight"
+                if 'bias' in name or 'beta' in name:
+                    para_type = "bias"
 
-            if hasattr(module, "bias") and module.bias is not None and hasattr(module.bias, "size"):
-                params += torch.prod(torch.LongTensor(list(module.bias.shape)))
-                summary[m_key]["bias"] = list(module.bias.shape)
-                summary[m_key]["flops"] += np.prod(np.array(summary[m_key]["bias"]).astype(np.float64)) * np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
+                summary[m_key][para_type][name]=list(int_shape(para))
+                num_params=np.prod(np.array(list(int_shape(para)),dtype=np.float64))
+                spatial_dims=np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
+                params += num_params
+                if para.requires_grad:
+                    summary[m_key]["trainable"]+=num_params
+
+                summary[m_key]["flops"] += (2 * num_params - 1) * spatial_dims
+                summary[m_key]["macc"] += num_params * spatial_dims
+
             summary[m_key]["nb_params"] = params
 
         if (
@@ -1735,16 +1742,23 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
     # remove these hooks
     for h in hooks:
         h.remove()
+    max_name_len=0
+    max_weight_len=0
+    for layer in summary:
+        max_name_len=builtins.max(max_name_len,len(layer + "  [" +  summary[layer]["class_name"] + "]")+5)
+        max_weight_len = builtins.max(max_weight_len, builtins.max([len(str(item).replace('(','').replace(')','')) for item in summary[layer]["weight"].items()])+5 if len(summary[layer]["weight"])>0 else 5)
+
 
     print("--------------------------------------------------------------------------------------------------------------------------------")
-    line_new = "{0:^50s} {1:<25s}  {2:<20s} {3:<8s}  {4:<8s}  {5:<25s}".format("Layer (type)", "Output Shape", "Weight ", "Bias", "Param #", "FLOPS #")
+    line_new = "{0:^50s} {1:<25s}  {2:<35s} {3:<8s}  {4:<8s}  {5:<25s}".replace('50s',str(max_name_len)+'s').replace('35s',str(max_weight_len)+'s').format("Layer (type)", "Output Shape", "Weight ", "Bias", "Param #", "FLOPS #")
+    line_new
     print(line_new)
     print("==============================================================================")
-    total_params = 0
+    total_params = np.array([0], dtype=np.float64)
     total_output = 0
-    trainable_params = 0
+    trainable_params =  np.array([0], dtype=np.float64)
     flops = np.array([0], dtype=np.float64)
-    macc = 0
+    macc =  np.array([0], dtype=np.float64)
     for layer in summary:
         # input_shape, output_shape, trainable, nb_params
         is_keep = '★' if summary[layer]["keep_output"] else ''
@@ -1758,21 +1772,27 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
         #     summary[layer]["flops"][0]
         # )
 
-        line_new = "{0:<50s} {1:<25s}  {2:<20s} {3:^8s}  {4:,}  {5:,}  ".format((layer + "  [" + class_name + "]").ljust(50, ' '),
+        line_new = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4:,.0f}  {5:,.0f}  ".replace('50s',str(max_name_len)+'s').replace('35s',str(max_weight_len)+'s').format((layer + "  [" + class_name + "]").ljust(max_name_len, ' '),
                                                                                 (is_keep + str([None] + summary[layer]["output_shape"][1:])).ljust(25, ' '),
-                                                                                str(summary[layer]["weight"] if 'weight' in summary[layer] else '').ljust(20, ' '),
-                                                                                str(summary[layer]["bias"] if 'bias' in summary[layer] else '').ljust(8, ' '),
+                                                                                str(summary[layer]["weight"].item_list[0] if  'weight' in summary[layer] and len(summary[layer]["weight"]) >0  else ' ').replace('(','').replace(')','').ljust(max_weight_len, ' '),
+                                                                                str(summary[layer]["bias"].item_list[0] if 'bias' in summary[layer]  and len(summary[layer]["bias"]) >0 else ' ').replace('(','').replace(')','').ljust(8, ' '),
                                                                                 summary[layer]["nb_params"],
                                                                                 summary[layer]["flops"].sum()
                                                                                 )
+        if len(summary[layer]["weight"])>1:
+            for n in range(1,len(summary[layer]["weight"])):
+                line_new_add = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4}  {5}  ".replace('50s',str(max_name_len)+'s').replace('35s',str(max_weight_len)+'s').format( " ".ljust(max_name_len+len(layer + "  [" + class_name + "]")//2, " "),  " ".ljust(25+len(is_keep + str([None] + summary[layer]["output_shape"][1:]))//2, " "),
+                                                                                        str(summary[layer]["weight"].item_list[n] if n<len(summary[layer]["weight"]) else ' ').replace('(','').replace(')','').ljust(max_weight_len, " "),
+                                                                                        str(summary[layer]["bias"].item_list[n] if n<len(summary[layer]["bias"]) else ' ').replace('(','').replace(')','').ljust(8, " ")," ", " " )
+                line_new=line_new+'\n'+line_new_add
+
 
         total_params += summary[layer]["nb_params"]
         flops += float(summary[layer]["flops"])
         macc += float(summary[layer]["macc"].sum())
         total_output += np.prod(summary[layer]["output_shape"])
         if "trainable" in summary[layer]:
-            if summary[layer]["trainable"]:
-                trainable_params += summary[layer]["nb_params"]
+            trainable_params += summary[layer]["trainable"]
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
@@ -1782,10 +1802,10 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
     total_size = total_params_size + total_output_size + total_input_size
 
     print("================================================================")
-    print("Total params: {0:,}".format(total_params))
-    print("Trainable params: {0:,}".format(trainable_params))
-    print("Non-trainable params: {0:,}".format(total_params - trainable_params))
-    print("Total MACC: {0:,}".format(int(macc)))
+    print("Total params: {0:,.0f}".format(total_params[0]))
+    print("Trainable params: {0:,.0f}".format(trainable_params[0]))
+    print("Non-trainable params: {0:,.0f}".format(total_params[0] - trainable_params[0]))
+    print("Total MACC: {0:,.0f}".format(macc[0]))
     print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]))
     print("----------------------------------------------------------------")
     print("Input size (MB): %0.2f" % total_input_size)
