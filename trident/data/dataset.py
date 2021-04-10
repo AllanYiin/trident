@@ -210,14 +210,13 @@ class ZipDataset(Dataset):
         super().__init__(datasets, **kwargs)
         if not all(len(datasets[0]) == len(ds) for ds in datasets):
             raise ValueError("lengths of input datasets are inconsistent")
-        self._datasets = datasets
         self.symbol = tuple([ds.symbol for ds in datasets])
 
     def __getitem__(self, index: int) -> Tuple:
-        return tuple(ds[index] for ds in self._datasets)
+        return tuple(ds[index] for ds in self.items)
 
     def __len__(self) -> int:
-        return len(self._datasets[0])
+        return len(self.items[0])
 
 
 class NumpyDataset(Dataset):
