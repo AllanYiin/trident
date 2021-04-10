@@ -246,9 +246,6 @@ def _rnn(step_function,
         output_lists.append(output_timet)
 
     outputs=stack(output_lists,axis=0)
-    if batch_first:
-        outputs = nest.map_structure(swap_batch_timestep, outputs)
-
   return outputs, states[0],states[1]
 
 
@@ -304,27 +301,42 @@ def standard_lstm(inputs, init_h, init_c, kernel, recurrent_kernel, bias,
     """Step function that will be used by Keras RNN backend."""
     # if ndim(cell_inputs)==2:
     #     cell_inputs=expand_dims(cell_inputs,0)
-    hidden_list=[]
-    cell_list=[]
+    hidden_list=array_ops.split(cell_states[0], int_shape(cell_states[0])[0], axis=0)
+    cell_list=array_ops.split(cell_states[1], int_shape(cell_states[1])[0], axis=0)
 
-    for layer in range(len(kernel)):
-        h_tm1 = cell_states[0][layer].detach()  # previous memory state
-        c_tm1 = cell_states[1][layer].detach()   # previous carry state
-        z = tf.matmul(cell_inputs, kernel[layer])
-        z=z+tf.matmul(h_tm1, recurrent_kernel[layer])
-        # if self.use_bias:
-        #     z +=bias
+    # if go_backwards:
+    #     reverse_cell_inputs=reverse(cell_inputs,axis=0 if not batch_first else 1)
 
-        z0, z1, z2, z3 = array_ops.split(z, 4, axis=-1)
 
-        input_gate = sigmoid(z0)
-        forget_gate = sigmoid(z1)
-        cell_state = forget_gate * c_tm1 + input_gate * tanh(z2)
-        output_gate = sigmoid(z3)
-        h=output_gate * tanh(cell_state)
-        hidden_list.append(h)
-        cell_list.append(cell_state)
-        cell_inputs=h
+
+    for layer in range(len(kernel)//(2 if go_backwards else 1)):
+        all_cell_inputs = [cell_inputs, reverse(cell_inputs, axis=0 if not batch_first else 1)] if go_backwards else [cell_inputs]
+        for direction in range(2 if go_backwards else 1):
+            cell_inputs=all_cell_inputs[direction]
+            layer_idx=layer*(2 if go_backwards else 1)+direction
+
+            h_tm1 =hidden_list[layer_idx][0].detach()  # previous memory state
+            c_tm1 = cell_list[layer_idx][0].detach()   # previous carry state
+            z = tf.matmul(cell_inputs, kernel[layer_idx],transpose_b=True)
+            z=z+tf.matmul(h_tm1, recurrent_kernel[layer],transpose_b=True)
+            # if self.use_bias:
+            #     z +=bias
+
+            z0, z1, z2, z3 = array_ops.split(z, 4, axis=-1)
+
+            input_gate = sigmoid(z0)
+            forget_gate = sigmoid(z1)
+            cell_state = forget_gate * c_tm1 + input_gate * tanh(z2)
+            output_gate = sigmoid(z3)
+            h=output_gate * tanh(cell_state)
+            hidden_list[layer_idx]=h
+            cell_list[layer_idx]=cell_state
+            all_cell_inputs[direction]=h
+
+        if go_backwards:
+            cell_inputs=concate(all_cell_inputs,axis=-1)
+        else:
+            cell_inputs=all_cell_inputs[0]
     return  cell_inputs , [stack(hidden_list,0), stack(cell_list,0)]
 
   outputs, hidden_state,cell_state= _rnn(
@@ -555,10 +567,10 @@ class RNNBase(Layer):
             self.recurrent_kernels=[]
             for layer in range(self.num_layers):
                 for direction in range(self.num_directions):
-                    layer_input_size = input_shape[-1] if layer == 0 else self.hidden_size * self.num_directions
+                    layer_input_size = input_shape[-1] if layer == 0 else self.hidden_size*self.num_directions
 
-                    w_ih = Parameter(random_normal((layer_input_size,self.gate_size)).to(get_device()),name='weight_ih_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
-                    w_hh = Parameter(random_normal((self.hidden_size,self.gate_size)).to(get_device()),name='weight_hh_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
+                    w_ih = Parameter(random_normal((self.gate_size,layer_input_size)).to(get_device()),name='weight_ih_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
+                    w_hh = Parameter(random_normal((self.gate_size,self.hidden_size)).to(get_device()),name='weight_hh_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
                     b_ih = Parameter(random_normal((self.gate_size)).to(get_device()),name='bias_ih_l{0}{1}'.format(layer,  '_reverse' if direction == 1 else ''))
                     # Second bias vector included for CuDNN compatibility. Only one
                     # bias vector is needed in standard definition.
@@ -988,9 +1000,8 @@ class LSTM(RNNBase):
         max_batch_size = int_shape(input)[0] if self.batch_first else int_shape(input)[1]
         num_directions = 2 if self.bidirectional else 1
 
-        zeros_para = zeros((self.num_layers * num_directions, max_batch_size, self.hidden_size), dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
-        self.hidden_state=zeros_para
-        self.cell_state = zeros_para
+        self.hidden_state= zeros((self.num_layers * num_directions, max_batch_size, self.hidden_size), dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
+        self.cell_state =  zeros((self.num_layers * num_directions, max_batch_size, self.hidden_size), dtype=self.weights[0].dtype, requires_grad=False).to(self.weights[0].device)
 
     def clear_state(self):
         self.hidden_state= zeros_like(self.hidden_state,dtype=self.weights[0].dtype, requires_grad=False ).to(self.weights[0].device)
