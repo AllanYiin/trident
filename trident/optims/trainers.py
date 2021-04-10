@@ -15,7 +15,7 @@ from functools import partial
 import builtins
 
 import numpy as np
-from trident.optims.pytorch_losses import BCELoss, MSELoss
+
 
 from trident import context
 
@@ -41,15 +41,13 @@ _backend = get_backend()
 working_directory = ctx.working_directory
 
 if _backend == 'pytorch':
-    import torch
-    import torch.nn as nn
-    from torch import autograd
+
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
     from trident.layers.pytorch_activations import Sigmoid, Tanh
     from trident.layers.pytorch_layers import Flatten, Dense
     from trident.layers.pytorch_pooling import GlobalAvgPool2d
-    from trident.optims.pytorch_losses import L1Loss, L2Loss
+    from trident.optims.pytorch_losses import L1Loss, L2Loss,BCELoss, MSELoss
     from trident.optims.pytorch_optimizers import *
 
 elif _backend == 'tensorflow':
@@ -59,7 +57,7 @@ elif _backend == 'tensorflow':
     from trident.layers.tensorflow_activations import Sigmoid, Tanh
     from trident.layers.tensorflow_layers import Flatten, Dense
     from trident.layers.tensorflow_pooling import GlobalAvgPool2d
-    from trident.optims.tensorflow_losses import L1Loss, L2Loss
+    from trident.optims.tensorflow_losses import L1Loss, L2Loss,BCELoss, MSELoss
     from trident.optims.tensorflow_optimizers import *
 
 
@@ -729,11 +727,11 @@ class GanTrainingPlan(TrainingPlan):
                 embeddings = traindata['fake_feature']
             if embeddings is not None:
                 embeddings = Flatten()(embeddings)
-                norm = torch.sqrt(torch.sum(embeddings ** 2.0, -1, keepdim=True))
+                norm = sqrt(sum(embeddings ** 2.0, -1, keepdim=True))
                 normalized_emb = embeddings / norm
-                similarity = torch.matmul(normalized_emb, normalized_emb.transpose(1, 0))
-                batch_size = embeddings.size(0)
-                loss_pt = (torch.sum(similarity) - batch_size) / (batch_size * (batch_size - 1))
+                similarity = matmul(normalized_emb, normalized_emb,transpose_b=True)
+                batch_size = int_shape(embeddings)[0]
+                loss_pt = (sum(similarity) - batch_size) / (batch_size * (batch_size - 1))
                 return loss_pt
             else:
                 return to_tensor(0.0)
@@ -746,20 +744,29 @@ class GanTrainingPlan(TrainingPlan):
 
         def gradient_penalty(img_real, img_fake):
             shp = int_shape(img_real)
-            eta = torch.FloatTensor(shp[0], 1, 1, 1).uniform_(0, 1).to(get_device())
+
+            eta = random_uniform((shp[0], 1, 1, 1),0.0,1.0).to(get_device())
             interpolated = eta * img_real + ((1 - eta) * img_fake)
-            interpolated.requires_grad = True
+            gradients=None
+            if get_backend()=='pytorch':
+                from torch import autograd
+                interpolated.requires_grad = True
 
-            # calculate probability of interpolated examples
-            prob_interpolated = self.discriminator(interpolated)
+                # calculate probability of interpolated examples
+                prob_interpolated = self.discriminator(interpolated)
 
-            # calculate gradients of probabilities with respect to examples
-            gradients = autograd.grad(outputs=prob_interpolated, inputs=interpolated,
-                                      grad_outputs=ones_like(prob_interpolated, requires_grad=False).to(get_device()),
-                                      create_graph=True, retain_graph=True, only_inputs=True)[0]
-            gradients = gradients.view(gradients.size(0), -1)
-            grad_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
-            return grad_penalty
+                # calculate gradients of probabilities with respect to examples
+                gradients = autograd.grad(outputs=prob_interpolated, inputs=interpolated,
+                                          grad_outputs=ones_like(prob_interpolated, requires_grad=False).to(get_device()),
+                                          create_graph=True, retain_graph=True, only_inputs=True)[0]
+                return ((sqrt(reduce_sum(gradients ** 2, axis=[2, 3])) - 1.0) ** 2).mean()
+            elif get_backend()=='tensorflow':
+                with tf.GradientTape() as t:
+                    t.watch(interpolated)
+                    prob_interpolated = self.discriminate(interpolated)
+                gradients = t.gradient(prob_interpolated, interpolated)
+                return ((sqrt(reduce_sum(gradients ** 2, axis=[1, 2])) - 1.0) ** 2).mean()
+
 
         for modual in self.discriminator.model.children():
             if 'BatchNorm' in modual.__class__.__name__:
@@ -817,11 +824,11 @@ class GanTrainingPlan(TrainingPlan):
         self.gan_type = gan_type
         real_label, fake_label = 1, 0
 
-        @torch.no_grad()
+
         def metric_dfake(d_fake):
             return d_fake.mean()
 
-        @torch.no_grad()
+
         def metric_dreal(d_real):
             return d_real.mean()
 
@@ -884,7 +891,7 @@ class GanTrainingPlan(TrainingPlan):
             def real_loss(img_real, d_real):
                 return L1Loss()(img_real, d_real)
 
-            @torch.no_grad()
+
             def fake_loss(img_fake, d_fake):
                 return L1Loss()(img_fake, d_fake)
 
@@ -911,7 +918,6 @@ class GanTrainingPlan(TrainingPlan):
             def real_loss(img_real, d_real):
                 return L2Loss()(img_real, d_real)
 
-            @torch.no_grad()
             def fake_loss(img_fake, d_fake):
                 return L2Loss()(img_fake, d_fake)
 
