@@ -3,6 +3,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import codecs
 import pickle
 import io
 import re
@@ -11,6 +12,8 @@ from xml.etree import ElementTree
 import numpy as np
 import copy
 import cv2
+from trident.data.text_transforms import ToHalfWidth, ChineseConvert
+
 from trident.data.utils import _delete_h
 
 from trident.backend.opencv_backend import image2array, array2image
@@ -610,7 +613,7 @@ def load_examples_data(dataset_name):
     """
     dataset_name = dataset_name.strip().lower()
     if dataset_name.lower() not in ['pokemon', 'hanzi', 'animals', 'nsfw', 'simpsons', 'horse2zebra', 'people',
-                                    'autodrive', 'superresolution', 'anpr', 'beauty','antisproofing','facelandmarks','dogs-vs-cats']:
+                                    'autodrive', 'superresolution', 'anpr', 'beauty','antisproofing','facelandmarks','dogs-vs-cats','chinese']:
         raise ValueError('Not a  valid  dataset_name.')
     dataset_name = 'examples_' + dataset_name
     dirname = os.path.join(_trident_dir, dataset_name)
@@ -949,7 +952,73 @@ def load_examples_data(dataset_name):
         extract_archive(tar_file_path, dirname, archive_format='tar')
         data_provider = load_folder_images(dataset_name, dirname)
         return data_provider
+    elif dataset_name == 'examples_chinese':
+        to_half=ToHalfWidth()
+        to_sc=ChineseConvert(convert_to='simplified')
+        download_file_from_google_drive('1yzRzXpLuhSUxnixqCgpbdTk16ajnTEWF', dirname, 'chinese.tar')
+        tar_file_path = os.path.join(dirname, 'chinese.tar')
+        extract_archive(tar_file_path, dirname, archive_format='tar')
+        as_train = codecs.open(os.path.join(dirname, 'as_training.utf8'), encoding='utf-8-sig').read()
+        cityu_train = codecs.open(os.path.join(dirname, 'cityu_training.utf8'), encoding='utf-8-sig').read()
+        as_train = as_train.replace('\u3000', '|').replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
+        cityu_train = cityu_train.replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
+        data = as_train + '\r\n' + cityu_train  # 把兩個語料合併
+        data = data.strip()  # 去除無效的字元
+        data = to_half(data)  # 把所有全形轉半形
+        raw_data_train = data.split('\r\n')  # 分行
+        raw_data_train = [row.strip('\n').strip('\r').replace("\x08", '').replace("\x80", '') for row in raw_data_train]  # 移除分行字元
+        process_data_train=[]
+        process_seg_label_train = []
+        process_simplifided_label_train = []
 
+        print('generate labels')
+        for row in tqdm(raw_data_train):
+            tmp_data_train = []
+            tmp_seg_label_train = []
+            tmp_simplifided_label_train = []
+            tmp_pronunce_label_train = []
+            words=row.split('|')
+            for word in words:
+                for i in range(len(word)):
+                    tmp_data_train.append(word[i])
+                    tmp_simplifided_label_train.append(to_sc(word[i]))
+                    #轉換為BMES
+                    if len(word)==1 and i==0: #S 自己就是一個單詞
+                        tmp_seg_label_train.append('S')
+                    elif i==0: #B 是一個詞的開始
+                        tmp_seg_label_train.append('B')
+                    elif i==len(word)-1:  #E 是一個詞的結束
+                        tmp_seg_label_train.append('E')
+                    else: #M 是一個詞的中間
+                        tmp_seg_label_train.append('M')
+            tmp_data_train=''.join(tmp_data_train)
+            tmp_seg_label_train = ''.join(tmp_seg_label_train)
+            tmp_simplifided_label_train = ''.join(tmp_simplifided_label_train)
 
+            process_data_train.append(tmp_data_train)
+            process_seg_label_train.append(tmp_seg_label_train)
+            process_simplifided_label_train.append(tmp_simplifided_label_train)
+        corpus='\n\n'.join(process_data_train)
+        seg_corpus='\n\n'.join(process_seg_label_train)
+        simplifided_corpus =to_half('\n\n'.join(process_simplifided_label_train))
+        data=TextSequenceDataset(corpus=corpus,sequence_length=128,sequence_start_at='section_start',object_type=ObjectType.corpus,symbol='input')
+        seg_label = TextSequenceDataset(corpus=seg_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.corpus,symbol='nextword_label')
+        simplifided_label = TextSequenceDataset(corpus=simplifided_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.corpus,symbol='simplified_label')
+        chars= list(sorted(set(list(corpus+simplifided_corpus))))
+        chars.insert(0, '<start/>')
+        chars.insert(1, '<end/>')
+        chars.insert(2, '<unk/>')
+        chars.insert(3, '<pad/>')
+
+        data.vocabs =simplifided_label.vocabs =  chars
+        data.text2index =simplifided_label.text2index =   dict((c, i) for i, c in enumerate(chars))
+        data.index2text =simplifided_label.index2text =  dict((i, c) for i, c in enumerate(chars))
+        nextword=copy.deepcopy(data)
+        nextword.symbol='nextword_label'
+        nextword.sequence_offset=1
+
+        label=ZipDataset(seg_label,nextword,simplifided_label)
+        provider=TextSequenceDataProvider(traindata=Iterator(data=data,label=label))
+        return provider
     else:
         return None

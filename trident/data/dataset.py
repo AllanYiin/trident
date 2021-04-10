@@ -207,7 +207,7 @@ class ZipDataset(Dataset):
 
     def __init__(self, *datasets, **kwargs):
         """See `Dataset.zip()` for details."""
-        super().__init__()
+        super().__init__(datasets, **kwargs)
         if not all(len(datasets[0]) == len(ds) for ds in datasets):
             raise ValueError("lengths of input datasets are inconsistent")
         self._datasets = datasets
@@ -644,16 +644,14 @@ class TextSequenceDataset(Dataset):
 
         if hasattr(corpus, "__iter__"):
             new_corpus = []
-            section = []
-            section.append('<start/>')
+            section = ['<start/>']
             for i in range(len(corpus)):
                 item = corpus[i]
                 if item == '\n' and corpus[i - 1] != '\n' and len(section) > 0:
                     section.append('<end/>')
                     if i < len(corpus) - 1 and corpus[i + 1] == '\n':
                         new_corpus.append(section)
-                        section = []
-                        section.append('<start/>')
+                        section = ['<start/>']
                     elif i < len(corpus) - 1:
                         section.append('<start/>')
                 elif self.section_delimiter != '\n\n' and len(self.section_delimiter) == 2 and len(section) > 0 and item == self.section_delimiter[0] and i < len(corpus) - 1 and \
@@ -661,8 +659,7 @@ class TextSequenceDataset(Dataset):
                     section.append('<end/>')
                     if i < len(corpus) - 1 and corpus[i + 1] == '\n':
                         new_corpus.append(section)
-                        section = []
-                        section.append('<start/>')
+                        section = ['<start/>']
                     elif i < len(corpus) - 1:
                         section.append('<start/>')
                 elif item == '\r' and corpus[i - 1] == '\n':
@@ -688,7 +685,7 @@ class TextSequenceDataset(Dataset):
 
             chars.insert(0, '<start/>')
             chars.insert(1, '<end/>')
-            chars.insert(2, '<unknown/>')
+            chars.insert(2, '<unk/>')
             chars.insert(3, '<pad/>')
             print('total distinct chars:', len(chars))
             self.vocabs = chars
@@ -752,7 +749,7 @@ class TextSequenceDataset(Dataset):
                 elif this_char in self.text2index:
                     arr[i, self.text2index[this_char]] = 1
                 else:
-                    arr[i, self.text2index['<unknown/>']] = 1
+                    arr[i, self.text2index['<unk/>']] = 1
             arr = arr.astype(np.float32)
         else:
             arr = np.zeros((self.sequence_length))
@@ -764,14 +761,14 @@ class TextSequenceDataset(Dataset):
                 elif this_char in self.text2index:
                     arr[i] = self.text2index[this_char]
                 else:
-                    arr[i] = self.text2index['<unknown/>']
+                    arr[i] = self.text2index['<unk/>']
             arr = arr.astype(np.int64)
 
         if self.is_paired_process == False and len(self.text_transform_funcs) == 0:
             return text_backend_adaption(arr)
-        elif self.is_paired_process == False:
+        elif not self.is_paired_process:
             return self.text_transform(arr)
-        elif self.is_paired_process == True:
+        elif self.is_paired_process:
             return arr
 
         return None

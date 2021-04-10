@@ -64,7 +64,6 @@ class ImageDataProvider(object):
             raise ValueError("Valid mode should be tuple or dict ")
 
         self._minibatch_size = minibatch_size
-        self.is_flatten = bool(kwargs['is_flatten']) if 'is_flatten' in kwargs else False
         self.__default_language__ = 'en-us'
         if len(self._class_names) > 0:
             if _locale in self._class_names:
@@ -83,7 +82,6 @@ class ImageDataProvider(object):
         self._image_transform_funcs = []
         self._label_transform_funcs = []
         self._paired_transform_funcs = []
-        self.spatial_transform_funcs = []
         cxt=context._context()
         cxt.regist_data_provider(self)
 
@@ -412,6 +410,7 @@ class TextSequenceDataProvider(object):
 
     def __init__(self, dataset_name='', traindata=None, testdata=None, minibatch_size=8, mode='tuple', **kwargs):
         self.__name__ = dataset_name
+        self.uuid = uuid.uuid4().node
         if mode in ['tuple', 'dict']:
             self.mode = mode
         else:
@@ -425,7 +424,6 @@ class TextSequenceDataProvider(object):
         self._class_names = {}
 
         self._minibatch_size = minibatch_size
-        self.is_flatten = bool(kwargs['is_flatten']) if 'is_flatten' in kwargs else False
         self.__default_language__ = 'en-us'
         if len(self._class_names) > 0:
             if _locale in self._class_names:
@@ -444,7 +442,9 @@ class TextSequenceDataProvider(object):
         self._text_transform_funcs = []
         self._label_transform_funcs = []
         self._paired_transform_funcs = []
-        self.spatial_transform_funcs = []
+        cxt = context._context()
+        cxt.regist_data_provider(self)
+
 
     @property
     def signature(self):
@@ -464,6 +464,15 @@ class TextSequenceDataProvider(object):
             print(self.traindata.signature)
         else:
             return None
+
+    @property
+    def batch_sampler(self):
+        if self.scenario == 'test' and self.testdata is not None:
+            return self.testdata.batch_sampler
+        elif self.traindata is not None:
+            return self.traindata.batch_sampler
+        else:
+            return []
 
     @property
     def batch_sampler(self):
@@ -636,26 +645,54 @@ class TextSequenceDataProvider(object):
         if text_data in text2indexdict:
             return text2indexdict[text_data]
         else:
-            return text2indexdict['<unknown/>']
+            return text2indexdict['<unk/>']
 
     def index2label(self, idx: int):
         index2textdict = None
         if self.scenario == 'test' and self.testdata is not None and self.testdata.label is not None:
-            index2textdict = self.testdata.label.index2text
+            if isinstance(self.testdata.label, ZipDataset):
+                for dataset in self.testdata.label.items:
+                    if isinstance(dataset, TextSequenceDataset):
+                        index2textdict = dataset.index2text
+                        break
+            else:
+                index2textdict = self.traindata.label.index2text
         else:
-            index2textdict = self.traindata.label.index2text
-        return index2textdict[idx]
+            if isinstance(self.traindata.label,ZipDataset):
+                for dataset in  self.traindata.label.items:
+                    if isinstance(dataset,TextSequenceDataset):
+                        index2textdict =dataset.index2text
+                        break
+            else:
+                index2textdict = self.traindata.label.index2text
+        if idx in index2textdict:
+            return index2textdict[idx]
+        else:
+            return  '<unk/>'
 
     def label2index(self, text_data: str):
         text2indexdict = None
         if self.scenario == 'test' and self.testdata is not None and self.testdata.label is not None:
-            text2indexdict = self.testdata.label.text2index
+            if isinstance(self.testdata.label, ZipDataset):
+                for dataset in self.testdata.label.items:
+                    if isinstance(dataset, TextSequenceDataset):
+                        text2indexdict = dataset.text2index
+                        break
+            else:
+                text2indexdict = self.traindata.label.text2index
         else:
-            text2indexdict = self.traindata.label.text2index
+            if isinstance(self.traindata.label, ZipDataset):
+                for dataset in self.traindata.label.items:
+                    if isinstance(dataset, TextSequenceDataset):
+                        text2indexdict = dataset.text2index
+                        break
+            else:
+                text2indexdict = self.traindata.label.text2index
+
         if text_data in text2indexdict:
             return text2indexdict[text_data]
         else:
-            return text2indexdict['<unknown/>']
+            return text2indexdict['<unk/>']
 
     @property
     def vocabs(self):
