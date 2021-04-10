@@ -968,7 +968,7 @@ class Iterator(object):
             for k in range(len(datasets)):
                 ds = datasets[k]
                 if isinstance(ds, ZipDataset):
-                    for dsitem in ds._datasets:
+                    for dsitem in ds.items:
                         if len(dsitem) > 0:
                             dataitem = dsitem[k]
                             dsitem.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
@@ -1031,17 +1031,17 @@ class Iterator(object):
         if self._data and isinstance(self._data, Dataset) and not isinstance(self._data, ZipDataset) and len(self._data) > 0:
             datasets.append(self._data)
         elif self._data and isinstance(self._data, ZipDataset):
-            for ds in self._data._datasets:
+            for ds in self._data.items:
                 datasets.append(ds)
         if self._label and isinstance(self._label, Dataset) and not isinstance(self._label, ZipDataset) and len(self._label) > 0:
             datasets.append(self._label)
         elif self._label and isinstance(self._label, ZipDataset):
-            for ds in self._label._datasets:
+            for ds in self._label.items:
                 datasets.append(ds)
         if self._unpair and isinstance(self._unpair, Dataset) and len(self._unpair) > 0:
             datasets.append(self._unpair)
         elif isinstance(self._unpair, ZipDataset):
-            for ds in self._unpair._datasets:
+            for ds in self._unpair.items:
                 datasets.append(ds)
         return tuple(datasets)
 
