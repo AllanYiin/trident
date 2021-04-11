@@ -154,7 +154,7 @@ class Resize(VisionTransform):
             if self.align_corner:
                 output[:th,:tw,:]=image
             else:
-                output[pad_vert//2:th+pad_vert, pad_horz//2:tw+pad_horz, :] = image
+                output[pad_vert//2:th+pad_vert//2, pad_horz//2:tw+pad_horz//2, :] = image
             return output
 
     def _apply_coords(self, coords,spec:TensorSpec):
