@@ -5,7 +5,7 @@ from __future__ import print_function
 import builtins
 import math
 from math import *
-
+import string
 import numpy as np
 import torch
 import torch.nn as nn
@@ -82,13 +82,28 @@ class _ClassificationLoss(Loss):
             ctx=context._context()
             if hasattr(ctx._thread_local_info,'data_providers') and len(ctx._thread_local_info.data_providers)>0:
                 with torch.no_grad():
-                    dp=list(ctx._thread_local_info.data_providers.values())[0]
+                    dp=list(ctx._thread_local_info.data_providers.values())[-1]
                     if dp.traindata.label.__class__.__name__=='LabelDataset':
                         unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
                         reweights=np.clip(counts,1,np.inf)/np.sum(counts).astype(np.float32)
 
                         reweights1=np.max(reweights)/reweights
                         self.label_statistics=reweights1
+                    elif dp.traindata.label.__class__.__name__=='TextSequenceDataset':
+                        corpus=[]
+                        if dp.traindata.label.sequence_start_at == 'random':
+                            corpus=list(''.join(dp.traindata.label.items))
+                        elif dp.traindata.label.sequence_start_at =='section_start':
+                            [corpus.extend(section) for section in dp.traindata.label.items]
+                        corpus=[dp.traindata.label.text2index[s] if s in dp.traindata.label.text2index else 2 for s in corpus]
+                        unique, counts = np.unique(np.array(corpus), return_counts=True)
+                        chars_count=np.ones(len(dp.traindata.label.vocabs))
+                        for i in range(len(unique)):
+                            chars_count[unique[i]]=counts[i]
+                        reweights = np.clip(chars_count, 1, np.inf) / np.sum(chars_count).astype(np.float32)
+                        reweights1 = np.max(reweights) / reweights
+                        reweights1[:4]=0.01
+                        self.label_statistics = reweights1
 
 
 
@@ -107,13 +122,16 @@ class _ClassificationLoss(Loss):
         if ndim(output) > 2:
             output=reshape(output,(output.size(0),output.size(1),-1))
             #output = output.permute(0,2,1)
-        if ndim(target) > 2:
-            if target.dtype != str2dtype('long'):
-                target=reshape(target,(target.size(0),target.size(1),-1))
-                #target = target.permute(0,2,1)
-            else:
-                target = reshape(target,(target.size(0),-1))
-            return output, target
+
+
+            if ndim(target) > 2 and target.dtype !=dtype.long:
+                target = reshape(target, (target.size(0),target.size(1), -1))
+            #target = target.permute(0, 2, 1)
+
+                return output, target
+            elif ndim(target) >= 2 and target.dtype ==dtype.long:
+                target = reshape(target, (target.size(0), -1))
+                return output, target
         elif ndim(output) <= 2 and len(output) == len(target):
             return output, target
         elif ndim(output) <= 2 and ndim(output) == ndim(target)+1:
@@ -228,6 +246,7 @@ class _ClassificationLoss(Loss):
             """
         try:
 
+            output, target=self.flatten_check(output, target)
             loss = self.calculate_loss(*self.preprocess(output, target, **kwargs))
             loss = self._handel_abnormal(loss)
             loss = self._get_reduction(loss)
