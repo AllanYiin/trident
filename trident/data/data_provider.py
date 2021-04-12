@@ -27,6 +27,7 @@ try:
 except ImportError:
     from six.moves.urllib.request import urlretrieve
 from trident.backend.common import *
+from trident.backend.tensorspec import *
 from trident.backend.opencv_backend import *
 from trident.data.text_common import *
 from trident.data.image_common import *
@@ -82,6 +83,7 @@ class ImageDataProvider(object):
         self._image_transform_funcs = []
         self._label_transform_funcs = []
         self._paired_transform_funcs = []
+        self._batch_transform_funcs = []
         cxt=context._context()
         cxt.regist_data_provider(self)
 
@@ -221,6 +223,42 @@ class ImageDataProvider(object):
             self.testdata.update_data_template()
 
     @property
+    def batch_transform_funcs(self):
+        return self._batch_transform_funcs
+
+    @batch_transform_funcs.setter
+    def batch_transform_funcs(self, value):
+        self._batch_transform_funcs = value
+        self.traindata.update_data_template()
+        self.traindata.batch_sampler._batch_transform_funcs = value
+        if self.testdata is not None :
+            self.testdata.update_data_template()
+
+    def batch_transform(self,batchdata):
+        if hasattr(self,'_batch_transform_funcs')  and len(self._batch_transform_funcs)>0:
+
+            if isinstance(batchdata,tuple):
+                new_batchdata = copy.deepcopy(self.traindata.data_template)
+                for i in range(len(batchdata)):
+                    new_batchdata[new_batchdata.key_list[i]] = batchdata[i]
+                batchdata = new_batchdata
+            if isinstance(batchdata,OrderedDict):
+                if not all([isinstance(k,TensorSpec) for k in batchdata.key_list]):
+                    new_batchdata=copy.deepcopy(self.traindata.data_template)
+                    for i in range(len(batchdata)):
+                        new_batchdata[new_batchdata.key_list[i]]=batchdata[batchdata.key_list[i]]
+                    batchdata=new_batchdata
+
+                for trans in self._batch_transform_funcs:
+                    batchdata=trans(batchdata)
+                return batchdata
+            else:
+                return batchdata
+
+        else:
+            return batchdata
+
+    @property
     def class_names(self):
         return self._class_names
 
@@ -239,6 +277,8 @@ class ImageDataProvider(object):
         else:
             if key is None and isinstance(self.traindata.data,ImageDataset):
                 data= self.next()
+                if isinstance(data,OrderedDict):
+                    data=data.value_list
                 data=enforce_singleton(data)
                 data = self.reverse_image_transform(data)
                 if is_concate:
@@ -287,10 +327,9 @@ class ImageDataProvider(object):
         return self.__next__()
 
     def __iter__(self):
+
         if self.scenario == 'test' and self.testdata is not None:
             return self.testdata._sample_iter
-
-
         else:
             return self.traindata._sample_iter
 
@@ -317,12 +356,12 @@ class ImageDataProvider(object):
             return next(self.traindata)
 
     def next_train(self):
-        return self.traindata.next()
+        return self.batch_transform(self.traindata.next())
 
 
     def next_test(self):
         if self.testdata is not None:
-            return self.testdata.next()
+            return self.batch_transform(self.testdata.next())
 
         else:
             return None
