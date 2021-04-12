@@ -193,9 +193,9 @@ class Resize(VisionTransform):
                     output[:th, :tw, :] = mask
             else:
                 if mask.ndim == 2:
-                    output[pad_vert // 2:th + pad_vert , pad_horz // 2:tw + pad_horz] = mask
+                    output[pad_vert // 2:th + pad_vert // 2 , pad_horz // 2:tw +pad_horz // 2] = mask
                 elif mask.ndim == 3:
-                    output[pad_vert // 2:th + pad_vert , pad_horz // 2:tw + pad_horz , :] = mask
+                    output[pad_vert // 2:th + pad_vert // 2 , pad_horz // 2:tw +pad_horz // 2 , :] = mask
             mask = np.squeeze(output)
             return mask.astype(mask_dtype)
 
@@ -894,12 +894,12 @@ class AddNoise(VisionTransform):
 
     def _apply_image(self, image,spec:TensorSpec):
         rr = random.randint(0, 10)
-        orig_min = image.min()
-        orig_max = image.max()
-        noise = np.random.standard_normal(image.shape) * (self.intensity * (orig_max - orig_min))
+        orig_mean = image.mean()
+        orig_std = np.std(image)
+        noise = self.intensity*np.random.normal(0,orig_std,image.shape)
         if rr % 2 == 0:
-            noise = np.random.uniform(-1, 1, image.shape) * (self.intensity * (orig_max - orig_min))
-        image = np.clip(image + noise, orig_min, orig_max)
+            noise =  self.intensity*np.random.uniform(orig_mean-orig_std, orig_mean+orig_std, image.shape)
+        image = np.clip(image + noise,0, 255)
         return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
