@@ -3,6 +3,7 @@ import math
 import numbers
 import random
 import inspect
+from collections import Iterable
 from functools import wraps
 from typing import Sequence, Tuple, Dict, Union, Optional
 import collections
@@ -27,7 +28,7 @@ from trident.data.transform import VisionTransform
 __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale','RandomCrop','RandomRescaleCrop','RandomCenterCrop','RandomMultiScaleImage','RandomTransform','RandomTransformAffine',
            'AdjustBrightness','AdjustContrast','AdjustSaturation','AddNoise','AdjustHue','RandomAdjustHue','RandomAdjustBrightness','RandomAdjustContrast','RandomAdjustSaturation',
            'Normalize','Unnormalize','CLAHE','Lighting','HorizontalFlip','RandomMirror','AdjustGamma','RandomBlur','RandomAdjustGamma','Blur','InvertColor','RandomInvertColor','GrayScale','RandomGrayScale',
-           'ImageDilation','ImageErosion','ErosionThenDilation','DilationThenErosion','AdaptiveBinarization','SaltPepper','RandomErasing','ToRGB']
+           'ImageDilation','ImageErosion','ErosionThenDilation','DilationThenErosion','AdaptiveBinarization','SaltPepperNoise','RandomErasing','ToRGB','ImageMosaic']
 
 
 
@@ -1500,7 +1501,7 @@ class CLAHE(VisionTransform):
         return mask
 
 
-class SaltPepper(VisionTransform):
+class SaltPepperNoise(VisionTransform):
     """Perform gamma correction on an image.
         Also known as Power Law Transform. Intensities in RGB mode are adjusted
         based on the following equation:
@@ -1513,21 +1514,26 @@ class SaltPepper(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, prob=0.01, name='adaptive_binarization', **kwargs):
+    def __init__(self, prob=0.005,keep_prob=0.5, name='saltpepper', **kwargs):
         super().__init__(name)
         self.prob=prob
+        self.keep_prob=keep_prob
 
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        imgtype = image.dtype
-        rnd = np.random.rand(image.shape[0], image.shape[1])
-        #noisy = image.copy()
-        image[rnd < self.prob / 2] = 0.0
-        image[rnd > 1 - self.prob / 2] = 255.0
-        return clip(image,0,255).astype(np.float32)
+        rr=random.random()
+        if rr>self.keep_prob:
+            imgtype = image.dtype
+            rnd = np.random.rand(image.shape[0], image.shape[1])
+            #noisy = image.copy()
+            image[rnd < self.prob / 2] = 0.0
+            image[rnd > 1 - self.prob / 2] = 255.0
+            return clip(image,0,255).astype(np.float32)
+        else:
+            return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -1549,54 +1555,223 @@ class RandomErasing(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, size_range=(0.05,0.4),transparency_range=(0.4,0.8),transparancy_ratio=0.5, name='random_erasing', **kwargs):
+    def __init__(self, size_range=(0.05,0.4),transparency_range=(0.4,0.8),transparancy_ratio=0.5, keep_prob=0.5,name='random_erasing', **kwargs):
         super().__init__(name)
         self.size_range=size_range
         self.transparency_range=transparency_range
         self.transparancy_ratio=transparancy_ratio
+        self.keep_prob=keep_prob
 
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        s_l, s_h = self.size_range
-        r_1 = 0.3
-        r_2 = 1 / 0.3
-        h, w, c = image.shape
-        p_1 = np.random.rand()
+        rr = random.random()
+        if rr > self.keep_prob:
+            s_l, s_h = self.size_range
+            r_1 = 0.3
+            r_2 = 1 / 0.3
+            h, w, c = image.shape
+            p_1 = np.random.rand()
 
-        if p_1 > 0.5:
-            return image
+            if p_1 > 0.5:
+                return image
 
-        while True:
-            s = np.random.uniform(s_l, s_h) * h * w / 4.0
-            r = np.random.uniform(r_1, r_2)
-            w1 = int(np.sqrt(s / r))
-            h1 = int(np.sqrt(s * r))
-            left = np.random.randint(0, w)
-            top = np.random.randint(0, h)
+            while True:
+                s = np.random.uniform(s_l, s_h) * h * w / 4.0
+                r = np.random.uniform(r_1, r_2)
+                w1 = int(np.sqrt(s / r))
+                h1 = int(np.sqrt(s * r))
+                left = np.random.randint(0, w)
+                top = np.random.randint(0, h)
 
-            if left + w1 <= w and top + h1 <= h:
-                break
-        self.rr = np.random.uniform(0, 1)
-        if self.rr  <= self.transparancy_ratio:
-            transparancy = np.random.uniform(*self.transparency_range)
-            mask = np.ones_like(image)
-            mask[top:top + h1, left:left + w1, :] = 0
-            image = image * (mask) + image * (1 - mask) * (transparancy)
-        else:
-
-            if self.rr % 2 == 1:
-                c1 = np.random.uniform(0, 255, (h1, w1, c))
+                if left + w1 <= w and top + h1 <= h:
+                    break
+            self.rr = np.random.uniform(0, 1)
+            if self.rr  <= self.transparancy_ratio:
+                transparancy = np.random.uniform(*self.transparency_range)
+                mask = np.ones_like(image)
+                mask[top:top + h1, left:left + w1, :] = 0
+                image = image * (mask) + image * (1 - mask) * (transparancy)
             else:
-                c1 = np.random.uniform(0, 255)
 
-            image[top:top + h1, left:left + w1, :] = c1
-        return clip(image,0,255).astype(np.float32)
+                if self.rr % 2 == 1:
+                    c1 = np.random.uniform(0, 255, (h1, w1, c))
+                else:
+                    c1 = np.random.uniform(0, 255)
+
+                image[top:top + h1, left:left + w1, :] = c1
+            return clip(image,0,255).astype(np.float32)
+        else:
+            return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
 
     def _apply_mask(self, mask,spec:TensorSpec):
         return mask
+
+
+class ImageMosaic(VisionTransform):
+    """Perform gamma correction on an image.
+        Also known as Power Law Transform. Intensities in RGB mode are adjusted
+        based on the following equation:
+        I_out = 255 * gain * ((I_in / 255) ** gamma)
+        See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+    Args:
+        gamma (float): Non negative real number. gamma larger than 1 make the
+            shadows darker, while gamma smaller than 1 make dark regions
+            lighter.
+        gain (float): The constant multiplier.
+    """
+
+    def __init__(self,output_size, keep_prob=0.7,name='image_mosaic', **kwargs):
+        super().__init__(name)
+        self.output_size=output_size
+        self.keep_prob=keep_prob
+
+
+    def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
+        r"""Apply transform on batch input data."""
+        if not isinstance(inputs,OrderedDict) :
+            if spec is None and self.is_spatial==True:
+                self._shape_info =None
+                spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.rgb)
+            return self.apply(inputs, spec)
+        else:
+            results=OrderedDict()
+            imgs=None
+            boxes=None
+            masks=None
+            imgs = inputs.value_list[0]
+
+            if int_shape(imgs)[0]<=4:
+                return inputs
+            else:
+                for i in range(len(inputs.values())):
+                    k,v=inputs.item_list[i]
+                    results[k] = []
+                    if i==0:
+                        imgs=v
+                    elif  isinstance(k,TensorSpec) and 'box' in str(k.object_type).lower():
+                            boxes =v
+                    elif  isinstance(k,TensorSpec) and 'mask' in str(k.object_type).lower():
+                            masks =v
+                if get_backend() == 'pytorch':
+                    imgs = imgs.transpose([0, 2, 3, 1])
+
+                for i in range(int_shape(imgs)[0]):
+                    rr=random.random()
+                    if rr>self.keep_prob:
+
+                        img=imgs[i]
+
+                        other_idxes=list(range(int_shape(imgs)[0]))
+                        other_idxes.remove(i)
+                        random.shuffle(other_idxes)
+                        other_idxes=other_idxes[:3]
+
+                        height,width =self.output_size
+                        rs = np.random.uniform(0.5, 1.5, [2])  # random shift
+                        center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
+
+                        # crop each image
+                        p1= imgs[other_idxes[0]].copy()[:center[0],center[1]:width,:]
+                        p2 =imgs[other_idxes[1]].copy()[center[0]:height,:center[1],:]
+                        p3=imgs[other_idxes[2]].copy()[center[0]:height,center[1]:width,:]
+
+                        base_img=img.copy()
+                        base_img[:center[0],center[1]:width,:]=p1
+                        base_img[center[0]:height,:center[1],:] = p2
+                        base_img[center[0]:height,center[1]:width,:] = p3
+
+                        results[results.key_list[0]].append(base_img)
+
+                        if masks is not None  and masks[i].any():
+                            msk=masks[i]
+                            mp1 = masks[other_idxes[0]].copy()[ :center[0], center[1]:width]
+                            mp2 = masks[other_idxes[1]].copy()[center[0]:height, :center[1]]
+                            mp3 = masks[other_idxes[2]].copy()[center[0]:height, center[1]:width]
+
+                            base_msk = msk.copy()
+                            base_msk[ :center[0], center[1]:width] = mp1
+                            base_msk[center[0]:height, :center[1]] = mp2
+                            base_msk[ center[0]:height, center[1]:width] = mp3
+
+                            mask_key=[k for k in results.key_list if 'mask' in str(k.object_type).lower() ]
+                            if mask_key:
+                                results[mask_key[0]].append(base_msk)
+
+                        mosaic_bboxes=[]
+                        if boxes is not None  and boxes[i].any():
+                            box=boxes[i]
+                            box1 = boxes[other_idxes[0]]
+                            box2 =boxes[other_idxes[1]]
+                            box3 =boxes[other_idxes[2]]
+                            box_list=[]
+                            if box.any():
+                                box[:, 0][box[:, 0] > center[1]] = center[1]
+                                box[:, 2][box[:, 2] > center[1]] = center[1]
+                                box[:, 1][box[:, 1] > center[0]] = center[0]
+                                box[:, 3][box[:, 3] > center[0]] = center[0]
+                                box_list.append(box)
+                            if box1.any():
+                                box1[:, 0][box1[:, 0] < center[1]] = center[1]
+                                box1[:, 2][box1[:, 2] < center[1]] = center[1]
+                                box1[:, 1][box1[:, 1] > center[0]] = center[0]
+                                box1[:, 3][box1[:, 3] > center[0]] = center[0]
+                                box_list.append(box1)
+
+                            if box2.any():
+                                box2[:, 0][box2[:, 0] > center[1]] = center[1]
+                                box2[:, 2][box2[:, 2] > center[1]] = center[1]
+                                box2[:, 1][box2[:, 1] < center[0]] = center[0]
+                                box2[:, 3][box2[:, 3] < center[0]] = center[0]
+                                box_list.append(box2)
+
+
+                            if box3.any():
+                                box3[:, 0][box3[:, 0] < center[1]] = center[1]
+                                box3[:, 2][box3[:, 2] < center[1]] = center[1]
+                                box3[:, 1][box3[:, 1] < center[0]] = center[0]
+                                box3[:, 3][box3[:, 3] < center[0]] = center[0]
+                                box_list.append(box3)
+
+
+                            if len(box_list)>0:
+                                mosaic_bboxes = np.concatenate(box_list)
+                                # remove no area bbox
+                                keep_x = mosaic_bboxes[:, 2] - mosaic_bboxes[:, 0] > 16
+                                keep_y = mosaic_bboxes[:, 3] - mosaic_bboxes[:, 1] > 16
+                                keep_mask = np.logical_and(keep_x, keep_y)
+                                mosaic_bboxes = mosaic_bboxes[keep_mask]
+                            else:
+                                mosaic_bboxes = list()
+                        box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
+                        if box_key:
+                            results[box_key[0]].append(mosaic_bboxes)
+                    else:
+                        results[results.key_list[0]].append(imgs[i])
+                        mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
+                        if mask_key:
+                            results[mask_key[0]].append(masks[i])
+                        box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
+                        if box_key:
+                            results[box_key[0]].append(boxes[i])
+
+            for i in range(len(results)):
+                if i==0:
+                    result_imgs=np.stack(results.value_list[i],0)
+                    if get_backend() == 'pytorch':
+                        result_imgs = result_imgs.transpose([0, 3, 1, 2])
+
+                    results[results.key_list[0]] =result_imgs
+                elif not 'box' in str(results.key_list[i].object_type).lower():
+                    results[results.key_list[i]]=np.array(results.value_list[i])
+            return results
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
