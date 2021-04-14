@@ -87,16 +87,17 @@ class TileImageCallback(VisualizationCallbackBase):
             output = to_numpy(model.clone())
         elif isinstance(model,Layer) and  input is not None:
             output = to_numpy(model(input))
-        target = to_numpy(data[dataprovider.traindata.label.symbol].copy())
+        if self.include_target:
+            target = to_numpy(data[dataprovider.traindata.label.symbol].copy())
+        if self.include_mask:
+            if isinstance(dataprovider.traindata.label,MaskDataset):
+                mask = to_numpy(data[dataprovider.traindata.label.symbol])
+            elif isinstance(dataprovider.traindata.label,ZipDataset):
+                for ds in  dataprovider.traindata.label._datasets:
+                    if isinstance(ds, MaskDataset):
+                        mask = to_numpy(data[ds.symbol])
 
-        if isinstance(dataprovider.traindata.label,MaskDataset):
-            mask = to_numpy(data[dataprovider.traindata.label.symbol])
-        elif isinstance(dataprovider.traindata.label,ZipDataset):
-            for ds in  dataprovider.traindata.label._datasets:
-                if isinstance(ds, MaskDataset):
-                    mask = to_numpy(data[ds.symbol])
-
-        reverse_image_transform = dataprovider.reverse_image_transform
+        reverse_image_transform = dataprovider.traindata.data.reverse_image_transform
         if self.include_input and input is not None:
             if reverse_image_transform is not None:
                 input_arr = []
@@ -403,11 +404,14 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                     self.counter = 0
                 self.loss_history_list = []
                 self.metric_history_list = []
-                for trainitem in self.training_items.value_list:
+                plotable_metric_names=OrderedDict()
+                for i in range(len(self.training_items.value_list)):
+                    trainitem=self.training_items.value_list[i]
                     self.loss_history_list.append(trainitem.batch_loss_history)
+                    plotable_metric_names[i]=[k for k,v in trainitem._metrics.item_list if v.print_only==False]
                     self.metric_history_list.append(trainitem.batch_metric_history)
                 self.counter += 1
-                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list,
+                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list,metrics_names=plotable_metric_names,
                                         legend=training_context['training_names'].value_list, calculate_base='batch',
                                         max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
                                         imshow=self.imshow)

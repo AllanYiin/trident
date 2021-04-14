@@ -169,23 +169,15 @@ class Model(ModelBase):
                     out = output(dummay_input)
 
                 self._model = output
-                self._model.input_spec = TensorSpec(shape=self._model.input_shape, dtype=self._model.weights[0].value().dtype)
-                if isinstance(out, Tensor):
-                    self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
-                    self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
+                output.signature.outputs = OrderedDict()
+                if is_tensor(out):
+                    output.signature.outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
                 elif isinstance(out, OrderedDict):
-                    for k, v in out.items():
-                        self._outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
-                        self._targets[k.replace('output', 'target').replace('student', 'teatcher')] = TensorSpec(shape=tensor_to_shape(v),
-                                                                                                                 name=k.replace('output', 'target').replace('student', 'teatcher'))
-
-                else:
+                    for k, v in out.item_list:
+                        output.signature.outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
+                elif isinstance(out, (list, tuple)):
                     for i in range(len(out)):
-                        self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
-                        self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='target_{0}'.format(i))
-
-            if self._model.signature.maybe_not_complete():
-                self._model.signature = None
+                        output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
 
 
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (tf.Module)) for m in output]):
@@ -344,7 +336,7 @@ class Model(ModelBase):
 
         return self
 
-    def with_loss(self, loss, loss_weight=1, output_idx=0, start_epoch=0, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1,start_epoch=0, name='', **kwargs):
         alias = name
         argnames = Signature()
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
@@ -426,9 +418,8 @@ class Model(ModelBase):
 
         return self
 
-    def with_metric(self, metric, output_idx=0, collect_history=None, name='', **kwargs):
-        if collect_history is None:
-            collect_history = True
+    def with_metric(self, metric,print_only=False, name='', **kwargs):
+
         alias = name
         argnames = Signature()
         if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
@@ -519,7 +510,7 @@ class Model(ModelBase):
         #             if target in argnames:
         #                 argnames[target] = targets[target]
         self._metrics[alias].__name__ = alias
-        self._metrics[alias].collect_history = collect_history
+        self._metrics[alias].print_only = print_only
         return self
 
     def with_regularizer(self, reg, **kwargs):

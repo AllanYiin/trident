@@ -22,7 +22,7 @@ from trident.data.vision_transforms import Unnormalize
 from trident.backend.opencv_backend import array2image
 
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, get_backend, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need, Signature, adaptive_format
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need, Signature, adaptive_format, dtype
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
 from trident.callbacks import LambdaCallback, UnfreezeModelCallback
@@ -254,8 +254,7 @@ class ModelBase(object):
                 spec.name=arg_names[i]
                 self.signature.inputs[arg_names[i]]=spec
                 self.inputs[arg_names[i]]=spec
-            if len(old_inputs)==1:
-                self.input_spec=self.signature.inputs.value_list[0]
+
 
         elif self.signature is not None and len(self.signature.inputs.key_list)+len(self.signature.outputs.key_list) == len(arg_names):
 
@@ -271,8 +270,7 @@ class ModelBase(object):
                 spec.name = arg_names[i]
                 self.signature.inputs[arg_names[i]] = spec
                 self.inputs[arg_names[i]] = spec
-            if len(old_inputs) == 1:
-                self.input_spec = self.signature.inputs.value_list[0]
+
             for i in range(len(old_inputs)):
                 target_arg = arg_names[i ].replace('output', 'target')
                 if 'target' not in target_arg:
@@ -319,13 +317,12 @@ class ModelBase(object):
             for fc in self.preprocess_flow:
                 if self._model is not None and  self.input_spec is not None:
                     img_data = fc(img_data,spec=self.input_spec)
-                elif self._model is not None and self.signature is not None and len(self.signature.inputs) > 1 :
-                    img_data = fc(img_data,spec=self.signature.inputs.value_list[0])
+
                 else:
                     img_data = fc(img_data)
             img_data = np.expand_dims(image_backend_adaption(img_data),0)
             if self.input_spec is None :
-                self.input_spec= TensorSpec(shape=tensor_to_shape(to_tensor(img_data),need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+                self.signature.inputs['input']= TensorSpec(shape=tensor_to_shape(to_tensor(img_data),need_exclude_batch_axis=False),dtype=dtype.float32, object_type=ObjectType.rgb, name='input')
 
             return img_data
         else:
@@ -461,10 +458,10 @@ class ModelBase(object):
     def with_optimizer(self, optimizer, **kwargs):
         return self
 
-    def with_loss(self, loss, loss_weight=1, output_idx=0, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1,start_epoch=0,  name='', **kwargs):
         return self
 
-    def with_metric(self, metric, output_idx=0, name='', **kwargs):
+    def with_metric(self, metric, name='',print_only=False, **kwargs):
         return self
 
     def with_regularizer(self, reg, **kwargs):
@@ -808,19 +805,19 @@ class ModelBase(object):
                         output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'])
                         if isinstance(output, (list, tuple)):
                             for i in range(len(output)):
-                                self.train_data[self.outputs.key_list[i]] = output[i]
+                                self.train_data[self.signature.outputs.key_list[i]] = output[i]
                         elif isinstance(output, (OrderedDict)):
                             for k,v in output.items():
                                 self.train_data[k] = v
                         elif 'tensor' in output.__class__.__name__.lower():
-                            self.train_data[self.outputs.key_list[0]] = output
+                            self.train_data[self.signature.outputs.key_list[0]] = output
                             if self.use_output_as_loss:
 
                                 this_loss=output.sum()
                                 self.training_context['losses'].collect(self.outputs.key_list[0],self.training_context['steps'],this_loss)
                                 self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                         else:
-                            self.train_data[self.outputs.key_list[0]] = output
+                            self.train_data[self.signature.outputs.key_list[0]] = output
                             if self.use_output_as_loss:
 
                                 this_loss=output.sum()

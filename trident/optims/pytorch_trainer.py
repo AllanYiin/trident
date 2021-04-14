@@ -26,7 +26,7 @@ try:
 except ImportError:
     pil_image = None
     ImageEnhance = None
-    ImageFilter=None
+    ImageFilter = None
 from functools import partial
 from typing import List, Tuple
 
@@ -67,10 +67,10 @@ from trident.data.image_common import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from trident import context
 
-__all__ = ['Model', 'ImageClassificationModel','ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
-           'ImageSegmentationModel','FaceLandmarkModel', 'FaceRecognitionModel']
+__all__ = ['Model', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
+           'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel']
 
-ctx=context._context()
+ctx = context._context()
 
 working_directory = ctx.working_directory
 _, term_width = get_terminal_size()
@@ -119,8 +119,8 @@ class Model(ModelBase):
         self.summary_writer = None
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
-        if isinstance(input_shape,numbers.Integral):
-            input_shape=(input_shape,)
+        if isinstance(input_shape, numbers.Integral):
+            input_shape = (input_shape,)
         if output is None:
             raise ValueError('There is at least one output')
 
@@ -140,11 +140,11 @@ class Model(ModelBase):
                         self.inputs[v.name] = v
             elif isinstance(input_shape, (tuple, list)) and all([isinstance(item, numbers.Integral) for item in input_shape]):
                 input_name = 'input'
-                input_shape=TensorShape((None,)+tuple(input_shape))
+                input_shape = TensorShape((None,) + tuple(input_shape))
                 self.inputs[input_name] = TensorSpec(shape=input_shape, name=input_name)
             else:
                 input_shape = TensorShape(unpack_singleton(input_shape))
-                if isinstance(input_shape,TensorShape):
+                if isinstance(input_shape, TensorShape):
                     input_name = 'input'
                     self.inputs[input_name] = TensorSpec(shape=input_shape, name=input_name)
                 else:
@@ -165,24 +165,24 @@ class Model(ModelBase):
                 if isinstance(v, TensorSpec):
                     self.inputs[k] = v
                 elif is_tensor(v) or isinstance(v, np.ndarray):
-                    if  isinstance(v, np.ndarray):
+                    if isinstance(v, np.ndarray):
                         v = to_tensor(v)
-                    self.inputs[k] = TensorSpec(shape=tensor_to_shape(v),dtype=v.dtype, name=k)
+                    self.inputs[k] = TensorSpec(shape=tensor_to_shape(v), dtype=v.dtype, name=k)
         elif is_tensor(inputs):
-            self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True),dtype=inputs.dtype, name='input')
+            self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True), dtype=inputs.dtype, name='input')
         elif isinstance(inputs, np.ndarray):
             inputs = to_tensor(inputs)
-            self.inputs['input'] =   TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True),dtype=inputs.dtype,name='input')
+            self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True), dtype=inputs.dtype, name='input')
 
         # single model
         if isinstance(output, (Layer, nn.Module)):
             # update notes
-            output.is_root=True
+            output.is_root = True
             output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules()) if isinstance(mod, Layer)])
-            for name,mod in output.named_modules():
+            for name, mod in output.named_modules():
                 if isinstance(mod, Layer):
                     mod.nodes = output.nodes
-                    mod.relative_name=name
+                    mod.relative_name = name
             # output.cpu()
             if output.built and hasattr(output, '_output_shape') and output._output_shape is not None:
                 self._model = output
@@ -204,47 +204,36 @@ class Model(ModelBase):
                         out = output(*inputs)
                     else:
                         out = output(inputs)
-                        if len(output.signature.outputs) == 0:
-                            output.signature.outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
 
                 else:
 
-                    #output.input_shape = input_shape
+                    # output.input_shape = input_shape
                     dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device())
                     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                     output.to(get_device())
                     output.eval()
                     out = output(dummay_input)
-                    if len(output.signature.outputs)==0:
-                        if is_tensor(out):
-                            output.signature.outputs['output'] =TensorSpec(shape=tensor_to_shape(out), name='output')
-                        elif isinstance(out,OrderedDict):
-                            for k,v in out.items():
-                                output.signature.outputs[k] = TensorSpec(shape=tensor_to_shape(v,need_exclude_batch_axis=True), name=k)
-
-
-
 
                 self._model = output
-                #self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
-                if isinstance(out, torch.Tensor):
-                    self._outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
-                    self._targets['target'] = TensorSpec(shape=tensor_to_shape(out), name='target')
+                # self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
+                output.signature.outputs = OrderedDict()
+                if is_tensor(out):
+                    output.signature.outputs['output'] = TensorSpec(shape=tensor_to_shape(out), name='output')
+
                 elif isinstance(out, OrderedDict):
-                    for k, v in out.items():
-                        self._outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
-                        self._targets[k.replace('output', 'target').replace('student', 'teacher')] = TensorSpec(shape=tensor_to_shape(v),
-                                                                                                                name=k.replace('output', 'target').replace('student', 'teacher'))
-                else:
+                    for k, v in out.item_list:
+                        output.signature.outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
+
+                elif isinstance(out, (list, tuple)):
                     for i in range(len(out)):
-                        self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
-                        self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='target_{0}'.format(i))
+                        output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
+                self._outputs = output.signature.outputs
+
 
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (nn.Module)) for m in output]):
             output_list = []
             model_list = []
             dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device()) if not is_tensor(inputs) else inputs.to(get_device())
-
 
             for op in output:
                 if isinstance(op, (Layer, nn.Module)):
@@ -422,7 +411,7 @@ class Model(ModelBase):
         self.training_context['current_lr'] = self.base_lr
         return self
 
-    def with_loss(self, loss, loss_weight=1, output_idx=0, start_epoch=0, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0, name='', **kwargs):
         alias = name
         argnames = Signature()
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
@@ -444,7 +433,7 @@ class Model(ModelBase):
                     argnames = get_signature(self._losses[alias].forward, alias)
                 else:
                     argnames = get_signature(self._losses[alias].__call__, alias)
-        elif inspect.isclass(loss) and  loss.__class__.__name__=="type":  # The loss is a class but not initialized yet.
+        elif inspect.isclass(loss) and loss.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
             alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -506,9 +495,8 @@ class Model(ModelBase):
 
         return self
 
-    def with_metric(self, metric, output_idx=0, collect_history=None, name='', **kwargs):
-        if collect_history is None:
-            collect_history = True
+    def with_metric(self, metric, print_only=False,name='', **kwargs):
+
         alias = name
         argnames = OrderedDict()
         if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
@@ -526,7 +514,7 @@ class Model(ModelBase):
             else:
                 self._metrics[alias] = partial(metric_fn, **kwargs)
             argnames = get_signature(metric_fn, alias)
-        elif inspect.isclass(metric) and metric.__class__.__name__=="type":
+        elif inspect.isclass(metric) and metric.__class__.__name__ == "type":
             alias = metric.__class__.__name__ if len(alias) == 0 else alias
             if alias in self._metrics:
                 dup_keys = [key for key in self._metrics.key_list if alias + '_' in key]
@@ -570,7 +558,7 @@ class Model(ModelBase):
         print(self._metrics[alias].signature)
         self._metrics[alias].__name__ = alias
         # self._metrics[alias].signature = argnames
-        self._metrics[alias].collect_history = collect_history
+        self._metrics[alias].print_only = print_only
         return self
 
     def with_regularizer(self, reg, **kwargs):
@@ -604,8 +592,8 @@ class Model(ModelBase):
         return self
 
     def with_initializer(self, initializer, **kwargs):
-        self.initializer=initializer
-        if self._model is not None and isinstance(self._model,Layer) and self._model._built:
+        self.initializer = initializer
+        if self._model is not None and isinstance(self._model, Layer) and self._model._built:
             self.initializer(self._model, **kwargs)
         return self
 
@@ -646,7 +634,7 @@ class Model(ModelBase):
 
         """
         if ctx.amp_available == True:
-            ctx.is_autocast_enabled=True
+            ctx.is_autocast_enabled = True
             self.gradscaler = torch.cuda.amp.GradScaler()
             sys.stdout.write('Automatic Mixed Precision:{0}.\n'.format('Turn On'))
         else:
@@ -690,18 +678,17 @@ class Model(ModelBase):
         if self.training_context['steps'] == 0:
             self.training_context['time_epoch_progress'] = 0
 
-
     def do_on_epoch_end(self):
         if self.model.device == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             gc.collect()
 
-        if self.warmup > 0 and self.training_context['current_epoch']+1 < self.warmup:
+        if self.warmup > 0 and self.training_context['current_epoch'] + 1 < self.warmup:
             lr = 1e-6 * (self.training_context['current_epoch'] + 1)
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = lr
-        elif 0 < self.warmup == self.training_context['current_epoch']+1:
+        elif 0 < self.warmup == self.training_context['current_epoch'] + 1:
             self.optimizer.adjust_learning_rate(self.base_lr, verbose=True)
             self.training_context['current_lr'] = self.base_lr
 
@@ -711,7 +698,7 @@ class Model(ModelBase):
             self.training_context['time_epoch_progress'] = 0
         self.training_context['time_batch_start'] = time.time()
 
-        if (self.training_context['steps'] + 1) % 100== 0:
+        if (self.training_context['steps'] + 1) % 100 == 0:
             if self.model.device == 'cuda':
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
@@ -719,20 +706,20 @@ class Model(ModelBase):
 
     def do_on_batch_end(self):
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['time_batch_progress']+=( time.time() -self.training_context['time_batch_start'] )
+        self.training_context['time_batch_progress'] += (time.time() - self.training_context['time_batch_start'])
         self.training_context['time_epoch_progress'] += (time.time() - self.training_context['time_batch_start'])
-        self.training_context['steps']+=1
-        if (self.training_context['steps']+1) % ctx.epoch_equivalent == 0:
-            if self.warmup > 0 and self.warmup == (self.training_context['steps']+1) // ctx.epoch_equivalent:
+        self.training_context['steps'] += 1
+        if (self.training_context['steps'] + 1) % ctx.epoch_equivalent == 0:
+            if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
                 self.warmup = 0
-        if self.training_context['current_batch'] == 0 :
+        if self.training_context['current_batch'] == 0:
             temp = OrderedDict()
             for k in self.training_context['losses'].key_list:
                 if len(self.training_context['losses'][k]) > 0:
                     temp[k] = self.training_context['losses'][k][-1][-1]
-            temp['total_losses']=to_numpy(self.training_context['current_loss'])[0]
-            print('{ '+', '.join(['{0}: {1}'.format(k,adaptive_format(v,value_type='loss')) for k,v in temp.items()])+' }')
+            temp['total_losses'] = to_numpy(self.training_context['current_loss'])[0]
+            print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -740,7 +727,8 @@ class Model(ModelBase):
         # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if self.training_context['steps'] == 0 and ('data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or None in self.training_context['data_feed'].value_list) :
+        if self.training_context['steps'] == 0 and (
+                'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or None in self.training_context['data_feed'].value_list):
             try:
 
                 data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
@@ -832,12 +820,12 @@ class Model(ModelBase):
             data_feed = self.training_context['data_feed']
             input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-                train_data[item]=to_tensor(train_data[item],device=get_device())
-                if  item in input_list and  'float' in str(train_data[item].dtype):
+                train_data[item] = to_tensor(train_data[item], device=get_device())
+                if item in input_list and 'float' in str(train_data[item].dtype):
                     train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    test_data[item] = to_tensor(test_data[item],device=get_device())  # .cpu()
+                    test_data[item] = to_tensor(test_data[item], device=get_device())  # .cpu()
 
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
@@ -859,7 +847,7 @@ class Model(ModelBase):
                 self._model.train()
             self.optimizer.zero_grad()
             if self.training_context['stop_update'] < 1:
-                if ctx.amp_available and ctx.is_autocast_enabled== True and get_device() == 'cuda':
+                if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     if self.gradscaler is None:
                         self.gradscaler = torch.cuda.amp.GradScaler()
                     self.gradscaler.scale(self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
@@ -872,7 +860,7 @@ class Model(ModelBase):
 
                 if isinstance(self._model, nn.Module) and self.grad_clipping_by_norm:
 
-                    if ctx.amp_available and ctx.is_autocast_enabled== True and get_device() == 'cuda':
+                    if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                         self.gradscaler.unscale_(self.optimizer)
                         torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
@@ -892,7 +880,7 @@ class Model(ModelBase):
 
             if self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update']):
                 # amp support
-                if ctx.amp_available and ctx.is_autocast_enabled== True and get_device() == 'cuda':
+                if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     self.gradscaler.step(self.optimizer)
                     self.gradscaler.update()
                 else:
@@ -917,8 +905,7 @@ class Model(ModelBase):
             PrintException()
 
     def do_post_gradient_update(self):
-        self.training_context['tmp_losses'].collect('total_losses',self.training_context['steps'],self.training_context['current_loss'])
-
+        self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'], self.training_context['current_loss'])
 
     def do_on_progress_end(self):
         if self.training_context['current_epoch'] > self.warmup:
@@ -1021,8 +1008,7 @@ class Model(ModelBase):
             import_or_install('torch.onnx')
             self._model.eval()
 
-
-            dummy_input =(to_tensor( self.signature.inputs.value_list[0].shape.get_dummy_tensor()))
+            dummy_input = (to_tensor(self.signature.inputs.value_list[0].shape.get_dummy_tensor()))
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -1031,7 +1017,6 @@ class Model(ModelBase):
             save_path = os.path.join(folder, filename + ext)
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
-
 
             outputs = self._model(dummy_input)
             if dynamic_axes is None:
@@ -1066,24 +1051,24 @@ class Model(ModelBase):
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
-        state_dict =None
+        state_dict = None
         pretrained_dict = None
-        if ext== '.pth.tar':
+        if ext == '.pth.tar':
             state_dict = torch.load(file_path, map_location=torch.device(get_device()))
-        elif ext== '.pth':
-            load_path=file_path
+        elif ext == '.pth':
+            load_path = file_path
             if not os.path.exists(file_path):
-                if os.path.exists(file_path.replace(ext,'.pth.tar')):
-                    load_path=file_path.replace(ext,'.pth.tar')
-                elif os.path.exists( os.path.join(working_directory, filename + ext)):
+                if os.path.exists(file_path.replace(ext, '.pth.tar')):
+                    load_path = file_path.replace(ext, '.pth.tar')
+                elif os.path.exists(os.path.join(working_directory, filename + ext)):
                     load_path = os.path.join(working_directory, filename + ext)
             recovery_pth = torch.load(load_path, map_location=torch.device(get_device()))
 
-            if isinstance(recovery_pth,dict):
-                state_dict=recovery_pth
+            if isinstance(recovery_pth, dict):
+                state_dict = recovery_pth
 
-            elif isinstance(recovery_pth,Layer):
-                state_dict=recovery_pth.state_dict()
+            elif isinstance(recovery_pth, Layer):
+                state_dict = recovery_pth.state_dict()
 
         if 'backend' in state_dict and state_dict['backend'] != 'pytorch':
             raise RuntimeError(
@@ -1094,26 +1079,27 @@ class Model(ModelBase):
         else:
             pretrained_dict = state_dict
 
-        if check_keys(self._model, pretrained_dict):
-            has_abnormal = False
-            for key in pretrained_dict.keys():
-                value = pretrained_dict[key]
-                if is_tensor(value) and any_abnormal_number(value):
-                    has_abnormal = True
-                    pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
-                if is_tensor(value) and ndim(value) == 0:
-                    pretrained_dict[key] = to_tensor(value.item())
+        if isinstance(self._model, Layer):
+            if check_keys(self._model, pretrained_dict):
+                has_abnormal = False
+                for key in pretrained_dict.keys():
+                    value = pretrained_dict[key]
+                    if is_tensor(value) and any_abnormal_number(value):
+                        has_abnormal = True
+                        pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                    if is_tensor(value) and ndim(value) == 0:
+                        pretrained_dict[key] = to_tensor(value.item())
 
-            if has_abnormal:
-                sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
-            self._model.load_state_dict(pretrained_dict, strict=False)
-            print('Model loaded!')
-            # must switch to evluate first beforeinference or training
-            # Dropout and Batch normalization will behavior change!!!
+                if has_abnormal:
+                    sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
+                self._model.load_state_dict(pretrained_dict, strict=False)
+                print('Model loaded!')
+                # must switch to evluate first beforeinference or training
+                # Dropout and Batch normalization will behavior change!!!
 
-            self._model.eval()
-        if "signature" in state_dict.keys() and (self._model.signature is None or  state_dict['signature'] != self._model.signature):
-            self._model.signature=state_dict['signature']
+                self._model.eval()
+        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
+            self._model.signature = state_dict['signature']
         self._model.to(get_device())
 
     def summary(self):
@@ -1127,6 +1113,7 @@ class Model(ModelBase):
 
     def test(self, input, target):
         raise NotImplementedError
+
     #
     # @property
     # def preprocess_flow(self):
@@ -1282,10 +1269,11 @@ class ImageClassificationModel(Model):
         self._idx2lab = {}
         self._lab2idx = {}
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.classification_label
+
     @property
     def class_names(self):
         return self._class_names
@@ -1322,7 +1310,7 @@ class ImageClassificationModel(Model):
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
@@ -1346,30 +1334,30 @@ class ImageClassificationModel(Model):
         else:
             raise ValueError('the model is not built yet.')
 
+
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
         if self._model.input_spec.object_type is None:
             self._model.input_spec.object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-
 
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
             img = image2array(img)
-            img_shp=img.shape
+            img_shp = img.shape
 
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-            rescale_scale=1.0
+            rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
-                    img = func(img,spec=self._model.input_spec)
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             if isinstance(self._model, Layer):
@@ -1382,17 +1370,15 @@ class ImageRegressionModel(Model):
                 raise ValueError('the model is not layer.')
 
 
-
 class ImageDetectionModel(Model):
-    def __init__(self, inputs=None, input_shape=None, output=None):
+    def __init__(self, inputs=None, input_shape=None, output=None, detection_threshold=0.5, nms_threshold=0.3):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
-        object.__setattr__(self, 'detection_threshold',  0.5)
-        object.__setattr__(self, 'nms_threshold', 0.3)
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        object.__setattr__(self, 'detection_threshold', detection_threshold)
+        object.__setattr__(self, 'nms_threshold', nms_threshold)
+
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-
-
 
     def infer_single_image(self, img, scale=1):
         if self._model.built:
@@ -1404,11 +1390,11 @@ class ImageDetectionModel(Model):
                 img = img[:, :, :3]
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-            rescale_scale=1
+            rescale_scale = 1
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
-                    img = func(img,spec=self._model.input_spec)
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op' ) or( isinstance(func,Transform) and  func.name=='resize') :
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
+                    img = func(img, spec=self._model.input_spec)
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
@@ -1434,12 +1420,12 @@ class ImageSegmentationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageSegmentationModel, self).__init__(inputs, input_shape, output)
 
-        self.palette= OrderedDict()
+        self.palette = OrderedDict()
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
     @property
@@ -1480,19 +1466,19 @@ class ImageSegmentationModel(Model):
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
                 self._model.weights[0].data.dtype)
-            result =argmax( self._model(inp)[0],axis=1)
+            result = argmax(self._model(inp)[0], axis=1)
             result = to_numpy(result)
             if self.class_names is None or len(self.class_names) == 0:
                 return result
             else:
-                if len(self.palette)>0:
-                    color_result=color2label(result,self.palette)
+                if len(self.palette) > 0:
+                    color_result = color2label(result, self.palette)
                     return color_result
                 else:
                     return result
@@ -1504,7 +1490,7 @@ class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.rgb
@@ -1517,9 +1503,9 @@ class ImageGenerationModel(Model):
                 img = img[:, :, :3]
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-            rescale_scale=1.0
+            rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1533,11 +1519,12 @@ class ImageGenerationModel(Model):
             result = array2image(result)
             return result
 
+
 class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.landmarks
@@ -1547,16 +1534,16 @@ class FaceLandmarkModel(Model):
             self._model.eval()
 
             img = image2array(img)
-            img_shp=img.shape
+            img_shp = img.shape
 
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-            rescale_scale=1.0
-            img_shape=int_shape(img)
+            rescale_scale = 1.0
+            img_shape = int_shape(img)
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1564,10 +1551,10 @@ class FaceLandmarkModel(Model):
             if isinstance(self._model, Layer):
                 inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
                 result = self._model(inp)
-                result = to_numpy(result)/ rescale_scale
-                result[:,:, 0::2] =clip(result[:,:, 0::2] ,0,img_shp[1])
-                result[:,:, 1::2] =clip(result[:,:, 1::2],0,img_shp[0])
-                return result#.astype(np.int32)
+                result = to_numpy(result) / rescale_scale
+                result[:, :, 0::2] = clip(result[:, :, 0::2], 0, img_shp[1])
+                result[:, :, 1::2] = clip(result[:, :, 1::2], 0, img_shp[0])
+                return result  # .astype(np.int32)
             else:
 
                 raise ValueError('the model is not layer.')
@@ -1575,17 +1562,15 @@ class FaceLandmarkModel(Model):
         else:
             raise ValueError('the model is not built yet.')
 
+
 class FaceRecognitionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
 
-
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list)>0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.embedding
-
-
 
     def infer_single_image(self, img):
 
@@ -1597,9 +1582,9 @@ class FaceRecognitionModel(Model):
                 img = img[:, :, :3]
             if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-            rescale_scale=1.0
+            rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func,Transform)) and func is not  image_backend_adaption:
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale

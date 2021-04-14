@@ -48,7 +48,7 @@ import colorsys
 import itertools
 import numpy as np
 from trident import context
-from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton
+from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton, get_plateform
 
 ctx = context._context()
 _backend =ctx.get_backend()
@@ -99,24 +99,27 @@ def generate_palette(num_classes: int, format: str = 'rgb'):
         return [hex_format(color) for color in colors]
 
 
-def plot_bbox(x, img, color=None, label=None, line_thickness=None, **kwargs):
+def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
+    import cv2
     img_shape = (img.height, img.width, 3)
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
     # img = array2image(img)
+    c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
     draw = ImageDraw.Draw(img)
-    draw.rectangle(((x[0], x[1]), (x[2], x[3])), outline=color, fill=None, width=tl)
+    draw.rectangle(((box[0], box[1]), (box[2], box[3])), outline=color, fill=None, width=tl)
     fontcolor = (255, 255, 255)
     avg_color = np.array(list(color)).mean()
+    font=ImageFont.truetype(fonts[fontnames.index('Hiragino Sans GB')],int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
     if avg_color > 150:
         fontcolor = (0, 0, 0)
-    if label and sys.platform == 'win32':
+    if label and get_plateform() == 'windows':
         font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
-        tf = max(tl - 1, 1)  # font thickness
-        size = draw.textsize(label, font=font)
-        offset = font.getoffset(label)
-        draw.rectangle(((x[0], x[1] - size[1] - 2 * (offset[1] + 1)), (x[0] + 2 * (size[0] + offset[0] + 1), x[1])), fill=color,
-                       width=2)
-        draw.text((x[0] + 2, x[1] - size[1] - offset[1] - 1), u'{0}'.format(label), fill=fontcolor, font=font)
+    tf = max(tl - 1, 1)  # font thickness
+    t_size = draw.textsize(label, font=font)
+    c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+    offset = font.getoffset(label)
+    draw.rectangle((c1, c2), fill=color,width=2)
+    draw.text((c1[0], c1[1] - 2- offset[1] ), u'{0}'.format(label), fill=fontcolor, font=font)
 
     # rgb_image = image2array(img)
     return img
@@ -176,7 +179,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
         return fig
 
 
-def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_iteration=None,
+def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base='epoch', max_iteration=None,
                       save_path=None, imshow=False, **kwargs):
     colors = []
     line_type = ['-', '--', '-.', ':']
@@ -219,37 +222,39 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
     first_axis_keys = []
     second_axis_keys = []
     if metrics.__class__.__name__ == 'HistoryBase':
+        metrics_need_plot = metrics_names[0]
         for n in range(len(metrics)):
             k, v = list(metrics.items())[n]
-            legend_label = k
-            if legend is not None and len(legend) == len(metrics):
-                legend_label = legend[n]
+            if k in metrics_need_plot:
+                legend_label = k
+                if legend is not None and len(legend) == len(metrics):
+                    legend_label = legend[n]
 
-            steps, values = metrics.get_series(k)
-            values_np = np.array(values)
-            if first_axis_range is None:
-                first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
-                first_axis_keys.append(k)
-                metric_ax1.plot(steps, values, label=legend_label)
-            else:
-                if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
-                    second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
-                    metric_ax2.plot(steps, values, label=legend_label)
-                    second_axis_keys.append(k)
-                elif second_axis_range is not None:
-                    compare_array = np.array([list(first_axis_range), list(second_axis_range)])
-                    this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
-                    distance=expand_dims(sqrt(reduce_sum((compare_array-this_array)**2,axis=-1)),0)
-                    result = argmin(distance,axis=-1)[0]
-                    if result == 0:
-                        metric_ax1.plot(steps, values, label=legend_label)
-                        first_axis_keys.append(k)
-                    else:
+                steps, values = metrics.get_series(k)
+                values_np = np.array(values)
+                if first_axis_range is None:
+                    first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                    first_axis_keys.append(k)
+                    metric_ax1.plot(steps, values, label=legend_label)
+                else:
+                    if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
+                        second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                         metric_ax2.plot(steps, values, label=legend_label)
                         second_axis_keys.append(k)
-                else:
-                    metric_ax1.plot(steps, values, label=legend_label)
-                    first_axis_keys.append(k)
+                    elif second_axis_range is not None:
+                        compare_array = np.array([list(first_axis_range), list(second_axis_range)])
+                        this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
+                        distance=expand_dims(sqrt(reduce_sum((compare_array-this_array)**2,axis=-1)),0)
+                        result = argmin(distance,axis=-1)[0]
+                        if result == 0:
+                            metric_ax1.plot(steps, values, label=legend_label)
+                            first_axis_keys.append(k)
+                        else:
+                            metric_ax2.plot(steps, values, label=legend_label)
+                            second_axis_keys.append(k)
+                    else:
+                        metric_ax1.plot(steps, values, label=legend_label)
+                        first_axis_keys.append(k)
 
         metric_ax1.legend()
         if len(second_axis_keys) > 0:
@@ -263,48 +268,50 @@ def loss_metric_curve(losses, metrics, legend=None, calculate_base='epoch', max_
             line_color = colors[i]
             if item.__class__.__name__ == 'HistoryBase':
                 for j in range(len(item.items())):
+                    metrics_need_plot=metrics_names[j]
                     k = list(item.keys())[j]
-                    legend_label = k+str(i)
-                    if legend is not None and len(legend) == len(metrics):
-                        legend_label = legend[i]+' '+k
+                    if k in metrics_need_plot:
+                        legend_label = k+str(i)
+                        if legend is not None and len(legend) == len(metrics):
+                            legend_label = legend[i]+' '+k
 
-                    steps, values = item.get_series(k)
-                    values_np = np.array(values)
-                    if first_axis_range is None:
-                        first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
-                        first_axis_keys.append(k)
-                        metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                    else:
-                        if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
-                            second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
-                            second_axis_keys.append(k)
-                            metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                        elif k in first_axis_keys:
-                            metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                        elif k in second_axis_keys:
-                            metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                        elif second_axis_range is not None:
-                            _, first_values = item.get_series(first_axis_keys[0])
-                            first_values=np.array(first_values)
-                            _, second_values = item.get_series(second_axis_keys[0])
-                            second_values = np.array(second_values)
-                            compare_array = np.array([[first_values.min(), first_values.mean(), first_values.max()], [second_values.min(), second_values.mean(), second_values.max()]])
-                            this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
-                            distance = expand_dims(sqrt(reduce_sum((compare_array - this_array) ** 2, axis=-1)), 0)
-                            result = argmin(distance, axis=-1)[0]
-                            if result == 0:
-                                first_axis_keys.append(k)
-                                metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                            else:
-                                second_axis_keys.append(k)
-                                metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                        else:
+                        steps, values = item.get_series(k)
+                        values_np = np.array(values)
+                        if first_axis_range is None:
+                            first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                             first_axis_keys.append(k)
                             metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
-                    if len(values) > 0 and legend is not None:
-                        legend_list.append(['{0} {1}'.format(k, legend[i])])
-                    elif len(values) > 0:
-                        legend_list.append(['{0} {1}'.format(k, i)])
+                        else:
+                            if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
+                                second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
+                                second_axis_keys.append(k)
+                                metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                            elif k in first_axis_keys:
+                                metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                            elif k in second_axis_keys:
+                                metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                            elif second_axis_range is not None:
+                                _, first_values = item.get_series(first_axis_keys[0])
+                                first_values=np.array(first_values)
+                                _, second_values = item.get_series(second_axis_keys[0])
+                                second_values = np.array(second_values)
+                                compare_array = np.array([[first_values.min(), first_values.mean(), first_values.max()], [second_values.min(), second_values.mean(), second_values.max()]])
+                                this_array = np.array([[values_np.min(), values_np.mean(), values_np.max()]])
+                                distance = expand_dims(sqrt(reduce_sum((compare_array - this_array) ** 2, axis=-1)), 0)
+                                result = argmin(distance, axis=-1)[0]
+                                if result == 0:
+                                    first_axis_keys.append(k)
+                                    metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                                else:
+                                    second_axis_keys.append(k)
+                                    metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                            else:
+                                first_axis_keys.append(k)
+                                metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
+                        if len(values) > 0 and legend is not None:
+                            legend_list.append(['{0} {1}'.format(k, legend[i])])
+                        elif len(values) > 0:
+                            legend_list.append(['{0} {1}'.format(k, i)])
 
         metric_ax1.legend()
         if len(second_axis_keys) > 0:
