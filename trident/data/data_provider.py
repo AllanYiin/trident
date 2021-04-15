@@ -84,7 +84,7 @@ class ImageDataProvider(object):
         self._label_transform_funcs = []
         self._paired_transform_funcs = []
         self._batch_transform_funcs = []
-        cxt=context._context()
+        cxt = context._context()
         cxt.regist_data_provider(self)
 
     @property
@@ -144,10 +144,11 @@ class ImageDataProvider(object):
     def image_transform_funcs(self, value):
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
-            dss=self.traindata.get_datasets()
+
+            dss = self.traindata.get_datasets()
             for ds in dss:
                 if isinstance(ds, ImageDataset):
-                    ds.transform_funcs =copy.deepcopy(value)
+                    ds.transform_funcs = copy.deepcopy(value)
             self.traindata.update_data_template()
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
             dss_t = self.testdata.get_datasets()
@@ -179,7 +180,7 @@ class ImageDataProvider(object):
             fn = self.image_transform_funcs[-1 - i]
             if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
                 return_list.append(Unnormalize(fn.mean, fn.std))
-        #return_list.append(array2image)
+        # return_list.append(array2image)
         return return_list
 
     def reverse_image_transform(self, img_data: np.ndarray):
@@ -191,7 +192,7 @@ class ImageDataProvider(object):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 img_data = fc(img_data)
-            #img_data = reverse_image_backend_adaption(img_data)
+            # img_data = reverse_image_backend_adaption(img_data)
 
         return img_data
 
@@ -218,13 +219,12 @@ class ImageDataProvider(object):
         self._paired_transform_funcs = value
 
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
-            self.traindata.paired_transform_funcs =copy.deepcopy(value)
-
+            self.traindata.paired_transform_funcs = copy.deepcopy(value)
 
             self.traindata.update_data_template()
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
-            self.testdata.paired_transform_funcs =copy.deepcopy(value)
+            self.testdata.paired_transform_funcs = copy.deepcopy(value)
             self.testdata.update_data_template()
 
     @property
@@ -236,26 +236,26 @@ class ImageDataProvider(object):
         self._batch_transform_funcs = value
         self.traindata.update_data_template()
         self.traindata.batch_sampler._batch_transform_funcs = value
-        if self.testdata is not None :
+        if self.testdata is not None:
             self.testdata.update_data_template()
 
-    def batch_transform(self,batchdata):
-        if hasattr(self,'_batch_transform_funcs')  and len(self._batch_transform_funcs)>0:
+    def batch_transform(self, batchdata):
+        if hasattr(self, '_batch_transform_funcs') and len(self._batch_transform_funcs) > 0:
 
-            if isinstance(batchdata,tuple):
+            if isinstance(batchdata, tuple):
                 new_batchdata = copy.deepcopy(self.traindata.data_template)
                 for i in range(len(batchdata)):
                     new_batchdata[new_batchdata.key_list[i]] = batchdata[i]
                 batchdata = new_batchdata
-            if isinstance(batchdata,OrderedDict):
-                if not all([isinstance(k,TensorSpec) for k in batchdata.key_list]):
-                    new_batchdata=copy.deepcopy(self.traindata.data_template)
+            if isinstance(batchdata, OrderedDict):
+                if not all([isinstance(k, TensorSpec) for k in batchdata.key_list]):
+                    new_batchdata = copy.deepcopy(self.traindata.data_template)
                     for i in range(len(batchdata)):
-                        new_batchdata[new_batchdata.key_list[i]]=batchdata[batchdata.key_list[i]]
-                    batchdata=new_batchdata
+                        new_batchdata[new_batchdata.key_list[i]] = batchdata[batchdata.key_list[i]]
+                    batchdata = new_batchdata
 
                 for trans in self._batch_transform_funcs:
-                    batchdata=trans(batchdata)
+                    batchdata = trans(batchdata)
                 return batchdata
             else:
                 return batchdata
@@ -267,7 +267,6 @@ class ImageDataProvider(object):
     def class_names(self):
         return self._class_names
 
-
     @class_names.setter
     def class_names(self, value):
         self._class_names = value
@@ -276,40 +275,40 @@ class ImageDataProvider(object):
         if self.testdata is not None and hasattr(self.testdata.label, 'class_names'):
             self.testdata.label.class_names = self._class_names
 
-    def preview_images(self, key=None,is_concate=True):
-        if not isinstance(self.traindata.data,ImageDataset):
+    def preview_images(self, key=None, is_concate=True):
+        if not isinstance(self.traindata.data, ImageDataset):
             return None
         else:
-            if key is None and isinstance(self.traindata.data,ImageDataset):
-                data= self.next()
-                if isinstance(data,OrderedDict):
-                    data=data.value_list
-                data=enforce_singleton(data)
+            if key is None and isinstance(self.traindata.data, ImageDataset):
+                data = self.next()
+                if isinstance(data, OrderedDict):
+                    data = data.value_list
+                data = enforce_singleton(data)
                 data = self.reverse_image_transform(data)
                 if is_concate:
-                    data = np.concatenate([img for img in data], axis=-1 if data[0].ndim==2 or (data[0].ndim==3 and data[0].shape[0] in [1,3,4]) else -2)
+                    data = np.concatenate([img for img in data], axis=-1 if data[0].ndim == 2 or (data[0].ndim == 3 and data[0].shape[0] in [1, 3, 4]) else -2)
                     return array2image(data)
                 else:
                     return [array2image(img) for img in data]
             elif isinstance(key, slice):
                 start = key.start if key.start is not None else 0
                 stop = key.stop
-                results=[]
-                for k in range(start,stop,1):
-                    img=self.traindata.data.__getitem__(k)
+                results = []
+                for k in range(start, stop, 1):
+                    img = self.traindata.data.__getitem__(k)
 
                     if isinstance(img, np.ndarray):
                         for fc in self.image_transform_funcs:
-                            if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption and  fc is not Normalize and fc is not normalize:
+                            if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption and fc is not Normalize and fc is not normalize:
                                 img = fc(img)
                     results.append(img)
                 if is_concate:
-                    results = np.concatenate(results, axis=-1 if results[0].ndim==2 or (results[0].ndim==3 and results[0].shape[0] in [1,3,4]) else -2)
+                    results = np.concatenate(results, axis=-1 if results[0].ndim == 2 or (results[0].ndim == 3 and results[0].shape[0] in [1, 3, 4]) else -2)
                     return array2image(results)
                 else:
                     return [array2image(img) for img in results]
             elif isinstance(key, int):
-                img=self.traindata.data.__getitem__(key)
+                img = self.traindata.data.__getitem__(key)
                 if isinstance(img, np.ndarray):
                     for fc in self.image_transform_funcs:
                         if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption and fc is not Normalize and fc is not normalize:
@@ -317,16 +316,14 @@ class ImageDataProvider(object):
                 return array2image(img)
 
     def label_statistics(self):
-        if isinstance(self.traindata.label,LabelDataset):
+        if isinstance(self.traindata.label, LabelDataset):
             unique, counts = np.unique(np.array(self.traindata.label.items), return_counts=True)
-            max_len=builtins.max([get_string_actual_length(item) for item in self.class_names[self.__default_language__]])+5
+            max_len = builtins.max([get_string_actual_length(item) for item in self.class_names[self.__default_language__]]) + 5
             for i in range(len(unique)):
-                class_names=''.join([' ']*max_len) if self.class_names is None or len(self.class_names) == 0 else self.index2label(unique[i])+''.join([' ']*(max_len-get_string_actual_length(self.index2label(unique[i]))))
-                bar=['█']*int(builtins.round(50*counts[i] / float(len(self.traindata.label.items))))
-                print('{0:<10} {1} {2:<50} {3:,} ({4:.3%})'.format(unique[i],class_names,''.join(bar),counts[i],counts[i]/float(len(self.traindata.label.items))))
-
-
-
+                class_names = ''.join([' '] * max_len) if self.class_names is None or len(self.class_names) == 0 else self.index2label(unique[i]) + ''.join(
+                    [' '] * (max_len - get_string_actual_length(self.index2label(unique[i]))))
+                bar = ['█'] * int(builtins.round(50 * counts[i] / float(len(self.traindata.label.items))))
+                print('{0:<10} {1} {2:<50} {3:,} ({4:.3%})'.format(unique[i], class_names, ''.join(bar), counts[i], counts[i] / float(len(self.traindata.label.items))))
 
     def _next_index(self):
         return self.__next__()
@@ -353,7 +350,6 @@ class ImageDataProvider(object):
         else:
             return self.traindata.next()
 
-
     def __next__(self):
         if self.scenario == 'test' and self.testdata is not None:
             return next(self.testdata)
@@ -363,7 +359,6 @@ class ImageDataProvider(object):
     def next_train(self):
         return self.batch_transform(self.traindata.next())
 
-
     def next_test(self):
         if self.testdata is not None:
             return self.batch_transform(self.testdata.next())
@@ -371,9 +366,9 @@ class ImageDataProvider(object):
         else:
             return None
 
-    def get_all_data(self, is_shuffle=False,topk=-1):
+    def get_all_data(self, is_shuffle=False, topk=-1):
         idxes = np.arange(len(self.traindata.data))
-        if is_shuffle :
+        if is_shuffle:
             np.random.shuffle(idxes)
         data = []
         if topk == -1:
@@ -381,7 +376,6 @@ class ImageDataProvider(object):
 
         for i in range(topk):
             data.append(self.traindata.data.__getitem__(idxes[i]))
-
 
         return data
 
@@ -429,16 +423,13 @@ class ImageDataProvider(object):
 
     def __setattr__(self, name: str, value) -> None:
         object.__setattr__(self, name, value)
-        if name=='mode':
-            if isinstance(self.traindata,Iterator):
-                self.traindata.mode=value
-                self.traindata.batch_sampler.mode=value
-            if isinstance(self.testdata,Iterator):
-                self.testdata.mode=value
+        if name == 'mode':
+            if isinstance(self.traindata, Iterator):
+                self.traindata.mode = value
+                self.traindata.batch_sampler.mode = value
+            if isinstance(self.testdata, Iterator):
+                self.testdata.mode = value
                 self.testdata.batch_sampler.mode = value
-
-
-
 
 
 DataProvider = ImageDataProvider
@@ -489,7 +480,6 @@ class TextSequenceDataProvider(object):
         self._batch_transform_funcs = []
         cxt = context._context()
         cxt.regist_data_provider(self)
-
 
     @property
     def signature(self):
@@ -701,7 +691,6 @@ class TextSequenceDataProvider(object):
     def next_train(self):
         return self.traindata.next()
 
-
     def next_test(self):
         if self.testdata is not None:
             return self.testdata.next()
@@ -739,17 +728,17 @@ class TextSequenceDataProvider(object):
             else:
                 index2textdict = self.traindata.label.index2text
         else:
-            if isinstance(self.traindata.label,ZipDataset):
-                for dataset in  self.traindata.label.items:
-                    if isinstance(dataset,TextSequenceDataset):
-                        index2textdict =dataset.index2text
+            if isinstance(self.traindata.label, ZipDataset):
+                for dataset in self.traindata.label.items:
+                    if isinstance(dataset, TextSequenceDataset):
+                        index2textdict = dataset.index2text
                         break
             else:
                 index2textdict = self.traindata.label.index2text
         if idx in index2textdict:
             return index2textdict[idx]
         else:
-            return  '<unk/>'
+            return '<unk/>'
 
     def label2index(self, text_data: str):
         text2indexdict = None
