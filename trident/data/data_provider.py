@@ -144,11 +144,16 @@ class ImageDataProvider(object):
     def image_transform_funcs(self, value):
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
-            self.traindata.data.transform_funcs =copy.deepcopy(value)
-
+            dss=self.traindata.get_datasets()
+            for ds in dss:
+                if isinstance(ds, ImageDataset):
+                    ds.transform_funcs =copy.deepcopy(value)
             self.traindata.update_data_template()
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
-            self.testdata.data.transform_funcs =copy.deepcopy(value)
+            dss_t = self.testdata.get_datasets()
+            for ds in dss_t:
+                if isinstance(ds, ImageDataset):
+                    ds.transform_funcs = copy.deepcopy(value)
 
             self.testdata.update_data_template()
 
@@ -481,6 +486,7 @@ class TextSequenceDataProvider(object):
         self._text_transform_funcs = []
         self._label_transform_funcs = []
         self._paired_transform_funcs = []
+        self._batch_transform_funcs = []
         cxt = context._context()
         cxt.regist_data_provider(self)
 
@@ -626,6 +632,42 @@ class TextSequenceDataProvider(object):
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
             self.testdata.paired_transform_funcs = value
+
+    @property
+    def batch_transform_funcs(self):
+        return self._batch_transform_funcs
+
+    @batch_transform_funcs.setter
+    def batch_transform_funcs(self, value):
+        self._batch_transform_funcs = value
+        self.traindata.update_data_template()
+        self.traindata.batch_sampler._batch_transform_funcs = value
+        if self.testdata is not None:
+            self.testdata.update_data_template()
+
+    def batch_transform(self, batchdata):
+        if hasattr(self, '_batch_transform_funcs') and len(self._batch_transform_funcs) > 0:
+
+            if isinstance(batchdata, tuple):
+                new_batchdata = copy.deepcopy(self.traindata.data_template)
+                for i in range(len(batchdata)):
+                    new_batchdata[new_batchdata.key_list[i]] = batchdata[i]
+                batchdata = new_batchdata
+            if isinstance(batchdata, OrderedDict):
+                if not all([isinstance(k, TensorSpec) for k in batchdata.key_list]):
+                    new_batchdata = copy.deepcopy(self.traindata.data_template)
+                    for i in range(len(batchdata)):
+                        new_batchdata[new_batchdata.key_list[i]] = batchdata[batchdata.key_list[i]]
+                    batchdata = new_batchdata
+
+                for trans in self._batch_transform_funcs:
+                    batchdata = trans(batchdata)
+                return batchdata
+            else:
+                return batchdata
+
+        else:
+            return batchdata
 
     def _next_index(self):
         return self.__next__()
