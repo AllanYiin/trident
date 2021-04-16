@@ -129,10 +129,13 @@ class BatchSampler(Sampler):
         if len(self.data_source) % self.batch_size > 0:
             idxes = idxes[:-(len(self.data_source.data) % self.batch_size)]
         if self.is_shuffle:
-            np.random.shuffle(idxes)
-        idxes = list(idxes)
+            n = len(self.data_source)
+            random_range=np.arange(n)
+            np.random.shuffle(random_range)
+            self.sampler = itertools.cycle(iter(random_range.tolist()))
 
-        self.sampler = itertools.cycle(iter(idxes))
+        else:
+            self.sampler =itertools.cycle(iter(range(len(self.data_source))))
         self.sample_filter = None
         if inspect.isfunction(sample_filter) or callable(sample_filter):
             self.sample_filter = sample_filter
