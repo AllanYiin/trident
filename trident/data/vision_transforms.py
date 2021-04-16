@@ -151,11 +151,20 @@ class Resize(VisionTransform):
         else:
 
             image=cv2.resize(image, (tw,th), interpolation=self.interpolation)
-            output=np.zeros((*self.output_size,1 if spec is not None and spec.object_type==ObjectType.gray else 3))
+            shp=list(int_shape(image))
+            shp[:2] = self.output_size
+
+            output=np.zeros(shp)
             if self.align_corner:
-                output[:th,:tw,:]=image
+                if ndim(image)== ndim(output)==3 and int_shape(image)[-1]==0:
+                    output[:th,:tw,0]=image
+                elif  ndim(image)== ndim(output)==3 and int_shape(image)[-1]==3:
+                    output[:th, :tw, :] = image
             else:
-                output[pad_vert//2:th+pad_vert//2, pad_horz//2:tw+pad_horz//2, :] = image
+                if ndim(image) == 2 and ndim(output) == 3:
+                    output[pad_vert//2:th+pad_vert//2, pad_horz//2:tw+pad_horz//2,0] = image
+                elif ndim(image) == 3 and ndim(output) == 3:
+                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2,:] = image
             return output
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -203,7 +212,7 @@ class Resize(VisionTransform):
     def _get_shape(self, image):
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
-        h, w,c = image.shape
+        h, w = image.shape[:2]
         eh, ew = self.output_size
 
         if not self.keep_aspect:
@@ -384,7 +393,7 @@ class RandomRescaleCrop(VisionTransform):
 
 
     def _get_shape(self, image):
-        height, width, _ = image.shape
+        height, width= image.shape[:2]
         area = height * width
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
@@ -432,7 +441,11 @@ class RandomCenterCrop(VisionTransform):
         crop_image = image[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
         if crop_image.shape[0]<eh or crop_image.shape[1]<ew:
             background=np.zeros((eh,ew,1 if spec is not None and spec.object_type==ObjectType.gray else 3))
-            background[builtins.max(eh-crop_image.shape[0],0)//2:builtins.max(eh-crop_image.shape[0],0)//2+crop_image.shape[0],builtins.max(ew-crop_image.shape[1],0)//2:builtins.max(ew-crop_image.shape[1],0)//2+crop_image.shape[1],:]=crop_image
+            if ndim(crop_image)==2:
+                background[builtins.max(eh - crop_image.shape[0], 0) // 2:builtins.max(eh - crop_image.shape[0], 0) // 2 + crop_image.shape[0],
+                builtins.max(ew - crop_image.shape[1], 0) // 2:builtins.max(ew - crop_image.shape[1], 0) // 2 + crop_image.shape[1], 0] = crop_image
+            else:
+                background[builtins.max(eh-crop_image.shape[0],0)//2:builtins.max(eh-crop_image.shape[0],0)//2+crop_image.shape[0],builtins.max(ew-crop_image.shape[1],0)//2:builtins.max(ew-crop_image.shape[1],0)//2+crop_image.shape[1],:]=crop_image
             return background
         else:
             return crop_image
@@ -460,7 +473,7 @@ class RandomCenterCrop(VisionTransform):
 
 
     def _get_shape(self, image):
-        h, w, _ = image.shape
+        h, w = image.shape[:2]
 
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
@@ -531,7 +544,7 @@ class RandomCrop(VisionTransform):
             return output
 
     def _get_shape(self, image):
-        h, w, _ = image.shape
+        h, w= image.shape[:2]
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
@@ -1182,10 +1195,13 @@ class ToRGB(VisionTransform):
         return self._apply_image(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
+        if  image.ndim == 3 and int_shape(image)[-1]==1:
+            image=image.copy()[:,:,0]
         if image.ndim == 3:
             return image
         elif image.ndim == 2:
-            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+            image=cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+        return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
