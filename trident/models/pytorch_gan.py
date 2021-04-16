@@ -191,9 +191,11 @@ class NetworkType(Enum):
 
 def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', generator_build_block='resnet',
         discriminator_build_block='resnet', generator_network_type='decoder', discriminator_network_type='encoder',
+        use_skip_connections=False,
         use_spectral=False, activation='leaky_relu', generator_norm='batch', discriminator_norm='batch',
         use_dilation=False, use_dropout=False, use_self_attention=False,use_minibatch_discrimination=False):
-    noise_input = torch.tensor(data=np.random.normal(0, 1, size=(2, noise_shape)))
+
+    noise_input = torch.tensor(data=np.random.normal(0, 1, size=(2, noise_shape))) if noise_shape is not None else None
 
     def build_generator():
         layers = []
@@ -320,102 +322,153 @@ def gan_builder(noise_shape=100, image_width=256, upsample_mode='nearest', gener
             return Sequential(new_layers, name='discriminator')
 
 
-    def build_autoencoder(gan_role='discriminator'):
+    def build_autoencoder(gan_role='discriminator',use_skip_connections=False):
+        layers=OrderedDict()
+
         ae=Sequential()
         normalization = generator_norm if gan_role == 'generator' else discriminator_norm
         build_block = generator_build_block if gan_role == 'generator' else discriminator_build_block
-        layers = []
-        initial_size = image_width // 8
-        layers.append(
-            Conv2d((3, 3), 32, strides=2, auto_pad=True, use_bias=False, activation=activation, name='first_layer'))
+        size_change=4
+        initial_size = image_width //pow(2,size_change)
         filter = 32
-        dilation = 1
+        embedding_filters=128
+        layers['head']=Conv2d((3, 3), 32, strides=1, auto_pad=True, use_bias=False, activation=activation, name='first_layer')
 
-        for i in range(3):
-            filter = filter + 32
+        dilation = 1
+        #WIDTH 128=>64=>32=>16=>8=>
+        #FILTERS 32=>64=>64=>96=>96
+        for i in range(size_change):
+            if i%2==1:
+                filter = filter + 32
             if use_dilation:
                 dilation = 2 if i < 2 else 1
             if build_block == BuildBlockMode.base.value:
-                layers.append(
-                    Conv2d_Block((3, 3), filter, strides=2, auto_pad=True, use_spectral=use_spectral, use_bias=False,
-                                 activation=activation, normalization=normalization, name='base_block{0}'.format(i)))
+                layers['downsample_block{0}'.format(i)]=Conv2d_Block((3, 3), filter, strides=2, auto_pad=True, use_spectral=use_spectral, use_bias=False,  activation=activation, normalization=normalization, name='base_block{0}'.format(i))
             elif build_block == BuildBlockMode.resnet.value:
-                layers.extend(resnet_block(filter, strides=2, activation=activation, use_spectral=use_spectral,
-                                           normalization=normalization, name='resnet_block{0}'.format(i)))
+                layers['downsample_block{0}'.format(i)]=Sequential(resnet_block(filter, strides=2, activation=activation, use_spectral=use_spectral,  normalization=normalization, name='resnet_block{0}'.format(i)))
             elif build_block == BuildBlockMode.bottleneck.value:
-                layers.append(
-                    bottleneck_block(num_filters=filter, strides=2, reduce=4, activation=activation, use_spectral=use_spectral,
-                                     normalization=normalization, name='bottleneck_block{0}'.format(i)))
-            if use_self_attention and i == 1:
-                layers.append(SelfAttention(16, name='self_attention'))
-        #filter = filter // 2
-        encoder=Sequential()
-        for layer in layers:
-            if layer.name is not None and len(layer.name)>2:
-                encoder.add_module(layer.name,layer)
-            else:
-                encoder.add(layer)
-        ae.add_module('encoder',encoder)
-        layers=[]
-        ae.add_module('embeddings',Conv2d((1, 1), filter, strides=1, auto_pad=True, use_bias=False, activation=activation, keep_output=True, name='embeddings'))
+                layers['downsample_block{0}'.format(i)]=bottleneck_block(num_filters=filter, strides=2, reduce=4, activation=activation, use_spectral=use_spectral,   normalization=normalization, name='bottleneck_block{0}'.format(i))
+            if use_self_attention and i == 2:
+                layers['self_attention'] =SelfAttention(16, name='self_attention')
+        layers['embeddings'] =Conv2d((1, 1), embedding_filters, strides=1, auto_pad=True, use_bias=False, activation=activation, keep_output=True, name='embeddings')
 
-        for i in range(4):
+        #16=>32=>64=>128
+        # WIDTH 128<=64<=32<=16<=8
+        # FILTERS 32<=64<=64<=96<=96
+        for i in range(size_change):
+            if i % 2 == 0:
+                filter = filter - 32
+
             if upsample_mode == UpsampleMode.transpose.value:
-                layers.append(
-                    TransConv2d_Block((3, 3), num_filters=filter if i == 0 else filter // 2, strides=2, auto_pad=True,
+                layers['upsampling{0}'.format(size_change-i-1)] =TransConv2d_Block((3, 3), num_filters=filter , strides=2, auto_pad=True,
                                       use_spectral=use_spectral, use_bias=False, activation=activation,
                                       normalization=normalization, dilation=dilation,
-                                      name='transconv_block{0}'.format(i)))
+                                      name='transconv_block{0}'.format(size_change-i-1))
             elif upsample_mode == UpsampleMode.pixel_shuffle.value:
-                layers.append(
-                    Conv2d_Block((3, 3), num_filters=4 * filter if i == 0 else 2 * filter, strides=1, auto_pad=True,
+                layers['upsampling{0}'.format(size_change - i-1)] =Sequential(
+                    Conv2d_Block((3, 3), num_filters=4 * filter, strides=1, auto_pad=True,
                                  use_spectral=use_spectral, use_bias=False, activation=activation,
-                                 normalization=normalization))
-                layers.append(Upsampling2d(scale_factor=2, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
-            else:
-                layers.append(Upsampling2d(scale_factor=2, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
+                                 normalization=normalization),
+                    Upsampling2d(scale_factor=2, mode=upsample_mode, name='{0}{1}'.format(upsample_mode,size_change-i-1))
+                )
 
-            filter = filter if i == 0 else filter + 32
-            if use_dropout and i == 0:
-                layers.append(Dropout(0.2))
+            else:
+                layers['upsampling{0}'.format(size_change-i-1)] = Sequential(
+                    Conv2d_Block((3, 3), num_filters=4 * encoder_filter if use_skip_connections else 4 * filter if i == 0 else 2 * filter, strides=1, auto_pad=True,
+                                 use_spectral=use_spectral, use_bias=False, activation=activation,
+                                 normalization=normalization),
+                    Upsampling2d(scale_factor=2, mode=upsample_mode, name='{0}{1}'.format(upsample_mode,size_change-i-1))
+                )
+
+
 
             if build_block == BuildBlockMode.base.value:
-                layers.append(
-                    Conv2d_Block((3, 3), filter, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False,
+                layers['upsampling_block{0}'.format(size_change-i-1)] = Conv2d_Block((3, 3), filter, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False,
                                  activation=activation, normalization=normalization, dilation=dilation,
-                                 name='base_block{0}'.format(i)))
+                                 name='base_block{0}'.format(size_change-i-1))
             elif build_block == BuildBlockMode.resnet.value:
-                layers.extend(resnet_block(filter, strides=1, activation=activation, use_spectral=use_spectral,
+                layers['upsampling_block{0}'.format(size_change-i-1)] = Sequential(resnet_block(filter, strides=1, activation=activation, use_spectral=use_spectral,
                                            normalization=normalization, dilation=dilation,
-                                           name='resnet_block{0}'.format(i)))
+                                           name='resnet_block{0}'.format(size_change-i-1)))
             elif build_block == BuildBlockMode.bottleneck.value:
-                layers.append(bottleneck_block(filter, strides=1, activation=activation, use_spectral=use_spectral,
+                layers['upsampling_block{0}'.format(size_change-i-1)] = bottleneck_block(filter, strides=1, activation=activation, use_spectral=use_spectral,
                                                normalization=normalization, dilation=dilation,
-                                               name='resnet_block{0}'.format(i)))
+                                               name='resnet_block{0}'.format(size_change-i-1))
             elif build_block == BuildBlockMode.separable_resnet.value:
-                layers.extend(
-                    separable_resnet_block(filter, strides=2, activation=activation, use_spectral=use_spectral,
-                                           normalization=discriminator_norm, name='resnet_block{0}'.format(i)))
+                layers['upsampling_block{0}'.format(size_change-i-1)] = (separable_resnet_block(filter, strides=2, activation=activation, use_spectral=use_spectral,
+                                           normalization=discriminator_norm, name='resnet_block{0}'.format(size_change-i-1)))
 
-            filter = filter if i == 0 else filter + 32
-        layers.append(Conv2d((3, 3), 3, strides=1, auto_pad=True, use_bias=False, activation='tanh', name='last_layer'))
-        decoder=Sequential()
-        for layer in layers:
-            if layer.name is not None and len(layer.name)>2:
-                decoder.add_module(layer.name, layer)
-            else:
-                decoder.add(layer)
-        ae.add_module('decoder', decoder)
-        ae.input_shape=TensorShape([None,3,image_width,image_width])
+
+        layers['tail'] =Conv2d((3, 3), 3, strides=1, auto_pad=True, use_bias=False, activation='tanh', name='last_layer')
+
+
+
+
+        # if use_skip_connections and len(skip_connections) > 0:
+        #     encode_layer = skip_connections.pop(-1)
+        #     layers.append(
+        #         Conv2d_Block((3, 3), num_filters=encode_layer.num_filters,strides=1, auto_pad=True,
+        #                      use_spectral=use_spectral, use_bias=False, activation=activation,
+        #                      normalization=normalization))
+        #     layers.append(ShortCut2d(layers[-1], branch_from=encode_layer.name, mode='add', axis=1))
+
+        if use_skip_connections:
+            shortcut3 = ShortCut2d(
+               Identity(),
+                Sequential({
+                    'downsample_block3':layers['downsample_block3'],
+                    'embeddings': layers['embeddings'],
+                    'upsampling3': layers['upsampling3'],
+                }), mode='add'
+            )
+            shortcut2=ShortCut2d(
+
+                Identity(),
+                Sequential({
+                    'downsample_block2':layers['downsample_block2'],
+                    'shortcut3':shortcut3,
+                    'upsampling_block3': layers['upsampling_block3'],
+                    'upsampling2': layers['upsampling2'],
+                }),mode='add'
+            )
+            shortcut1 = ShortCut2d(
+                Identity(),
+                Sequential({
+                    'downsample_block1':layers['downsample_block1'],
+                    'shortcut2': shortcut2,
+                    'upsampling_block2': layers['upsampling_block2'],
+                    'upsampling1': layers['upsampling1']
+                }),mode='add'
+            )
+            shortcut0 = ShortCut2d(
+                Identity(),
+                Sequential({
+                    'downsample_block0':layers['downsample_block0'],
+                    'shortcut1': shortcut1,
+                    'upsampling_block1': layers['upsampling_block1'],
+                    'upsampling0': layers['upsampling0']
+                }),mode='add'
+            )
+            ae = Sequential(
+                {
+                    'head':layers[ 'head'],
+                    'shortcut0':shortcut0,
+                    'upsampling_block0': layers['upsampling_block0'],
+                    'tail': layers['tail']
+                }
+            )
+
+        else:
+            ae=Sequential(layers)
+
         return ae
 
     gen = Model(
         input_shape=(3, image_width, image_width) if generator_network_type == 'autoencoder' else (noise_shape),
-        output=build_generator())
+        output=build_generator() if generator_network_type != 'autoencoder' else build_autoencoder('generator',use_skip_connections=use_skip_connections))
     gen.model.name = 'generator'
 
-    dis = ImageClassificationModel(input_shape=(3, image_width, image_width), output=build_autoencoder(
-        'discriminator') if discriminator_network_type == 'autoencoder' else build_discriminator())
+    dis = ImageClassificationModel(input_shape=(3, image_width, image_width), output=build_autoencoder( 'discriminator',use_skip_connections=use_skip_connections) if discriminator_network_type == 'autoencoder' else build_discriminator())
     dis.model.name = 'discriminator'
 
     gen.model.apply(weights_init_normal)
