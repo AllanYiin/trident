@@ -164,7 +164,7 @@ def reset_name(module: nn.Module, prefix_dict=None):
     module.default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
     module.__name__ = module._name if hasattr(module, '_name') else module.default_name
 
-
+nn.Module
 _UID_PREFIX = defaultdict(int)
 
 
@@ -653,19 +653,13 @@ class Layer(nn.Module):
             self.to(value)
 
     def cuda(self, device=None):
-        if self.get_root().device != 'cuda':
-            self.get_root().device = 'cuda'
-            super().cuda(device=device)
+        return self._apply(lambda t: t.cuda())
 
     def cpu(self):
-        if self.get_root().device != 'cpu':
-            self.get_root().device = 'cpu'
-            super().cpu()
+        return self._apply(lambda t: t.cpu())
 
     def gpu(self, device=None):
-        if self.get_root().device != 'cuda':
-            self.get_root().device = 'cuda'
-            super().cuda(device)
+        return self._apply(lambda t: t.cuda())
 
     def to(self, *args, **kwargs):
         r"""Moves and/or casts the parameters and buffers.
@@ -1149,12 +1143,13 @@ class Sequential(Layer):
         super(Sequential, self).__init__()
         self._name = name
         self._built = False
-        if len(args) == 1 and isinstance(args[0], OrderedDict):
-            for key, module in args[0].items():
+        args=unpack_singleton(args)
+        if  isinstance(args,(dict,OrderedDict, ModuleDict,nn.ModuleDict)):
+            for key, module in args.items():
                 module.name = key
                 self.add_module(key, module)
-        elif len(args) == 1 and isinstance(args[0], (list, nn.ModuleList)):
-            for idx, module in enumerate(args[0]):
+        elif  isinstance(args, (list,tuple, nn.ModuleList,ModuleList)):
+            for idx, module in enumerate(args):
                 self.add_module(str(idx), module)
         else:
             for idx, module in enumerate(args):
@@ -1545,7 +1540,7 @@ class ModuleDict(Layer):
                 self._built = True
 
     def forward(self, x, **kwargs):
-        if self.is_multicasting == True:
+        if self.is_multicasting:
             x = enforce_singleton(x)
             results = OrderedDict()
             for name, module in self.items():
@@ -1683,19 +1678,20 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
             summary[m_key][ "weight"]=OrderedDict()
             summary[m_key]["bias"] =OrderedDict()
             for name, para in module._parameters.items():
-                para_type= "weight"
-                if 'bias' in name or 'beta' in name:
-                    para_type = "bias"
+                if para is not None:
+                    para_type= "weight"
+                    if 'bias' in name or 'beta' in name:
+                        para_type = "bias"
 
-                summary[m_key][para_type][name]=list(int_shape(para))
-                num_params=np.prod(np.array(list(int_shape(para)),dtype=np.float64))
-                spatial_dims=np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
-                params += num_params
-                if para.requires_grad:
-                    summary[m_key]["trainable"]+=num_params
+                    summary[m_key][para_type][name]=list(int_shape(para))
+                    num_params=np.prod(np.array(list(int_shape(para)),dtype=np.float64))
+                    spatial_dims=np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
+                    params += num_params
+                    if para.requires_grad:
+                        summary[m_key]["trainable"]+=num_params
 
-                summary[m_key]["flops"] += (2 * num_params - 1) * spatial_dims
-                summary[m_key]["macc"] += num_params * spatial_dims
+                    summary[m_key]["flops"] += (2 * num_params - 1) * spatial_dims
+                    summary[m_key]["macc"] += num_params * spatial_dims
 
             summary[m_key]["nb_params"] = params
 
@@ -1751,7 +1747,7 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
 
     print("--------------------------------------------------------------------------------------------------------------------------------")
     line_new = "{0:^50s} {1:<25s}  {2:<35s} {3:<8s}  {4:<8s}  {5:<25s}".replace('50s',str(max_name_len)+'s').replace('35s',str(max_weight_len)+'s').format("Layer (type)", "Output Shape", "Weight ", "Bias", "Param #", "FLOPS #")
-    line_new
+
     print(line_new)
     print("==============================================================================")
     total_params = np.array([0], dtype=np.float64)
