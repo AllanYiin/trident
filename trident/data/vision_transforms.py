@@ -512,13 +512,18 @@ class RandomCrop(VisionTransform):
         if  self._shape_info is None:
             self._shape_info = self._get_shape(image)
         h,w,eh, ew,offset_x,offset_y,offset_x1,offset_y1 = self._shape_info
-        if image.ndim == 2:
+        if image.ndim == 2 or (image.ndim == 3 and int_shape(image)[-1]==1):
+            origin_ndim=image.ndim
+            if origin_ndim==3:
+                image=image[:,:,0]
             output = np.zeros(self.output_size)
             crop_im = image[offset_y:min(offset_y + eh,h), offset_x:min(offset_x + ew,w)]
             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1]] = crop_im
+            if origin_ndim == 3:
+                output=np.expand_dims(output,-1)
             return output
         elif image.ndim == 3:
-            output=np.zeros((*self.output_size,1 if spec is not None and spec.object_type==ObjectType.gray else 3))
+            output=np.zeros(self.output_size+(1,) if spec is not None and spec.object_type==ObjectType.gray else self.output_size+(3,))
             crop_im = image[offset_y:min(offset_y + eh,h), offset_x:min(offset_x + ew,w),:]
             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1],:] = crop_im
             return output
@@ -548,7 +553,6 @@ class RandomCrop(VisionTransform):
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
-
 
         offset_x = 0
         offset_y = 0
@@ -726,9 +730,10 @@ RandomTransform=RandomTransformAffine
 
 
 class RandomMultiScaleImage(VisionTransform):
-    def __init__(self, output_size,scale_range=(0.8, 1.2), interpolation=cv2.INTER_LANCZOS4,name='random_center_crop',**kwargs):
+    def __init__(self, output_size,scale_range=(0.8, 1.2), interpolation=cv2.INTER_LANCZOS4,keep_aspect=True,name='random_multiscale_image',**kwargs):
         super().__init__(name)
         self.is_spatial = True
+        self.keep_aspect=keep_aspect
         self.output_size = output_size
         self.scale_range=scale_range
         self.interpolation = interpolation
@@ -739,10 +744,12 @@ class RandomMultiScaleImage(VisionTransform):
                           RandomRescaleCrop(output_size=output_size,scale_range=scale_range,interpolation=interpolation),
                           RandomCrop(output_size=output_size),
                           RandomCenterCrop(output_size=output_size,scale_range=scale_range,interpolation=interpolation)]
+        if self.keep_aspect:
+            self.resize_funs.pop(2)
+
 
     def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], **kwargs):
-        idx =random.randint(0,5)
-        fn = self.resize_funs[idx]
+        fn = random_choice(self.resize_funs)
         spec = kwargs.get('spec')
         return fn.apply_batch(inputs, spec)
 
