@@ -230,11 +230,13 @@ class Embedding(Layer):
 
     def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = None,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
-                 sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=1, keep_output: bool = False, name: Optional[str] = None) -> None:
+                 sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=1, keep_output: bool = False, name: Optional[str] = None,add_noise=False, noise_intensity=0.005) -> None:
         super(Embedding, self).__init__(keep_output=keep_output, name=name)
         self.filter_index = filter_index
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
+        self.add_noise=add_noise
+        self.noise_intensity=noise_intensity
 
         self.register_parameter('weight', None)
 
@@ -289,7 +291,12 @@ class Embedding(Layer):
         elif not self.sparse and x.dtype !=dtype.long and int_shape(x)[-1] != self.num_embeddings:
             x = x.long()
 
-        return F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+        embed=F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+        if self.add_noise == True and self.training == True:
+            noise = self.noise_intensity * random_normal_like(embed,mean=embed.mean().item(),std=embed.std().item(),dtype=embed.dtype).detach().to(embed.device)
+            embed = embed + noise
+        return embed
+
 
     def extra_repr(self) -> str:
         s = '{num_embeddings}, {embedding_dim}'
@@ -1758,14 +1765,14 @@ class GcdConv1d(Layer):
             self.groups = gcd_list[min(int(self.divisor_rank + 1), len(gcd_list))]
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             self.calculate_gcd()
-            print('input:{0} -> output:{1}   {2}  {3}  gcd:{4} group:{5}   通道縮放倍數:{5} '.format(self.input_filters,
-                                                                                               self.num_filters,
-                                                                                               self.input_filters // self.groups,
-                                                                                               self.num_filters // self.groups,
-                                                                                               self.gcd, self.groups,
-                                                                                               self.num_filters / self.num_filters))
+            # print('input:{0} -> output:{1}   {2}  {3}  gcd:{4} group:{5}   通道縮放倍數:{5} '.format(self.input_filters,
+            #                                                                                    self.num_filters,
+            #                                                                                    self.input_filters // self.groups,
+            #                                                                                    self.num_filters // self.groups,
+            #                                                                                    self.gcd, self.groups,
+            #                                                                                    self.num_filters / self.num_filters))
 
             self.channel_kernal = 2 if self.crossgroup_fusion == True and self.groups > 3 else 1
             self.channel_dilation = 1
@@ -1786,7 +1793,7 @@ class GcdConv1d(Layer):
                 init.zeros_(self.bias)
                 self._parameters['bias'] = self.bias
 
-            if self.self_norm == True:
+            if self.self_norm:
                 self.norm = get_normalization('batch')
                 init.ones_(self.norm.weight)
                 init.zeros_(self.norm.bias)
@@ -2038,13 +2045,12 @@ class GcdConv2d(_ConvNd):
 
 
 class Lambda(Layer):
-    def __init__(self, lambd):
+    def __init__(self, funcs):
         super(Lambda, self).__init__()
-        self.lambd = lambd
-    def apply_lambd(self, x):
-        return self.lambd(x)
+        self.funcs = funcs
+
     def forward(self, x):
-        return self.apply_lambd(x)
+        return self.funcs(x)
 
 class Reshape(Layer):
     def __init__(self, target_shape, keep_output=False, name=None):
