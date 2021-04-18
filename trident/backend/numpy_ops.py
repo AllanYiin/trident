@@ -139,7 +139,7 @@ def cast(x, dtype):
         same type as `dtype`.
 
     Examples:
-        >>> x = to_tensor([1.8, 2.2])
+        >>> x = np.array([1.8, 2.2])
         >>>cast(x, torch.int32)
         tensor([1, 2], dtype=int32)
 
@@ -323,9 +323,9 @@ def less(left:np.ndarray, right:(np.ndarray,float,int)):
         Result is 1 if left < right else 0.
 
     Examples:
-       >>> less(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+       >>> less(np.array([41., 42., 43.]), np.array([42., 42., 42.]))
        tensor([1., 0., 0.])
-       >>> less(to_tensor([-1,0,1]), 0)
+       >>> less(np.array([-1,0,1]), 0)
        tensor([1., 0., 0.])
 
     """
@@ -343,9 +343,9 @@ def equal(left:np.ndarray, right:(np.ndarray,float,int)):
         :Result is 1 if values are equal 0 otherwise
 
     Examples:
-        >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        >>> equal(np.array([41., 42., 43.]), np.array([42., 42., 42.]))
         tensor([0., 1., 0.])
-        >>> equal(to_tensor([-1,0,1]), 1)
+        >>> equal(np.array([-1,0,1]), 1)
         tensor([0., 0., 1.])
 
     """
@@ -362,9 +362,9 @@ def greater(left:np.ndarray, right:(np.ndarray,float,int)):
         :Result is 1 if left > right else 0.
 
     Examples:
-        >>> greater(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        >>> greater(np.array([41., 42., 43.]), np.array([42., 42., 42.]))
         tensor([0., 0., 1.])
-        >>> greater(to_tensor([-1,0,1]), 0)
+        >>> greater(np.array([-1,0,1]), 0)
         tensor([0., 0., 1.])
 
     """
@@ -382,9 +382,9 @@ def greater_equal(left:np.ndarray, right:(np.ndarray,float,int)):
         :Result is 1 if left >= right else 0
 
     Examples:
-        >>> greater_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        >>> greater_equal(np.array([41., 42., 43.]), np.array([42., 42., 42.]))
         tensor([0., 1., 1.])
-        >>> greater_equal(to_tensor([-1,0,1]), 0)
+        >>> greater_equal(np.array([-1,0,1]), 0)
         tensor([0., 1., 1.])
 
     """
@@ -402,9 +402,9 @@ def not_equal(left:np.ndarray, right:(np.ndarray,float,int)):
         :Result is 1 if left != right else 0.
 
     Examples:
-        >>> not_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        >>> not_equal(np.array([41., 42., 43.]), np.array([42., 42., 42.]))
         tensor([1., 0., 1.])
-        >>> not_equal(to_tensor([-1,0,1]), 0)
+        >>> not_equal(np.array([-1,0,1]), 0)
         tensor([1., 0., 1.])
 
     """
@@ -422,9 +422,9 @@ def less_equal(left:np.ndarray, right:(np.ndarray,float,int)):
     Returns:
         Result is 1 if left <= right else 0.
     Examples:
-        >>> less_equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
+        >>> less_equal(np.array([41., 42., 43.]), np.array([42., 42., 42.]))
         tensor([1., 1., 0.])
-        >>> less_equal(to_tensor([-1,0,1]), 0)
+        >>> less_equal(np.array([-1,0,1]), 0)
         tensor([1., 1., 0.])
 
     """
@@ -600,11 +600,11 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
      A simple 2-D tensor matrix multiplication:
 
 
-     >>> a =reshape(to_tensor([1, 2, 3, 4, 5, 6]),[2, 3])
+     >>> a =reshape(np.array([1, 2, 3, 4, 5, 6]),[2, 3])
      >>> a  # 2-D tensor
      tensor([[1, 2, 3],
             [4, 5, 6]])
-     >>> b = reshape(to_tensor([7, 8, 9, 10, 11, 12]), [3, 2])
+     >>> b = reshape(np.array([7, 8, 9, 10, 11, 12]), [3, 2])
      >>> b  # 2-D tensor
      tensor([[ 7,  8],
             [ 9, 10],
@@ -616,13 +616,13 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
 
      A batch matrix multiplication with batch shape [2]:
 
-     >>> a =  reshape(to_tensor(np.arange(1, 13, dtype=np.int32)),[2, 2, 3])
+     >>> a =  reshape(np.array(np.arange(1, 13, dtype=np.int32)),[2, 2, 3])
      >>> a  # 3-D tensor
      tensor([[[ 1,  2,  3],
              [ 4,  5,  6]],
             [[ 7,  8,  9],
              [10, 11, 12]]])
-     >>> b =  reshape(to_tensor(np.arange(13, 25, dtype=np.int32)),[2, 3, 2])
+     >>> b =  reshape(np.array(np.arange(13, 25, dtype=np.int32)),[2, 3, 2])
      >>> b  # 3-D tensor
      tensor([[[13, 14],
              [15, 16],
@@ -738,15 +738,15 @@ def round(x: (np.ndarray, float), digit: int = 0):
         A `Tensor` of same shape and type as `x`.
 
     Examples;
-        >>> round(to_tensor([[1,2,3,4,5]])/3,0)
+        >>> round(np.array([[1,2,3,4,5]])/3,0)
         <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
         array([[0.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00, 2.0000e+00]],
               dtype=float32)>
-        >>> round(to_tensor([[1,2,3,4,5]])/3,2)
+        >>> round(np.array([[1,2,3,4,5]])/3,2)
         <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
         array([[3.3000e-01, 6.7000e-01, 1.0000e+00, 1.3300e+00, 1.6700e+00]],
               dtype=float32)>
-        >>> round(to_tensor([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
+        >>> round(np.array([[11.6,24.3,35.2,14.4,23.5]])/3,-1)
         <tf.Tensor: shape=(1, 5), dtype=float32, numpy=
         array([[0.0000e+00, 1.0000e+01, 1.0000e+01, 0.0000e+00, 1.0000e+01]],
               dtype=float32)>
@@ -774,17 +774,17 @@ def sqrt(x:np.ndarray):
 
     Note: This operation does not support integer types.
 
-    >>> x = to_tensor([[4.0], [16.0]])
+    >>> x = np.array([[4.0], [16.0]])
     >>> tf.sqrt(x)
     <tf.Tensor: shape=(2, 1), dtype=float32, numpy=
       array([[2.],
              [4.]], dtype=float32)>
-    >>> y = to_tensor([[-4.0], [16.0]])
+    >>> y = np.array([[-4.0], [16.0]])
     >>> sqrt(y)
     <tf.Tensor: shape=(2, 1), dtype=float32, numpy=
       array([[nan],
              [ 4.]], dtype=float32)>
-    >>> z = to_tensor([[-1.0], [16.0]], dtype=tf.complex128)
+    >>> z = np.array([[-1.0], [16.0]], dtype=tf.complex128)
     >>> sqrt(z)
     <tf.Tensor: shape=(2, 1), dtype=complex128, numpy=
       array([[0.0+1.j],
@@ -815,7 +815,7 @@ def rsqrt(x:np.ndarray):
 
 
     Examples:
-        >>> x = to_tensor([2., 0., -2.])
+        >>> x = np.array([2., 0., -2.])
         >>> rsqrt(x)
         <tf.Tensor: shape=(3,), dtype=float32,
         numpy=array([0.707, inf, nan], dtype=float32)>
@@ -858,7 +858,7 @@ def abs(x:np.ndarray):
     a complex number \\(a + bj\\), its absolute value is computed as \\(\sqrt{a^2
     + b^2}\\).  For example:
 
-    >>> x = to_tensor([[-2.25 + 4.75j], [-3.25 + 5.75j]])
+    >>> x = np.array([[-2.25 + 4.75j], [-3.25 + 5.75j]])
     >>> tf.abs(x)
     <tf.Tensor: shape=(2, 1), dtype=float64, numpy=
     array([[5.25594901],
@@ -885,8 +885,8 @@ def pow(x:np.ndarray, y):
     corresponding elements in `x` and `y`. For example:
 
     ```python
-    x = to_tensor([[2, 2], [3, 3]])
-    y = to_tensor([[8, 16], [2, 3]])
+    x = np.array([[2, 2], [3, 3]])
+    y = np.array([[8, 16], [2, 3]])
     tf.pow(x, y)  # [[256, 65536], [9, 27]]
     ```
 
@@ -917,7 +917,7 @@ def log(x:np.ndarray):
         A `Tensor`. Has the same type as `x`.
 
     Examples:
-        >>> x = to_tensor([0, 0.5, 1, 5])
+        >>> x = np.array([0, 0.5, 1, 5])
         >>> log(x)
         array([      -inf, -0.6931472,  0.       ,  1.609438 ])
 
@@ -937,11 +937,11 @@ def exp(x:np.ndarray):
     \\(e\\) denotes Euler's number and is approximately equal to 2.718281.
     Output is positive for any real input.
 
-    >>> x = to_tensor(2.0)
+    >>> x = np.array(2.0)
     >>> exp(x)
     <tf.Tensor: shape=(), dtype=float32, numpy=7.389056>
 
-    >>> x = to_tensor([2.0, 8.0])
+    >>> x = np.array([2.0, 8.0])
     >>> exp(x)
     tensor([   7.389056, 2980.958   ])
 
@@ -951,7 +951,7 @@ def exp(x:np.ndarray):
     For `1+1j` the value would be computed as:
     \\(e^1{\\cos(1)+i\\sin(1)} = 2.7182817 \\times (0.5403023+0.84147096j)\\)
 
-    >>> x =to_tensor(1 + 1j)
+    >>> x =np.array(1 + 1j)
     >>> exp(x)
     tensor(1.4686939399158851+2.2873552871788423j)>
 
@@ -995,7 +995,7 @@ def sin(x:np.ndarray):
     Returns: element-wise sine
 
     Examples:
-        >>> sin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> sin(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 0.8415,  0.4794],
                 [-0.2474, -0.6816]])
 
@@ -1012,7 +1012,7 @@ def cos(x:np.ndarray):
     Returns: element-wise cosine
 
     Examples:
-        >>> cos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> cos(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[0.5403, 0.8776],
                 [0.9689, 0.7317]])
 
@@ -1029,7 +1029,7 @@ def tan(x:np.ndarray):
     Returns: element-wise tan
 
     Examples:
-        >>> tan(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> tan(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 1.5574,  0.5463],
                 [-0.2553, -0.9316]])
 
@@ -1046,7 +1046,7 @@ def asin(x:np.ndarray):
     Returns: element-wise arcsin
 
     Examples:
-        >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> asin(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 1.5708,  0.5236],
                 [-0.2527, -0.8481]])
 
@@ -1063,7 +1063,7 @@ def acos(x:np.ndarray):
     Returns: element-wise arccos
 
     Examples:
-        >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> acos(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[0.0000, 1.0472],
                 [1.8235, 2.4189]])
 
@@ -1080,7 +1080,7 @@ def atan(x:np.ndarray):
     Returns: element-wise arccos
 
     Examples:
-        >>> atan(to_tensor([-1, 0, 1])).cpu()
+        >>> atan(np.array([-1, 0, 1])).cpu()
         tensor([-0.7854,  0.0000,  0.7854])
 
     """
@@ -1096,7 +1096,7 @@ def sinh(x:np.ndarray):
     Returns: element-wise sinh
 
     Examples:
-        >>> sinh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> sinh(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 1.1752,  0.5211],
                 [-0.2526, -0.8223]])
 
@@ -1113,7 +1113,7 @@ def cosh(x:np.ndarray):
     Returns: element-wise cosh
 
     Examples:
-        >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> cosh(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[1.5431, 1.1276],
                 [1.0314, 1.2947]])
 
@@ -1130,7 +1130,7 @@ def tanh(x:np.ndarray):
     Returns: element-wise tanh
 
     Examples:
-        >>> tanh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
+        >>> tanh(np.array([[1,0.5],[-0.25,-0.75]])).cpu()
         tensor([[ 0.7616,  0.4621],
                 [-0.2449, -0.6351]])
 
@@ -1155,11 +1155,11 @@ def element_times(left, right):
         :the element-wise product of the two  input
 
     Examples:
-    >>> element_times(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    >>> element_times(np.array([1., 1., 1., 1.]), np.array([0.5, 0.25, 0.125, 0.]))
     tensor([0.5000, 0.2500, 0.1250, 0.0000])
-    >>> element_times(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    >>> element_times(np.array([5., 10., 15., 30.]),np.array([2.]))
     tensor([10., 20., 30., 60.])
-    >>> element_times(to_tensor([[5., 10.], [15., 30.]]), to_tensor([[1., 2.], [3.,1.]]))
+    >>> element_times(np.array([[5., 10.], [15., 30.]]), np.array([[1., 2.], [3.,1.]]))
     tensor([[ 5., 20.],
             [45., 30.]])
     """
@@ -1179,11 +1179,11 @@ def element_max(left, right):
         :the element-wise product of the two  input
 
     Examples:
-    >>> element_max(to_tensor([1., 1., 0., -1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    >>> element_max(np.array([1., 1., 0., -1.]), np.array([0.5, 0.25, 0.125, 0.]))
     tensor([1.0000, 1.0000, 0.1250, 0.0000])
-    >>> element_max(to_tensor([5., 10., 15., 30.]),to_tensor([20.]))
+    >>> element_max(np.array([5., 10., 15., 30.]),np.array([20.]))
     tensor([20., 20., 20., 30.])
-    >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
+    >>> element_max(np.array([5., 10., 15., 30.]), np.array([10., 2., 8., 2.]))
     tensor([10., 10., 15., 30.])
     """
     return np.max(left, right)
@@ -1202,11 +1202,11 @@ def element_min(left, right):
         :the element-wise product of the two  input
 
     Examples:
-    >>> element_min(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    >>> element_min(np.array([1., 1., 1., 1.]), np.array([0.5, 0.25, 0.125, 0.]))
     tensor([0.5000, 0.2500, 0.1250, 0.0000])
-    >>> element_min(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    >>> element_min(np.array([5., 10., 15., 30.]),np.array([2.]))
     tensor([2., 2., 2., 2.])
-    >>> element_min(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
+    >>> element_min(np.array([5., 10., 15., 30.]), np.array([1., 2., 1., 2.]))
     tensor([1., 2., 1., 2.])
     """
     return np.min(left, right)
@@ -1225,11 +1225,11 @@ def element_divide(left, right):
         :the element-wise divide of the two  input
 
     Examples:
-    >>> element_divide(to_tensor([1., 1., 1., 1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+    >>> element_divide(np.array([1., 1., 1., 1.]), np.array([0.5, 0.25, 0.125, 0.]))
     tensor([2., 4., 8., inf])
-    >>> element_divide(to_tensor([5., 10., 15., 30.]),to_tensor([2.]))
+    >>> element_divide(np.array([5., 10., 15., 30.]),np.array([2.]))
     tensor([ 2.5000,  5.0000,  7.5000, 15.0000])
-    >>> element_divide(to_tensor([5., 10., 15., 30.]), to_tensor([1., 2., 1., 2.]))
+    >>> element_divide(np.array([5., 10., 15., 30.]), np.array([1., 2., 1., 2.]))
     tensor([ 5.,  5., 15., 15.])
     """
     return np.true_divide(left, right)
@@ -1267,7 +1267,7 @@ def where(flag, value_if_true, value_if_false):
         :conditional selection
 
     Examples:
-    >>> x=to_tensor([0.1, 0.9, 0.8, 0.4, 0.5])
+    >>> x=np.array([0.1, 0.9, 0.8, 0.4, 0.5])
     >>> where(x>0.5, x, zeros_like(x))
     tensor([0.0000, 0.9000, 0.8000, 0.0000, 0.0000])
     """
@@ -1291,7 +1291,7 @@ def reduce_mean(x:np.ndarray, axis=None, keepdims=False, **kwargs):
 
 
     Examples:
-        >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+        >>> data = np.array(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
         >>> print(reduce_mean(data, 0).cpu())
         tensor([[30.,  1.],
                 [40.,  2.]])
@@ -1330,7 +1330,7 @@ def reduce_sum(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         The sum of the input tensor's elements across a specified axis or a list of specified axes.
 
     Examples:
-        >>> data = to_tensor(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
+        >>> data = np.array(np.array([[[5,1], [20,2]],[[30,1], [40,2]],[[55,1], [60,2]]], dtype=np.float32))
         >>> print(reduce_sum(data).cpu())
         tensor(219.)
         >>> print(reduce_sum(data, 0).cpu())
@@ -1383,19 +1383,19 @@ def reduce_max(x:np.ndarray, axis=None, keepdims=False, **kwargs):
       The reduced tensor.
 
     Examples:
-        >>> x = to_tensor([5, 1, 2, 4])
+        >>> x = np.array([5, 1, 2, 4])
         >>> print(reduce_max(x))
         tensor(5, shape=(), dtype=int32)
-        >>> x = to_tensor([-5, -1, -2, -4])
+        >>> x = np.array([-5, -1, -2, -4])
         >>> print(reduce_max(x))
         tensor(-1, shape=(), dtype=int32)
-        >>> x = to_tensor([4, float('nan')])
+        >>> x = np.array([4, float('nan')])
         >>> print(reduce_max(x))
         tensor(4.0, shape=(), dtype=float32)
-        >>> x = to_tensor([float('nan'), float('nan')])
+        >>> x = np.array([float('nan'), float('nan')])
         >>> print(reduce_max(x))
         tensor(-inf, shape=(), dtype=float32)
-        >>> x =to_tensor([float('-inf'), float('inf')])
+        >>> x =np.array([float('-inf'), float('inf')])
         >>> print(reduce_max(x))
         tensor(inf, shape=(), dtype=float32)
 
@@ -1443,19 +1443,19 @@ def reduce_min(x:np.ndarray, axis=None, keepdims=False, **kwargs):
       The reduced tensor.
 
     Examples:
-        >>> x = to_tensor([5, 1, 2, 4])
+        >>> x = np.array([5, 1, 2, 4])
         >>> print(reduce_min(x))
         tensor(5, shape=(), dtype=int32)
-        >>> x = to_tensor([-5, -1, -2, -4])
+        >>> x = np.array([-5, -1, -2, -4])
         >>> print(reduce_min(x))
         tensor(-1, shape=(), dtype=int32)
-        >>> x = to_tensor([4, float('nan')])
+        >>> x = np.array([4, float('nan')])
         >>> print(reduce_min(x))
         tensor(4.0, shape=(), dtype=float32)
-        >>> x = to_tensor([float('nan'), float('nan')])
+        >>> x = np.array([float('nan'), float('nan')])
         >>> print(reduce_min(x))
         tensor(-inf, shape=(), dtype=float32)
-        >>> x =to_tensor([float('-inf'), float('inf')])
+        >>> x =np.array([float('-inf'), float('inf')])
         >>> print(reduce_min(x))
         tensor(inf, shape=(), dtype=float32)
 
@@ -1494,7 +1494,7 @@ def reduce_logsumexp(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     taking the log of small inputs.
 
     Examples:
-        >>> x =to_tensor([[0., 0., 0.], [0., 0., 0.]])
+        >>> x =np.array([[0., 0., 0.], [0., 0., 0.]])
         >>> reduce_logsumexp(x)  # log(6)
         >>> reduce_logsumexp(x, 0)  # [log(2), log(2), log(2)]
         >>> reduce_logsumexp(x, 1)  # [log(3), log(3)]
@@ -1660,7 +1660,7 @@ def identity(x):
         (np.ndarray): output tensor and have same shape with x.
 
     Examples:
-        >>> identity(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> identity(np.array([-3.0, -1.0, 0.0, 2.0]))
         tensor([-3.0, -1.0, 0.0, 2.0])
 
     """
@@ -1826,7 +1826,7 @@ def swish(x):
         https://arxiv.org/abs/1710.05941v1
 
     Examples:
-        >>> swish(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> swish(np.array([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00])
 
     """
@@ -1850,7 +1850,7 @@ def hard_sigmoid(x):
 
 
     Examples:
-        >>> hard_sigmoid(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
+        >>> hard_sigmoid(np.array([-3.0, -1.0, 0.0, 2.0])).cpu()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
 
 
@@ -1874,7 +1874,7 @@ def hard_swish(x):
         (np.ndarray): output tensor and have same shape with x.
 
     Examples:
-        >>> hard_swish(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
+        >>> hard_swish(np.array([-3.0, -1.0, 0.0, 2.0])).cpu()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
 
     References:
@@ -1901,7 +1901,7 @@ def hard_tanh(x):
 
 
     Examples:
-        >>> hard_tanh(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
+        >>> hard_tanh(np.array([-3.0, -1.0, 0.0, 2.0])).cpu()
         tensor([-0.0000, -0.3333,  0.0000,  1.6667])
 
 
@@ -1924,7 +1924,7 @@ def elu(x,alpha):
 
 
     Examples:
-        >>> elu(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> elu(np.array([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
 
     """
@@ -1960,7 +1960,7 @@ def selu(x):
 
 
     Examples:
-        >>> selu(to_tensor([[-1, -0.5, 0, 1, 2]]))
+        >>> selu(np.array([[-1, -0.5, 0, 1, 2]]))
         tensor([[-1.1113, -0.6918,  0.0000,  1.0507,  2.1014]])
 
     """
@@ -2044,7 +2044,7 @@ def log_log(x):
 
 
     Examples:
-        >>> loglog(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> loglog(np.array([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
 
     References:
@@ -2068,7 +2068,7 @@ def mish(x):
 
 
     Examples:
-        >>> mish(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> mish(np.array([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
 
     References:
@@ -2095,7 +2095,7 @@ def hard_mish(x):
 
 
     Examples:
-        >>> hard_mish(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> hard_mish(np.array([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
 
     References:
@@ -2129,14 +2129,14 @@ def softmax(x, axis=1):
 
 
     Examples:
-    >>> softmax(to_tensor([[1, 1, 2, 3]]))
+    >>> softmax(np.array([[1, 1, 2, 3]]))
     tensor([[0.0826, 0.0826, 0.2245, 0.6103]])
-    >>> softmax(to_tensor([1., 1.]))
+    >>> softmax(np.array([1., 1.]))
     tensor([0.5000, 0.5000])
-    >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=-1)
+    >>> softmax(np.array([[[1, 1], [3, 5]]]), axis=-1)
     tensor([[[0.5000, 0.5000],
              [0.1192, 0.8808]]])
-    >>> softmax(to_tensor([[[1, 1], [3, 5]]]), axis=1)
+    >>> softmax(np.array([[[1, 1], [3, 5]]]), axis=1)
     tensor([[[0.1192, 0.0180],
              [0.8808, 0.9820]]])
 
@@ -2184,7 +2184,7 @@ def gelu(x):
         https://arxiv.org/abs/1606.08415
 
     Examples:
-        >>> gelu(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> gelu(np.array([-3.0, -1.0, 0.0, 2.0]))
         <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
 
     """
@@ -2331,7 +2331,7 @@ def expand_dims(x:np.ndarray, axis=0):
 #     Returns: resized tensor
 #
 #     Examples:
-#     >>> x = to_tensor(np.tile(np.array(np.reshape(range(8), (8, 1, 1)), dtype=np.float32), (1, 2, 3)))
+#     >>> x = np.array(np.tile(np.array(np.reshape(range(8), (8, 1, 1)), dtype=np.float32), (1, 2, 3)))
 #     >>> x
 #     tensor([[[0., 0., 0.],
 #              [0., 0., 0.]],
@@ -2402,7 +2402,7 @@ def expand_dims(x:np.ndarray, axis=0):
 #
 #     Returns: resized tensor
 #     Examples:
-#     >>> arr=space_to_depth(to_tensor([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],
+#     >>> arr=space_to_depth(np.array([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],
 #     [2., 3., 2., 3., 2., 3.]],[[4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.], [4., 5., 4., 5., 4., 5.],[6., 7.,
 #     6., 7., 6., 7.]]]),block_size=2)
 #     >>> arr
@@ -2679,7 +2679,7 @@ def make_onehot(label, num_classes, axis=-1):
     Returns:
         :onehot tensor
     Examples:
-    >>> make_onehot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
+    >>> make_onehot(np.array([[1, 2],[1, 3]]).long(), 4, axis=-1)
     tensor([[[0., 1., 1., 0.],
              [0., 1., 0., 1.]],
     <BLANKLINE>
@@ -2975,6 +2975,367 @@ def binary_crossentropy(target, output, from_logits=False):
     output = -target * np.log(output) - (1.0 - target) * np.log(1.0 - output)
     return output
 
+
+
+def conv2d(input, weight,bias: Optional[np.ndarray]=None, strides=1, padding=0,dilation=1,groups=1):
+    ish = input.shape
+    fsh = weight.shape
+    output = np.zeros([ish[0],(ish[1]-fsh[0])//strides[1]+1,(ish[2]-fsh[1])//strides[2]+1,fsh[3]])
+    osh = output.shape
+    for m in range(osh[0]):
+        for i in range(osh[1]):
+            for j in range(osh[2]):
+                for di in range(fsh[0]):
+                    for dj in range(fsh[1]):
+                        t = np.dot(
+                                input[m,strides[1]*i+di,strides[2]*j+dj,:],
+                            weight[di, dj, :, :]
+                            )
+                        output[m,i,j] = np.sum(
+                                [
+                                    t,
+                                    output[m,i,j]
+                                ],
+                                axis=0
+                            )
+    return output
+
+
+############################
+## color space
+###########################
+
+def rgb2gray(rgb:np.ndarray):
+    """Compute luminance of an RGB image.
+
+    Args:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+    Returns:
+        gray(tensor):  gray-scale image(shape:(H,W))
+
+    """
+    rgb=rgb.copy().astype(np.float32)
+    if ndim(rgb)!=3 :
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    r,g,b=np.split(rgb,3,axis=-1)
+    gray = 0.2125*r + 0.7154*g + 0.0721*b
+    return gray
+
+
+def rgb2hsv(rgb:np.ndarray):
+    """Compute luminance of an RGB image.
+
+    Args:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+    Returns:
+        gray(tensor):  gray-scale image(shape:(H,W))
+
+    Examples:
+        >>> import cv2
+        >>> from skimage import color
+        >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
+        >>> hsv_Img=rgb2hsv(np.array(img.copy()).astype(np.float32))
+        >>> ground_truth_hsv=np.array(color.rgb2hsv(img.copy()/255.)*255.0).astype(np.float32)
+        >>> abs(hsv_Img-ground_truth_hsv).mean().item()<2
+        True
+        >>> print( ground_truth_hsv)
+        >>> print( hsv_Img)
+        >>> print( abs(hsv_Img-ground_truth_hsv).mean().item())
+
+    """
+    rgb=rgb.astype(np.float32)/255.0
+    if ndim(rgb)!=3 :
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    #rgb=rgb[np.newaxis, ...]
+    out = zeros_like(rgb.copy())
+
+    # -- V channel
+    out_v = reduce_max(rgb.copy(),-1)
+
+    # -- S channel
+    delta =reduce_max(rgb.copy(),-1)-reduce_min(rgb.copy(),-1)
+    delta_zero=zeros_like(delta,dtype=delta.dtype)
+    out_s = where(delta==0,delta_zero,delta / out_v)
+
+    # -- H channel
+    # red is max
+    out0=zeros_like(delta,dtype=delta.dtype)
+    idx = (rgb[..., 0] == out_v)
+
+    out0[idx] = (rgb[..., 1][idx] - rgb[..., 2][idx]) / delta[idx]
+
+    # green is max
+    idx = (rgb[..., 1] == out_v)
+    out0[idx] =  2. + (rgb[..., 2][idx] - rgb[..., 1][idx]) / delta[idx]
+
+    # blue is max
+    idx = (rgb[..., 2] == out_v)
+    out0[idx] =  4. + (rgb[..., 0][idx] - rgb[..., 1][idx]) / delta[idx]
+
+
+    out_h = (out0/ 6.) % 1.
+    out_h[delta == 0.] = 0.
+
+    # -- output
+    out[..., 0] = out_h
+    out[..., 1] = out_s
+    out[..., 2] = out_v
+
+
+    return out*255.0
+
+
+def xyz2rgb(xyz:np.ndarray):
+    """
+    input xyz as pytorch tensor of size (batch_size,  h, w, 3) or (h, w,3)
+    """
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.transpose([0,3,1,2])
+        elif int_shape(xyz)[1]==3:
+            pass
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.transpose([2,0,1])
+        elif  int_shape(xyz)[0]==3:
+            pass
+    xyz=xyz/255.0
+    transform_tensor = np.array([[3.2404542, - 1.5371385, - 0.4985314],
+                                     [-0.9692660, 1.8760108, 0.0415560],
+                                     [0.0556434, - 0.2040259, 1.0572252]],dtype=xyz.dtype,requires_grad=False)
+
+    transform_tensor=np.expand_dims(np.expand_dims(transform_tensor,2),3)
+    convolved=None
+    if len(xyz.shape) == 4:
+        convolved = conv2d(xyz, transform_tensor)
+    else:
+        convolved = np.expand_dims(conv2d(np.expand_dims(xyz,0), transform_tensor),0)
+    # return convolved
+    rgb=convolved*255.0
+    if len(rgb.shape) == 4:
+        if int_shape(rgb)[-1] == 3:
+            return rgb
+        elif  int_shape(rgb)[1] == 3:
+            rgb = rgb.transpose([0, 2, 3, 1])
+            return rgb
+
+    elif len(rgb.shape) == 3:
+        if int_shape(rgb)[-1] == 3:
+            return rgb
+        elif int_shape(rgb)[0] == 3:
+            rgb = rgb.transpose([1, 2,0])
+            return rgb
+
+    raise ValueError('image should channel-last')
+
+
+def rgb2xyz(rgb:np.ndarray):
+    """
+    input rgb as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if len(rgb.shape) == 4:
+        if int_shape(rgb)[-1]==3:
+            rgb =rgb.transpose([0,3,1,2])
+        elif int_shape(rgb)[1]==3:
+            pass
+    elif len(rgb.shape) == 3:
+        if int_shape(rgb)[-1]==3:
+            rgb =rgb.transpose([2,0,1])
+        elif  int_shape(rgb)[0]==3:
+            pass
+    rgb=rgb/255.0
+    rgb = np.where(rgb > 0.04045, ((rgb + 0.055) / 1.055).pow(2.4), rgb / 12.92)
+
+    transform_tensor = np.array([[0.4124564, 0.3575761, 0.1804375],
+                                     [0.2126729, 0.7151522, 0.0721750],
+                                     [0.0193339, 0.1191920, 0.9503041]],dtype=rgb.dtype,requires_grad=False)
+
+    transform_tensor.unsqueeze_(2).unsqueeze_(3)
+    xyz=None
+    if len(rgb.shape) == 4:
+        xyz=conv2d(rgb, transform_tensor)
+    else:
+        xyz= np.expand_dims(conv2d(np.expand_dims(rgb,0), transform_tensor),0)
+    xyz=xyz*255.0
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[1] == 3:
+            xyz = xyz.transpose([0, 2, 3, 1])
+            return xyz
+
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[0] == 3:
+            xyz = xyz.transpose([1, 2, 0])
+            return xyz
+
+    raise ValueError('image should channel-last')
+
+
+
+# LAB
+# CIE-L*a*b*: A perceptually uniform color space,
+# i.e. distances are meaningful. L* in [0..1] and a*, b* almost in [-1..1].
+D65 = [0.95047, 1.00000, 1.08883]
+
+
+def lab_f(t:np.ndarray):
+    return where(t > 0.008856451679035631, cast(t.pow(1.0 / 3.0),cast_dtype=t.dtype), cast(t * 7.787037037037035 + 0.13793103448275862,cast_dtype=t.dtype))
+
+
+def lab_finv(t:np.ndarray):
+    return where(t > 0.20689655172413793, cast(t.pow(3.0),cast_dtype=t.dtype), cast(0.12841854934601665 * (t - 0.13793103448275862),cast_dtype=t.dtype))
+
+
+def lab2xyz(lab:np.ndarray, wref=None):
+    """
+    input lab as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    l
+    """
+    if len(lab.shape) == 4:
+        if int_shape(lab)[-1]==3:
+            lab =lab.transpose([0,3,1,2])
+        elif int_shape(lab)[1]==3:
+            pass
+        lab[:,0, :, :] = lab[:,0, :, :] / 100.0
+        lab[:,1:, :, :] = (lab[:,1:, :, :] - 127) / 128
+    elif len(lab.shape) == 3:
+        if int_shape(lab)[-1]==3:
+            lab =lab.transpose([2,0,1])
+        elif  int_shape(lab)[0]==3:
+            pass
+        lab[0,:,:]=lab[0,:,:]/100.0
+        lab[1:, :, :]=(lab[1:, :, :]-127)/128
+    if wref is None:
+        wref = D65
+    dim = 1 if len(lab.shape) == 4 else 0
+    l, a, b = np.split(lab,3, axis=dim)
+
+    l2 = (l + 0.16) / 1.16
+    x = wref[0] * lab_finv(l2 + a / 5)
+    y = wref[1] * lab_finv(l2)
+    z = wref[2] * lab_finv(l2 - b / 2)
+    xyz = np.concatenate([x, y, z], axis=dim)
+    xyz=xyz*255.0
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[1] == 3:
+            xyz = xyz.transpose([0, 2, 3, 1])
+            return xyz
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[0] == 3:
+            xyz = xyz.transpose([1, 2, 0])
+            return xyz
+
+    raise ValueError('image should channel-last')
+
+def xyz2lab(xyz:np.ndarray, wref=None):
+    """
+    input xyz as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.transpose([0,3,1,2])
+        elif int_shape(xyz)[1]==3:
+            pass
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.transpose([2,0,1])
+        elif  int_shape(xyz)[0]==3:
+            pass
+    xyz=xyz/255.0
+    if wref is None:
+        wref = D65
+    dim = 1 if len(xyz.shape) == 4 else 0
+    x, y, z = xyz.chunk(3, dim=dim)
+
+    fy = lab_f(y / wref[1])
+    l = 1.16 * fy - 0.16
+    a = 5.0 * (lab_f(x / wref[0]) - fy)
+    b = 2.0 * (fy - lab_f(z / wref[2]))
+    lab =np.concatenate([clip(l,0,1)*100, clip(a,-1,1)*128+127, clip(b,-1,1)*128+127], dim=dim)
+
+    if len(lab.shape) == 4:
+        if int_shape(lab)[-1] == 3:
+            return lab
+        elif int_shape(lab)[1] == 3:
+            lab = lab.transpose([0, 2, 3, 1])
+            return lab
+
+    elif len(lab.shape) == 3:
+        if int_shape(lab)[-1] == 3:
+            return lab
+        elif int_shape(lab)[0] == 3:
+            lab = lab.transpose([1, 2, 0])
+            return lab
+
+    raise ValueError('image should channel-last')
+
+
+def lab2rgb(lab:np.ndarray):
+    """
+    input lab as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if ndim(lab)==4:
+        channel_idx=1
+        if int_shape(lab)[1]==3:
+            channel_idx = 1
+        elif  int_shape(lab)[-1]==3:
+            channel_idx = -1
+        rgb=xyz2rgb(lab2xyz(lab))
+        if channel_idx==1:
+            rgb=rgb.transpose([0,3,1,2])
+        return rgb
+    else:
+        rgb=xyz2rgb(lab2xyz(lab))
+        return rgb
+
+
+def rgb2lab(rgb:np.ndarray):
+    """
+    input rgb as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if ndim(rgb)==4:
+        channel_idx=1
+        if int_shape(rgb)[1]==3:
+            channel_idx = 1
+        elif  int_shape(rgb)[-1]==3:
+            channel_idx = -1
+        xyz=xyz2lab(rgb2xyz(rgb))
+        if channel_idx==1:
+            xyz=xyz.transpose([0,3,1,2])
+        return xyz
+    else:
+        xyz=xyz2lab(rgb2xyz(rgb))
+        return xyz
+
+def gray2rgb(gray:np.ndarray):
+    """Compute luminance of an RGB image.
+
+    Args:
+        gray(tensor):  gray-scale image(shape:(H,W))
+    Returns:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+
+    """
+    gray=gray.copy().astype(np.float32)
+    if ndim(gray) == 3 and int_shape(gray)[-1]==1:
+        gray=gray[:,:,0]
+    if ndim(gray)!=2 :
+        raise ValueError('input gray image ndim should equal 2 but get {0}'.format(ndim(gray)))
+    rgb=stack([gray,gray,gray],axis=-1)
+    return rgb
+
+
+
+
+
+
 #
 # def torch_rot90_(x:np.ndarray):
 #     return x.transpose_(2, 3).flip(2)
@@ -3139,9 +3500,9 @@ def binary_crossentropy(target, output, from_logits=False):
 #         tensor([[[ 0.7071,  0.7071,  0.0000],
 #                  [-0.7071,  0.7071,  0.0000]]])
 #     """
-#     center = to_tensor(center)
-#     angle = to_tensor(angle)
-#     scale = to_tensor(scale)
+#     center = np.array(center)
+#     angle = np.array(angle)
+#     scale = np.array(scale)
 #
 #     if len(center) == 2 and ndim(center) == 1:
 #         center = center.unsqueeze(0)

@@ -13,10 +13,13 @@ from enum import Enum
 from functools import wraps
 from typing import Tuple, List, Optional, Union, Sequence
 import gc
+from warnings import warn
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from torch.nn.parameter import Parameter
 from trident.backend.common import dtype as Dtype
 from trident.backend.common import *
@@ -72,7 +75,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather', 'index_select','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
-           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy']
+           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy','rgb2xyz','rgb2hsv','rgb2lab','rgb2gray','xyz2lab','xyz2rgb','lab2xyz','lab2rgb']
 
 Tensor=torch.Tensor
 
@@ -354,6 +357,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
 def copy(x: Tensor):
     return x.clone()
 
+@numpy_compatible
 def ndim(x: Tensor):
     """Number of dimension of a tensor
 
@@ -364,7 +368,7 @@ def ndim(x: Tensor):
         (int) Number of dimension
 
     """
-    return x.ndim
+    return len(int_shape(x))
 
 def numel(x: Tensor):
     """Number of elements of a tensor
@@ -392,7 +396,9 @@ def int_shape(x: Tensor):
         (3, 3, 7)
 
     """
-    return tuple([d for d in  x.shape])
+
+    return [d for d in  x.shape] #if isinstance(x,np.ndarray)  else  [d for d in  x.size()]
+
 
 
 
@@ -419,7 +425,7 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
         shp[0]=None
         return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton==True:
-        return TensorShape(list((None,)+int_shape(x)))
+        return TensorShape([None]+int_shape(x))
     else:
         return TensorShape(int_shape(x))
 
@@ -1800,11 +1806,17 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
+        original_shape = int_shape(x)
+        new_shape = tuple([1] * len(original_shape))
         if ndim(x) == 1:
             axis = 0
         elif ndim(x) > 1:
-            axis =tuple(list(range(ndim(x))))
-        return torch.mean(x, dim=axis, keepdim=keepdims)
+            axis = 0
+            x = x.view(-1)
+        arr= torch.mean(x, dim=axis, keepdim=keepdims)
+        if keepdims:
+            arr=reshape(arr,new_shape)
+        return arr
     elif isinstance(axis, int):
         return torch.mean(x,dim=[axis],keepdim=keepdims)
     elif isinstance(axis, list):
@@ -1843,12 +1855,18 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
+        original_shape = int_shape(x)
+        new_shape = tuple([1] * len(original_shape))
         if ndim(x) == 1:
             axis = 0
         elif ndim(x) > 1:
-            axis =tuple(list(range(ndim(x))))
+            axis = 0
+            x = x.view(-1)
 
-        return torch.sum(x,dim=axis,keepdim=keepdims)
+        arr= torch.sum(x,dim=axis,keepdim=keepdims)
+        if keepdims:
+            arr=reshape(arr,new_shape)
+        return arr
     elif isinstance(axis, int):
         return torch.sum(x,dim=axis,keepdim=keepdims)
     elif isinstance(axis, list):
@@ -1901,11 +1919,16 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
+        original_shape=int_shape(x)
+        new_shape=tuple([1]*len(original_shape))
         if ndim(x)==1:
             axis=0
         elif  ndim(x)>1:
-            axis =tuple(list(range(ndim(x))))
+            axis =0
+            x=x.view(-1)
         arr, idx =torch.max(x,dim=axis,keepdim=keepdims)
+        if keepdims:
+            arr=reshape(arr,new_shape)
         return arr
     elif isinstance(axis, int):
         arr, idx = torch.max(x,dim=axis,keepdim=keepdims)
@@ -1962,11 +1985,16 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if axis is None:
+        original_shape = int_shape(x)
+        new_shape = tuple([1] * len(original_shape))
         if ndim(x) == 1:
             axis = 0
         elif ndim(x) > 1:
-            axis =tuple(list(range(ndim(x))))
+            axis = 0
+            x = x.view(-1)
         arr, idx = torch.min(x, dim=axis, keepdim=keepdims)
+        if keepdims:
+            arr=reshape(arr,new_shape)
         return arr
     elif isinstance(axis, int):
         arr, idx = torch.min(x,dim=axis,keepdim=keepdims)
@@ -3916,6 +3944,340 @@ def binary_hinge(output, target, margin=1, pos_weight=1.0):
     hinge = (margin - output * target_shifted).relu()
     hinge *= target * pos_weight + (1 - target)
     return hinge  # reduction == mean
+
+
+
+############################
+## color space
+###########################
+
+def rgb2gray(rgb:Tensor):
+    """Compute luminance of an RGB image.
+
+    Args:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+    Returns:
+        gray(tensor):  gray-scale image(shape:(H,W))
+
+    """
+    rgb=rgb.copy().float()
+    if ndim(rgb)!=3 :
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    r,g,b=split(rgb,3,axis=-1)
+    gray = 0.2125*r + 0.7154*g + 0.0721*b
+    return gray
+
+
+def rgb2hsv(rgb:Tensor):
+    """Compute luminance of an RGB image.
+
+    Args:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+    Returns:
+        gray(tensor):  gray-scale image(shape:(H,W))
+
+    Examples:
+        >>> import cv2
+        >>> from skimage import color
+        >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
+        >>> hsv_Img=rgb2hsv(to_tensor(img.copy()).float())
+        >>> ground_truth_hsv=to_tensor(color.rgb2hsv(img.copy()/255.)*255.0).float()
+        >>> abs(hsv_Img-ground_truth_hsv).mean().item()<2
+        True
+        >>> print( ground_truth_hsv)
+        >>> print( hsv_Img)
+        >>> print( abs(hsv_Img-ground_truth_hsv).mean().item())
+
+    """
+    rgb=rgb.float()/255.0
+    if ndim(rgb)!=3 :
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    #rgb=rgb[np.newaxis, ...]
+    out = zeros_like(rgb.copy())
+
+    # -- V channel
+    out_v = reduce_max(rgb.copy(),-1)
+
+    # -- S channel
+    delta =reduce_max(rgb.copy(),-1)-reduce_min(rgb.copy(),-1)
+    delta_zero=zeros_like(delta,dtype=delta.dtype)
+    out_s = where(delta==0,delta_zero,delta / out_v)
+
+    # -- H channel
+    # red is max
+    out0=zeros_like(delta,dtype=delta.dtype)
+    idx = (rgb[..., 0] == out_v)
+
+    out0[idx] = (rgb[..., 1][idx] - rgb[..., 2][idx]) / delta[idx]
+
+    # green is max
+    idx = (rgb[..., 1] == out_v)
+    out0[idx] =  2. + (rgb[..., 2][idx] - rgb[..., 1][idx]) / delta[idx]
+
+    # blue is max
+    idx = (rgb[..., 2] == out_v)
+    out0[idx] =  4. + (rgb[..., 0][idx] - rgb[..., 1][idx]) / delta[idx]
+
+
+    out_h = (out0/ 6.) % 1.
+    out_h[delta == 0.] = 0.
+
+    # -- output
+    out[..., 0] = out_h
+    out[..., 1] = out_s
+    out[..., 2] = out_v
+
+
+    return out*255.0
+
+
+def xyz2rgb(xyz:Tensor):
+    """
+    input xyz as pytorch tensor of size (batch_size,  h, w, 3) or (h, w,3)
+    """
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(0,3,1,2)
+        elif int_shape(xyz)[1]==3:
+            pass
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(2,0,1)
+        elif  int_shape(xyz)[0]==3:
+            pass
+    xyz=xyz/255.0
+    transform_tensor = to_tensor([[3.2404542, - 1.5371385, - 0.4985314],
+                                     [-0.9692660, 1.8760108, 0.0415560],
+                                     [0.0556434, - 0.2040259, 1.0572252]],dtype=xyz.dtype,requires_grad=False).to(_get_device())
+
+    transform_tensor.unsqueeze_(2).unsqueeze_(3)
+    convolved=None
+    if len(xyz.shape) == 4:
+        convolved = F.conv2d(xyz, transform_tensor)
+    else:
+        convolved = F.conv2d(xyz.unsqueeze(0), transform_tensor).squeeze(0)
+    # return convolved
+    rgb=convolved*255.0
+    if len(rgb.shape) == 4:
+        if int_shape(rgb)[-1] == 3:
+            return rgb
+        elif  int_shape(rgb)[1] == 3:
+            rgb = rgb.permute(0, 2, 3, 1)
+            return rgb
+
+    elif len(rgb.shape) == 3:
+        if int_shape(rgb)[-1] == 3:
+            return rgb
+        elif int_shape(rgb)[0] == 3:
+            rgb = rgb.permute(1, 2,0)
+            return rgb
+
+    raise ValueError('image should channel-last')
+
+
+def rgb2xyz(rgb:Tensor):
+    """
+    input rgb as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if len(rgb.shape) == 4:
+        if int_shape(rgb)[-1]==3:
+            rgb =rgb.permute(0,3,1,2)
+        elif int_shape(rgb)[1]==3:
+            pass
+    elif len(rgb.shape) == 3:
+        if int_shape(rgb)[-1]==3:
+            rgb =rgb.permute(2,0,1)
+        elif  int_shape(rgb)[0]==3:
+            pass
+    rgb=rgb/255.0
+    rgb = torch.where(rgb > 0.04045, ((rgb + 0.055) / 1.055).pow(2.4), rgb / 12.92)
+
+    transform_tensor = to_tensor([[0.4124564, 0.3575761, 0.1804375],
+                                     [0.2126729, 0.7151522, 0.0721750],
+                                     [0.0193339, 0.1191920, 0.9503041]],dtype=rgb.dtype,requires_grad=False).to(_get_device())
+
+    transform_tensor.unsqueeze_(2).unsqueeze_(3)
+    xyz=None
+    if len(rgb.shape) == 4:
+        xyz= F.conv2d(rgb, transform_tensor)
+    else:
+        xyz= F.conv2d(rgb.unsqueeze(0), transform_tensor).squeeze(0)
+    xyz=xyz*255.0
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[1] == 3:
+            xyz = xyz.permute(0, 2, 3, 1)
+            return xyz
+
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[0] == 3:
+            xyz = xyz.permute(1, 2, 0)
+            return xyz
+
+    raise ValueError('image should channel-last')
+
+
+
+# LAB
+# CIE-L*a*b*: A perceptually uniform color space,
+# i.e. distances are meaningful. L* in [0..1] and a*, b* almost in [-1..1].
+D65 = [0.95047, 1.00000, 1.08883]
+
+
+def lab_f(t:Tensor):
+    return where(t > 0.008856451679035631, cast(t.pow(1.0 / 3.0),cast_dtype=t.dtype).to(_get_device()), cast(t * 7.787037037037035 + 0.13793103448275862,cast_dtype=t.dtype).to(_get_device()))
+
+
+def lab_finv(t:Tensor):
+    return where(t > 0.20689655172413793, cast(t.pow(3.0),cast_dtype=t.dtype).to(_get_device()), cast(0.12841854934601665 * (t - 0.13793103448275862),cast_dtype=t.dtype).to(_get_device()))
+
+
+def lab2xyz(lab:Tensor, wref=None):
+    """
+    input lab as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    l
+    """
+    if len(lab.shape) == 4:
+        if int_shape(lab)[-1]==3:
+            lab =lab.permute(0,3,1,2)
+        elif int_shape(lab)[1]==3:
+            pass
+        lab[:,0, :, :] = lab[:,0, :, :] / 100.0
+        lab[:,1:, :, :] = (lab[:,1:, :, :] - 127) / 128
+    elif len(lab.shape) == 3:
+        if int_shape(lab)[-1]==3:
+            lab =lab.permute(2,0,1)
+        elif  int_shape(lab)[0]==3:
+            pass
+        lab[0,:,:]=lab[0,:,:]/100.0
+        lab[1:, :, :]=(lab[1:, :, :]-127)/128
+    if wref is None:
+        wref = D65
+    dim = 1 if len(lab.shape) == 4 else 0
+    l, a, b = lab.chunk(3, dim=dim)
+
+    l2 = (l + 0.16) / 1.16
+    x = wref[0] * lab_finv(l2 + a / 5)
+    y = wref[1] * lab_finv(l2)
+    z = wref[2] * lab_finv(l2 - b / 2)
+    xyz = torch.cat([x, y, z], dim=dim)
+    xyz=xyz*255.0
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[1] == 3:
+            xyz = xyz.permute(0, 2, 3, 1)
+            return xyz
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[0] == 3:
+            xyz = xyz.permute(1, 2, 0)
+            return xyz
+
+    raise ValueError('image should channel-last')
+
+def xyz2lab(xyz:Tensor, wref=None):
+    """
+    input xyz as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(0,3,1,2)
+        elif int_shape(xyz)[1]==3:
+            pass
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(2,0,1)
+        elif  int_shape(xyz)[0]==3:
+            pass
+    xyz=xyz/255.0
+    if wref is None:
+        wref = D65
+    dim = 1 if len(xyz.shape) == 4 else 0
+    x, y, z = xyz.chunk(3, dim=dim)
+
+    fy = lab_f(y / wref[1])
+    l = 1.16 * fy - 0.16
+    a = 5.0 * (lab_f(x / wref[0]) - fy)
+    b = 2.0 * (fy - lab_f(z / wref[2]))
+    lab = torch.cat([clip(l,0,1)*100, clip(a,-1,1)*128+127, clip(b,-1,1)*128+127], dim=dim)
+
+    if len(lab.shape) == 4:
+        if int_shape(lab)[-1] == 3:
+            return lab
+        elif int_shape(lab)[1] == 3:
+            lab = lab.permute(0, 2, 3, 1)
+            return lab
+
+    elif len(lab.shape) == 3:
+        if int_shape(lab)[-1] == 3:
+            return lab
+        elif int_shape(lab)[0] == 3:
+            lab = lab.permute(1, 2, 0)
+            return lab
+
+    raise ValueError('image should channel-last')
+
+
+def lab2rgb(lab:Tensor):
+    """
+    input lab as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if ndim(lab)==4:
+        channel_idx=1
+        if int_shape(lab)[1]==3:
+            channel_idx = 1
+        elif  int_shape(lab)[-1]==3:
+            channel_idx = -1
+        rgb=xyz2rgb(lab2xyz(lab))
+        if channel_idx==1:
+            rgb=rgb.permute(0,3,1,2)
+        return rgb
+    else:
+        rgb=xyz2rgb(lab2xyz(lab))
+        return rgb
+
+
+def rgb2lab(rgb:Tensor):
+    """
+    input rgb as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if ndim(rgb)==4:
+        channel_idx=1
+        if int_shape(rgb)[1]==3:
+            channel_idx = 1
+        elif  int_shape(rgb)[-1]==3:
+            channel_idx = -1
+        xyz=xyz2lab(rgb2xyz(rgb))
+        if channel_idx==1:
+            xyz=xyz.permute(0,3,1,2)
+        return xyz
+    else:
+        xyz=xyz2lab(rgb2xyz(rgb))
+        return xyz
+
+def gray2rgb(gray:Tensor):
+    """Compute luminance of an RGB image.
+
+    Args:
+        gray(tensor):  gray-scale image(shape:(H,W))
+    Returns:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+
+    """
+    gray=gray.copy().float()
+    if ndim(gray) == 3 and int_shape(gray)[-1]==1:
+        gray=gray[:,:,0]
+    if ndim(gray)!=2 :
+        raise ValueError('input gray image ndim should equal 2 but get {0}'.format(ndim(gray)))
+    rgb=stack([gray,gray,gray],axis=-1)
+    return rgb
+
+
 
 
 
