@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+from tqdm import tqdm
 import builtins
 import math
 from math import *
@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.modules.loss import _Loss
+from trident.backend.tensorspec import ObjectType
+
 from trident.layers.pytorch_layers import Dense
 
 from trident import context
@@ -84,11 +86,25 @@ class _ClassificationLoss(Loss):
                 with torch.no_grad():
                     dp=list(ctx._thread_local_info.data_providers.values())[-1]
                     if dp.traindata.label.__class__.__name__=='LabelDataset':
+                        print('Start retrive label class distribution for auto-balance in loss function.')
                         unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
                         reweights=np.clip(counts,1,np.inf)/np.sum(counts).astype(np.float32)
-
                         reweights1=np.max(reweights)/reweights
+                        print('Retrive success!')
                         self.label_statistics=reweights1
+
+                    elif dp.traindata.label.__class__.__name__ == 'MaskDataset'and dp.traindata.label.object_type in [ObjectType.label_mask,ObjectType.color_mask]:
+                        print('Start retrive label class distribution for auto-balance in loss function.')
+                        unique, counts = torch.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]),dtype=dtype.long, device='cpu'), return_counts=True)
+                        unique=to_list(to_numpy(unique))
+                        counts = to_numpy(counts)
+                        if len(unique)!=builtins.max(unique)+1:
+                            counts=np.array([counts[unique.index(i)] if i in unique else 0 for i in range(builtins.max(unique)+1)])
+                        reweights = np.clip(counts, 1, np.inf) / np.sum(counts).astype(np.float32)
+                        reweights1 = np.max(reweights) / reweights
+                        print('Retrive success!')
+                        self.label_statistics = reweights1
+
                     elif dp.traindata.label.__class__.__name__=='TextSequenceDataset':
                         corpus=[]
                         if dp.traindata.label.sequence_start_at == 'random':
@@ -169,7 +185,10 @@ class _ClassificationLoss(Loss):
             self.is_logsoftmax = False
             self.from_logits = True
             if self.auto_balance and self.label_statistics is not None:
-                output=output*to_tensor(self.label_statistics.copy())
+                if int_shape(output)[1] == len(self.label_statistics):
+                    new_shp = [1] * len(int_shape(output))
+                    new_shp[1] = len(self.label_statistics)
+                    output=output*to_tensor(np.reshape(self.label_statistics.copy(),tuple(new_shp)))
 
             output = clip(output, min=1e-8, max=1 - 1e-8)
 
@@ -177,7 +196,11 @@ class _ClassificationLoss(Loss):
             self.is_logsoftmax = True
             self.from_logits = True
             if self.auto_balance and self.label_statistics is not None:
-                output = output +to_tensor(np.log(self.label_statistics.copy()))
+                if int_shape(output)[1]==len(self.label_statistics):
+                    new_shp=[1]*len(int_shape(output))
+                    new_shp[1]=len(self.label_statistics)
+
+                    output = output +to_tensor(np.reshape(np.log(self.label_statistics.copy()),tuple(new_shp)))
             output = clip(output, max=- 1e-8)
         else:
             self.is_logsoftmax = False
@@ -1018,8 +1041,8 @@ class L1Loss(_PairwiseLoss):
         Returns:
 
         """
-
-        return F.l1_loss(output, target, reduction='none')
+        batch=int_shape(output)[0]
+        return F.l1_loss(output.view(batch,-1), target.view(batch,-1), reduction='none')
 
 
 class L2Loss(_PairwiseLoss):
@@ -1046,7 +1069,8 @@ class L2Loss(_PairwiseLoss):
         Returns:
 
         """
-        return 0.5 * F.mse_loss(output, target, reduction='none')
+        batch = int_shape(output)[0]
+        return 0.5 * F.mse_loss(output.view(batch,-1), target.view(batch,-1), reduction='none')
 
 
 class SmoothL1Loss(_PairwiseLoss):
@@ -1073,7 +1097,8 @@ class SmoothL1Loss(_PairwiseLoss):
         Returns:
 
         """
-        return F.smooth_l1_loss(output, target, reduction='none')
+        batch = int_shape(output)[0]
+        return F.smooth_l1_loss(output.view(batch,-1), target.view(batch,-1), reduction='none')
 
 
 class MSELoss(_PairwiseLoss):
@@ -1100,7 +1125,8 @@ class MSELoss(_PairwiseLoss):
         Returns:
 
         """
-        return F.mse_loss(output, target, reduction='none')
+        batch = int_shape(output)[0]
+        return F.mse_loss(output.view(batch,-1), target.view(batch,-1), reduction='none')
 
 
 class WingLoss(_PairwiseLoss):
@@ -1249,94 +1275,159 @@ class CosineSimilarityLoss(_PairwiseLoss):
         return 1.0 - torch.cosine_similarity(output, target)
 
 
-def gaussian(window_size, sigma=1.5):
-    gauss = torch.Tensor([exp(-(x - window_size // 2) ** 2 / float(2 * sigma ** 2)) for x in range(window_size)])
-    return gauss / gauss.sum()
+def gaussian(window_size, sigma):
+    gauss = torch.Tensor([exp(-(x - window_size//2)**2/float(2*sigma**2)) for x in range(window_size)])
+    return gauss/gauss.sum()
 
 
 
-def create_window(window_size, channel):
-    _1D_window = gaussian(window_size, 1.5).unsqueeze(1)
-    _2D_window = _1D_window.mm(_1D_window.t()).float().unsqueeze(0).unsqueeze(0)
-    window = _2D_window.expand(channel, 1, window_size, window_size).contiguous()
-    return window
+def create_window(window_size: int, sigma: float, channel: int):
+    '''
+    Create 1-D gauss kernel
+    :param window_size: the size of gauss kernel
+    :param sigma: sigma of normal distribution
+    :param channel: input channel
+    :return: 1D kernel
+    '''
+    coords = torch.arange(window_size, dtype=torch.float)
+    coords -= window_size // 2
 
+    g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+    g /= g.sum()
 
+    g = g.reshape(1, 1, 1, -1).repeat(channel, 1, 1, 1)
+    return g
 
-def ssim(img1, img2, window_size=11, window=None, val_range=None):
-    # Value range can be different from 255. Other common ranges are 1 (sigmoid) and 2 (tanh).
-    if val_range is None:
-        if torch.max(img1) > 128:
-            max_val = 255
-        else:
-            max_val = 1
+def _gaussian_filter(x, window_1d, use_padding: bool):
+    '''
+    Blur input with 1-D kernel
+    :param x: batch of tensors to be blured
+    :param window_1d: 1-D gauss kernel
+    :param use_padding: padding image before conv
+    :return: blured tensors
+    '''
+    C = x.shape[1]
+    padding = 0
+    if use_padding:
+        window_size = window_1d.shape[3]
+        padding = window_size // 2
+    out = F.conv2d(x, window_1d, stride=1, padding=(0, padding), groups=C)
+    out = F.conv2d(out, window_1d.transpose(2, 3), stride=1, padding=(padding, 0), groups=C)
+    return out
 
-        if torch.min(img1) < -0.5:
-            min_val = -1
-        else:
-            min_val = 0
-        L = max_val - min_val
-    else:
-        L = val_range
+def ssim(X, Y, window, data_range: float, use_padding: bool=False):
+    '''
+    Calculate ssim index for X and Y
+    :param X: images
+    :param Y: images
+    :param window: 1-D gauss kernel
+    :param data_range: value range of input images. (usually 1.0 or 255)
+    :param use_padding: padding image before conv
+    :return:
+    '''
 
-    padd = 0
-    (_, channel, height, width) = img1.size()
-    if window is None:
-        real_size = min(window_size, height, width)
-        window = create_window(real_size, channel=channel).to(img1.device)
+    K1 = 0.01
+    K2 = 0.03
+    compensation = 1.0
 
-    mu1 = F.conv2d(img1, window, padding=padd, groups=channel)
-    mu2 = F.conv2d(img2, window, padding=padd, groups=channel)
+    C1 = (K1 * data_range) ** 2
+    C2 = (K2 * data_range) ** 2
+
+    mu1 = _gaussian_filter(X, window, use_padding)
+    mu2 = _gaussian_filter(Y, window, use_padding)
+    sigma1_sq = _gaussian_filter(X * X, window, use_padding)
+    sigma2_sq = _gaussian_filter(Y * Y, window, use_padding)
+    sigma12 = _gaussian_filter(X * Y, window, use_padding)
 
     mu1_sq = mu1.pow(2)
     mu2_sq = mu2.pow(2)
     mu1_mu2 = mu1 * mu2
 
-    sigma1_sq = F.conv2d(img1 * img1, window, padding=padd, groups=channel) - mu1_sq
-    sigma2_sq = F.conv2d(img2 * img2, window, padding=padd, groups=channel) - mu2_sq
-    sigma12 = F.conv2d(img1 * img2, window, padding=padd, groups=channel) - mu1_mu2
+    sigma1_sq = compensation * (sigma1_sq - mu1_sq)
+    sigma2_sq = compensation * (sigma2_sq - mu2_sq)
+    sigma12 = compensation * (sigma12 - mu1_mu2)
 
-    C1 = (0.01 * L) ** 2
-    C2 = (0.03 * L) ** 2
+    cs_map = (2 * sigma12 + C2) / (sigma1_sq + sigma2_sq + C2)
+    # Fixed the issue that the negative value of cs_map caused ms_ssim to output Nan.
+    cs_map = F.relu(cs_map)
+    ssim_map = ((2 * mu1_mu2 + C1) / (mu1_sq + mu2_sq + C1)) * cs_map
 
-    v1 = 2.0 * sigma12 + C2
-    v2 = sigma1_sq + sigma2_sq + C2
-    cs = torch.mean(v1 / v2)  # contrast sensitivity
+    ssim_val = ssim_map.mean(dim=(1, 2, 3))  # reduce along CHW
+    cs = cs_map.mean(dim=(1, 2, 3))
 
-    ssim_map = ((2 * mu1_mu2 + C1) * v1) / ((mu1_sq + mu2_sq + C1) * v2)
-
-    ret = ssim_map.mean()
-    return ret, cs
+    return ssim_val, cs
 
 
-
-
-def msssim( img1, img2, levels=5):
-    weight = torch.FloatTensor([0.0448, 0.2856, 0.3001, 0.2363, 0.1333]).to(get_device())
-    mssim = torch.Tensor(levels, ).to(get_device())
-    mcs =torch.Tensor(levels, ).to(get_device())
-    for i in range(levels):
-        ssim_map, mcs_map = ssim(img1, img2)
-        mssim[i] = ssim_map
-        mcs[i] = mcs_map
-        filtered_im1 = F.avg_pool2d(img1, kernel_size=2, stride=2)
-        filtered_im2 = F.avg_pool2d(img2, kernel_size=2, stride=2)
-        img1 = filtered_im1
-        img2 = filtered_im2
-
-    value = (torch.prod(mcs[0:levels - 1] ** weight[0:levels - 1]) *(mssim[levels - 1] ** weight[levels - 1]))
-    return value
 
 
 class MS_SSIMLoss(_Loss):
-    def __init__(self, reduction='mean', window_size=11, max_val=255):
+    def __init__(self,  window_size=11, window_sigma=1.5, data_range=255., channel=3, use_padding=False, weights=None, levels=4,eps=1e-8):
         super(MS_SSIMLoss, self).__init__()
-        self.reduction = reduction
-        self.window_size = window_size
-        self.channel = 3
 
+        self.window_size=window_size
+        self.channel = channel
+        window = create_window(window_size, window_sigma, channel)
+        self.register_buffer('window', window.to(get_device()))
+        self.data_range=data_range
+        self.use_padding = use_padding
+        self.eps=eps
+        window = create_window(window_size, window_sigma, channel)
+        self.register_buffer('window', window.to(get_device()))
+
+        if weights is None:
+            weights = [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]
+        weights = torch.tensor(weights, dtype=torch.float,requires_grad=False)
+        self.levels=levels
+        if levels is not None:
+            weights = weights[:levels]
+            weights = weights / weights.sum()
+
+        self.register_buffer('weights', weights.to(get_device()))
+
+    def ms_ssim(self,X, Y):
+        '''
+        interface of ms-ssim
+        :param X: a batch of images, (N,C,H,W)
+        :param Y: a batch of images, (N,C,H,W)
+        :param window: 1-D gauss kernel
+        :param data_range: value range of input images. (usually 1.0 or 255)
+        :param weights: weights for different levels
+        :param use_padding: padding image before conv
+        :param eps: use for avoid grad nan.
+        :return:
+        '''
+        window = self.window
+        data_range = self.data_range
+
+        weights = self.weights[:, None]
+        levels = self.levels
+        use_padding = self.use_padding
+        eps = self.eps
+
+
+        vals = []
+        for i in range(levels):
+            ss, cs = ssim(X, Y, window=window, data_range=data_range, use_padding=use_padding)
+
+            if i < levels - 1:
+                vals.append(cs)
+                X = F.avg_pool2d(X, kernel_size=2, stride=2, ceil_mode=True)
+                Y = F.avg_pool2d(Y, kernel_size=2, stride=2, ceil_mode=True)
+            else:
+                vals.append(ss)
+
+        vals =torch.stack(vals, dim=0)
+        vals=where(is_abnormal_number(vals),zeros_like(vals),vals)
+        # Use for fix a issue. When c = a ** b and a is 0, c.backward() will cause the a.grad become inf.
+        vals = clip(vals,min=eps)
+        # The origin ms-ssim op.
+        ms_ssim_val = torch.prod(vals[:-1] ** weights[:-1] * vals[-1:] ** weights[-1:], dim=0)
+        # The new ms-ssim op. But I don't know which is best.
+        # ms_ssim_val = torch.prod(vals ** weights, dim=0)
+        # In this file's image training demo. I feel the old ms-ssim more better. So I keep use old ms-ssim op.
+        return ms_ssim_val
     def forward(self, output, target) -> 'loss':
-        return 1 - msssim(output, target, levels=5)
+        return self.ms_ssim(output, target).mean()
 
 
 class IoULoss(_ClassificationLoss):
@@ -1362,7 +1453,7 @@ class IoULoss(_ClassificationLoss):
         output_flat = output.reshape((batch_size,-1))
         target_flat = target.reshape((batch_size,-1))
         intersection = equal(output_flat,target_flat,dtype=_dtype).sum()
-        union = greater(greater(output_flat,0,dtype=_dtype) + greater(target_flat,0,dtype=_dtype),2,dtype=_dtype).sum().clamp(min=1)
+        union = greater(greater(output_flat,0,dtype=_dtype) + greater(target_flat,0,dtype=_dtype),0,dtype=_dtype).sum().clamp(min=1)
         loss =1 -(intersection / union)
         return loss
 
