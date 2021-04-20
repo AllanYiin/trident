@@ -363,9 +363,10 @@ def image_backend_adaption(image):
 
 
 def reverse_image_backend_adaption(image):
-    if get_backend() in ['pytorch', 'cntk'] and image.ndim == 3 and image.shape[0] in [3, 4]:
+    image=to_numpy(image)
+    if get_backend() =='pytorch' and len( int_shape(image))== 3 and int_shape(image)[0] in [3, 4]:
         image = np.transpose(image, [1, 2, 0]).astype(np.float32)
-    elif get_backend() in ['pytorch', 'cntk'] and image.ndim == 4 and image.shape[1] in [3, 4]:
+    elif get_backend() =='pytorch'  and len( int_shape(image))== 4 and int_shape(image)[1] in [3, 4]:
         image = np.transpose(image, [0, 2, 3, 1]).astype(np.float32)
     return image
 
