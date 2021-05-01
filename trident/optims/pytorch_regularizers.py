@@ -13,7 +13,7 @@ _epsilon = _session.epsilon
 __all__ = ['l1_reg','l2_reg','orth_reg','get_reg','total_variation_norm_reg']
 
 
-def l1_reg(model:nn.Module,reg_weight=1e-5):
+def l1_reg(model:nn.Module,reg_weight=1e-6):
     #with torch.enable_grad():
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
@@ -22,7 +22,7 @@ def l1_reg(model:nn.Module,reg_weight=1e-5):
     return loss
 
 
-def l2_reg(model:nn.Module,reg_weight=1e-5):
+def l2_reg(model:nn.Module,reg_weight=1e-6):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name  and  not any_abnormal_number(param) and  param.requires_grad==True:
@@ -30,7 +30,7 @@ def l2_reg(model:nn.Module,reg_weight=1e-5):
     return loss
 
 
-def orth_reg(model:nn.Module,reg_weight=1e-4):
+def orth_reg(model:nn.Module,reg_weight=1e-6):
     loss =to_tensor(0.0,requires_grad=True)
     for name, param in model.named_parameters():
         if 'bias' not in name and param.requires_grad==True:
@@ -56,8 +56,14 @@ def total_variation_norm_reg(output:torch.Tensor,reg_weight=1):
 def get_reg(reg_name):
     if reg_name is None:
         return None
-    if '_reg' not in reg_name:
-        reg_name=reg_name+'_reg'
-    reg_modules = ['trident.optims.pytorch_regularizers']
-    reg_fn = get_function(camel2snake(reg_name), reg_modules)
-    return reg_fn
+    if reg_name=='l1':
+        return l1_reg
+    elif reg_name=='l2':
+        return l2_reg
+    else:
+        if '_reg' not in reg_name:
+            reg_name=reg_name+'_reg'
+
+        reg_modules = ['trident.optims.pytorch_regularizers']
+        reg_fn = get_function(camel2snake(reg_name), reg_modules)
+        return reg_fn
