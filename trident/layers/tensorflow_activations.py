@@ -5,6 +5,7 @@ from __future__ import division
 from __future__ import print_function
 
 import inspect
+from functools import partial
 
 import numpy as np
 import six
@@ -572,56 +573,58 @@ class SIREN(Layer):
         return x
 
 
-def get_activation(fn_name):
+
+
+
+def get_activation(fn_name,only_layer=False):
     """
-    get the proper activation function
 
     Args:
-        fn_name (string ,function,Type):
+        fn_name ():
 
-    Returns: function or Layer class
+    Returns:
 
     Examples:
-    >>> get_activation('relu').__name__
-    'relu'
-    >>> get_activation('Relu')
-    Relu()
-    >>> get_activation(Mish)
-    Mish()
-    >>> get_activation(LeakyRelu(alpha=0.1))
-    LeakyRelu(alpha=0.1)
+        >>> print(get_activation('swish'))
+
 
 
     """
-    fn_modules = ['trident.backend.tensorflow_ops','trident.layers.tensorflow_activations','tensorflow.python.framework.ops.nn_ops']
-
     if fn_name is None:
         return None
+    fn_modules = ['trident.layers.tensorflow_activations', 'trident.backend.tensorflow_ops', 'tensorflow.python.framework.ops.nn_ops']
+    trident_fn_modules = ['trident.layers.tensorflow_activations', 'trident.backend.tensorflow_ops']
+    if only_layer:
+        fn_modules = ['trident.layers.tensorflow_activations']
+        trident_fn_modules = ['trident.layers.tensorflow_activations']
     try:
         if isinstance(fn_name, str):
             if camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name:
                 if fn_name == 'p_relu' or fn_name == 'prelu':
                     return PRelu()
-                activation_fn = get_function(fn_name, ['trident.backend.tensorflow_ops',
-                                                       'trident.layers.tensorflow_activations'] if fn_name in __all__ else fn_modules)
+                activation_fn = get_function(fn_name, trident_fn_modules if fn_name in __all__
+                else fn_modules)
                 return activation_fn
             else:
                 try:
                     activation_fn = get_class(snake2camel(fn_name), fn_modules)
                     return activation_fn()
                 except Exception:
-                    activation_fn = get_class(fn_name, ['trident.backend.tensorflow_ops',
-                                                        'trident.layers.tensorflow_activations'] if fn_name in __all__ else fn_modules)
+                    activation_fn = get_class(fn_name, fn_modules)
                     return activation_fn()
         elif getattr(fn_name, '__module__', None) == 'trident.layers.tensorflow_activations':
             if inspect.isfunction(fn_name):
-                return fn_name
-            elif inspect.isclass(fn_name) and inspect._is_type(fn_name):
+                return partial(fn_name)
+            elif inspect.isclass(fn_name) and  fn_name.__class__.__name__=="type":
                 return fn_name()
             elif isinstance(fn_name, Layer):
                 return fn_name
         elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.tensorflow_ops':
-            return fn_name
+            if only_layer:
+                activation_layer = get_class(snake2camel(fn_name.__class__.__name__), trident_fn_modules)
+                return activation_layer()
+            else:
+                return fn_name
 
         else:
             if callable(fn_name):
@@ -633,4 +636,5 @@ def get_activation(fn_name):
     except Exception as e:
         print(e)
         return None
+
 

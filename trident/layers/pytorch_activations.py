@@ -677,7 +677,7 @@ class SIREN(Layer):
         return x
 
 
-def get_activation(fn_name):
+def get_activation(fn_name,only_layer=False):
     """
 
     Args:
@@ -694,13 +694,16 @@ def get_activation(fn_name):
     if fn_name is None:
         return None
     fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops', 'torch.nn.functional']
+    trident_fn_modules = ['trident.layers.pytorch_activations', 'trident.backend.pytorch_ops']
+    if only_layer:
+        fn_modules = ['trident.layers.pytorch_activations']
+        trident_fn_modules = ['trident.layers.pytorch_activations']
     try:
         if isinstance(fn_name, str):
             if camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name:
                 if fn_name == 'p_relu' or fn_name == 'prelu':
                     return PRelu()
-                activation_fn = get_function(fn_name, ['trident.backend.pytorch_ops',
-                                                       'trident.layers.pytorch_activations'] if fn_name in __all__
+                activation_fn = get_function(fn_name, trident_fn_modules if fn_name in __all__
                 else fn_modules)
                 return activation_fn
             else:
@@ -708,8 +711,7 @@ def get_activation(fn_name):
                     activation_fn = get_class(snake2camel(fn_name), fn_modules)
                     return activation_fn()
                 except Exception:
-                    activation_fn = get_class(fn_name, ['trident.backend.pytorch_ops',
-                        'trident.layers.pytorch_activations'] if fn_name in __all__ else fn_modules)
+                    activation_fn = get_class(fn_name, fn_modules)
                     return activation_fn()
         elif getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
             if inspect.isfunction(fn_name):
@@ -719,6 +721,10 @@ def get_activation(fn_name):
             elif isinstance(fn_name, Layer):
                 return fn_name
         elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.pytorch_ops':
+            if only_layer:
+                activation_layer = get_class(snake2camel(fn_name.__class__.__name__), trident_fn_modules)
+                return activation_layer()
+            else:
                 return fn_name
 
         else:
