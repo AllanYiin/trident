@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import numbers
 import inspect
 import math
 import uuid
@@ -17,7 +17,6 @@ import torch.nn.functional as F
 from torch._six import container_abcs
 from torch.nn import init
 
-
 from trident.layers.pytorch_activations import get_activation, Identity
 from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, SpectralNorm
@@ -26,8 +25,8 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, Sequential, ModuleList
 from trident.backend.pytorch_ops import *
 
-__all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'GcdConv2d_Block',
-           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d','ShortCut','Hourglass', 'ConcateBlock', 'SqueezeExcite', 'For']
+__all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'TemporalConv1d_Block',
+           'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ShortCut', 'Hourglass', 'ConcateBlock', 'SqueezeExcite', 'For']
 
 _session = get_session()
 
@@ -51,11 +50,11 @@ _quadruple = _ntuple(4)
 
 class Conv1d_Block(Layer):
     def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
-                 normalization=None, use_spectral=False,use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
-                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False,sequence_rank='cna',**kwargs):
-        super(Conv1d_Block, self).__init__(name=name,keep_output=keep_output)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+                 normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
+                 dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, sequence_rank='cna', **kwargs):
+        super(Conv1d_Block, self).__init__(name=name, keep_output=keep_output)
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         else:
             self.sequence_rank = 'cna'
         self.kernel_size = kernel_size
@@ -88,29 +87,28 @@ class Conv1d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            conv= nn.utils.spectral_norm(conv)
-        if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
+            conv = nn.utils.spectral_norm(conv)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.conv = conv
             self.norm = norm
             self.activation = get_activation(activation)
-        elif self.sequence_rank=='nac':
+        elif self.sequence_rank == 'nac':
             self.norm = norm
             self.activation = get_activation(activation)
             self.conv = conv
 
-
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
                 if self.norm is SpectralNorm:
-                    self.norm=None
+                    self.norm = None
             self._built = True
 
     def forward(self, x, **kwargs):
-       
-        if hasattr(self,'sequence_rank'):
-            setattr(self,'sequence_rank','cna')
+
+        if hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -140,18 +138,15 @@ class Conv1d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-
-
-
 class Conv2d_Block(Layer):
-    def __init__(self,kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
-                 keep_output=False,sequence_rank='cna',   **kwargs):
-        super(Conv2d_Block, self).__init__(name=name,keep_output=keep_output)
+                 keep_output=False, sequence_rank='cna', **kwargs):
+        super(Conv2d_Block, self).__init__(name=name, keep_output=keep_output)
 
-        if sequence_rank in ['cna','nac','acn']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac', 'acn']:
+            self.sequence_rank = sequence_rank
         else:
             self.sequence_rank = 'cna'
         self.kernel_size = kernel_size
@@ -199,27 +194,30 @@ class Conv2d_Block(Layer):
             self.use_spectral = True
             norm = None
             conv = nn.utils.spectral_norm(conv)
-        if (hasattr(self,'sequence_rank') and self.sequence_rank=='cna') or not hasattr(self,'sequence_rank') :
-            self.conv=conv
-            self.norm = norm
-            self.activation = get_activation(activation)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+
         elif self.sequence_rank == 'nac':
-            self.norm = norm
-            self.activation = get_activation(activation)
-            self.conv=conv
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('conv', conv)
+
         elif self.sequence_rank == 'acn':
-            self.activation = get_activation(activation)
-            self.conv = conv
-            self.norm = norm
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
         self._name = name
 
-    def build(self, input_shape:TensorShape):
-        if self._built == False:
+    def build(self, input_shape: TensorShape):
+        if not self._built:
+
             self.conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
                 if self.norm is SpectralNorm:
-                    self.norm=None
+                    self.norm = None
 
             # if self.norm is not None:
             #     self.norm.input_shape = self.conv.output_shape
@@ -227,9 +225,9 @@ class Conv2d_Block(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-       
-        if not hasattr(self,'sequence_rank'):
-            setattr(self,'sequence_rank','cna')
+
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -260,15 +258,15 @@ class Conv2d_Block(Layer):
 
 
 class TransConv2d_Block(Layer):
-    def __init__(self,  kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
-                 keep_output=False,sequence_rank='cna',   **kwargs):
-        super(TransConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+                 keep_output=False, sequence_rank='cna', **kwargs):
+        super(TransConv2d_Block, self).__init__(name=name, keep_output=keep_output)
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.num_filters = num_filters
         self.strides = strides
@@ -282,31 +280,50 @@ class TransConv2d_Block(Layer):
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
         self.use_spectral = use_spectral
-        self.depth_multiplier=depth_multiplier
-        self.conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
-                               auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
-                               use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
-                               depth_multiplier=self.depth_multiplier).to(self.device)
-        self.norm = get_normalization(normalization)
-        self.activation = get_activation(activation)
+        self.depth_multiplier = depth_multiplier
+        conv = TransConv2d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                                auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                                use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self.name,
+                                depth_multiplier=self.depth_multiplier).to(self.device)
+        norm = get_normalization(normalization)
+
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            conv = nn.utils.spectral_norm(conv)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+
+        elif self.sequence_rank == 'nac':
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+
+        elif self.sequence_rank == 'acn':
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
         self.droupout = None
 
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False or self.conv is None:
+            self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else self.num_filters
             self.conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
                 if self.norm is SpectralNorm:
-                    self.norm=None
+                    self.norm = None
 
             self.to(self.device)
             self._built = True
 
     def forward(self, x, **kwargs):
-       
+
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
@@ -341,14 +358,14 @@ class TransConv2d_Block(Layer):
 
 
 class DepthwiseConv2d_Block(Layer):
-    def __init__(self,  kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
+    def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, add_noise=False,
-                 noise_intensity=0.005, dropout_rate=0, name=None,keep_output=False,sequence_rank='cna', **kwargs):
-        super(DepthwiseConv2d_Block, self).__init__(name=name,keep_output=keep_output)
-        if not hasattr(self,'sequence_rank'):
-            setattr(self,'sequence_rank','cna')
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+                 noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, sequence_rank='cna', **kwargs):
+        super(DepthwiseConv2d_Block, self).__init__(name=name, keep_output=keep_output)
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
 
@@ -369,32 +386,50 @@ class DepthwiseConv2d_Block(Layer):
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
 
-        self.conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                   strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                   activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(self.device)
-        self.norm = get_normalization(normalization)
+        conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                                    strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                                    activation=None, use_bias=self.use_bias, dilation=self.dilation, name=self._name).to(self.device)
+        norm = get_normalization(normalization)
         self.use_spectral = use_spectral
-        self.activation = get_activation(activation)
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            conv = nn.utils.spectral_norm(conv)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+
+        elif self.sequence_rank == 'nac':
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+
+        elif self.sequence_rank == 'acn':
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+
         self.droupout = None
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False or self.conv is None:
 
             self.conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
                 if self.norm is SpectralNorm:
-                    self.norm=None
+                    self.norm = None
 
             self.to(self.device)
             self._built = True
 
     def forward(self, x, **kwargs):
-       
-        if not hasattr(self,'sequence_rank'):
-            setattr(self,'sequence_rank','cna')
+
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
             x = x + noise
@@ -428,10 +463,10 @@ class SeparableConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, keep_output=False, sequence_rank='cna', **kwargs):
-        super(SeparableConv2d_Block, self).__init__(name=name,keep_output=keep_output)
+        super(SeparableConv2d_Block, self).__init__(name=name, keep_output=keep_output)
 
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
+        if sequence_rank in ['cna', 'nac']:
+            self.sequence_rank = sequence_rank
         self.kernel_size = kernel_size
         self.depth_multiplier = depth_multiplier
         self.num_filters = kwargs.get('num_filters')
@@ -453,42 +488,49 @@ class SeparableConv2d_Block(Layer):
         self.noise_intensity = noise_intensity
         self.dropout_rate = dropout_rate
         self.use_spectral = use_spectral
-        if not hasattr(self,'sequence_rank'):
-            setattr(self,'sequence_rank','cna')
-        if self.sequence_rank == 'cna':
-            self.conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                       strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                       activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                                       name=self._name).to(self.device)
+        conv=SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                        strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                        activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                        name=self._name).to(self.device)
+        norm = get_normalization(normalization)
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            conv = nn.utils.spectral_norm(conv)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
 
-            self.norm = get_normalization(normalization)
-            self.activation = get_activation(activation)
         elif self.sequence_rank == 'nac':
-            self.norm = get_normalization(normalization)
-            self.activation = get_activation(activation)
-            self.conv = SeparableConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
-                                       strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
-                                       activation=None, use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
-                                       name=self._name).to(self.device)
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+
+        elif self.sequence_rank == 'acn':
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+
+
         self.depth_multiplier = depth_multiplier
         self.keep_output = keep_output
         self._name = name
 
-    def build(self, input_shape:TensorShape):
-        if self._built == False:
-            self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else \
-                self.num_filters
+    def build(self, input_shape: TensorShape):
+        if not self._built:
+            self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else self.num_filters
 
             self.conv.input_shape = input_shape
             if self.use_spectral:
                 self.conv = nn.utils.spectral_norm(self.conv)
                 if self.norm is SpectralNorm:
-                    self.norm=None
+                    self.norm = None
             self.to(self.device)
             self._built = True
 
     def forward(self, x, **kwargs):
-       
+
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
@@ -520,87 +562,31 @@ class SeparableConv2d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-class GcdConv2d_Block(Layer):
-    def __init__(self,  kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
-                 divisor_rank=0, activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1,
-                 groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,keep_output=False,sequence_rank='cna',
-                 **kwargs):
-        super(GcdConv2d_Block, self).__init__(name=name,keep_output=keep_output)
-        if sequence_rank in ['cna','nac']:
-            self.sequence_rank=sequence_rank
-        self.kernel_size = kernel_size
-        self.num_filters = num_filters
-        self.strides = _pair(strides)
-        self.auto_pad = auto_pad
-        self.padding_mode = padding_mode
-        self.use_spectral = use_spectral
-        self.use_bias = use_bias
+class TemporalConv1d_Block(Sequential):
+    def __init__(self, kernel_size=2, num_filters=None, num_levels=8,strides=1, activation=None,dropout_rate=0.2,
+                 use_bias=False, name=None, depth_multiplier=None, keep_output=False,**kwargs):
 
-        self.dilation = dilation
-        self.groups = groups
-        self.add_noise = add_noise
-        self.noise_intensity = noise_intensity
-        self.dropout_rate = dropout_rate
-        if self.sequence_rank == 'cna':
-            self.conv =GcdConv2d(self.kernel_size, input_filters=self.input_filters, num_filters=self.num_filters,
-                                 strides=self.strides, auto_pad=self.auto_pad, activation=None, init=None,
-                                 use_bias=self.use_bias, init_bias=0, divisor_rank=self.divisor_rank,
-                                 dilation=self.dilation).to(self.device)
-            self.norm = get_normalization(normalization)
-            self.activation = get_activation(activation)
-        elif self.sequence_rank == 'nac':
-            self.norm = get_normalization(normalization)
-            self.activation = get_activation(activation)
-            self.conv =GcdConv2d(self.kernel_size, input_filters=self.input_filters, num_filters=self.num_filters,
-                                 strides=self.strides, auto_pad=self.auto_pad, activation=None, init=None,
-                                 use_bias=self.use_bias, init_bias=0, divisor_rank=self.divisor_rank,
-                                 dilation=self.dilation).to(self.device)
-        self.divisor_rank = divisor_rank
+        super(TemporalConv1d_Block, self).__init__()
+        self.kernel_size=kernel_size
+        self.num_filters=num_filters
+        self.depth_multiplier=depth_multiplier
+
+        layers = []
+        self.num_levels=num_levels
+        for i in range(num_levels):
+            self.add_module('temporal_block{0}'.format(i),self.temporal_block(num_filters= num_filters, kernel_size=2, strides=1, dilation= 2 ** i,
+                                     padding=(kernel_size - 1) * (i*2), dropout_rate=dropout_rate))
 
 
+    def temporal_block(self,kernel_size=2,num_filters=None,depth_multiplier=1,strides=1,dilation=1,padding=0,dropout_rate=0,activation=None):
+        return ShortCut(
+            Conv1d_Block(kernel_size=1, num_filters=num_filters, depth_multiplier=1, strides=strides, dilation=1, auto_pad=True,activation=None, dropout_rate=0),
+            Sequential(
+                Conv1d_Block(kernel_size=kernel_size,num_filters=num_filters,depth_multiplier=depth_multiplier,strides=strides,dilation=dilation,auto_pad=False,padding=(0,padding),activation=activation,dropout_rate=dropout_rate),
+                Conv1d_Block(kernel_size=kernel_size,num_filters=num_filters,depth_multiplier=depth_multiplier,strides=strides,dilation=dilation,auto_pad=False,padding=(0,padding),activation=activation,dropout_rate=dropout_rate)
+            ),mode='add')
 
 
-    def build(self, input_shape:TensorShape):
-        if self._built == False or self.conv is None:
-            self.conv.input_shape = input_shape
-            if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm=None
-            self._built = True
-            self.to(self.device)
-
-    def forward(self, x, **kwargs):
-       
-        if not hasattr(self, 'sequence_rank'):
-            setattr(self, 'sequence_rank', 'cna')
-        if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
-            x = x + noise
-        # dynamic generation
-        if self.sequence_rank == 'cna':
-            x = self.conv(x)
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-        elif self.sequence_rank == 'nac':
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-            x = self.conv(x)
-        if self.dropout_rate > 0:
-            x = F.dropout(x, p=self.dropout_rate, training=self.training)
-        if torch.isnan(x).any():
-            print(self._get_name() + '  nan detected!!')
-        return x
-
-    def extra_repr(self):
-        s = ('{input_filters}, {num_filters}, kernel_size={kernel_size}'
-             ', stride={stride}')
-
-        return s.format(**self.__dict__)
 
 
 def For(what_range, constructor):
@@ -684,7 +670,7 @@ class Highway(Layer):
             Variable: Output variable. Its array has the same spatial size and
             the same minibatch size as the input array.
         """
-       
+
         out_plain = self.activate(self.plain(x))
         out_transform = torch.sigmoid(self.transform(x))
         x = out_plain * out_transform + x * (1 - out_transform)
@@ -704,7 +690,7 @@ class Classifier1d(Layer):
         self._name = name
         self.keep_output = keep_output
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False or self.conv1x1 is None:
             if self.classifier_type == 'global_avgpool':
                 if self.input_filters != self.num_classes:
@@ -715,7 +701,7 @@ class Classifier1d(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-       
+
         if self.classifier_type == 'dense':
             x = x.view(x.size(0), x.size(1), -1)
             x = torch.mean(x, -1, False)
@@ -742,7 +728,8 @@ class Classifier1d(Layer):
 
 class ShortCut2d(Layer):
     """ShortCut2d Layer """
-    def __init__(self, *args, axis=1, branch_from=None, activation=None, mode='add', name=None, keep_output=False,
+
+    def __init__(self, *args, axis=1, branch_from=None, branch_from_uuid=None, activation=None, mode='add', name=None, keep_output=False,
                  **kwargs):
         """
 
@@ -763,7 +750,13 @@ class ShortCut2d(Layer):
         self.mode = mode
         self.axis = axis
         self.branch_from = branch_from
-        self.branch_from_uuid = None
+        self.branch_from_uuid = branch_from_uuid
+        if self.branch_from or self.branch_from_uuid:
+            for k, v in self.nodes.item_list:
+                if self.branch_from is not None and v.name == self.branch_from:
+                    v.keep_output = True
+                    self.branch_from_uuid = k
+                    break
 
         self.keep_output = keep_output
 
@@ -806,63 +799,64 @@ class ShortCut2d(Layer):
             self.add_module('Identity', Identity())
         self.to(self.device)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             if self.branch_from is not None:
                 for k, v in self.nodes.item_list:
                     if v.name == self.branch_from:
                         v.keep_output = True
                         self.branch_from_uuid = k
-                        self.register_buffer('branch_from_tensor', v._output_tensor)
-                        print('get {0} output info...'.format(self.branch_from))
+
                         break
                 if self.branch_from_uuid is None:
                     raise ValueError('Cannot find any layer named {0}'.format(self.branch_from))
             self._built = True
 
     def forward(self, x, **kwargs):
-       
         current = None
         concate_list = []
 
         for k, v in self._modules.items():
-            new_item = v(x) #if not isinstance(v, Identity) else x
+            new_item = v(x)  # if not isinstance(v, Identity) else x
             if current is None:
                 current = new_item
                 concate_list.append(current)
             else:
-                if self.mode == 'add':
-                    current = current + new_item
-                elif self.mode == 'dot':
-                    current = current * new_item
-                elif self.mode == 'concate':
-                    concate_list.append(new_item)
-                else:
-                    raise ValueError('Not valid shortcut mode')
+                try:
+                    if self.mode == 'add':
+                        current = current + new_item
+                    elif self.mode == 'dot':
+                        current = current * new_item
+                    elif self.mode == 'concate':
+                        concate_list.append(new_item)
+                    else:
+                        raise ValueError('Not valid shortcut mode')
+                except Exception as e:
+                    print(e)
 
-        if hasattr(self,
-                   'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
-            self.branch_from_tensor = self.nodes.get(self.branch_from_uuid)._output_tensor
-
+        branch1 = None
+        if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes.key_list:
+            tt = self.nodes.get(self.branch_from_uuid)
+            branch1 = identity(self.nodes.get(self.branch_from_uuid)._output_tensor)
             if self.mode == 'add':
-                current = current + self.branch_from_tensor
+                current = current + branch1
             elif self.mode == 'dot':
-                current = current * self.branch_from_tensor
+                current = current * branch1
             elif self.mode == 'concate':
-                concate_list.append(self.branch_from_tensor)
-
-        if self.mode == 'concate':
-            try:
+                concate_list.append(branch1)
+                if len(concate_list) > 1:
+                    print('')
+        try:
+            if self.mode == 'concate':
                 x = concate(concate_list, axis=self.axis)
-            except Exception as e:
-                print('Layer {0} relative name:{1} concate fails. The input shapes:{2} '.format(self.name, self.relative_name, [int_shape(item) for item in concate_list]))
-
-
-        else:
-            x = current
+            else:
+                x = current
+        except Exception as e:
+            print('Layer {0} relative name:{1} concate fails. The input shapes:{2} '.format(self.name, self.relative_name, [int_shape(item) for item in concate_list]))
         if self.activation is not None:
             x = self.activation(x)
         return x
+
     def extra_repr(self):
         s = ('mode={mode}, keep_output={keep_output},axis={axis}')
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -894,7 +888,7 @@ class ShortCut(Layer):
 
         """
         super(ShortCut, self).__init__(name=name, keep_output=keep_output)
-        valid_mode = ['add', 'subtract', 'concate', 'dot','maxout']
+        valid_mode = ['add', 'subtract', 'concate', 'dot', 'maxout']
         if mode in valid_mode:
             self.mode = mode
         else:
@@ -975,7 +969,7 @@ class ShortCut(Layer):
                 if self.mode == 'add':
                     current = current + new_item
                 elif self.mode == 'subtract':
-                    current = current -new_item
+                    current = current - new_item
                 elif self.mode == 'dot':
                     current = current * new_item
                 elif self.mode == 'concate':
@@ -990,7 +984,7 @@ class ShortCut(Layer):
             if self.mode == 'add':
                 current = current + self.branch_from_tensor
             elif self.mode == 'subtract':
-                current = current -  self.branch_from_tensor
+                current = current - self.branch_from_tensor
             elif self.mode == 'dot':
                 current = current * self.branch_from_tensor
             elif self.mode == 'concate':
@@ -1031,12 +1025,13 @@ class Hourglass(Layer):
 
 
     """
-    def __init__(self,block,depth=2,blocks_repeat=2,keep_output=False,name=None,**kwargs):
-        super(Hourglass, self).__init__(keep_output=keep_output,name=name)
+
+    def __init__(self, block, depth=2, blocks_repeat=2, keep_output=False, name=None, **kwargs):
+        super(Hourglass, self).__init__(keep_output=keep_output, name=name)
         self.depth = depth
         self.block = block
-        self.pool=MaxPool2d((2,2),strides=2)
-        self.upsample = Upsampling2d(scale_factor=2,mode='bilinear')
+        self.pool = MaxPool2d((2, 2), strides=2)
+        self.upsample = Upsampling2d(scale_factor=2, mode='bilinear')
 
         hg = []
         for i in range(depth):
@@ -1046,17 +1041,16 @@ class Hourglass(Layer):
             if i == 0:
                 res.append(self._make_residual(block, blocks_repeat))
             hg.append(ModuleList(res))
-        self.hg=ModuleList(hg)
+        self.hg = ModuleList(hg)
 
-
-    def _make_residual(self,block,blocks_repeat):
-        return Sequential([block]*blocks_repeat)
+    def _make_residual(self, block, blocks_repeat):
+        return Sequential([block] * blocks_repeat)
 
     def _hour_glass_forward(self, depth_id, x):
         up1 = self.hg[depth_id][0](x)
         low1 = self.pool(x)
         low1 = self.hg[depth_id][1](low1)
-        if depth_id ==0:
+        if depth_id == 0:
             low2 = self.hg[depth_id][3](low1)
         else:
             low2 = self._hour_glass_forward(depth_id + 1, low1)
@@ -1065,7 +1059,7 @@ class Hourglass(Layer):
         return up1 + up2
 
     def forward(self, x, **kwargs):
-        x=self._hour_glass_forward(0, x)
+        x = self._hour_glass_forward(0, x)
         return x
 
 
@@ -1105,7 +1099,7 @@ class ConcateBlock(Layer):
         self.to(self.device)
 
     def forward(self, x, **kwargs):
-       
+
         outs = []
         if 'Identity' in self._modules:
             outs.append(x)
@@ -1124,21 +1118,31 @@ class ConcateBlock(Layer):
 
 
 class SqueezeExcite(Layer):
-    def __init__(self, se_filters, num_filters, is_gather_excite=False, activation='relu',use_bias=False, name=''):
+    def __init__(self, se_filters, num_filters=None, is_gather_excite=False, activation='relu', use_bias=False, depth_multiplier=None,name=''):
         super(SqueezeExcite, self).__init__(name=name)
-
         self.se_filters = se_filters
+        self.depth_multiplier=depth_multiplier
         self.num_filters = num_filters
+
         self.use_bias = use_bias
-        self.squeeze = Conv2d((1, 1), self.se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
-        self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
         self.is_gather_excite = is_gather_excite
         self.activation = get_activation(activation)
         self.pool = GlobalAvgPool2d()
 
-
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
+            if self.num_filters is None and isinstance(self.depth_multiplier,numbers.Number):
+                self.num_filters=int(self.input_filters*self.depth_multiplier)
+
+            se_filters=None
+            if isinstance(self.se_filters,numbers.Integral):
+                se_filters=self.se_filters
+            if inspect.isfunction(self.se_filters):
+                se_filters=self.se_filters(self.input_filters)
+
+            self.squeeze = Conv2d((1, 1), se_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_squeeze')
+            self.excite = Conv2d((1, 1), self.num_filters, strides=1, auto_pad=False, activation=None, use_bias=self.use_bias, name=self.name + '_excite')
+
             self.to(self.device)
             self._built = True
 
