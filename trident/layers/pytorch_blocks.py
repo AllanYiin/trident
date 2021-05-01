@@ -25,7 +25,7 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, Sequential, ModuleList
 from trident.backend.pytorch_ops import *
 
-__all__ = ['Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'TemporalConv1d_Block',
+__all__ = ['FullConnect_Block','Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'TemporalConv1d_Block',
            'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ShortCut', 'Hourglass', 'ConcateBlock', 'SqueezeExcite', 'For']
 
 _session = get_session()
@@ -47,6 +47,84 @@ _pair = _ntuple(2)
 _triple = _ntuple(3)
 _quadruple = _ntuple(4)
 
+
+class FullConnect_Block(Layer):
+    def __init__(self, num_filters=None,
+                 activation=None, normalization=None, use_spectral=False, use_bias=False,
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 keep_output=False, sequence_rank='cna', **kwargs):
+        super(FullConnect_Block, self).__init__(name=name, keep_output=keep_output)
+
+        if sequence_rank in ['fna', 'naf', 'afn']:
+            self.sequence_rank = sequence_rank
+        else:
+            self.sequence_rank = 'fna'
+
+        self.num_filters = num_filters
+
+
+
+        self.use_bias = use_bias
+
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
+        self.dropout_rate = dropout_rate
+        self.droupout = None
+        self.depth_multiplier = depth_multiplier
+        self.keep_output = keep_output
+
+        norm = get_normalization(normalization)
+        fc = Dense(num_filters=self.num_filters, activation=None, use_bias=self.use_bias, depth_multiplier=self.depth_multiplier).to(self.device)
+        self.use_spectral = use_spectral
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            fc = nn.utils.spectral_norm(fc)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'fna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('fc', fc)
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+
+        elif self.sequence_rank == 'naf':
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('fc', fc)
+
+        elif self.sequence_rank == 'afn':
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('fc', fc)
+            self.add_module('norm', norm)
+        self._name = name
+
+    def build(self, input_shape: TensorShape):
+        if not self._built:
+            # if self.norm is not None:
+            #     self.norm.input_shape = self.conv.output_shape
+            self.to(self.device)
+            self._built = True
+
+    def forward(self, x, **kwargs):
+
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'fna')
+        if self.add_noise == True and self.training == True:
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
+            x = x + noise
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
+        if self.training and self.dropout_rate > 0:
+            x = F.dropout(x, p=self.dropout_rate, training=self.training)
+        return x
+
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], nn.Module):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
 
 class Conv1d_Block(Layer):
     def __init__(self, kernel_size=3, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
@@ -89,13 +167,19 @@ class Conv1d_Block(Layer):
             norm = None
             conv = nn.utils.spectral_norm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
-            self.conv = conv
-            self.norm = norm
-            self.activation = get_activation(activation)
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+
         elif self.sequence_rank == 'nac':
-            self.norm = norm
-            self.activation = get_activation(activation)
-            self.conv = conv
+            self.add_module('norm', norm)
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+
+        elif self.sequence_rank == 'acn':
+            self.add_module('activation', get_activation(activation, only_layer=True))
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
 
     def build(self, input_shape: TensorShape):
         if self._built == False:
@@ -110,7 +194,7 @@ class Conv1d_Block(Layer):
         if hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
             x = x + noise
         if self.sequence_rank == 'cna':
             x = self.conv(x)
@@ -229,20 +313,11 @@ class Conv2d_Block(Layer):
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
             x = x + noise
-        if self.sequence_rank == 'cna':
-            x = self.conv(x)
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-        elif self.sequence_rank == 'nac':
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-            x = self.conv(x)
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
         if self.training and self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
@@ -327,20 +402,11 @@ class TransConv2d_Block(Layer):
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
             x = x + noise
-        if self.sequence_rank == 'cna':
-            x = self.conv(x)
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-        elif self.sequence_rank == 'nac':
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-            x = self.conv(x)
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
 
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
@@ -431,20 +497,11 @@ class DepthwiseConv2d_Block(Layer):
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
             x = x + noise
-        if self.sequence_rank == 'cna':
-            x = self.conv(x)
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-        elif self.sequence_rank == 'nac':
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-            x = self.conv(x)
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
@@ -534,20 +591,11 @@ class SeparableConv2d_Block(Layer):
         if not hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * torch.randn_like(x, dtype=torch.float32)
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
             x = x + noise
-        if self.sequence_rank == 'cna':
-            x = self.conv(x)
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-        elif self.sequence_rank == 'nac':
-            if self.norm is not None:
-                x = self.norm(x)
-            if self.activation is not None:
-                x = self.activation(x)
-            x = self.conv(x)
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
         if self.dropout_rate > 0:
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x

@@ -21,7 +21,7 @@ from tensorflow.python.ops import image_ops
 from trident.backend.common import *
 from trident.layers.tensorflow_activations import get_activation, Identity
 from trident.layers.tensorflow_layers import *
-from trident.layers.tensorflow_normalizations import get_normalization
+from trident.layers.tensorflow_normalizations import get_normalization,SpectralNorm
 from trident.layers.tensorflow_pooling import GlobalAvgPool2d
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
@@ -47,6 +47,85 @@ _single = _ntuple(1)
 _pair = _ntuple(2)
 _triple = _ntuple(3)
 _quadruple = _ntuple(4)
+
+
+class FullConnect_Block(Layer):
+    def __init__(self, num_filters=None,
+                 activation=None, normalization=None, use_spectral=False, use_bias=False,
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 keep_output=False, sequence_rank='cna', **kwargs):
+        super(FullConnect_Block, self).__init__(name=name, keep_output=keep_output)
+
+        if sequence_rank in ['fna', 'naf', 'afn']:
+            self.sequence_rank = sequence_rank
+        else:
+            self.sequence_rank = 'fna'
+
+        self.num_filters = num_filters
+
+
+
+        self.use_bias = use_bias
+
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
+        self.dropout_rate = dropout_rate
+        self.droupout = None
+        self.depth_multiplier = depth_multiplier
+        self.keep_output = keep_output
+
+        norm = get_normalization(normalization)
+        fc = Dense(num_filters=self.num_filters, activation=None, use_bias=self.use_bias, depth_multiplier=self.depth_multiplier).to(self.device)
+        self.use_spectral = use_spectral
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            fc = SpectralNorm(module=fc)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'fna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('fc', fc)
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+
+        elif self.sequence_rank == 'naf':
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('fc', fc)
+
+        elif self.sequence_rank == 'afn':
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('fc', fc)
+            self.add_module('norm', norm)
+        self._name = name
+
+    def build(self, input_shape: TensorShape):
+        if not self._built:
+            # if self.norm is not None:
+            #     self.norm.input_shape = self.conv.output_shape
+            self.to(self.device)
+            self._built = True
+
+    def forward(self, x, **kwargs):
+
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'fna')
+        if self.add_noise == True and self.training == True:
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
+            x = x + noise
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
+        if self.training and self.dropout_rate > 0:
+            x = F.dropout(x, p=self.dropout_rate, training=self.training)
+        return x
+
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], nn.Module):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
 
 
 class Conv1d_Block(Layer):
@@ -111,7 +190,7 @@ class Conv1d_Block(Layer):
         if hasattr(self, 'sequence_rank'):
             setattr(self, 'sequence_rank', 'cna')
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * random_normal_like(x, dtype=tf.float32)
+            noise = self.noise_intensity * random_normal_like(x, dtype=x.dtype)
             x = x + noise
         if self.sequence_rank == 'cna':
             x = self.conv(x)
@@ -194,7 +273,7 @@ class Conv2d_Block(Layer):
 
     def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
             x += noise
         x = self.conv(x)
         if self.norm is not None:
@@ -263,7 +342,7 @@ class TransConv2d_Block(Layer):
 
     def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
             x += noise
         x = self.conv(x)
         if self.norm is not None:
@@ -313,7 +392,7 @@ class TransConv3d_Block(Layer):
 
     def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
             x += noise
         x = self._conv(x)
         if self.norm is not None:
@@ -380,7 +459,7 @@ class DepthwiseConv2d_Block1(Layer):
 
     def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
             x += noise
         x = self.conv(x)
         if self.norm is not None:
@@ -451,7 +530,7 @@ class DepthwiseConv2d_Block(Layer):
 
     def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
             x += noise
         x = self.conv(x)
         if self.norm is not None:
@@ -517,7 +596,7 @@ class SeparableConv2d_Block(Layer):
 
     def forward(self, x, **kwargs):
         if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1)
+            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
             x += noise
         x = self.conv(x)
         if self.norm is not None:
