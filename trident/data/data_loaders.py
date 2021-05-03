@@ -20,6 +20,7 @@ from trident.backend.opencv_backend import image2array, array2image
 from trident.data.image_common import list_images
 from trident.data.data_provider import *
 from trident.data.dataset import *
+from trident.data.text_transforms import *
 from trident.data.mask_common import *
 from trident.data.utils import *
 from trident.backend.common import floatx,OrderedDict
@@ -959,29 +960,42 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'chinese.tar')
         extract_archive(tar_file_path, dirname, archive_format='tar')
         as_train = codecs.open(os.path.join(dirname, 'as_training.utf8'), encoding='utf-8-sig').read()
+        tt=as_train[:2000]
         cityu_train = codecs.open(os.path.join(dirname, 'cityu_training.utf8'), encoding='utf-8-sig').read()
+        #as_test = codecs.open(os.path.join(dirname, 'as_test.utf8'), encoding='utf-8-sig').read()
+
+        #cityu_test = codecs.open(os.path.join(dirname, 'cityu_testing.utf8'), encoding='utf-8-sig').read()
+
         as_train = as_train.replace('\u3000', '|').replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
         cityu_train = cityu_train.replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
+
+        #as_test = as_test.replace('\u3000', '|').replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
+        #cityu_test = cityu_test.replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
+
         data = as_train + '\r\n' + cityu_train  # 把兩個語料合併
-        data = data.strip()  # 去除無效的字元
-        data = to_half(data)  # 把所有全形轉半形
+        #test_data=as_test + '\r\n' + cityu_test  # 把兩個語料合併
+
+        data = to_half(data.strip() )  # 把所有全形轉半形
+        #test_data = to_half(test_data.strip())  # 把所有全形轉半形
+
         raw_data_train = data.split('\r\n')  # 分行
         raw_data_train = [row.strip('\n').strip('\r').replace("\x08", '').replace("\x80", '') for row in raw_data_train]  # 移除分行字元
+
         process_data_train=[]
         process_seg_label_train = []
         process_simplifided_label_train = []
 
         print('generate labels')
+        tmp_data_train = []
+        tmp_seg_label_train = []
+        tmp_simplifided_label_train = []
+        tmp_pronunce_label_train = []
         for row in tqdm(raw_data_train):
-            tmp_data_train = []
-            tmp_seg_label_train = []
-            tmp_simplifided_label_train = []
-            tmp_pronunce_label_train = []
-            words=row.split('|')
+            words=row.replace('||','|').split('|')
             for word in words:
                 for i in range(len(word)):
                     tmp_data_train.append(word[i])
-                    tmp_simplifided_label_train.append(to_sc(word[i]))
+                    #tmp_simplifided_label_train.append(to_half(to_sc(word[i])))
                     #轉換為BMES
                     if len(word)==1 and i==0: #S 自己就是一個單詞
                         tmp_seg_label_train.append('S')
@@ -991,20 +1005,29 @@ def load_examples_data(dataset_name):
                         tmp_seg_label_train.append('E')
                     else: #M 是一個詞的中間
                         tmp_seg_label_train.append('M')
-            tmp_data_train=''.join(tmp_data_train)
-            tmp_seg_label_train = ''.join(tmp_seg_label_train)
-            tmp_simplifided_label_train = ''.join(tmp_simplifided_label_train)
+            if words[-1]=="。":
+                tmp_data_train=''.join(tmp_data_train)
+                tmp_seg_label_train = ''.join(tmp_seg_label_train)
+                tmp_simplifided_label_train =to_half(to_sc(tmp_data_train))
 
-            process_data_train.append(tmp_data_train)
-            process_seg_label_train.append(tmp_seg_label_train)
-            process_simplifided_label_train.append(tmp_simplifided_label_train)
-        corpus='\n\n'.join(process_data_train)
-        seg_corpus='\n\n'.join(process_seg_label_train)
-        simplifided_corpus =to_half('\n\n'.join(process_simplifided_label_train))
+                process_data_train.append(tmp_data_train)
+                process_seg_label_train.append(tmp_seg_label_train)
+                process_simplifided_label_train.append(tmp_simplifided_label_train)
+                tmp_data_train = []
+                tmp_seg_label_train = []
+                tmp_simplifided_label_train = []
+                tmp_pronunce_label_train = []
+            # else:
+            #     tmp_data_train.append('\n')
+            #     tmp_simplifided_label_train.append('\n')
+            #     tmp_seg_label_train.append('\n')
+        corpus=process_data_train
+        seg_corpus=process_seg_label_train
+        simplifided_corpus =process_simplifided_label_train
         data=TextSequenceDataset(corpus=corpus,sequence_length=128,sequence_start_at='section_start',object_type=ObjectType.corpus,symbol='input')
-        seg_label = TextSequenceDataset(corpus=seg_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.corpus,symbol='nextword_label')
-        simplifided_label = TextSequenceDataset(corpus=simplifided_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.corpus,symbol='simplified_label')
-        chars= list(sorted(set(list(corpus+simplifided_corpus))))
+        seg_label = TextSequenceDataset(corpus=seg_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='seg_label')
+        simplifided_label = TextSequenceDataset(corpus=simplifided_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='simplified_label')
+        chars = list(sorted(set(list(''.join(corpus) + ''.join(simplifided_corpus)))))
         chars.insert(0, '<start/>')
         chars.insert(1, '<end/>')
         chars.insert(2, '<unk/>')
@@ -1014,6 +1037,7 @@ def load_examples_data(dataset_name):
         data.text2index =simplifided_label.text2index =   dict((c, i) for i, c in enumerate(chars))
         data.index2text =simplifided_label.index2text =  dict((i, c) for i, c in enumerate(chars))
         nextword=copy.deepcopy(data)
+        nextword.object_type=ObjectType.sequence_label
         nextword.symbol='nextword_label'
         nextword.sequence_offset=1
 

@@ -319,7 +319,6 @@ class ImageDataset(Dataset):
                 if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
                     img_data = fc(img_data, spec=self.element_spec)
             img_data = image_backend_adaption(img_data)
-
             return img_data
         else:
             return img_data
@@ -624,8 +623,192 @@ class RandomNoiseDataset(Dataset):
         return self.length
 
 
+# class TextSequenceDataset(Dataset):
+#     def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
+#                  object_type=ObjectType.corpus, symbol=None, **kwargs):
+#         super().__init__(None,symbol=symbol, object_type=object_type, **kwargs)
+#         self.sequence_start_at = sequence_start_at
+#         self.transform_funcs = []
+#         if len(section_delimiter) == 2:
+#             self.section_delimiter = section_delimiter
+#         else:
+#             self.section_delimiter = '\n\n'
+#         self.vocabs = None
+#         self.text2index = None
+#         self.index2text = None
+#         self.is_onehot = is_onehot
+#         self.is_paired_process = False
+#         self.is_spatial = True
+#
+#         if hasattr(corpus, "__iter__"):
+#             new_corpus = []
+#             section = ['<start/>']
+#             for i in range(len(corpus)):
+#                 item = corpus[i]
+#                 if item == '\n' and corpus[i - 1] != '\n' and len(section) > 0:
+#                     section.append('<end/>')
+#                     if i < len(corpus) - 1 and corpus[i + 1] == '\n':
+#                         new_corpus.append(section)
+#                         section = ['<start/>']
+#                     elif i < len(corpus) - 1:
+#                         section.append('<start/>')
+#                 elif self.section_delimiter != '\n\n' and len(self.section_delimiter) == 2 and len(section) > 0 and item == self.section_delimiter[0] and i < len(corpus) - 1 and \
+#                         corpus[i - 1] == self.section_delimiter[1]:
+#                     section.append('<end/>')
+#                     if i < len(corpus) - 1 and corpus[i + 1] == '\n':
+#                         new_corpus.append(section)
+#                         section = ['<start/>']
+#                     elif i < len(corpus) - 1:
+#                         section.append('<start/>')
+#                 elif item == '\r' and corpus[i - 1] == '\n':
+#                     pass
+#                 elif item == '\n':
+#                     pass
+#                 else:
+#                     section.append(item)
+#                     if i == len(corpus) - 1:
+#                         section.append('<end/>')
+#             if len(section) > 0:
+#                 new_corpus.append(section)
+#
+#             if self.sequence_start_at == 'random':
+#                 for sect in new_corpus:
+#                     self.items.extend(sect)
+#                     self.items.append('\n')
+#                     self.items.append('\n')
+#             else:
+#                 self.items.extend(new_corpus)
+#
+#             chars = sorted(list(set(corpus)))
+#
+#             chars.insert(0, '<start/>')
+#             chars.insert(1, '<end/>')
+#             chars.insert(2, '<unk/>')
+#             chars.insert(3, '<pad/>')
+#             print('total distinct chars:', len(chars))
+#             self.vocabs = chars
+#             self.text2index = dict((c, i) for i, c in enumerate(chars))
+#             self.index2text = dict((i, c) for i, c in enumerate(chars))
+#         else:
+#             raise ValueError('corpus should be a collection.')
+#
+#
+#         self.sequence_offset = sequence_offset
+#         self.dtype = np.float32 if self.is_onehot else np.int64
+#         self.text_transform_funcs = []
+#         self.is_paired_process = False
+#         self.sequence_length = sequence_length
+#
+#     def _get_item_by_idx(self, iterator, idx):
+#         """Get the idx-th item of the iterator"""
+#         size = len(self)
+#         idx = idx.__index__()
+#         if not -size <= idx < size:
+#             raise IndexError('index {} is out of range'.format(idx))
+#         idx %= size
+#         return next(itertools.islice(iterator, idx, None))
+#
+#     def __getitem__(self, index: int):
+#         sequencetext = None
+#         seq_base = list(self.items)
+#         if isinstance(self.sequence_offset, int):
+#             if self.sequence_start_at == 'random':
+#                 sequencetext = seq_base[index + self.sequence_offset:builtins.min(index + self.sequence_offset + self.sequence_length, self.len())]
+#             elif self.sequence_start_at == 'section_start':
+#                 sectiontext = seq_base[index]
+#                 sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length, self.len())]
+#         elif isinstance(self.sequence_offset, list):
+#             sequencetext = []
+#             if self.sequence_start_at == 'random':
+#                 for k in self.sequence_offset:
+#                     if 0 <= index + self.sequence_offset < len(seq_base):
+#                         sequencetext.append(seq_base[index + self.sequence_offset])
+#                     else:
+#                         sequencetext.append('<pad/>')
+#
+#             elif self.sequence_start_at == 'section_start':
+#                 sectiontext = seq_base[index]
+#                 for k in self.sequence_offset:
+#                     if 0 <= index + self.sequence_offset < len(seq_base):
+#                         sequencetext.append(seq_base[index + self.sequence_offset])
+#                     else:
+#                         sequencetext.append('<pad/>')
+#
+#         if len(sequencetext) != self.sequence_length:
+#             sequencetext.extend(['<pad/>'] * (self.sequence_length - len(sequencetext)))
+#         arr = None
+#         if self.is_onehot:
+#             arr = np.zeros((self.sequence_length, len(self.text2index)))
+#             for i in range(self.sequence_length):
+#                 this_char = sequencetext[i]
+#                 if i + 1 < self.sequence_length and ''.join(sequencetext[i:i + 2]) == '\n\n':
+#                     arr[i:, self.text2index['<pad/>']] = 1
+#                     break
+#                 elif this_char in self.text2index:
+#                     arr[i, self.text2index[this_char]] = 1
+#                 else:
+#                     arr[i, self.text2index['<unk/>']] = 1
+#             arr = arr.astype(np.float32)
+#         else:
+#             arr = np.zeros((self.sequence_length))
+#             for i in range(self.sequence_length):
+#                 this_char = sequencetext[i]
+#                 if i + 1 < self.sequence_length and ''.join(sequencetext[i:i + 2]) == '\n\n':
+#                     arr[i:] = self.text2index['<pad/>']
+#                     break
+#                 elif this_char in self.text2index:
+#                     arr[i] = self.text2index[this_char]
+#                 else:
+#                     arr[i] = self.text2index['<unk/>']
+#             arr = arr.astype(np.int64)
+#
+#         if self.is_paired_process == False and len(self.text_transform_funcs) == 0:
+#             return text_backend_adaption(arr)
+#         elif not self.is_paired_process:
+#             return self.text_transform(arr)
+#         elif self.is_paired_process:
+#             return arr
+#
+#         return None
+#
+#     def data_transform(self, text_data):
+#         if len(self.transform_funcs) == 0:
+#             return text_backend_adaption(text_data)
+#         if isinstance(text_data, np.ndarray):
+#             for fc in self.transform_funcs:
+#                 text_data = fc(text_data, spec=self.element_spec)
+#             text_data = text_backend_adaption(text_data)
+#
+#     def text_transform(self, text_data):
+#         return self.data_transform(text_data)
+#
+#     @property
+#     def reverse_text_transform_funcs(self):
+#         return_list = []
+#         return_list.append(reverse_text_backend_adaption)
+#         for i in range(len(self.text_transform_funcs)):
+#             fn = self.text_transform_funcs[-1 - i]
+#             # if fn.__qualname__ == 'normalize.<locals>.text_op':
+#             #     return_list.append(unnormalize(fn.mean, fn.std))
+#         # return_list.append(array2image)
+#         return return_list
+#
+#     def reverse_text_transform(self, text_data):
+#         if len(self.reverse_text_transform_funcs) == 0:
+#             return reverse_text_backend_adaption(text_data)
+#         if isinstance(text_data, np.ndarray):
+#             # if img_data.ndim>=2:
+#             for fc in self.reverse_text_transform_funcs:
+#                 text_data = fc(text_data)
+#             text_data = reverse_text_backend_adaption(text_data)
+#
+#             return text_data
+#         else:
+#             return text_data
+#
+
 class TextSequenceDataset(Dataset):
-    def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
+    def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, storage_unit='section',section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
                  object_type=ObjectType.corpus, symbol=None, **kwargs):
         super().__init__(None,symbol=symbol, object_type=object_type, **kwargs)
         self.sequence_start_at = sequence_start_at
@@ -634,71 +817,52 @@ class TextSequenceDataset(Dataset):
             self.section_delimiter = section_delimiter
         else:
             self.section_delimiter = '\n\n'
+        self.storage_unit=storage_unit
         self.vocabs = None
         self.text2index = None
         self.index2text = None
         self.is_onehot = is_onehot
         self.is_paired_process = False
         self.is_spatial = True
-
-        if hasattr(corpus, "__iter__"):
-            new_corpus = []
-            section = ['<start/>']
-            for i in range(len(corpus)):
-                item = corpus[i]
-                if item == '\n' and corpus[i - 1] != '\n' and len(section) > 0:
-                    section.append('<end/>')
-                    if i < len(corpus) - 1 and corpus[i + 1] == '\n':
-                        new_corpus.append(section)
-                        section = ['<start/>']
-                    elif i < len(corpus) - 1:
-                        section.append('<start/>')
-                elif self.section_delimiter != '\n\n' and len(self.section_delimiter) == 2 and len(section) > 0 and item == self.section_delimiter[0] and i < len(corpus) - 1 and \
-                        corpus[i - 1] == self.section_delimiter[1]:
-                    section.append('<end/>')
-                    if i < len(corpus) - 1 and corpus[i + 1] == '\n':
-                        new_corpus.append(section)
-                        section = ['<start/>']
-                    elif i < len(corpus) - 1:
-                        section.append('<start/>')
-                elif item == '\r' and corpus[i - 1] == '\n':
-                    pass
-                elif item == '\n':
-                    pass
-                else:
-                    section.append(item)
-                    if i == len(corpus) - 1:
-                        section.append('<end/>')
-            if len(section) > 0:
-                new_corpus.append(section)
-
-            if self.sequence_start_at == 'random':
-                for sect in new_corpus:
-                    self.items.extend(sect)
-                    self.items.append('\n')
-                    self.items.append('\n')
-            else:
-                self.items.extend(new_corpus)
-
-            chars = sorted(list(set(corpus)))
-
-            chars.insert(0, '<start/>')
-            chars.insert(1, '<end/>')
-            chars.insert(2, '<unk/>')
-            chars.insert(3, '<pad/>')
-            print('total distinct chars:', len(chars))
-            self.vocabs = chars
-            self.text2index = dict((c, i) for i, c in enumerate(chars))
-            self.index2text = dict((i, c) for i, c in enumerate(chars))
-        else:
-            raise ValueError('corpus should be a collection.')
-
-
+        self.add_corpus(corpus)
         self.sequence_offset = sequence_offset
         self.dtype = np.float32 if self.is_onehot else np.int64
         self.text_transform_funcs = []
         self.is_paired_process = False
         self.sequence_length = sequence_length
+
+    def add_corpus(self,corpus):
+        if hasattr(corpus, "__iter__"):
+            self.items.extend(corpus)
+            if self.vocabs is None:
+                chars = sorted(list(set(''.join(corpus))))
+
+                chars.insert(0, '<start/>')
+                chars.insert(1, '<end/>')
+                chars.insert(2, '<unk/>')
+                chars.insert(3, '<pad/>')
+                print('total distinct chars:', len(chars))
+                self.vocabs = chars
+                self.text2index = dict((c, i) for i, c in enumerate(chars))
+                self.index2text = dict((i, c) for i, c in enumerate(chars))
+            else:
+                new_chars = sorted(list(set(''.join(corpus))))
+                new_chars=[ch for ch in new_chars if ch not in self.vocabs]
+                new_chars=list(sorted(set(''.join(new_chars))))
+                for ch in new_chars:
+                    self.vocabs.append(ch)
+                    self.text2index[ch]=len(self.vocabs)-1
+                    self.index2text[len(self.vocabs)-1]=ch
+            self.length_index=OrderedDict()
+            total_len=0
+            for i in range(len(self.items)):
+                total_len+=(len(self.items[i])+2)
+                self.length_index[i]=total_len
+
+
+        else:
+            raise ValueError('corpus should be a collection.')
+
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -709,59 +873,32 @@ class TextSequenceDataset(Dataset):
         idx %= size
         return next(itertools.islice(iterator, idx, None))
 
+    def __len__(self):
+        if self.sequence_start_at == 'random':
+            return self.length_index.value_list[-1]
+        elif self.sequence_start_at == 'section_start':
+            return len(self.items)
+
     def __getitem__(self, index: int):
         sequencetext = None
-        seq_base = list(self.items)
         if isinstance(self.sequence_offset, int):
+
             if self.sequence_start_at == 'random':
-                sequencetext = seq_base[index + self.sequence_offset:builtins.min(index + self.sequence_offset + self.sequence_length, self.len())]
+                for k,v in self.length_index.item_list:
+                    if v>=index:
+                        last_v = self.length_index[k - 1]
+                        sectiontext = list(self.items[k])
+                        sectiontext.insert(0, '<start/>')
+                        sectiontext.append('<end/>')
+                        idx=index-last_v
+                        sequencetext =sectiontext[self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length, self.len())]
+                        break
             elif self.sequence_start_at == 'section_start':
-                sectiontext = seq_base[index]
+                sectiontext = list(self.items[index])
+                sectiontext.insert(0, '<start/>')
+                sectiontext.append('<end/>')
                 sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length, self.len())]
-        elif isinstance(self.sequence_offset, list):
-            sequencetext = []
-            if self.sequence_start_at == 'random':
-                for k in self.sequence_offset:
-                    if 0 <= index + self.sequence_offset < len(seq_base):
-                        sequencetext.append(seq_base[index + self.sequence_offset])
-                    else:
-                        sequencetext.append('<pad/>')
-
-            elif self.sequence_start_at == 'section_start':
-                sectiontext = seq_base[index]
-                for k in self.sequence_offset:
-                    if 0 <= index + self.sequence_offset < len(seq_base):
-                        sequencetext.append(seq_base[index + self.sequence_offset])
-                    else:
-                        sequencetext.append('<pad/>')
-
-        if len(sequencetext) != self.sequence_length:
-            sequencetext.extend(['<pad/>'] * (self.sequence_length - len(sequencetext)))
-        arr = None
-        if self.is_onehot:
-            arr = np.zeros((self.sequence_length, len(self.text2index)))
-            for i in range(self.sequence_length):
-                this_char = sequencetext[i]
-                if i + 1 < self.sequence_length and ''.join(sequencetext[i:i + 2]) == '\n\n':
-                    arr[i:, self.text2index['<pad/>']] = 1
-                    break
-                elif this_char in self.text2index:
-                    arr[i, self.text2index[this_char]] = 1
-                else:
-                    arr[i, self.text2index['<unk/>']] = 1
-            arr = arr.astype(np.float32)
-        else:
-            arr = np.zeros((self.sequence_length))
-            for i in range(self.sequence_length):
-                this_char = sequencetext[i]
-                if i + 1 < self.sequence_length and ''.join(sequencetext[i:i + 2]) == '\n\n':
-                    arr[i:] = self.text2index['<pad/>']
-                    break
-                elif this_char in self.text2index:
-                    arr[i] = self.text2index[this_char]
-                else:
-                    arr[i] = self.text2index['<unk/>']
-            arr = arr.astype(np.int64)
+        return sequencetext
 
         if self.is_paired_process == False and len(self.text_transform_funcs) == 0:
             return text_backend_adaption(arr)
@@ -774,11 +911,42 @@ class TextSequenceDataset(Dataset):
 
     def data_transform(self, text_data):
         if len(self.transform_funcs) == 0:
-            return text_backend_adaption(text_data)
+            pass
         if isinstance(text_data, np.ndarray):
             for fc in self.transform_funcs:
                 text_data = fc(text_data, spec=self.element_spec)
-            text_data = text_backend_adaption(text_data)
+            #text_data = text_backend_adaption(text_data)
+
+        arr = None
+        if self.is_onehot:
+            arr = np.zeros((self.sequence_length, len(self.text2index)))
+            for i in range(self.sequence_length):
+                if i < len(text_data):
+                    this_char = text_data[i]
+                    if this_char in self.text2index:
+                        arr[i, self.text2index[this_char]] = 1
+                    else:
+                        arr[i, self.text2index['<unk/>']] = 1
+                else:
+                    arr[i:, self.text2index['<pad/>']] = 1
+            arr = arr.astype(np.float32)
+        else:
+            arr = np.zeros((self.sequence_length))
+            for i in range(self.sequence_length):
+                if i<len(text_data):
+                    this_char = text_data[i]
+                    if this_char in self.text2index:
+                        arr[i] = self.text2index[this_char]
+                    else:
+                        arr[i] = self.text2index['<unk/>']
+                else:
+                    arr[i] = self.text2index['<pad/>']
+            arr = arr.astype(np.int64)
+        return arr
+
+
+
+
 
     def text_transform(self, text_data):
         return self.data_transform(text_data)
@@ -815,8 +983,10 @@ class Iterator(object):
         self._label = None
         self._unpair = None
         self.paired_process_symbols = []
-        self.data_template = None
+
         self.is_shuffe = is_shuffe
+
+
 
         self.data_template = OrderedDict()
         self.mode = mode
@@ -862,13 +1032,17 @@ class Iterator(object):
 
         for k in range(len(datasets)):
             ds = datasets[k]
-            if len(ds) > 0:
-                dataitem = ds[k]
-                ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
-                self.data_template[ds.element_spec] = None
+            if isinstance(ds,TextSequenceDataset):
+                ds.element_spec = TensorSpec(shape=TensorShape([None,ds.sequence_length]), dtype=dtype.long,object_type=ds.object_type, name=ds.symbol)
+            else:
+                if len(ds) > 0:
+                    dataitem = ds[k]
+                    ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
+                    self.data_template[ds.element_spec] = None
 
         self._minibatch_size = minibatch_size
         self.paired_transform_funcs = []
+
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         if buffer_size is None:
@@ -895,7 +1069,7 @@ class Iterator(object):
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
 
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -912,7 +1086,7 @@ class Iterator(object):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -925,7 +1099,7 @@ class Iterator(object):
         self._unpair = value
 
 
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size,is_shuffle=self.is_shuffe,  drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -943,7 +1117,7 @@ class Iterator(object):
     @minibatch_size.setter
     def minibatch_size(self, value):
         self._minibatch_size = value
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 8 * value
@@ -1005,14 +1179,13 @@ class Iterator(object):
             if ds.symbol == dataset_symbol:
                 return ds
 
-    def update_data_template(self):
+    def update_signature(self):
         datasets = self.get_datasets()
         results=self[0]
         self._signature = Signature(name='data_provider')
-        self.data_template = OrderedDict()
+
         for ds, result in zip(datasets, results):
             spec = TensorSpec.tensor_to_spec(result, object_type=ds.object_type,need_exclude_batch_axis=True,is_singleton=True, name=ds.symbol)
-            self.data_template[spec] = None
             self._signature.outputs[ds.symbol] = spec
         self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
@@ -1038,7 +1211,9 @@ class Iterator(object):
 
             unpair = self.unpair.__getitem__(index % len(self.unpair)) if self.unpair is not None and len(self.unpair) > 0 else None
 
-            results = iteration_tools.flatten([data, label, unpair], iterable_types=(list, tuple))
+
+
+            results = iteration_tools.flatten((data, label, unpair), iterable_types=(tuple))
             results = tuple([item for item in results if item is not None])
 
             if  len(returnData) >0 and  len(returnData) != len(results):
@@ -1150,7 +1325,7 @@ class MetricIterator(Iterator):
 
         self._minibatch_size = minibatch_size
         self.paired_transform_funcs = []
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=True, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._minibatch_size,is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 10
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)

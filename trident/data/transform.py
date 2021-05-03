@@ -96,10 +96,12 @@ class VisionTransform(Transform):
             sampledata= list(inputs.values())[0]
             spec=inputs.key_list[0]
             if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
-                for i in range(sampledata):
+                for i in range(len(sampledata)):
                     self._shape_info = None
                     for spec, data in inputs.items():
-                        results[spec] = self.apply(data[i], spec)
+                        if spec not in results:
+                            results[spec] = []
+                        results[spec].append(self.apply(data[i], spec))
             else:
                 self._shape_info = None
                 for spec, data in inputs.items():
@@ -215,17 +217,9 @@ class TextTransform(Transform):
             return self.apply(inputs, spec)
         else:
             results=OrderedDict()
-            sampledata= list(inputs.values())[0]
-            spec=inputs.key_list[0]
-            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
-                for i in range(sampledata):
-                    self._shape_info = None
-                    for spec, data in inputs.items():
-                        results[spec] = self.apply(data[i], spec)
-            else:
-                self._shape_info = None
-                for spec, data in inputs.items():
-                    results[spec]=self.apply(data, spec)
+            self._shape_info = None
+            for spec, data in inputs.items():
+                results[spec]=self.apply(data, spec)
             return results
 
 

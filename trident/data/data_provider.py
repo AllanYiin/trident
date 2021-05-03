@@ -149,14 +149,14 @@ class ImageDataProvider(object):
             for ds in dss:
                 if isinstance(ds, ImageDataset):
                     ds.transform_funcs = copy.deepcopy(value)
-            self.traindata.update_data_template()
+            self.traindata.update_signature()
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
             dss_t = self.testdata.get_datasets()
             for ds in dss_t:
                 if isinstance(ds, ImageDataset):
                     ds.transform_funcs = copy.deepcopy(value)
 
-            self.testdata.update_data_template()
+            self.testdata.update_signature()
 
     def image_transform(self, img_data):
         if img_data.ndim == 4:
@@ -205,10 +205,10 @@ class ImageDataProvider(object):
         self._label_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.label, 'label_transform_funcs'):
             self.traindata.label.label_transform_funcs = self._label_transform_funcs
-            self.traindata.update_data_template()
+            self.traindata.update_signature()
         if self.testdata is not None and hasattr(self.testdata.label, 'label_transform_funcs'):
             self.testdata.label.label_transform_funcs = self._label_transform_funcs
-            self.testdata.update_data_template()
+            self.testdata.update_signature()
 
     @property
     def paired_transform_funcs(self):
@@ -221,11 +221,11 @@ class ImageDataProvider(object):
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
             self.traindata.paired_transform_funcs = copy.deepcopy(value)
 
-            self.traindata.update_data_template()
+            self.traindata.update_signature()
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
             self.testdata.paired_transform_funcs = copy.deepcopy(value)
-            self.testdata.update_data_template()
+            self.testdata.update_signature()
 
     @property
     def batch_transform_funcs(self):
@@ -234,19 +234,19 @@ class ImageDataProvider(object):
     @batch_transform_funcs.setter
     def batch_transform_funcs(self, value):
         self._batch_transform_funcs = value
-        self.traindata.update_data_template()
+        self.traindata.update_signature()
         self.traindata.batch_sampler._batch_transform_funcs = value
         if self.testdata is not None:
-            self.testdata.update_data_template()
+            self.testdata.update_signature()
 
     def batch_transform(self, batchdata):
         if hasattr(self, '_batch_transform_funcs') and len(self._batch_transform_funcs) > 0:
 
             if isinstance(batchdata, tuple):
-                new_batchdata = copy.deepcopy(self.traindata.data_template)
-                for i in range(len(batchdata)):
-                    new_batchdata[new_batchdata.key_list[i]] = batchdata[i]
-                batchdata = new_batchdata
+                new_batchdata = OrderedDict()
+                for ds in self.traindata.get_datasets():
+                    new_batchdata[ds.element_spec] = None
+
             if isinstance(batchdata, OrderedDict):
                 if not all([isinstance(k, TensorSpec) for k in batchdata.key_list]):
                     new_batchdata = copy.deepcopy(self.traindata.data_template)
@@ -630,10 +630,10 @@ class TextSequenceDataProvider(object):
     @batch_transform_funcs.setter
     def batch_transform_funcs(self, value):
         self._batch_transform_funcs = value
-        self.traindata.update_data_template()
+        self.traindata.update_signature()
         self.traindata.batch_sampler._batch_transform_funcs = value
         if self.testdata is not None:
-            self.testdata.update_data_template()
+            self.testdata.update_signature()
 
     def batch_transform(self, batchdata):
         if hasattr(self, '_batch_transform_funcs') and len(self._batch_transform_funcs) > 0:

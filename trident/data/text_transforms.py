@@ -27,10 +27,10 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 from trident.data.transform import TextTransform
 
-__all__ = ['RandomSwapChar','RandomInsertChar','ToHalfWidth','BopomofoConvert','ChineseConvert','RandomHomophonicTypo','RandomHomomorphicTypo']
+__all__ = ['bpmf_phonetic','RandomSwapChar','RandomInsertChar','ToHalfWidth','BopomofoConvert','ChineseConvert','RandomHomophonicTypo','RandomHomomorphicTypo']
 
 
-bpmf_phonetic='ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄫㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄚㄛㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦㄧㄨㄩ'
+bpmf_phonetic='ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄚㄛㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦㄧㄨㄩ'
 
 
 
@@ -67,6 +67,7 @@ class RandomSwapChar(TextTransform):
         elif isinstance(corpus,np.ndarray):
             idx=np.array(self._idxes).astype(np.int64)
             return corpus[idx]
+
     def check_swaptable(self,corpus,idx):
         def check_single(corpus,idx):
             char =corpus[idx]
@@ -210,19 +211,26 @@ class ToHalfWidth(TextTransform):
 
     def _apply_corpus(self, corpus,spec:TensorSpec):
         out_str = []
+        is_list = isinstance(corpus, list)
         for char in corpus:
-            inside_code = ord(char)
-            if inside_code == 0x3000 or inside_code == 12288 or char == string.whitespace:  # 全形空格直接轉換
-                out_str.append(' ')
-            elif inside_code in self.additional_rules:
-                out_str.append(self.additional_rules[inside_code])
-            elif 65281 <= inside_code <= 65374:
-                inside_code -= 0xfee0
-                out_str.append(chr(inside_code))
-            else:
+            if char in ['<start/>', '<end/>', '<pad/>', '<unk/>']:
                 out_str.append(char)
+            else:
+                try:
+                    inside_code = ord(char)
+                    if inside_code == 0x3000 or inside_code == 12288 or char == string.whitespace:  # 全形空格直接轉換
+                        out_str.append(' ')
+                    elif inside_code in self.additional_rules:
+                        out_str.append(self.additional_rules[inside_code])
+                    elif 65281 <= inside_code <= 65374:
+                        inside_code -= 0xfee0
+                        out_str.append(chr(inside_code))
+                    else:
+                        out_str.append(char)
+                except:
+                    out_str.append(char)
 
-        return ''.join(out_str)
+        return  ''.join(out_str) if not is_list else out_str
 
     def _apply_sequence_labels(self, labels,spec:TensorSpec):
        return labels
@@ -266,19 +274,23 @@ class ChineseConvert(TextTransform):
         self.name=name
 
     def _apply_corpus(self, corpus,spec:TensorSpec):
+        is_list=isinstance(corpus,list)
         out_str = []
         for char in corpus:
-            if self.convert_to=='simplified':
-                if random.random()<=self.convert_ratio and char in self.traditional2simplified:
-                    out_str.append(self.traditional2simplified[char])
-                else:
-                    out_str.append(char)
-            elif self.convert_to=='traditional':
-                if random.random()<=self.convert_ratio and char in self.simplified2traditional:
-                    out_str.append(self.simplified2traditional[char])
-                else:
-                    out_str.append(char)
-        return ''.join(out_str)
+            if  char in  ['<start/>','<end/>','<pad/>','<unk/>']:
+                out_str.append(char)
+            else:
+                if self.convert_to=='simplified':
+                    if random.random()<=self.convert_ratio and char in self.traditional2simplified:
+                        out_str.append(self.traditional2simplified[char] if char in self.traditional2simplified else char)
+                    else:
+                        out_str.append(char)
+                elif self.convert_to=='traditional':
+                    if random.random()<=self.convert_ratio and char in self.simplified2traditional:
+                        out_str.append(self.simplified2traditional[char] if char in self.simplified2traditional else char)
+                    else:
+                        out_str.append(char)
+        return ''.join(out_str) if not is_list else out_str
 
     def _apply_sequence_labels(self, labels,spec:TensorSpec):
        return labels
@@ -320,27 +332,35 @@ class BopomofoConvert(TextTransform):
         self.name=name
 
     def _apply_corpus(self, corpus,spec:TensorSpec):
+        is_list = isinstance(corpus, list)
         out_str = []
         for char in corpus:
-            return_char=char
-            if char in self.text2pronounce:
-                pronounce=self.text2pronounce[char]
-                if len(pronounce)>2:
-                    pronounce=pronounce[:2]
-                canconvert=all([len(p)==2 if p[0] in ['ㄚ','ㄧ','ㄟ','ㄡ'] else len(p)<=3 for p in pronounce ])
-                if char in string.digits or char in string.punctuation:
-                    canconvert=False
-                rr=random.random()
-                if any([len(p)==2 for p in pronounce ]):
-                    rr=rr/2
-                if canconvert and (rr<self.convert_ratio or char in '的呵啊呃哈你他') and char not in '我元':
-                    return_char=pronounce[0][0]
-                    if char == ['呦']:
-                        return_char='ㄡ'
-                    elif char in ['耶也']:
-                        return_char='ㄝ'
+            if char in ['<start/>', '<end/>', '<pad/>', '<unk/>']:
+                return_char=char
+            else:
+                return_char=char
+                if char in self.text2pronounce:
+                    pronounce=self.text2pronounce[char]
+                    if len(pronounce)>2:
+                        pronounce=pronounce[:2]
+                    canconvert=all([len(p)==2 if p[0] in ['ㄚ','ㄧ','ㄟ','ㄡ'] else len(p)<=3 for p in pronounce ])
+                    if char in string.digits or char in string.punctuation:
+                        canconvert=False
+                    rr=random.random()
+                    if any([len(p)==2 for p in pronounce ]):
+                        rr=rr/2
+                    elif char in  '的呵啊呃哈你他':
+                        rr = rr / 2
+                    elif char in  '我元':
+                        rr = rr *10
+                    if canconvert and rr<self.convert_ratio :
+                        return_char=pronounce[0][0]
+                        if char == ['呦']:
+                            return_char='ㄡ'
+                        elif char in ['耶也']:
+                            return_char='ㄝ'
             out_str.append(return_char)
-        return ''.join(out_str)
+        return ''.join(out_str) if not is_list else out_str
 
     def _apply_sequence_labels(self, labels,spec:TensorSpec):
        return labels
@@ -406,52 +426,56 @@ class RandomHomophonicTypo(TextTransform):
         self.name=name
 
     def _apply_corpus(self, corpus,spec:TensorSpec):
+        is_list = isinstance(corpus, list)
         out_str = []
         for char in corpus:
-            if char not in string.digits and char not in string.punctuation and char not in string.ascii_letters and char not in bpmf_phonetic:
-                rr=random.random()
+            if char in ['<start/>', '<end/>', '<pad/>', '<unk/>']:
                 return_char=char
-                if rr<self.convert_ratio:
-                    if char in self.text2pronounce:
-                        pronounce=self.text2pronounce[char][0]
-                        candidates = self.pronounce2text[pronounce].copy() if pronounce in self.pronounce2text else []
-                        #ㄓㄔㄕㄖㄗㄘㄙ
-                        # if pronounce[0] in 'ㄓㄗ' and len(pronounce)>=3:
-                        #     for s in 'ㄓㄗ':
-                        #         if s!=pronounce[0]:
-                        #             candidates.extend(self.pronounce2text[s+pronounce[1:]].copy() if s+pronounce[1:] in self.pronounce2text else [])
-                        if pronounce[0] in 'ㄕㄘ' and len(pronounce)>=3:
-                            for s in 'ㄕㄘ':
-                                if s != pronounce[0]:
-                                    candidates.extend(self.pronounce2text[s + pronounce[1:]].copy() if s + pronounce[1:] in self.pronounce2text else [])
-                        elif pronounce[0] in 'ㄖㄙ' and len(pronounce)>=3:
-                            for s in 'ㄖㄙ':
-                                if s != pronounce[0]:
-                                    candidates.extend(self.pronounce2text[s + pronounce[1:]].copy() if s + pronounce[1:] in self.pronounce2text else [])
-
-                        elif pronounce[0] in 'ㄕㄖㄘㄙ':
-                            for s in 'ㄕㄖㄘㄙ':
-                                if s != pronounce[0]:
-                                    candidates.extend(self.pronounce2text[s + pronounce[1:]].copy() if s + pronounce[1:] in self.pronounce2text else [])
-                        if char in candidates:
-                            candidates.remove(char)
-                        if len(candidates) == 0:
-                            pass
-                        elif len(candidates)==1:
-                            return_char=candidates[0]
-                        elif  len(candidates)>1:
-                            max_freq=builtins.max(self.char_freq[char]-2,-15.5)
-                            for candidate in candidates:
-                                if candidate in self.char_freq :
-                                    freq=self.char_freq[candidate]
-                                    if freq>max_freq:
-                                        max_freq=freq
-                                        return_char=candidate
-
-                out_str.append(return_char)
             else:
-                out_str.append(char)
-        return ''.join(out_str)
+                if char not in string.digits and char not in string.punctuation and char not in string.ascii_letters and char not in bpmf_phonetic:
+                    rr=random.random()
+                    return_char=char
+                    if rr<self.convert_ratio:
+                        if char in self.text2pronounce:
+                            pronounce=self.text2pronounce[char][0]
+                            candidates = self.pronounce2text[pronounce].copy() if pronounce in self.pronounce2text else []
+                            #ㄓㄔㄕㄖㄗㄘㄙ
+                            # if pronounce[0] in 'ㄓㄗ' and len(pronounce)>=3:
+                            #     for s in 'ㄓㄗ':
+                            #         if s!=pronounce[0]:
+                            #             candidates.extend(self.pronounce2text[s+pronounce[1:]].copy() if s+pronounce[1:] in self.pronounce2text else [])
+                            if pronounce[0] in 'ㄕㄘ' and len(pronounce)>=3:
+                                for s in 'ㄕㄘ':
+                                    if s != pronounce[0]:
+                                        candidates.extend(self.pronounce2text[s + pronounce[1:]].copy() if s + pronounce[1:] in self.pronounce2text else [])
+                            elif pronounce[0] in 'ㄖㄙ' and len(pronounce)>=3:
+                                for s in 'ㄖㄙ':
+                                    if s != pronounce[0]:
+                                        candidates.extend(self.pronounce2text[s + pronounce[1:]].copy() if s + pronounce[1:] in self.pronounce2text else [])
+
+                            elif pronounce[0] in 'ㄕㄖㄘㄙ':
+                                for s in 'ㄕㄖㄘㄙ':
+                                    if s != pronounce[0]:
+                                        candidates.extend(self.pronounce2text[s + pronounce[1:]].copy() if s + pronounce[1:] in self.pronounce2text else [])
+                            if char in candidates:
+                                candidates.remove(char)
+                            if len(candidates) == 0:
+                                pass
+                            elif len(candidates)==1:
+                                return_char=candidates[0]
+                            elif  len(candidates)>1:
+                                max_freq=builtins.max(self.char_freq[char]-2,-15.5)
+                                for candidate in candidates:
+                                    if candidate in self.char_freq :
+                                        freq=self.char_freq[candidate]
+                                        if freq>max_freq:
+                                            max_freq=freq
+                                            return_char=candidate
+
+                    out_str.append(return_char)
+                else:
+                    out_str.append(char)
+        return  ''.join(out_str) if not is_list else out_str
 
     def _apply_sequence_labels(self, labels,spec:TensorSpec):
        return labels
@@ -518,6 +542,7 @@ class RandomHomomorphicTypo(TextTransform):
 
 
     def _apply_corpus(self, corpus,spec:TensorSpec):
+        is_list = isinstance(corpus, list)
         out_str = []
         for char in corpus:
             rr=random.random()
@@ -526,7 +551,7 @@ class RandomHomomorphicTypo(TextTransform):
                 out_str.append(self.get_similar(char))
             else:
                 out_str.append(char)
-        return ''.join(out_str)
+        return  ''.join(out_str) if not is_list else out_str
 
     def _apply_sequence_labels(self, labels,spec:TensorSpec):
        return labels
