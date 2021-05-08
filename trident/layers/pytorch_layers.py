@@ -93,11 +93,12 @@ class Dense(Layer):
         torch.Size([2, 30])
     """
 
-    def __init__(self, num_filters, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None,filter_index=-1, **kwargs):
+    def __init__(self, num_filters=None, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None,filter_index=-1, depth_multiplier=1,**kwargs):
         super(Dense, self).__init__(name=name, keep_output=keep_output)
         self.rank = 0
         self.filter_index=-1
-        if isinstance(num_filters, int):
+        self.depth_multiplier=depth_multiplier
+        if isinstance(num_filters, int) or num_filters is None:
             self.num_filters = num_filters
         elif isinstance(num_filters, tuple):
             self.num_filters = unpack_singleton(num_filters)
@@ -118,6 +119,8 @@ class Dense(Layer):
                 self.input_filters = input_shape.dims[0]
             else:
                 self.input_filters = input_shape[self.filter_index]
+            if self.num_filters is None:
+                self.num_filters=int(self.input_filters*self.depth_multiplier)
             self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters))
             kaiming_uniform(self.weight, a=math.sqrt(5))
             # self._parameters['weight'] =self.weight
@@ -129,6 +132,7 @@ class Dense(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
+        x=enforce_singleton(x)
         if ndim(x)>2:
             x=squeeze(x)
         shp=None
@@ -646,8 +650,7 @@ def get_static_padding(rank, kernal_shape, strides, dilations, input_shape=None,
     """
     if input_shape is None:
         input_shape = [224] * rank
-    elif len(input_shape)%2==1:
-        input_shape=input_shape[1:]
+
     if isinstance(kernal_shape, int):
         kernal_shape = _ntuple(rank)(kernal_shape)
     if isinstance(strides, int):
@@ -1847,6 +1850,7 @@ class GcdConv1d(Layer):
         #     if self.bias is None:
         #         s += ', use_bias=False'
         return s.format(**self.__dict__)
+
 
 
 class GatedConv2d(Conv2d):
