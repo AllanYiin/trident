@@ -48,7 +48,7 @@ import colorsys
 import itertools
 import numpy as np
 from trident import context
-from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton, get_plateform
+from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton, get_plateform, PrintException
 
 ctx = context._context()
 _backend =ctx.get_backend()
@@ -59,7 +59,7 @@ if _backend == 'pytorch':
     import torch
     import torch.nn as nn
     from trident.backend.pytorch_backend import *
-    from trident.backend.pytorch_ops import element_cosine_distance, argmin,sqrt,reduce_sum,expand_dims
+    from trident.backend.pytorch_ops import element_cosine_distance, argmin, sqrt, reduce_sum, expand_dims, int_shape
 
 elif _backend == 'tensorflow':
     import tensorflow as tf
@@ -102,24 +102,30 @@ def generate_palette(num_classes: int, format: str = 'rgb'):
 def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
     import cv2
     img_shape = (img.height, img.width, 3)
-    tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
-    # img = array2image(img)
-    c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
-    draw = ImageDraw.Draw(img)
-    draw.rectangle(((box[0], box[1]), (box[2], box[3])), outline=color, fill=None, width=tl)
-    fontcolor = (255, 255, 255)
-    avg_color = np.array(list(color)).mean()
-    font=ImageFont.truetype(fonts[fontnames.index('Hiragino Sans GB')],int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
-    if avg_color > 150:
-        fontcolor = (0, 0, 0)
-    if label and get_plateform() == 'windows':
-        font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
-    tf = max(tl - 1, 1)  # font thickness
-    t_size = draw.textsize(label, font=font)
-    c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
-    offset = font.getoffset(label)
-    draw.rectangle((c1, c2), fill=color,width=2)
-    draw.text((c1[0], c1[1] - 2- offset[1] ), u'{0}'.format(label), fill=fontcolor, font=font)
+    try:
+
+        tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
+        # img = array2image(img)
+        c1, c2 = (int(box[0]), int(box[1])), (int(box[2]), int(box[3]))
+        draw = ImageDraw.Draw(img)
+        draw.rectangle(((box[0], box[1]), (box[2], box[3])), outline=color, fill=None, width=tl)
+        fontcolor = (255, 255, 255)
+        avg_color = np.array(list(color)).mean()
+        font=None#ImageFont.truetype(fonts[fontnames.index('Hiragino Sans GB')],int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+        if avg_color > 150:
+            fontcolor = (0, 0, 0)
+        if label and get_plateform() == 'windows':
+            font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+        tf = max(tl - 1, 1)  # font thickness
+        t_size = draw.textsize(label, font=font)
+        c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+        offset = font.getoffset(label)
+        draw.rectangle((c1, c2), fill=color,width=2)
+        draw.text((c1[0], c1[1] - 2- offset[1] ), u'{0}'.format(label), fill=fontcolor, font=font)
+    except Exception as e:
+        print('image_size', img_shape,box)
+        print(e)
+        PrintException()
 
     # rgb_image = image2array(img)
     return img
@@ -209,7 +215,7 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
     loss_ax1.set_title('model loss', fontsize=14, fontweight='bold')
     loss_ax1.set_ylabel('loss')
     loss_ax1.set_xlabel(calculate_base)
-    loss_ax1.legend()
+    loss_ax1.legend(loc="upper right")
     plt.legend(loc=2)
 
     if max_iteration is not None:
@@ -225,6 +231,8 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
         second_axis_range = None
         first_axis_keys = []
         second_axis_keys = []
+        first_axis_limit = []
+        second_axis_limit = []
         if metrics.__class__.__name__ == 'HistoryBase':
             metrics_need_plot = metrics_names[0]
             for n in range(len(metrics)):
@@ -239,11 +247,13 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                     if first_axis_range is None:
                         first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                         first_axis_keys.append(k)
+                        first_axis_limit=[first_axis_range[0],first_axis_range[2]]
                         metric_ax1.plot(steps, values, label=legend_label)
                     else:
                         if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
                             second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                             metric_ax2.plot(steps, values, label=legend_label)
+                            second_axis_limit=[second_axis_range[0],second_axis_range[2]]
                             second_axis_keys.append(k)
                         elif second_axis_range is not None:
                             compare_array = np.array([list(first_axis_range), list(second_axis_range)])
@@ -253,16 +263,21 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                             if result == 0:
                                 metric_ax1.plot(steps, values, label=legend_label)
                                 first_axis_keys.append(k)
+                                first_axis_limit = [min(first_axis_limit[0],values_np.min()), max(first_axis_limit[1],values_np.max())]
                             else:
                                 metric_ax2.plot(steps, values, label=legend_label)
                                 second_axis_keys.append(k)
+                                second_axis_limit = [min(second_axis_limit[0], values_np.min()), max(second_axis_limit[1], values_np.max())]
                         else:
                             metric_ax1.plot(steps, values, label=legend_label)
+                            first_axis_limit = [min(first_axis_limit[0], values_np.min()), max(first_axis_limit[1], values_np.max())]
                             first_axis_keys.append(k)
 
-            metric_ax1.legend()
+            metric_ax1.legend( loc="lower right")
+            metric_ax1.set_ylim(first_axis_limit[0], first_axis_limit[1])
             if len(second_axis_keys) > 0:
                 metric_ax2.legend()
+                metric_ax2.set_ylim(second_axis_limit[0], second_axis_limit[1])
             #plt.legend(loc='upper left')
 
         elif isinstance(metrics, list):
@@ -284,15 +299,19 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                             if first_axis_range is None:
                                 first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                                 first_axis_keys.append(k)
+                                first_axis_limit = [first_axis_range[0], first_axis_range[2]]
                                 metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                             else:
                                 if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
                                     second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                                     second_axis_keys.append(k)
+                                    second_axis_limit = [second_axis_range[0], second_axis_range[2]]
                                     metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                                 elif k in first_axis_keys:
+                                    first_axis_limit = [min(first_axis_limit[0], values_np.min()), max(first_axis_limit[1], values_np.max())]
                                     metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                                 elif k in second_axis_keys:
+                                    second_axis_limit = [min(second_axis_limit[0], values_np.min()), max(second_axis_limit[1], values_np.max())]
                                     metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                                 elif second_axis_range is not None:
                                     _, first_values = item.get_series(first_axis_keys[0])
@@ -305,21 +324,26 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                                     result = argmin(distance, axis=-1)[0]
                                     if result == 0:
                                         first_axis_keys.append(k)
+                                        first_axis_limit = [min(first_axis_limit[0], values_np.min()), max(first_axis_limit[1], values_np.max())]
                                         metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                                     else:
                                         second_axis_keys.append(k)
+                                        second_axis_limit = [min(second_axis_limit[0], values_np.min()), max(second_axis_limit[1], values_np.max())]
                                         metric_ax2.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                                 else:
                                     first_axis_keys.append(k)
+                                    first_axis_limit = [min(first_axis_limit[0], values_np.min()), max(first_axis_limit[1], values_np.max())]
                                     metric_ax1.plot(steps, values, color=line_color, linestyle=line_type[j % 4], linewidth=int((j // 4) % 4) + 1,label=legend_label)
                             if len(values) > 0 and legend is not None:
                                 legend_list.append(['{0} {1}'.format(k, legend[i])])
                             elif len(values) > 0:
                                 legend_list.append(['{0} {1}'.format(k, i)])
 
-            metric_ax1.legend()
+            metric_ax1.legend( loc="lower right")
+            metric_ax1.set_ylim(first_axis_limit[0], first_axis_limit[1])
             if len(second_axis_keys) > 0:
                 metric_ax2.legend()
+                metric_ax2.set_ylim(second_axis_limit[0], second_axis_limit[1])
             #plt.legend(legend_list,loc='upper left')
 
         metric_ax1.set_title('model metrics', fontsize=14, fontweight='bold')
