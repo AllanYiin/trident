@@ -760,6 +760,7 @@ class ModelBase(object):
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
             self.training_context['is_out_sample_evaluation']=is_out_sample_evaluation
+            self.training_context['optimizer'] = self.optimizer
 
 
 
@@ -791,8 +792,9 @@ class ModelBase(object):
             for callback in self.callbacks:
                 callback.on_data_received(self.training_context)
 
+            self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
             self.do_preparation_for_loss()
-            self.training_context['optimizer'] = self.optimizer
+
 
 
             if  'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output']==False:
@@ -987,7 +989,7 @@ class ModelBase(object):
 
 
             # ON_BATCH_END
-            self.training_context['current_loss'] =to_tensor(0.0,requires_grad=True)
+
             self.do_on_batch_end()
             for callback in self.training_context['callbacks']:
                 callback.on_batch_end(self.training_context)
