@@ -5,6 +5,7 @@ import importlib
 import datetime
 import inspect
 import builtins
+import string
 import copy
 import json
 import linecache
@@ -36,7 +37,7 @@ __all__ = ['get_session','set_session','get_session_value','is_autocast_enabled'
            'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException','TensorShape', 'unpack_singleton', 'enforce_singleton',
            'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature','is_iter','get_string_actual_length',
-           'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein',
+           'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein','is_alphabet','is_punctuation','remove_nonprintable',
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode','adaptive_format','num_cpus',
           'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map','dtype']
@@ -721,7 +722,7 @@ class TensorShape(object):
             shape[0]=2
         else:
             shape=[2,]+shape
-        return np.clip(np.abs(np.random.standard_normal(shape)))
+        return np.clip(np.abs(np.random.standard_normal(shape)),0,1)
 
 
 
@@ -967,6 +968,22 @@ def is_numpy(x):
     return isinstance(x,np.ndarray)
 
 
+def is_alphabet(x:str):
+    return all([s in string.ascii_lowercase for s in x.lower()])
+
+def is_punctuation(x:str):
+    return all([s in string.punctuation for s in x.lower()])
+
+
+def remove_nonprintable(x:str):
+    import itertools
+    # Use characters of control category
+
+    nonprintable = itertools.chain(range(0x00,0x20),range(0x7f,0xa0))
+    # Use translate to remove all non-printable characters
+    return x.translate({character:None for character in nonprintable if chr(character) not in '\n\r\t'})
+
+
 def unpack_singleton(x):
     """
     Gets the first element if the iterable has only one value. Otherwise return the iterable.But would not split a
@@ -1036,6 +1053,20 @@ def check_keys(model, pretrained_state_dict):
     print('Unused checkpoint keys:{}'.format(len(unused_pretrained_keys)))
     print('\n\t'.join(unused_pretrained_keys))
     print('Used keys:{}'.format(len(used_pretrained_keys)))
+    if len(missing_keys)>=len(unused_pretrained_keys)>0:
+        print('Try to mapping missing_keys to unused_pretrained_keys:')
+        tmp_unused_pretrained_keys=list(unused_pretrained_keys)
+        fix_dict=find_minimal_edit_distance_key(missing_keys,unused_pretrained_keys)
+        for k, v in fix_dict.items():
+            print('{0}=>{1}'.format(k,v))
+        print('Is mapping results accetable?')
+        ans = input('(Y/N) << ').lower()
+        if ans in ['yes', 'y']:
+            for k,v in fix_dict.items():
+                pretrained_state_dict[k]=pretrained_state_dict[v]
+
+
+
     #print('\n\t'.join(used_pretrained_keys))
 
     assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
@@ -1133,18 +1164,78 @@ def text_similarity(list1, list2):
 
 
 
-def find_minimal_edit_distance_key(key,lookup_keys):
+def find_minimal_edit_distance_key(keys,lookup_keys):
+    def only_keep_number(input_string):
+        input_string=input_string.split('_')[-1].split('-')[-1]
+        return ''.join([s for s in list(input_string) if s in string.digits])
+
     candidates_keys=None
-    if not '.' in key:
-        candidates_keys = [1-(levenshtein(list(key), list(k))/builtins.max(len(key),len(k))) for k in lookup_keys]
-    else:
-        sections=key.split('.')
-        candidates_keys=[s for s in lookup_keys if s.startswith(sections[0])]
-        candidates_keys=[ text_similarity(sections,key.split('.')) for key in candidates_keys]
-    candidates_keys=np.array(candidates_keys)
-    candidate_idx=np.argmax(candidates_keys)
-    returnkey=lookup_keys[candidate_idx]
-    return returnkey,candidates_keys[candidate_idx]
+    final_mapping=OrderedDict()
+    section_keys=[key.split('.') for key in keys]
+    is_allkey_same_section =len(list(set([len(k) for k in section_keys])))==1
+    section_keys_annotation=[]
+    section_dict=[]
+    section_lookup_keys=[key.split('.') for key in lookup_keys]
+    is_alllookupkey_same_section = len(list(set([len(k) for k in section_lookup_keys]))) == 1
+    avaiable_section=list(range(len(section_lookup_keys[0])))
+
+    if is_allkey_same_section and is_alllookupkey_same_section:
+        for k in range(len(section_keys[0])):
+            section_dict.append(OrderedDict())
+            subdata=[item[k] for item in section_keys]
+            number_parts=[int(only_keep_number(item)) for item in subdata if len(only_keep_number(item)) ]
+            section_distinct = len(set(subdata))
+            section_keys_annotation.append((len(set(subdata)),number_parts))
+            for n in avaiable_section:
+                sublookup = [item[n] for item in section_lookup_keys]
+                lookup_number_parts = OrderedDict([(item,int(only_keep_number(item))) for item in sublookup if len(only_keep_number(item))])
+                lookup_section_distinct=len(set(sublookup))
+
+                if section_distinct==lookup_section_distinct:
+                    if len(lookup_number_parts) == len(set(number_parts))==section_distinct and len(set(lookup_number_parts.value_list))==lookup_section_distinct:
+                        if len(set(number_parts))==len(set(lookup_number_parts.value_list))==1:
+                            section_dict[k][str(subdata[0])]=sublookup[0]
+                            avaiable_section.remove(n)
+                            break
+                        elif len(set(number_parts))==len(set(lookup_number_parts.value_list))==section_distinct:
+                            sorted_number_parts=list(sorted(set(number_parts)))
+                            sorted_lookup_number_parts=list(sorted(lookup_number_parts.value_list))
+
+                            for item in subdata:
+                                idx=sorted_number_parts.index(int(only_keep_number(item)))
+                                section_dict[k][str(item)]=lookup_number_parts.key_list[lookup_number_parts.value_list.index(sorted_lookup_number_parts[idx])]
+                            avaiable_section.remove(n)
+                            break
+                    elif  len(lookup_number_parts) == len(set(number_parts))==0:
+                        tmp_lookup_subdata=copy.deepcopy(sublookup)
+                        for item in subdata:
+                            candidates_keys = [text_similarity(list(item), key.split('.')) for key in tmp_lookup_subdata]
+                            candidates_keys = np.array(candidates_keys)
+                            candidate_idx = np.argmax(candidates_keys)
+                            section_dict[k][str(item)] =tmp_lookup_subdata[candidate_idx]
+                            tmp_lookup_subdata.remove(tmp_lookup_subdata[candidate_idx])
+                        avaiable_section.remove(n)
+                        break
+                    else:
+                        section_dict[k][str(item)] = sublookup[subdata.index(item)]
+                        avaiable_section.remove(n)
+                        break
+
+        for  section in section_keys:
+            conver_key=[]
+            for i in range(len(section)):
+                if section[i] in section_dict[i]:
+                    conver_key.append(section_dict[i][section[i]])
+            conver_key='.'.join(conver_key)
+            if conver_key in lookup_keys:
+                final_mapping['.'.join(section)]=conver_key
+            else:
+                raise ValueError('{0} not exist!'.format(conver_key))
+        return final_mapping
+
+
+
+
 
 
 
