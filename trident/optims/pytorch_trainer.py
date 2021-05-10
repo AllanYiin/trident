@@ -35,10 +35,14 @@ import torch
 import torch.nn as nn
 from PIL.PngImagePlugin import PngImageFile
 
+from trident import __version__
+from trident.backend.common import *
+from trident.backend.tensorspec import *
+from trident.backend.pytorch_backend import *
+from trident.backend.pytorch_ops import *
+from trident.backend import model
 from trident.data.mask_common import color2label
-
 from trident.data.transform import Transform
-
 from trident.data.vision_transforms import Unnormalize, Resize, Normalize
 
 from trident.backend.opencv_backend import array2image, image2array, file2array
@@ -46,16 +50,9 @@ from trident.backend.opencv_backend import array2image, image2array, file2array
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
 from trident.optims.trainers import TrainingPlan
 from trident.data.data_provider import DataProvider
-
-from trident import __version__
-from trident.backend.common import *
-from trident.backend.tensorspec import *
-from trident.backend.pytorch_backend import *
-from trident.backend.pytorch_ops import *
-from trident.backend.model import ModelBase, progress_bar
 from trident.layers.pytorch_layers import SoftMax
 from trident.optims.pytorch_constraints import get_constraint
-from trident.optims.pytorch_losses import get_loss, _ClassificationLoss
+from trident.optims.pytorch_losses import *
 from trident.optims.pytorch_metrics import get_metric
 from trident.optims.pytorch_optimizers import get_optimizer
 from trident.optims.pytorch_regularizers import get_reg
@@ -110,13 +107,14 @@ def make_deterministic(seed: int = 19260817, cudnn_deterministic: bool = False):
         torch.backends.cudnn.benchmark = False
 
 
-class Model(ModelBase):
+class Model(model.ModelBase):
     def __init__(self, inputs=None, input_shape=None, output=None, name=None):
         super().__init__(inputs, input_shape, output, name)
         self.batch_index = 0
         self.filter_index = 1
         self._enable_tensorboard = False
         self.summary_writer = None
+        self.accumulate_grads_inteval = 1
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
         if isinstance(input_shape, numbers.Integral):
@@ -470,7 +468,7 @@ class Model(ModelBase):
 
         # create signature
         if hasattr(self._losses[alias], 'signature') and self._losses[alias].signature is not None:
-            pass
+            print(self._losses[alias].signature)
         else:
             try:
                 self._losses[alias].signature = argnames
@@ -495,7 +493,7 @@ class Model(ModelBase):
 
         return self
 
-    def with_metric(self, metric, print_only=False,name='', **kwargs):
+    def with_metric(self, metric, print_only=False, name='', **kwargs):
 
         alias = name
         argnames = OrderedDict()
@@ -547,7 +545,7 @@ class Model(ModelBase):
 
         # create signature
         if hasattr(self._metrics[alias], 'signature') and self._metrics[alias].signature is not None:
-            pass
+            print(self._metrics[alias].signature)
         else:
             self._metrics[alias].signature = argnames
         self._metrics[alias].signature.name = alias
@@ -842,64 +840,68 @@ class Model(ModelBase):
 
     def do_gradient_update(self, log_gradients=False):
         try:
+            accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
             if isinstance(self._model, (Layer, nn.Module)):
                 # double check!!!
                 self._model.train()
-            self.optimizer.zero_grad()
+
             if self.training_context['stop_update'] < 1:
                 if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     if self.gradscaler is None:
                         self.gradscaler = torch.cuda.amp.GradScaler()
-                    self.gradscaler.scale(self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
+                    self.gradscaler.scale(self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
+
                 else:
-                    self.training_context['current_loss'].backward(retain_graph=self.training_context['retain_graph'])
+                    (self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
+                if not accumulate_grads:
+                    # only check once every epoch start.
+                    for callback in self.training_context['callbacks']:
+                        callback.on_optimization_step_start(self.training_context)
 
-                # only check once every epoch start.
-                for callback in self.training_context['callbacks']:
-                    callback.on_optimization_step_start(self.training_context)
+                    if isinstance(self._model, nn.Module) and self.grad_clipping_by_norm:
 
-                if isinstance(self._model, nn.Module) and self.grad_clipping_by_norm:
+                        if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                            self.gradscaler.unscale_(self.optimizer)
+                            torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
-                    if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
-                        self.gradscaler.unscale_(self.optimizer)
-                        torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
-
-                    else:
-                        torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
+                        else:
+                            torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
 
-                elif isinstance(self._model, torch.Tensor):
-                    grad_norm = self._model.grad.norm()
-                    if not is_tensor(self._model) and not 0 < grad_norm < 1e5:
-                        sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
-                        if any_abnormal_number(grad_norm):
-                            raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
+                    elif isinstance(self._model, torch.Tensor):
+                        grad_norm = self._model.grad.norm()
+                        if not is_tensor(self._model) and not 0 < grad_norm < 1e5:
+                            sys.stderr.write('warning...Gradient norm {0} exceed 1e5 nor less-or-equal zero\n'.format(grad_norm))
+                            if any_abnormal_number(grad_norm):
+                                raise ValueError('grad_norm cannot has abnormal number (nan or inf).')
 
-                if log_gradients:
-                    self.log_gradient()
+                    if log_gradients:
+                        self.log_gradient()
 
             if self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update']):
-                # amp support
-                if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
-                    self.gradscaler.step(self.optimizer)
-                    self.gradscaler.update()
-                else:
-                    self.optimizer.step(self.get_current_loss, )
+                if not accumulate_grads:
+                    # amp support
+                    if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                        self.gradscaler.step(self.optimizer)
+                        self.gradscaler.update()
+                    else:
+                        self.optimizer.step(self.get_current_loss, )
 
-                if is_tensor(self._model):
-                    if self._model.grad is not None:
-                        self._model.requires_grad = False
-                        self._model.requires_grad = True
-                elif isinstance(self._model, nn.Module):
-                    self._model.zero_grad()
+                    self.optimizer.zero_grad()
+                    if is_tensor(self._model):
+                        if self._model.grad is not None:
+                            self._model.requires_grad = False
+                            self._model.requires_grad = True
+                    elif isinstance(self._model, nn.Module):
+                        self._model.zero_grad()
 
             elif self.training_context['stop_update'] >= 1:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1
-                if not self.training_context['retain_graph']:
+                if not self.training_context['retain_graph'] and not accumulate_grads:
                     self._model.zero_grad()
-
-            for callback in self.training_context['callbacks']:
-                callback.on_optimization_step_end(self.training_context)
+            if not accumulate_grads:
+                for callback in self.training_context['callbacks']:
+                    callback.on_optimization_step_end(self.training_context)
         except Exception as e:
             print(e)
             PrintException()
@@ -1086,6 +1088,7 @@ class Model(ModelBase):
                     value = pretrained_dict[key]
                     if is_tensor(value) and any_abnormal_number(value):
                         has_abnormal = True
+                        print('detect abnormal in state_dict[{0}],value:{1}'.format(key), value)
                         pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
                     if is_tensor(value) and ndim(value) == 0:
                         pretrained_dict[key] = to_tensor(value.item())

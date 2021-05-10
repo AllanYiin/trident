@@ -16,7 +16,6 @@ import builtins
 
 import numpy as np
 
-
 from trident import context
 
 from trident.backend.decorators import deprecated
@@ -47,7 +46,7 @@ if _backend == 'pytorch':
     from trident.layers.pytorch_activations import Sigmoid, Tanh
     from trident.layers.pytorch_layers import Flatten, Dense
     from trident.layers.pytorch_pooling import GlobalAvgPool2d
-    from trident.optims.pytorch_losses import L1Loss, L2Loss,BCELoss, MSELoss
+    from trident.optims.pytorch_losses import L1Loss, L2Loss, BCELoss, MSELoss
     from trident.optims.pytorch_optimizers import *
 
 elif _backend == 'tensorflow':
@@ -57,7 +56,7 @@ elif _backend == 'tensorflow':
     from trident.layers.tensorflow_activations import Sigmoid, Tanh
     from trident.layers.tensorflow_layers import Flatten, Dense
     from trident.layers.tensorflow_pooling import GlobalAvgPool2d
-    from trident.optims.tensorflow_losses import L1Loss, L2Loss,BCELoss, MSELoss
+    from trident.optims.tensorflow_losses import L1Loss, L2Loss, BCELoss, MSELoss
     from trident.optims.tensorflow_optimizers import *
 
 
@@ -490,6 +489,8 @@ class TrainingPlan(object):
             if only_steps:
                 self.num_epochs = (max_batches // len(data_provider.batch_sampler)) + 2
 
+            if len(data_provider._batch_transform_funcs) > 0:
+                data_provider.traindata.batch_sampler._batch_transform_funcs = data_provider._batch_transform_funcs
             for epoch in range(self.num_epochs):
                 try:
                     for mbs, return_data in enumerate(data_provider):
@@ -518,7 +519,8 @@ class TrainingPlan(object):
 
                             # check weather need out-of-sample evaluation
                             need_out_sample_evaluation = False
-                            if self.out_sample_evaluation_on_epoch_end == True and mbs > 0 and self.out_sample_evaluation_unit == 'batch' and mbs % self.out_sample_evaluation_frequency == 0:
+                            if self.out_sample_evaluation_on_epoch_end == True and mbs > 0 and self.out_sample_evaluation_unit == 'batch' and mbs % \
+                                    self.out_sample_evaluation_frequency == 0:
                                 need_out_sample_evaluation = True
                             elif self.out_sample_evaluation_on_epoch_end == True and only_steps == False and self.out_sample_evaluation_unit == 'epoch' and mbs == len(
                                     data_provider.batch_sampler) - 1 and epoch % self.out_sample_evaluation_frequency == 0:
@@ -556,7 +558,7 @@ class TrainingPlan(object):
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
-                                                      accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
+                                                      accumulate_grads=(trainitem.training_context['steps']+1) % trainitem.accumulation_steps != 0, is_out_sample_evaluation=need_out_sample_evaluation)
                             self.steps += 1
 
                             if self.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
@@ -583,7 +585,10 @@ class TrainingPlan(object):
                             for k, trainitem in self.training_items.items():
                                 for callback in trainitem.training_context['callbacks']:
                                     if not callback.is_shared:
-                                        callback.on_overall_batch_end(trainitem.training_context)
+                                        try:
+                                            callback.on_overall_batch_end(trainitem.training_context)
+                                        except Exception as e:
+                                            print(e)
                             for callback in self.callbacks:
                                 if callback.is_shared:
                                     callback.on_overall_batch_end(self.__dict__)
@@ -658,18 +663,19 @@ class GanTrainingPlan(TrainingPlan):
         super().__init__()
         self.is_generator_first = None
         self.gan_type = None
+        self.is_condition_gan = False
         self.discriminator = None
         self.generator = None
-        self.label_smoothing = False
+        self._use_label_smoothing = False
         self.max_noise_intensity = 0
         self.min_noise_intensity = 0
         self.decay = 10000
-        self.use_total_variation_loss = False
+        self._use_total_variation_loss = False
         self.total_variation_reg_weight = 0.005
         self.total_variation_start_epoch = 3
-        self.use_pull_away_term_loss = False
-        self.use_feature_matching = False
-        self.label_smoothing = None
+        self._use_pull_away_term_loss = False
+        self._use_feature_matching = False
+        self._use_label_smoothing = None
         self.discriminator_feature_uuid = None
 
     def with_generator(self, generator, name='modelG'):
@@ -680,7 +686,8 @@ class GanTrainingPlan(TrainingPlan):
         if generator.optimizer is None:
             generator.with_optimizer(Adam, 2e-4, betas=(0.5, 0.999))
         generator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
-        generator.with_callbacks(GanTileImageCallback(batch_inteval=50))
+        if not any([isinstance(cb, TileImageCallback) for cb in generator.callbacks]):
+            generator.with_callbacks(GanTileImageCallback(batch_inteval=50))
 
         self.generator = generator
         return self.add_training_item(self.generator, name=name, start_epoch=0)
@@ -701,7 +708,7 @@ class GanTrainingPlan(TrainingPlan):
         return self.add_training_item(self.discriminator, name=name, start_epoch=0)
 
     def with_label_smoothing(self, one_side=True):
-        self.label_smoothing = "one_side" if one_side else "two_side"
+        self._use_label_smoothing = "one_side" if one_side else "two_side"
         return self
 
     def with_noised_real_images(self, max_noise_intensity=0.1, min_noise_intensity=0, decay=10000):
@@ -711,7 +718,7 @@ class GanTrainingPlan(TrainingPlan):
         return self
 
     def with_total_variation_loss(self, reg_weight=0.005, start_epoch=3):
-        self.use_total_variation_loss = True
+        self._use_total_variation_loss = True
         self.total_variation_start_epoch = start_epoch
         self.total_variation_reg_weight = reg_weight
         return self
@@ -729,14 +736,14 @@ class GanTrainingPlan(TrainingPlan):
                 embeddings = Flatten()(embeddings)
                 norm = sqrt(sum(embeddings ** 2.0, -1, keepdim=True))
                 normalized_emb = embeddings / norm
-                similarity = matmul(normalized_emb, normalized_emb,transpose_b=True)
+                similarity = matmul(normalized_emb, normalized_emb, transpose_b=True)
                 batch_size = int_shape(embeddings)[0]
                 loss_pt = (sum(similarity) - batch_size) / (batch_size * (batch_size - 1))
                 return loss_pt
             else:
                 return to_tensor(0.0)
 
-        self.use_pull_away_term_loss = True
+        self._use_pull_away_term_loss = True
         self.generator.with_loss(pullaway_loss, loss_weight=loss_weight)
         return self
 
@@ -745,10 +752,10 @@ class GanTrainingPlan(TrainingPlan):
         def gradient_penalty(img_real, img_fake):
             shp = int_shape(img_real)
 
-            eta = random_uniform((shp[0], 1, 1, 1),0.0,1.0).to(get_device())
+            eta = random_uniform((shp[0], 1, 1, 1), 0.0, 1.0).to(get_device())
             interpolated = eta * img_real + ((1 - eta) * img_fake)
-            gradients=None
-            if get_backend()=='pytorch':
+            gradients = None
+            if get_backend() == 'pytorch':
                 from torch import autograd
                 interpolated.requires_grad = True
 
@@ -760,13 +767,12 @@ class GanTrainingPlan(TrainingPlan):
                                           grad_outputs=ones_like(prob_interpolated, requires_grad=False).to(get_device()),
                                           create_graph=True, retain_graph=True, only_inputs=True)[0]
                 return ((sqrt(reduce_sum(gradients ** 2, axis=[2, 3])) - 1.0) ** 2).mean()
-            elif get_backend()=='tensorflow':
+            elif get_backend() == 'tensorflow':
                 with tf.GradientTape() as t:
                     t.watch(interpolated)
                     prob_interpolated = self.discriminate(interpolated)
                 gradients = t.gradient(prob_interpolated, interpolated)
                 return ((sqrt(reduce_sum(gradients ** 2, axis=[1, 2])) - 1.0) ** 2).mean()
-
 
         for modual in self.discriminator.model.children():
             if 'BatchNorm' in modual.__class__.__name__:
@@ -776,7 +782,7 @@ class GanTrainingPlan(TrainingPlan):
         return self
 
     def with_feature_matching(self, loss_weight=0.5):
-        self.use_feature_matching = True
+        self._use_feature_matching = True
         moduals = list(self.discriminator.model.children())
         for i in range(len(moduals)):
             m = moduals[i]
@@ -794,23 +800,13 @@ class GanTrainingPlan(TrainingPlan):
                 self.discriminator_feature_uuid = moduals[i].uuid
                 break
 
-        def feature_mapping(real_features, fake_features):
-
-            # fake_features=None
-            # real_features = None
-            #
-            # d_real = self.discriminator(img_real)
-            # if self.discriminator_feature_uuid in self.discriminator.nodes:
-            #     real_features = self.discriminator.nodes[self.discriminator_feature_uuid].output.detach()
-            # d_fake = self.discriminator(img_fake)
-            # if self.discriminator_feature_uuid in self.discriminator.nodes:
-            #     fake_features=self.discriminator.nodes[self.discriminator_feature_uuid].output
+        def feature_matching(real_features, fake_features):
             if fake_features is not None and real_features is not None:
                 return L2Loss(reduction='mean')(fake_features, real_features)
-                # return ((real_features.mean(dim=0)-fake_features.mean(dim=0))**2).mean()
+
             return to_tensor(0.0)
 
-        self.generator.with_loss(feature_mapping, loss_weight=loss_weight)
+        self.generator.with_loss(feature_matching, loss_weight=loss_weight)
         return self
 
     def with_ttur(self, multiplier=2.5):
@@ -824,10 +820,8 @@ class GanTrainingPlan(TrainingPlan):
         self.gan_type = gan_type
         real_label, fake_label = 1, 0
 
-
         def metric_dfake(d_fake):
             return d_fake.mean()
-
 
         def metric_dreal(d_real):
             return d_real.mean()
@@ -890,7 +884,6 @@ class GanTrainingPlan(TrainingPlan):
 
             def real_loss(img_real, d_real):
                 return L1Loss()(img_real, d_real)
-
 
             def fake_loss(img_fake, d_fake):
                 return L1Loss()(img_fake, d_fake)
@@ -999,25 +992,33 @@ class GanTrainingPlan(TrainingPlan):
         if data_provider.signature is None:
             _ = data_provider.next()
         # data_input=data_provider.traindata.data.symbol
-        # if len(data_provider.traindata.unpair)>0:
-        #     data_unpair = data_provider.traindata.unpair
-        data_provider.traindata.data.symbol = 'img_real'
-        data_provider.traindata.unpair.symbol = 'noise'
+        self.is_condition_gan = False
+        if len(data_provider.traindata.unpair) > 0:
+            data_unpair = data_provider.traindata.unpair
+            data_provider.traindata.unpair.symbol = 'noise'
+
+        elif isinstance(data_provider.traindata.label, ImageDataset) and len(data_provider.traindata.data) == len(data_provider.traindata.label):
+            self.is_condition_gan = True
 
         self.generator.data_feed = OrderedDict()
-        self.generator.data_feed['input'] = 'noise'
+        self.generator.data_feed['input'] = data_provider.traindata.data.symbol if self.is_condition_gan else data_provider.traindata.unpair
         self.generator.data_feed['img_fake'] = 'output'
+        self.generator.data_feed['img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
         self.generator.data_feed['d_fake'] = 'd_fake'
         self.generator.data_feed['d_real'] = 'd_real'
         self.generator.data_feed['real_label'] = 'real_label'
         self.generator.data_feed['fake_label'] = 'fake_label'
-        if self.use_feature_matching:
+        if self.is_condition_gan:
+            self.generator.data_feed['target'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
+        if self._use_feature_matching:
             self.generator.data_feed['real_features'] = 'real_features'
             self.generator.data_feed['fake_features'] = 'fake_features'
         print('generator data_feed:{0}'.format(self.generator.data_feed))
 
         self.discriminator.data_feed = OrderedDict()
-        self.discriminator.data_feed['input'] = 'img_real'
+        self.discriminator.data_feed['input'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
+        self.discriminator.data_feed['img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
+        self.discriminator.data_feed['img_fake'] = 'img_fake'
         self.discriminator.data_feed['d_real'] = "output"
         self.discriminator.data_feed['d_fake'] = "d_fake"
 
@@ -1037,7 +1038,7 @@ class GanTrainingPlan(TrainingPlan):
         def g_get_dfake(training_context):
             traindata = training_context['train_data']
             traindata['d_fake'] = self.discriminator(traindata['output'].to(get_device()))
-            if self.use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
+            if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
                 traindata['fake_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
             traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
@@ -1045,12 +1046,13 @@ class GanTrainingPlan(TrainingPlan):
 
         def g_get_dreal(training_context):
             traindata = training_context['train_data']
-            if (self.is_generator_first and 'output' not in self.discriminator.training_context['train_data']) or self.use_feature_matching:
-                traindata['d_real'] = self.discriminator(traindata['img_real']).detach()
+
+            if (self.is_generator_first and 'output' not in self.discriminator.training_context['train_data']) or self._use_feature_matching:
+                traindata['d_real'] = self.discriminator(traindata[training_context['data_feed']['img_real']]).detach()
             else:
                 traindata['d_real'] = self.discriminator.training_context['train_data']['output'].detach()
 
-            if self.use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
+            if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
                 traindata['real_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
         def d_get_dfake(training_context):
@@ -1059,41 +1061,35 @@ class GanTrainingPlan(TrainingPlan):
                 traindata['k_t'] = to_tensor(self.k_t)
                 traindata['measure'] = to_tensor(self.measure)
 
-            # if self.is_generator_first:
-            #     traindata['img_fake'] = self.generator.training_context['train_data']['output']
-            #     traindata['d_fake'] = self.discriminator(traindata['img_fake'] )
-            # else:
-            # traindata['img_fake'] = self.generator(traindata['noise']).detach()
             if not self.is_generator_first and 'output' not in self.generator.training_context['train_data']:
-                traindata['img_fake'] = self.generator(traindata['noise']).detach()
+                traindata[training_context['data_feed']['img_fake']] = self.generator(traindata[data_provider.traindata.data.symbol if self.is_condition_gan else 'noise']).detach()
             else:
-                traindata['img_fake'] = self.generator.training_context['train_data']['output'].detach()
-            traindata['d_fake'] = self.discriminator(traindata['img_fake'])
+                traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data']['output'].detach()
+            traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']])
 
             traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            if self.label_smoothing is not None:
+            if self._use_label_smoothing is not None:
                 traindata['real_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.02), 0.8, 1.2).detach().to(get_device())
             traindata['fake_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
-            if self.label_smoothing == 'two_side':
+            if self._use_label_smoothing == 'two_side':
                 traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0, 0.2).detach().to(get_device())
 
         def d_get_dreal(training_context):
             traindata = training_context['train_data']
             traindata['d_real'] = traindata['output']
             traindata['real_label'] = ones_like(traindata['output']).detach().to(get_device())
-            if self.label_smoothing is not None:
+            if self._use_label_smoothing is not None:
                 traindata['real_label'] = random_uniform_like(traindata['output'], 0.9, 1).detach().to(get_device())
             traindata['fake_label'] = zeros_like(traindata['output']).detach().to(get_device())
-            if self.label_smoothing == 'two_side':
+            if self._use_label_smoothing == 'two_side':
                 traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0, 0.2).detach().to(get_device())
 
         data_provider = self._dataloaders.value_list[0]
-        if isinstance(data_provider.traindata.data, ImageDataset):
-            data_provider.traindata.data.symbol = 'img_real'
-        if isinstance(data_provider.traindata.unpair, RandomNoiseDataset):
-            data_provider.traindata.unpair.symbol = 'noise'
+
         data_provider.minibatch_size = self.minibatch_size
         data_provider.mode = 'dict'
+        # generate data feed
+        self.generate_datafeed(data_provider)
         try:
             self.execution_id = get_time_suffix()
             exception_cnt = 0
@@ -1132,7 +1128,7 @@ class GanTrainingPlan(TrainingPlan):
                                 # shared callback
                                 item.with_callbacks(callback)
                 self.generator.trigger_when(when='on_loss_calculation_start', action=g_get_dfake)
-                if self.gan_type in ('rasgan') or self.use_feature_matching:
+                if self.gan_type in ('rasgan') or self._use_feature_matching:
                     self.generator.trigger_when(when='on_loss_calculation_start', action=g_get_dreal)
                 if self.gan_type in ('began'):
                     def update_k_t(training_context):
@@ -1161,9 +1157,7 @@ class GanTrainingPlan(TrainingPlan):
                     if callback.is_shared:
                         callback.on_training_start(self.__dict__)
 
-            # generate data feed
             if not is_resume or only_steps == True:
-                self.generate_datafeed(data_provider)
                 if collect_data_inteval == 1 and len(data_provider.batch_sampler) * self.num_epochs > 1000:
                     collect_data_inteval = self.default_collect_data_inteval
             if only_steps:
@@ -1231,7 +1225,7 @@ class GanTrainingPlan(TrainingPlan):
                                 else:
                                     trainitem.training_context['stop_update'] = 1
                                     should_collect_data = False
-                                if self.use_total_variation_loss and trainitem.training_context[
+                                if self._use_total_variation_loss and trainitem.training_context[
                                     'gan_role'] == 'generator' and epoch == self.total_variation_start_epoch and mbs == 0:
                                     self.generator.with_regularizer('total_variation_norm_reg', reg_weight=self.total_variation_reg_weight)
 

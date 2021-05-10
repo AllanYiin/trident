@@ -68,6 +68,7 @@ class ModelBase(object):
         self._targets = OrderedDict()
         self._model = None
         self.output_fn:Callable=None
+        self.accumulation_steps=1
 
         self.lr_scheduler = None
         self._losses = OrderedDict()
@@ -119,7 +120,7 @@ class ModelBase(object):
                                  'current_target': None,  # current target
                                  'steps': 0,
                                  'current_output': None,  # current output
-                                 'current_loss': None,  # current loss
+                                 'current_loss':to_tensor(0.0,requires_grad=True),  # current loss
                                  'best_metric': None,  # current loss
                                  'best_model': None,  # current model
                                 'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
@@ -513,6 +514,10 @@ class ModelBase(object):
                """
         return self
 
+    def with_accumulate_grads(self,accumulation_steps=2):
+        self.accumulation_steps=accumulation_steps
+        return self
+
     def adjust_learning_rate_scheduling(self, index: int, unit='batch', new_value:float=None):
         return self
 
@@ -544,7 +549,7 @@ class ModelBase(object):
                                  'current_target': None,  # current target
                                  'steps': 0,
                                  'current_output': None,  # current output
-                                 'current_loss': None,  # current loss
+                                 'current_loss': to_tensor(0.0,requires_grad=True),  # current loss
                                  'best_metric': None,  # current loss
                                  'best_model': None,  # current model
                                 'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
@@ -685,23 +690,18 @@ class ModelBase(object):
         metric_strings=[]
         slice_length = print_batch_progress_frequency // self.training_context['collect_data_inteval']
         for k in  self.batch_metric_history.key_list:
-            collect_history =True
-
-            if k in self._metrics:
-                collect_history=self._metrics[k].collect_history
             metric_value=None
-            if collect_history:
-                batch_steps, batch_values = self.batch_metric_history.get_series(k)
-                if len(batch_values)==0:
-                    batch_steps, batch_values = self.tmp_metrics.get_series(k)
-                    metric_value = np.array(batch_values).mean()
-                else:
+            batch_steps, batch_values = self.batch_metric_history.get_series(k)
+            if len(batch_values)==0:
+                batch_steps, batch_values = self.tmp_metrics.get_series(k)
+                metric_value = np.array(batch_values).mean()
+            else:
 
-                    if len(batch_values) > slice_length:
-                        metric_value = np.array(batch_values[-1 * slice_length:]).mean()
-                    else:
-                        metric_value=np.array(batch_values).mean()
-                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, value_type='metric')))
+                if len(batch_values) > slice_length:
+                    metric_value = np.array(batch_values[-1 * slice_length:]).mean()
+                else:
+                    metric_value=np.array(batch_values).mean()
+            metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, value_type='metric')))
         loss_value=None
         loss_steps,loss_values=self.batch_loss_history.get_series('total_losses')
         if len(loss_values) == 0:
@@ -791,10 +791,8 @@ class ModelBase(object):
             for callback in self.callbacks:
                 callback.on_data_received(self.training_context)
 
-            if accumulate_grads == False:
-                self.training_context['current_loss'] = to_tensor(0.0,requires_grad=True)
-                self.do_preparation_for_loss()
-                self.training_context['optimizer'] = self.optimizer
+            self.do_preparation_for_loss()
+            self.training_context['optimizer'] = self.optimizer
 
 
             if  'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output']==False:
@@ -881,141 +879,145 @@ class ModelBase(object):
             for callback in self.callbacks:
                 callback.on_loss_calculation_end(self.training_context)
 
-            if not accumulate_grads:
+
+            # if self.accumulation_steps>1:
+            #     self.training_context['current_loss']=self.training_context['current_loss'] /self.accumulation_steps
                 # regularizer
-                for k, v in self._regs.items():
-                    this_loss=to_tensor(0.0,requires_grad=True)
-                    if 'model' in v.signature.inputs:
-                        this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,requires_grad=True)
-                    elif 'output' in v.signature.inputs:
+            for k, v in self._regs.items():
+                this_loss=to_tensor(0.0,requires_grad=True)
+                if 'model' in v.signature.inputs:
+                    this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,requires_grad=True)
+                elif 'output' in v.signature.inputs:
 
-                        this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
-                    if not any_abnormal_number(this_loss):
-                        # a leaf Variable that requires grad connotused in an in-place operation.
-                        self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
-                    # 'current_loss'] + this_loss
-                    if is_collect_data:
-                        self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
-
-
-
-                # self.do_post_loss_calculation()
-                #
-                # for callback in self.callbacks:
-                #     callback.on_loss_calculation_end(self.training_context)
-
-                self.do_pre_optimization_step()
-                self.do_gradient_update(log_gradients and is_collect_data)
-
-                self.training_context['current_lr'] = self.optimizer.lr
-
-                # ON_POSTBACKWARD_CALCULATION
-                self.do_post_gradient_update()
-
-
-                for k, v in self._constraints.items():
-                    if self.training_context['stop_update'] == 0 :
-                        v(self._model)
-
-                if log_weights and is_collect_data:
-                    if isinstance(self._model,Layer):
-                        self.log_weight(weghts=self._model.weights)
-                    elif is_tensor(self._model):
-                        self.log_weight(weghts=self._model)
-
-
-
-                if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and  self.training_context['stop_update']<1 :
-                    tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'])
-                    if isinstance(tmp_output, (list, tuple)):
-                        for i in range(len(tmp_output)):
-                            self.test_data[self.outputs.key_list[i]] = tmp_output[i]
-                    elif 'tensor' in tmp_output.__class__.__name__.lower():
-                        self.test_data[self.outputs.key_list[0]] = tmp_output
-                    else:
-                        self.test_data[self.outputs.key_list[0]] = tmp_output
-
-
-
-
-                # ON_EVALUATION_START
-                self.do_on_metrics_evaluation_start()
-                for callback in self.training_context['callbacks']:
-                    callback.on_metrics_evaluation_start(self.training_context)
-
-
-                for k, v in self._metrics.items():
-                    collect_history =getattr(v,'collect_history') if  hasattr(v,'collect_history') else True
-                    if collect_history:
-                        self.training_context['metrics'].regist(k)
-                    self.training_context['tmp_metrics'].regist(k)
-
-                    this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
-                    self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
-
-
-                    if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and collect_history!=False :
-                        this_out_metric = try_map_args_and_call(v, self.test_data , self.training_context['data_feed'])
-                        self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
-
-                # ON_EVALUATION_END
-                self.do_on_metrics_evaluation_end()
-                for callback in self.training_context['callbacks']:
-                    callback.on_metrics_evaluation_end(self.training_context)
-
-                #callback's metric can keep in epoch_metric_history
-
-
+                    this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
+                if not any_abnormal_number(this_loss):
+                    # a leaf Variable that requires grad connotused in an in-place operation.
+                    self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
+                # 'current_loss'] + this_loss
                 if is_collect_data:
-                    #aggregate tmp data and move to metrics history
-                    for k, v in self.training_context['tmp_metrics'].items():
-                        steps,values=self.training_context['tmp_metrics'].get_series(k)
-
-                        #check
-                        if len(steps) > 0:
-                            values = np.mean(to_numpy(values))
-                            self.training_context['metrics'].collect(k, self.training_context['steps'], values)
-                    self.training_context['tmp_metrics'].reset()
-
-                    for k, v in self.training_context['tmp_losses'].items():
-                        steps, values = self.training_context['tmp_losses'].get_series(k)
-
-                        if len(steps)>0:
-                            values =np.mean(to_numpy(values))
-                            self.training_context['losses'].collect(k, self.training_context['steps'], values)
-                    self.training_context['tmp_losses'].reset()
+                    self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
 
-                # ON_BATCH_END
-                self.do_on_batch_end()
-                for callback in self.training_context['callbacks']:
-                    callback.on_batch_end(self.training_context)
 
-                # print batch progresss
-                if is_print_batch_progress:
-                    self.do_on_progress_start()
-                    for callback in self.training_context['callbacks']:
-                        callback.on_progress_start(self.training_context)
+            # self.do_post_loss_calculation()
+            #
+            # for callback in self.callbacks:
+            #     callback.on_loss_calculation_end(self.training_context)
 
-                    self.print_batch_progress(self.training_context['print_batch_progress_frequency'])
+            self.do_pre_optimization_step()
+            self.do_gradient_update(log_gradients and is_collect_data)
 
-                    self.training_context['print_batch_progress_frequency'] = 1
-                    self.do_on_progress_end()
-                    for callback in self.training_context['callbacks']:
-                        callback.on_progress_end(self.training_context)
+            self.training_context['current_lr'] = self.optimizer.lr
+
+            # ON_POSTBACKWARD_CALCULATION
+            self.do_post_gradient_update()
+
+
+            for k, v in self._constraints.items():
+                if self.training_context['stop_update'] == 0 :
+                    v(self._model)
+
+            if log_weights and is_collect_data:
+                if isinstance(self._model,Layer):
+                    self.log_weight(weghts=self._model.weights)
+                elif is_tensor(self._model):
+                    self.log_weight(weghts=self._model)
+
+
+
+            if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and  self.training_context['stop_update']<1 :
+                tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'])
+                if isinstance(tmp_output, (list, tuple)):
+                    for i in range(len(tmp_output)):
+                        self.test_data[self.outputs.key_list[i]] = tmp_output[i]
+                elif 'tensor' in tmp_output.__class__.__name__.lower():
+                    self.test_data[self.outputs.key_list[0]] = tmp_output
                 else:
-                    self.training_context['print_batch_progress_frequency'] += 1
+                    self.test_data[self.outputs.key_list[0]] = tmp_output
 
-                if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0:
-                    verbose=[]
-                    for k in self.training_context['out_sample_metrics'].get_keys():
-                        test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
-                        metric_value= test_values[-1]
-                        history_metric_value=np.array(test_values).mean()
 
-                        verbose.append('{0}: {1}'.format(k, adaptive_format(metric_value)))
-                    print(self.training_context['model_name'] + ': out-of-sample evaluation: ',','.join(verbose))
+
+
+            # ON_EVALUATION_START
+            self.do_on_metrics_evaluation_start()
+            for callback in self.training_context['callbacks']:
+                callback.on_metrics_evaluation_start(self.training_context)
+
+
+            for k, v in self._metrics.items():
+                collect_history =not (getattr(v,'print_only') if  hasattr(v,'print_only') else False)
+                if collect_history:
+                    self.training_context['metrics'].regist(k)
+                self.training_context['tmp_metrics'].regist(k)
+
+                this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
+                self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
+
+
+                if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 :
+                    this_out_metric = try_map_args_and_call(v, self.test_data , self.training_context['data_feed'])
+                    self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
+
+            # ON_EVALUATION_END
+            self.do_on_metrics_evaluation_end()
+            for callback in self.training_context['callbacks']:
+                callback.on_metrics_evaluation_end(self.training_context)
+
+            #callback's metric can keep in epoch_metric_history
+
+
+            if is_collect_data:
+                #aggregate tmp data and move to metrics history
+                for k, v in self.training_context['tmp_metrics'].items():
+                    steps,values=self.training_context['tmp_metrics'].get_series(k)
+
+                    #check
+                    if len(steps) > 0:
+                        values = np.mean(to_numpy(values))
+                        self.training_context['metrics'].collect(k, self.training_context['steps'], values)
+                self.training_context['tmp_metrics'].reset()
+
+                for k, v in self.training_context['tmp_losses'].items():
+                    steps, values = self.training_context['tmp_losses'].get_series(k)
+
+                    if len(steps)>0:
+                        values =np.mean(to_numpy(values))
+                        self.training_context['losses'].collect(k, self.training_context['steps'], values)
+                self.training_context['tmp_losses'].reset()
+
+
+            # ON_BATCH_END
+            self.training_context['current_loss'] =to_tensor(0.0,requires_grad=True)
+            self.do_on_batch_end()
+            for callback in self.training_context['callbacks']:
+                callback.on_batch_end(self.training_context)
+
+            # print batch progresss
+            if is_print_batch_progress:
+                self.do_on_progress_start()
+                for callback in self.training_context['callbacks']:
+                    callback.on_progress_start(self.training_context)
+
+                self.print_batch_progress(self.training_context['print_batch_progress_frequency'])
+
+                self.training_context['print_batch_progress_frequency'] = 1
+                self.do_on_progress_end()
+                for callback in self.training_context['callbacks']:
+                    callback.on_progress_end(self.training_context)
+            else:
+                self.training_context['print_batch_progress_frequency'] += 1
+
+            if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0:
+                verbose=[]
+                for k in self.training_context['out_sample_metrics'].get_keys():
+                    test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
+                    metric_value= test_values[-1]
+                    history_metric_value=np.array(test_values).mean()
+
+                    verbose.append('{0}: {1}'.format(k, adaptive_format(metric_value)))
+                print(self.training_context['model_name'] + ': out-of-sample evaluation: ',','.join(verbose))
             #self.training_context['steps'] += 1
+
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
                 self.do_on_epoch_end()
                 batch_steps,batch_values=self.training_context['losses'].get_series('total_losses')
