@@ -715,7 +715,7 @@ class TextSequenceDataProvider(object):
         if text_data in text2indexdict:
             return text2indexdict[text_data]
         else:
-            return text2indexdict['<unk/>']
+            return text2indexdict['[UNK]']
 
     def index2label(self, idx: int):
         index2textdict = None
@@ -738,7 +738,7 @@ class TextSequenceDataProvider(object):
         if idx in index2textdict:
             return index2textdict[idx]
         else:
-            return '<unk/>'
+            return '[UNK]'
 
     def label2index(self, text_data: str):
         text2indexdict = None
@@ -762,7 +762,7 @@ class TextSequenceDataProvider(object):
         if text_data in text2indexdict:
             return text2indexdict[text_data]
         else:
-            return text2indexdict['<unk/>']
+            return text2indexdict['[UNK]']
 
     @property
     def vocabs(self):
