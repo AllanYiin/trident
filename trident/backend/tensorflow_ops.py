@@ -11,7 +11,7 @@ from types import MethodType
 import random
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.ops import state_ops
+from tensorflow.python.ops import state_ops, sparse_ops
 from tensorflow.python.training import moving_averages
 from tensorflow.python.eager import core as _core
 from tensorflow.python.eager import execute as _execute
@@ -21,6 +21,7 @@ from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
 
 from tensorflow.python.ops import math_ops
+
 from trident.backend.common import dtype as Dtype
 
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
@@ -34,11 +35,12 @@ __all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy'
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu','crelu',  'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse','index_select',
+           'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse','index_select',
            'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_crossentropy']
 
+ctx=get_session()
 Tensor=tf.Tensor
 FLOAT32MAX=np.finfo(float).max
 FLOAT32MIN=np.finfo(float).min
@@ -285,6 +287,13 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         dtype=float32)>
 
     """
+    if device is None:
+        device=ctx.device
+
+    if  'cuda' in device.lower() or 'gpu' in device.lower():
+        device='/gpu:0'
+    else:
+        device="/cpu:0"
     input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
@@ -307,7 +316,16 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
                 return tf.identity(x)
         else:
             return None
+    elif isinstance(x, np.ndarray):
+        npdtype = x.dtype
 
+        if 'int' in str(npdtype):
+            with tf.device(device):
+                x=tf.convert_to_tensor(x, dtype=tf.int64)
+        else:
+            with tf.device(device):
+                x = tf.convert_to_tensor(x, dtype=tf.float32)
+        return x
     else:
         with tf.device(device):
             return tf.convert_to_tensor(x, dtype=dtype)
@@ -389,6 +407,7 @@ def int_shape(x):
 
 
 
+
 def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->TensorShape:
     """Get tensor shape information ten convert to TensorShape
 
@@ -405,16 +424,21 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
         TensorShape([None, 64, 32, 32])
 
     """
-    if isinstance(x, numbers.Number):
-        return TensorShape((None,))
-    if need_exclude_batch_axis and is_singleton == False:
-        shp = list(int_shape(x))
-        shp[0] = None
+    if isinstance(x,numbers.Number) or (is_tensor(x) and ndim(x)==0):
+        return TensorShape([None])
+    if need_exclude_batch_axis and is_singleton==False:
+        shp=list(int_shape(x))
+        if len(shp)==0:
+            print('')
+        shp[0]=None
         return TensorShape(shp)
-    elif need_exclude_batch_axis and is_singleton == True:
-        return TensorShape(list((None,) + int_shape(x)))
+    elif need_exclude_batch_axis and is_singleton==True:
+        return TensorShape([None]+list(int_shape(x)))
     else:
         return TensorShape(int_shape(x))
+
+
+
 
 
 def is_sparse(x):
@@ -1022,17 +1046,20 @@ def dot(x, y):
 
 
     """
-
+    need_squeeze=False
+    # if ndim(x)<=2 and ndim(y)<=2:
+    #     y=expand_dims(y,-1)
+    #     need_squeeze=True
     if ndim(x) is not None and (ndim(x) > 2 or ndim(y) > 2):
         x_shape = []
-        for i, s in zip(int_shape(x), tf.unstack(tf.shape(x))):
+        for i, s in zip(int_shape(x), array_ops.unstack(array_ops.shape(x))):
             if i is not None:
                 x_shape.append(i)
             else:
                 x_shape.append(s)
         x_shape = tuple(x_shape)
         y_shape = []
-        for i, s in zip(int_shape(y), tf.unstack(tf.shape(y))):
+        for i, s in zip(int_shape(y), array_ops.unstack(array_ops.shape(y))):
             if i is not None:
                 y_shape.append(i)
             else:
@@ -1040,13 +1067,18 @@ def dot(x, y):
         y_shape = tuple(y_shape)
         y_permute_dim = list(range(ndim(y)))
         y_permute_dim = [y_permute_dim.pop(-2)] + y_permute_dim
-        xt = tf.reshape(x, [-1, x_shape[-1]])
-        yt = tf.reshape(tf.transpose(y, perm=y_permute_dim), [y_shape[-2], -1])
-        return tf.reshape(tf.matmul(xt, yt), x_shape[:-1] + y_shape[:-2] + y_shape[-1:])
+        xt = array_ops.reshape(x, [-1, x_shape[-1]])
+        yt = array_ops.reshape(
+            array_ops.transpose(y, perm=y_permute_dim), [y_shape[-2], -1])
+        result=array_ops.reshape(
+            math_ops.matmul(xt, yt), x_shape[:-1] + y_shape[:-2] + y_shape[-1:])
+        if need_squeeze:
+            result=squeeze(result,-1)
+        return result
     if is_sparse(x):
-        out = tf.sparse.sparse_dense_matmul(x, y)
+        out = sparse_ops.sparse_tensor_dense_matmul(x, y)
     else:
-        out = tf.matmul(x, y)
+        out = math_ops.matmul(x, y)
     return out
 
 @numpy_compatible
@@ -2485,6 +2517,21 @@ def lecun_tanh(x:Tensor,name='lecun_tanh'):
 def soft_plus(x:Tensor,name='soft_plus'):
     return tf.nn.softplus(x)
 
+
+@numpy_compatible
+def square_plus(x):
+    """
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+        (Tensor): output tensor and have same shape with x.
+
+
+    """
+    return  (x+tf.math.sqrt(x**2+4))/2.0
+
 @numpy_compatible
 def hard_sigmoid(x:Tensor,name='hard_sigmoid'):
     """Hard sigmoid Activation Function.
@@ -3371,7 +3418,7 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=None):
         return t
 
 @numpy_compatible
-def reverse(x, axis):
+def reverse(x, axis=-1):
   """Reverse a tensor along the specified axes.
 
   Arguments:
@@ -3382,7 +3429,7 @@ def reverse(x, axis):
   Returns:
       A tensor.
   """
-  if isinstance(axis, int):
+  if isinstance(axis, numbers.Integral):
     axis = [axis]
   return array_ops.reverse(x, axis)
 
@@ -4063,6 +4110,7 @@ _FUN_NAMES = [
     ('lecun_tanh', lecun_tanh),
     ('soft_sign', soft_sign),
     ('soft_plus', soft_plus),
+    ('square_plus', square_plus),
     ('hard_tanh', hard_tanh),
     ('logit', logit),
     ('log_log', log_log),
