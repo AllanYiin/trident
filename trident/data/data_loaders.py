@@ -296,7 +296,7 @@ def load_birdsnap(dataset_name='birdsnap', kind='train', is_flatten=None, is_one
     return (images, labels)
 
 
-def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',section_delimiter='\n\n',sequence_start_at='random',is_onehot=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False,**kwargs):
+def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',section_delimiter='\n',sequence_start_at='section_start',is_onehot=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False,**kwargs):
     valid_sequence_start_at=['random','slide','follow_up','section_start']
     valid_mode=['next_word','skip_gram', 'cbow','onehot','1to1_seq2seq']
     if mode not in valid_mode:
@@ -308,34 +308,21 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
     if filname is not None:
         with io.open(filname, encoding=encoding) as f:
             original_corpus = f.read().lower()
-            if unit == 'char':
-                corpus = list(original_corpus)
-            elif unit == 'word':
-                corpus = original_corpus.split(' \t')
+            corpus=original_corpus.splitlines()
+            corpus=[item for item in corpus if len(item)>0]
+
     if data is not None:
         if isinstance(data,str):
-            if unit == 'char':
-                corpus = list(data)
-            elif unit == 'word':
-                corpus = data.split(' \t')
+            corpus = data.splitlines()
         elif hasattr(data,"__iter__"):
-            corpus= '\n\n'.join(data)
-            if unit == 'char':
-                corpus = list(corpus)
-            elif unit == 'word':
-                corpus = corpus.replace('\n\n',' \n \n ').split(' \t')
+            corpus=data
+
     if label is not None:
-        if isinstance(label,str):
-            if unit == 'char':
-                output_corpus = list(label)
-            elif unit == 'word':
-                output_corpus = label.split(' \t')
-        elif hasattr(label,"__iter__"):
-            output_corpus = '\n\n'.join(label)
-            if unit == 'char':
-                output_corpus = list(output_corpus)
-            elif unit == 'word':
-                output_corpus = output_corpus.replace('\n\n',' \n \n ').split(' \t')
+        if isinstance(label, str):
+            output_corpus = data.splitlines()
+        elif hasattr(label, "__iter__"):
+            output_corpus = data
+
     dataprovider=None
     if mode=='next_word':
         corpus1=copy.deepcopy(corpus)
@@ -360,7 +347,7 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
         else:
             raise  ValueError('data ({0}) and label({1}) should have the same length in 1to1_seq2seq mide.'.format(len(corpus),len(output_corpus)))
     if return_corpus:
-        return dataprovider,original_corpus
+        return dataprovider,corpus
     else:
         return dataprovider
 
