@@ -683,8 +683,8 @@ class RandomNoiseDataset(Dataset):
 #
 #             chars.insert(0, '<start/>')
 #             chars.insert(1, '<end/>')
-#             chars.insert(2, '<unk/>')
-#             chars.insert(3, '<pad/>')
+#             chars.insert(2, '[UNK]')
+#             chars.insert(3, '[PAD]')
 #             print('total distinct chars:', len(chars))
 #             self.vocabs = chars
 #             self.text2index = dict((c, i) for i, c in enumerate(chars))
@@ -695,7 +695,7 @@ class RandomNoiseDataset(Dataset):
 #
 #         self.sequence_offset = sequence_offset
 #         self.dtype = np.float32 if self.is_onehot else np.int64
-#         self.text_transform_funcs = []
+#         self.transform_funcs = []
 #         self.is_paired_process = False
 #         self.sequence_length = sequence_length
 #
@@ -724,7 +724,7 @@ class RandomNoiseDataset(Dataset):
 #                     if 0 <= index + self.sequence_offset < len(seq_base):
 #                         sequencetext.append(seq_base[index + self.sequence_offset])
 #                     else:
-#                         sequencetext.append('<pad/>')
+#                         sequencetext.append('[PAD]')
 #
 #             elif self.sequence_start_at == 'section_start':
 #                 sectiontext = seq_base[index]
@@ -732,37 +732,37 @@ class RandomNoiseDataset(Dataset):
 #                     if 0 <= index + self.sequence_offset < len(seq_base):
 #                         sequencetext.append(seq_base[index + self.sequence_offset])
 #                     else:
-#                         sequencetext.append('<pad/>')
+#                         sequencetext.append('[PAD]')
 #
 #         if len(sequencetext) != self.sequence_length:
-#             sequencetext.extend(['<pad/>'] * (self.sequence_length - len(sequencetext)))
+#             sequencetext.extend(['[PAD]'] * (self.sequence_length - len(sequencetext)))
 #         arr = None
 #         if self.is_onehot:
 #             arr = np.zeros((self.sequence_length, len(self.text2index)))
 #             for i in range(self.sequence_length):
 #                 this_char = sequencetext[i]
 #                 if i + 1 < self.sequence_length and ''.join(sequencetext[i:i + 2]) == '\n\n':
-#                     arr[i:, self.text2index['<pad/>']] = 1
+#                     arr[i:, self.text2index['[PAD]']] = 1
 #                     break
 #                 elif this_char in self.text2index:
 #                     arr[i, self.text2index[this_char]] = 1
 #                 else:
-#                     arr[i, self.text2index['<unk/>']] = 1
+#                     arr[i, self.text2index['[UNK]']] = 1
 #             arr = arr.astype(np.float32)
 #         else:
 #             arr = np.zeros((self.sequence_length))
 #             for i in range(self.sequence_length):
 #                 this_char = sequencetext[i]
 #                 if i + 1 < self.sequence_length and ''.join(sequencetext[i:i + 2]) == '\n\n':
-#                     arr[i:] = self.text2index['<pad/>']
+#                     arr[i:] = self.text2index['[PAD]']
 #                     break
 #                 elif this_char in self.text2index:
 #                     arr[i] = self.text2index[this_char]
 #                 else:
-#                     arr[i] = self.text2index['<unk/>']
+#                     arr[i] = self.text2index['[UNK]']
 #             arr = arr.astype(np.int64)
 #
-#         if self.is_paired_process == False and len(self.text_transform_funcs) == 0:
+#         if self.is_paired_process == False and len(self.transform_funcs) == 0:
 #             return text_backend_adaption(arr)
 #         elif not self.is_paired_process:
 #             return self.text_transform(arr)
@@ -783,22 +783,22 @@ class RandomNoiseDataset(Dataset):
 #         return self.data_transform(text_data)
 #
 #     @property
-#     def reverse_text_transform_funcs(self):
+#     def reverse_transform_funcs(self):
 #         return_list = []
 #         return_list.append(reverse_text_backend_adaption)
-#         for i in range(len(self.text_transform_funcs)):
-#             fn = self.text_transform_funcs[-1 - i]
+#         for i in range(len(self.transform_funcs)):
+#             fn = self.transform_funcs[-1 - i]
 #             # if fn.__qualname__ == 'normalize.<locals>.text_op':
 #             #     return_list.append(unnormalize(fn.mean, fn.std))
 #         # return_list.append(array2image)
 #         return return_list
 #
 #     def reverse_text_transform(self, text_data):
-#         if len(self.reverse_text_transform_funcs) == 0:
+#         if len(self.reverse_transform_funcs) == 0:
 #             return reverse_text_backend_adaption(text_data)
 #         if isinstance(text_data, np.ndarray):
 #             # if img_data.ndim>=2:
-#             for fc in self.reverse_text_transform_funcs:
+#             for fc in self.reverse_transform_funcs:
 #                 text_data = fc(text_data)
 #             text_data = reverse_text_backend_adaption(text_data)
 #
@@ -827,7 +827,7 @@ class TextSequenceDataset(Dataset):
         self.add_corpus(corpus)
         self.sequence_offset = sequence_offset
         self.dtype = np.float32 if self.is_onehot else np.int64
-        self.text_transform_funcs = []
+
         self.is_paired_process = False
         self.sequence_length = sequence_length
 
@@ -835,12 +835,12 @@ class TextSequenceDataset(Dataset):
         if hasattr(corpus, "__iter__"):
             self.items.extend(corpus)
             if self.vocabs is None:
-                chars = sorted(list(set(''.join(corpus))))
-
-                chars.insert(0, '<start/>')
-                chars.insert(1, '<end/>')
-                chars.insert(2, '<unk/>')
-                chars.insert(3, '<pad/>')
+                chars = sorted(list(set( ''.join(corpus ))))
+                chars.insert(0, '[CLS]')
+                chars.insert(1, '[SEP]')
+                chars.insert(2, '[UNK]')
+                chars.insert(3, '[PAD]')
+                chars.insert(4, '[MASK]')
                 print('total distinct chars:', len(chars))
                 self.vocabs = chars
                 self.text2index = dict((c, i) for i, c in enumerate(chars))
@@ -886,21 +886,25 @@ class TextSequenceDataset(Dataset):
             if self.sequence_start_at == 'random':
                 for k,v in self.length_index.item_list:
                     if v>=index:
-                        last_v = self.length_index[k - 1]
+                        last_v = self.length_index[k - 1] if k>0 else 0
                         sectiontext = list(self.items[k])
-                        sectiontext.insert(0, '<start/>')
-                        sectiontext.append('<end/>')
+                        sectiontext.insert(0, '[CLS]')
+                        sectiontext.append('[SEP]')
+                        if k+1<len( self.length_index):
+                            sectiontext.append('[CLS]')
+                            sectiontext.extend(list(self.items[k+1]))
+                            sectiontext.append('[SEP]')
                         idx=index-last_v
-                        sequencetext =sectiontext[self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length, self.len())]
+                        sequencetext =sectiontext[idx+self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length, self.len())]
                         break
             elif self.sequence_start_at == 'section_start':
                 sectiontext = list(self.items[index])
-                sectiontext.insert(0, '<start/>')
-                sectiontext.append('<end/>')
+                sectiontext.insert(0, '[CLS]')
+                sectiontext.append('[SEP]')
                 sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length, self.len())]
         return sequencetext
 
-        if self.is_paired_process == False and len(self.text_transform_funcs) == 0:
+        if self.is_paired_process == False and len(self.transform_funcs) == 0:
             return text_backend_adaption(arr)
         elif not self.is_paired_process:
             return self.text_transform(arr)
@@ -912,10 +916,10 @@ class TextSequenceDataset(Dataset):
     def data_transform(self, text_data):
         if len(self.transform_funcs) == 0:
             pass
-        if isinstance(text_data, np.ndarray):
-            for fc in self.transform_funcs:
-                text_data = fc(text_data, spec=self.element_spec)
-            #text_data = text_backend_adaption(text_data)
+
+        for fc in self.transform_funcs:
+            text_data = fc(text_data, spec=self.element_spec)
+        #text_data = text_backend_adaption(text_data)
 
         arr = None
         if self.is_onehot:
@@ -926,9 +930,9 @@ class TextSequenceDataset(Dataset):
                     if this_char in self.text2index:
                         arr[i, self.text2index[this_char]] = 1
                     else:
-                        arr[i, self.text2index['<unk/>']] = 1
+                        arr[i, self.text2index['[UNK]']] = 1
                 else:
-                    arr[i:, self.text2index['<pad/>']] = 1
+                    arr[i:, self.text2index['[PAD]']] = 1
             arr = arr.astype(np.float32)
         else:
             arr = np.zeros((self.sequence_length))
@@ -938,9 +942,9 @@ class TextSequenceDataset(Dataset):
                     if this_char in self.text2index:
                         arr[i] = self.text2index[this_char]
                     else:
-                        arr[i] = self.text2index['<unk/>']
+                        arr[i] = self.text2index['[UNK]']
                 else:
-                    arr[i] = self.text2index['<pad/>']
+                    arr[i] = self.text2index['[PAD]']
             arr = arr.astype(np.int64)
         return arr
 
@@ -952,22 +956,22 @@ class TextSequenceDataset(Dataset):
         return self.data_transform(text_data)
 
     @property
-    def reverse_text_transform_funcs(self):
+    def reverse_transform_funcs(self):
         return_list = []
         return_list.append(reverse_text_backend_adaption)
-        for i in range(len(self.text_transform_funcs)):
-            fn = self.text_transform_funcs[-1 - i]
+        for i in range(len(self.transform_funcs)):
+            fn = self.transform_funcs[-1 - i]
             # if fn.__qualname__ == 'normalize.<locals>.text_op':
             #     return_list.append(unnormalize(fn.mean, fn.std))
         # return_list.append(array2image)
         return return_list
 
     def reverse_text_transform(self, text_data):
-        if len(self.reverse_text_transform_funcs) == 0:
+        if len(self.reverse_transform_funcs) == 0:
             return reverse_text_backend_adaption(text_data)
         if isinstance(text_data, np.ndarray):
             # if img_data.ndim>=2:
-            for fc in self.reverse_text_transform_funcs:
+            for fc in self.reverse_transform_funcs:
                 text_data = fc(text_data)
             text_data = reverse_text_backend_adaption(text_data)
 
@@ -977,7 +981,7 @@ class TextSequenceDataset(Dataset):
 
 
 class Iterator(object):
-    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, minibatch_size=8, mode='tuple', is_shuffe=True, buffer_size=None, workers=2, **kwargs):
+    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, batch_size=8, mode='tuple', is_shuffe=True, buffer_size=None, workers=2, **kwargs):
         self.is_paired_process = False
         self._data = None
         self._label = None
@@ -1040,13 +1044,13 @@ class Iterator(object):
                     ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
                     self.data_template[ds.element_spec] = None
 
-        self._minibatch_size = minibatch_size
+        self._batch_size = batch_size
         self.paired_transform_funcs = []
 
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         if buffer_size is None:
-            buffer_size = 8 * minibatch_size
+            buffer_size = 8 * batch_size
         self.buffer_size = buffer_size
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)
         self.sample_filter = None
@@ -1069,7 +1073,7 @@ class Iterator(object):
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
 
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1086,7 +1090,7 @@ class Iterator(object):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1099,7 +1103,7 @@ class Iterator(object):
         self._unpair = value
 
 
-        self.batch_sampler = BatchSampler(self, self._minibatch_size,is_shuffle=self.is_shuffe,  drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffe,  drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1111,13 +1115,13 @@ class Iterator(object):
             return None
 
     @property
-    def minibatch_size(self):
-        return self._minibatch_size
+    def batch_size(self):
+        return self._batch_size
 
-    @minibatch_size.setter
-    def minibatch_size(self, value):
-        self._minibatch_size = value
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+    @batch_size.setter
+    def batch_size(self, value):
+        self._batch_size = value
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 8 * value
@@ -1137,7 +1141,7 @@ class Iterator(object):
                 spec = ds.element_spec
                 self.data_template[spec] = None
                 self._signature.outputs[ds.symbol] = spec
-            self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+            self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
             self._sample_iter = iter(self.batch_sampler)
             return self._signature
 
@@ -1184,10 +1188,10 @@ class Iterator(object):
         results=self[0]
         self._signature = Signature(name='data_provider')
 
-        for ds, result in zip(datasets, results):
-            spec = TensorSpec.tensor_to_spec(result, object_type=ds.object_type,need_exclude_batch_axis=True,is_singleton=True, name=ds.symbol)
+        for ds, result,value in zip(datasets, results.key_list,results.value_list):
+            spec = TensorSpec.tensor_to_spec(value, object_type=ds.object_type,need_exclude_batch_axis=True,is_singleton=True, name=ds.symbol)
             self._signature.outputs[ds.symbol] = spec
-        self.batch_sampler = BatchSampler(self, self._minibatch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         return self._signature
 
@@ -1195,7 +1199,7 @@ class Iterator(object):
 
     def print_statistics(self):
         print('avg. process time: {0:.5f}'.format(self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
-        print('avg. batch time: {0:.5f}'.format(self._minibatch_size * self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
+        print('avg. batch time: {0:.5f}'.format(self._batch_size * self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
 
     def __getitem__(self, index: int):
         start_time = time.time()
@@ -1304,8 +1308,8 @@ class MetricIterator(Iterator):
 
     """
 
-    def __init__(self, data=None, label=None, minibatch_size=8):
-        super().__init__(data, minibatch_size)
+    def __init__(self, data=None, label=None, batch_size=8):
+        super().__init__(data, batch_size)
         self.is_paired_process = False
         self.signature = None
         self._data = ImageDataset()
@@ -1323,9 +1327,9 @@ class MetricIterator(Iterator):
         self.pass_cnt = 0
         self.pass_time_spend = 0
 
-        self._minibatch_size = minibatch_size
+        self._batch_size = batch_size
         self.paired_transform_funcs = []
-        self.batch_sampler = BatchSampler(self, self._minibatch_size,is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffe, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 10
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)
