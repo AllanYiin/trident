@@ -296,7 +296,7 @@ def load_birdsnap(dataset_name='birdsnap', kind='train', is_flatten=None, is_one
     return (images, labels)
 
 
-def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',section_delimiter='\n',sequence_start_at='section_start',is_onehot=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False,**kwargs):
+def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',section_delimiter='\n\n',sequence_start_at='section_start',is_onehot=False,encoding='utf-8-sig',sequence_length=64, return_corpus=False,**kwargs):
     valid_sequence_start_at=['random','slide','follow_up','section_start']
     valid_mode=['next_word','skip_gram', 'cbow','onehot','1to1_seq2seq']
     if mode not in valid_mode:
@@ -307,21 +307,41 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
     output_corpus=None
     if filname is not None:
         with io.open(filname, encoding=encoding) as f:
-            original_corpus = f.read().lower()
+            original_corpus = f.read().lower().replace('\u3000' ,' ')
             corpus=original_corpus.splitlines()
-            corpus=[item for item in corpus if len(item)>0]
+            new_corpus=[]
+            for item in corpus:
+                if len(item) > 0:
+                    new_corpus.append(item)
+                else:
+                    new_corpus[-1]=new_corpus[-1]+section_delimiter
+            corpus=new_corpus
 
     if data is not None:
         if isinstance(data,str):
             corpus = data.splitlines()
         elif hasattr(data,"__iter__"):
             corpus=data
+        new_corpus = []
+        for item in corpus:
+            if len(item) > 0:
+                new_corpus.append(item)
+            else:
+                new_corpus[-1] = new_corpus[-1] + section_delimiter
+        corpus = new_corpus
 
     if label is not None:
         if isinstance(label, str):
             output_corpus = data.splitlines()
         elif hasattr(label, "__iter__"):
             output_corpus = data
+        new_corpus = []
+        for item in output_corpus:
+            if len(item) > 0:
+                new_corpus.append(item)
+            else:
+                new_corpus[-1] = new_corpus[-1] +section_delimiter
+        output_corpus = new_corpus
 
     dataprovider=None
     if mode=='next_word':
@@ -330,20 +350,20 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
         data_seq=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_onehot=is_onehot,symbol='input',sequence_offset=0,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         labels_seq =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_onehot=is_onehot,symbol='label',sequence_offset=1,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         traindata=Iterator(data=data_seq,label=labels_seq)
-        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata)
+        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata,sequence_length=sequence_length)
     elif mode=='skip_gram':
         corpus1 = copy.deepcopy(corpus)
         corpus2 = copy.deepcopy(corpus)
         data_seq = TextSequenceDataset(corpus1, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at)
         labels_seq = TextSequenceDataset(corpus2, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=[-1,1], sequence_start_at=sequence_start_at)
         traindata = Iterator(data=data_seq, label=labels_seq)
-        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0], traindata=traindata)
+        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0], traindata=traindata,sequence_length=sequence_length)
     elif mode == '1to1_seq2seq':
         if len(corpus)==len(output_corpus):
             data_seq = TextSequenceDataset(corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
             labels_seq = TextSequenceDataset(output_corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.sequence_label)
             traindata = Iterator(data=data_seq, label=labels_seq)
-            dataprovider = TextSequenceDataProvider('1to1_seq2seq', traindata=traindata)
+            dataprovider = TextSequenceDataProvider('1to1_seq2seq', traindata=traindata,sequence_length=sequence_length)
         else:
             raise  ValueError('data ({0}) and label({1}) should have the same length in 1to1_seq2seq mide.'.format(len(corpus),len(output_corpus)))
     if return_corpus:

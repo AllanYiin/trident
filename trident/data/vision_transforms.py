@@ -147,24 +147,24 @@ class Resize(VisionTransform):
         h, w, th, tw,pad_vert,pad_horz = self._shape_info
 
         if not self.keep_aspect:
-            return cv2.resize(image, (tw,th), interpolation=self.interpolation)
+            return cv2.resize(image.copy(), (tw,th), interpolation=self.interpolation)
         else:
 
-            image=cv2.resize(image, (tw,th), interpolation=self.interpolation)
-            shp=list(int_shape(image))
+            resized_image=cv2.resize(image.copy(), (tw,th), interpolation=self.interpolation)
+            shp=list(int_shape(resized_image))
             shp[:2] = self.output_size
 
             output=np.zeros(shp)
             if self.align_corner:
-                if ndim(image)== ndim(output)==3 and int_shape(image)[-1]==0:
-                    output[:th,:tw,0]=image
-                elif  ndim(image)== ndim(output)==3 and int_shape(image)[-1]==3:
-                    output[:th, :tw, :] = image
+                if ndim(resized_image)==2 :
+                    output[:th,:tw]=resized_image
+                elif  ndim(resized_image) == 3 :
+                    output[:th, :tw, :] = resized_image
             else:
-                if ndim(image) == 2 and ndim(output) == 3:
-                    output[pad_vert//2:th+pad_vert//2, pad_horz//2:tw+pad_horz//2,0] = image
-                elif ndim(image) == 3 and ndim(output) == 3:
-                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2,:] = image
+                if ndim(resized_image) == 2 :
+                    output[pad_vert//2:th+pad_vert//2, pad_horz//2:tw+pad_horz//2] = resized_image
+                elif ndim(resized_image) == 3 :
+                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2,:] = resized_image
             return output
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -228,73 +228,65 @@ class Resize(VisionTransform):
 
 
 class ShortestEdgeResize(VisionTransform):
-    def __init__(
-        self,
-        min_size,
-        max_size,
-        sample_style="range",
-        interpolation=cv2.INTER_LANCZOS4,
-        *,
-        order=None
-    ):
-        super().__init__(order)
+    def __init__(self,output_size,keep_aspect=True,interpolation=cv2.INTER_LANCZOS4,name='short_edge_resize',**kwargs):
+        super().__init__(name)
         self.is_spatial = True
-        if sample_style not in ("range", "choice"):
-            raise NotImplementedError(
-                "{} is unsupported sample style".format(sample_style)
-            )
-        self.sample_style = sample_style
-        if isinstance(min_size, int):
-            min_size = (min_size, min_size)
-        self.min_size = min_size
-        self.max_size = max_size
+        self.output_size=output_size
+        self.keep_aspect=keep_aspect
+
         self.interpolation = interpolation
 
-    def apply(self, input: Tuple,spec:TensorSpec):
-
-        return super().apply(input,spec)
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
 
     def _apply_image(self, image,spec:TensorSpec):
         if  self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        h, w, th, tw = self._shape_info
-        if h == th and w == tw:
+        h, w, th, tw, eh, ew,offsetx,offsety = self._shape_info
+        if h == eh and w == ew:
             return image
-        return cv2.resize(image, (tw,th), self.interpolation)
+        image=cv2.resize(image, (tw,th), self.interpolation)
+        if ndim(image)==2:
+            return image.copy()[offsety:offsety+eh,offsetx:offsetx+ew]
+        elif ndim(image)==3:
+            return image.copy()[offsety:offsety+eh,offsetx:offsetx+ew,:]
+
 
     def _apply_coords(self, coords,spec:TensorSpec):
-        h, w, th, tw = self._shape_info
-        if h == th and w == tw:
+        h, w, th, tw, eh, ew,offsetx,offsety = self._shape_info
+        if h == eh and w == ew:
             return coords
-        coords[:, 0] = coords[:, 0] * (tw / w)
-        coords[:, 1] = coords[:, 1] * (th / h)
+        coords[:, 0] = clip(coords[:, 0] *self.scale-offsetx,0,ew)
+        coords[:, 1] = clip(coords[:, 1] *self.scale-offsety,0,eh)
         return coords
 
     def _apply_mask(self, mask,spec:TensorSpec):
-        h, w, th, tw = self._shape_info
-        if h == th and w == tw:
+        h, w, th, tw, eh, ew, offsetx, offsety = self._shape_info
+        if h == eh and w == ew:
             return mask
-        return cv2.resize(mask,(tw,th), cv2.INTER_NEAREST)
+        mask = cv2.resize(mask, (tw, th), cv2.INTER_NEAREST)
+        if ndim(mask) == 2:
+            return mask.copy()[offsety:offsety + eh, offsetx:offsetx + ew]
+        elif ndim(mask) == 3:
+            return mask.copy()[offsety:offsety + eh, offsetx:offsetx + ew, :]
 
     def _get_shape(self, image):
+        if isinstance(self.output_size, int):
+            self.output_size = (self.output_size, self.output_size)
         h, w = image.shape[:2]
-        if self.sample_style == "range":
-            size = np.random.randint(self.min_size[0], self.min_size[1] + 1)
-        else:
-            size = np.random.choice(self.min_size)
+        eh,ew=self.output_size
 
-        scale = size / min(h, w)
-        if h < w:
-            th, tw = size, scale * w
-        else:
-            th, tw = scale * h, size
-        if max(th, tw) > self.max_size:
-            scale = self.max_size / max(th, tw)
-            th = th * scale
-            tw = tw * scale
-        th = int(round(th))
-        tw = int(round(tw))
-        return h, w, th, tw
+        self.scale = builtins.max(eh/h,ew/w)
+        th = int(builtins.round(h * self.scale, 0))
+        tw = int(builtins.round(w * self.scale, 0))
+
+        offsetx=int(random.randint(0,int(tw-ew)) if tw-ew>=1 else 0)
+        offsety = int(random.randint(0, int(th - eh)) if th-eh>=1 else 0)
+        return h, w, th, tw, eh, ew,offsetx,offsety
+
+
+
+
 
 
 class Rescale(VisionTransform):
@@ -437,8 +429,8 @@ class RandomCenterCrop(VisionTransform):
         if  self._shape_info is None:
             self._shape_info = self._get_shape(image)
         x, y, th, tw, eh, ew,h,w = self._shape_info
-        image=cv2.resize(image, (tw,th), interpolation=self.interpolation)
-        crop_image = image[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
+        resized_image=cv2.resize(image.copy(), (tw,th), interpolation=self.interpolation)
+        crop_image = resized_image[y: builtins.min(y + eh, th), x:builtins.min( x + ew,tw)]
         if crop_image.shape[0]<eh or crop_image.shape[1]<ew:
             background=np.zeros((eh,ew,1 if spec is not None and spec.object_type==ObjectType.gray else 3))
             if ndim(crop_image)==2:
@@ -741,7 +733,11 @@ class RandomMultiScaleImage(VisionTransform):
         self.resize_funs=[Resize(output_size,True,align_corner=True,interpolation=interpolation),
                           Resize(output_size, True,align_corner=False, interpolation=interpolation),
                           Resize(output_size, False, interpolation=interpolation),
+                          ShortestEdgeResize(output_size=output_size,keep_aspect=True,interpolation=interpolation),
+                          ShortestEdgeResize(output_size=output_size, keep_aspect=True, interpolation=interpolation),
                           RandomRescaleCrop(output_size=output_size,scale_range=scale_range,interpolation=interpolation),
+                          RandomRescaleCrop(output_size=output_size, scale_range=((scale_range[0]+1)/2,(scale_range[1]+1)/2), interpolation=interpolation),
+                          RandomCrop(output_size=output_size),
                           RandomCrop(output_size=output_size),
                           RandomCenterCrop(output_size=output_size,scale_range=scale_range,interpolation=interpolation)]
         if self.keep_aspect:
@@ -1205,7 +1201,7 @@ class ToRGB(VisionTransform):
         if  image.ndim == 3 and int_shape(image)[-1]==1:
             image=image.copy()[:,:,0]
         if image.ndim == 3:
-            return image
+            pass
         elif image.ndim == 2:
             image=cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
         return image
@@ -1497,7 +1493,6 @@ class Lighting(VisionTransform):
 
 
 class CLAHE(VisionTransform):
-
 
     def __init__(self, clipLimit=5,gridsize=8,name='clahe',**kwargs):
         super().__init__(name)

@@ -15,7 +15,7 @@ from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_initializers import *
 
 
-__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','EvoNormB0','EvoNormS0','get_normalization']
+__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','AdaptiveInstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','EvoNormB0','EvoNormS0','get_normalization']
 
 _session = get_session()
 _epsilon = _session.epsilon
@@ -148,7 +148,7 @@ class BatchNorm(Layer):
             return variable
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             self.input_filters= input_shape[self.filter_index]
             ndims = len(input_shape)
             # Convert axis to list and resolve negatives
@@ -454,6 +454,34 @@ class InstanceNorm(GroupNorm):
 
 InstanceNorm2d=InstanceNorm
 InstanceNorm3d=InstanceNorm
+
+
+
+class AdaptiveInstanceNorm(Layer):
+    def __init__(self):
+        super().__init__()
+
+    def mu(self, x):
+        """ Takes a (n,c,h,w) tensor as input and returns the average across
+        it's spatial dimensions as (h,w) tensor [See eq. 5 of paper]"""
+        return tf.reduce_sum(x,(1,2))/(x.shape[1]*x.shape[2])
+
+    def sigma(self, x):
+        """ Takes a (n,c,h,w) tensor as input and returns the standard deviation
+        across it's spatial dimensions as (h,w) tensor [See eq. 6 of paper] Note
+        the permutations are required for broadcasting"""
+        return tf.sqrt((tf.reduce_sum((x.permute([1,2,0,3])-self.mu(x)).permute([1,2,0,3])**2,(1,2))+0.000000023)/(x.shape[1]*x.shape[2]))
+
+    def build(self, input_shape:TensorShape):
+        if not self._built:
+            self._built=True
+    def forward(self, x, y):
+        """ Takes a content embeding x and a style embeding y and changes
+        transforms the mean and standard deviation of the content embedding to
+        that of the style. [See eq. 8 of paper] Note the permutations are
+        required for broadcasting"""
+        return (self.sigma(y)*((x.permute([1,2,0,3])-self.mu(x))/self.sigma(x)) + self.mu(y)).permute([1,2,0,3])
+
 
 
 class LayerNorm(Layer):

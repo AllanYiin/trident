@@ -31,7 +31,7 @@ __all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','ps
 #         return input_tensor.eq(target_tensor).float().mean()
 
 
-# 计算准确度
+
 
 
 
@@ -43,6 +43,8 @@ def accuracy(output, target, topk=1,axis=1,ignore_index=-100, exclude_mask=False
     input_tensor=output.copy().detach()
     target_tensor=target.copy().detach()
     num_classes = int_shape(output)[axis]
+    if len(input_tensor)==0:
+        return to_tensor(0.0)
 
 
     is_logsoftmax = None

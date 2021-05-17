@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import math
 import numbers
+import random
 import warnings
 from typing import Optional, Tuple, overload
 
@@ -15,11 +16,13 @@ from torch._jit_internal import List
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from torch.nn.utils.rnn import PackedSequence
+from trident.layers.pytorch_layers import Embedding, Dense, SoftMax
+
 from trident.backend.pytorch_ops import *
 from  trident.backend.common import *
 from trident.backend.pytorch_backend import Layer, get_device
 
-__all__ = ['RNNBase','RNN','LSTM','GRU']
+__all__ = ['RNNBase','RNN','LSTM','GRU','LSTMDecoder']
 _rnn_impls = {
     'RNN_TANH': _VF.rnn_tanh,
     'RNN_RELU': _VF.rnn_relu,
@@ -458,6 +461,7 @@ class RNN(RNNBase):
 # TODO: remove the overriding implementations for LSTM and GRU when TorchScript
 # support expressing these two modules generally.
 from torch.nn.modules.rnn import LSTM
+
 class LSTM(RNNBase):
     r"""Applies a multi-layer long short-term memory (LSTM) RNN to an input
     sequence.
@@ -563,13 +567,14 @@ class LSTM(RNNBase):
         >>> output, (hn, cn) = rnn(input, (h0, c0))
     """
 
-    def __init__(self, hidden_size,num_layers:int =2,activation=None,stateful=False,use_bias=False,batch_first=False,dropout_rate=0,bidirectional=False,name=None,keep_output=False, in_sequence=True,filter_index=-1, **kwargs):
+    def __init__(self, hidden_size,num_layers:int =2,activation=None,stateful=False,use_bias=False,use_attention=False,attention_size=16,batch_first=False,dropout_rate=0,bidirectional=False,name=None,keep_output=False, in_sequence=True,filter_index=-1, **kwargs):
         super(LSTM, self).__init__(mode='LSTM', hidden_size=hidden_size,
                  num_layers=num_layers, stateful=stateful,use_bias=use_bias, batch_first=batch_first,
                  dropout_rate=dropout_rate, bidirectional=bidirectional,name=name,keep_output=keep_output,in_sequence=in_sequence,filter_index=filter_index)
 
         self.mode = 'LSTM'
-
+        self.use_attention=use_attention
+        self.attention_size=attention_size
         self.hidden_state=None
         self.cell_state=None
 
@@ -586,6 +591,8 @@ class LSTM(RNNBase):
                                 dtype=dtype.float32, requires_grad=False).to(get_device())
         self.hidden_state=zeros
         self.cell_state = zeros
+
+
 
     def clear_state(self):
         self.hidden_state= zeros_like(self.hidden_state,dtype=dtype.float32, requires_grad=False ).to(get_device())
@@ -605,7 +612,19 @@ class LSTM(RNNBase):
             return hx
         return apply_permutation(self.hidden_state, permutation), apply_permutation(self.cell_state, permutation)
 
+    def attention(self, lstm_output):
+        batch_size, sequence_length, channels = int_shape(lstm_output)
+        if not hasattr(self, 'w_omega') or self.w_omega is None:
+            self.w_omega = Parameter(torch.zeros(channels, self.attention_size).to(get_device()))
+            self.u_omega = Parameter(torch.zeros(self.attention_size).to(get_device()))
 
+        output_reshape = reshape(lstm_output, (-1, channels))
+        attn_tanh = torch.tanh(torch.mm(output_reshape, self.w_omega))
+        attn_hidden_layer = torch.mm(attn_tanh, reshape(self.u_omega, [-1, 1]))
+        exps = reshape(torch.exp(attn_hidden_layer), [-1, sequence_length])
+        alphas = exps / reshape(torch.sum(exps, 1), [-1, 1])
+        alphas_reshape = reshape(alphas, [-1, sequence_length, 1])
+        return lstm_output * alphas_reshape
 
     @overload
     @torch._jit_internal._overload_method  # noqa: F811
@@ -619,8 +638,11 @@ class LSTM(RNNBase):
                 ) -> Tuple[PackedSequence, Tuple[Tensor, Tensor]]:  # noqa: F811
         pass
 
-    def forward(self, x, **kwargs):  # noqa: F811
-        orig_input = x
+    def forward(self, *x, **kwargs):  # noqa: F811
+        x=unpack_singleton(x)
+        if isinstance(x,tuple):
+            x,hx=x
+        orig_input =x
         self.flatten_parameters()
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
         if isinstance(orig_input, PackedSequence):
@@ -628,7 +650,7 @@ class LSTM(RNNBase):
             max_batch_size = batch_sizes[0]
             max_batch_size = int(max_batch_size)
         else:
-            if self.batch_first == False:
+            if not self.batch_first:
                 x = x.transpose(1,0)
             batch_sizes = None
             max_batch_size = x.size(0) if self.batch_first else x.size(1)
@@ -639,7 +661,7 @@ class LSTM(RNNBase):
         if self.hidden_state is None or self.cell_state is None or max_batch_size!=int_shape(self.hidden_state)[1]:
             self.initial_state(x)
         else:
-            if self.stateful == False :
+            if not self.stateful:
                 self.clear_state()
             self.hidden_state, self.cell_state = self.permute_hidden((self.hidden_state, self.cell_state), sorted_indices)
 
@@ -657,6 +679,9 @@ class LSTM(RNNBase):
         #hidden = result[1:]
         self.hidden_state=result[1:][0].detach()
         self.cell_state=result[1:][1].detach()
+        if self.use_attention:
+            output = self.attention(output)
+
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
         if isinstance(orig_input, PackedSequence):
             output_packed = PackedSequence(output, batch_sizes, sorted_indices, unsorted_indices)
@@ -664,6 +689,51 @@ class LSTM(RNNBase):
         else:
 
             return output, self.permute_hidden((self.hidden_state, self.cell_state), unsorted_indices)
+
+class LSTMDecoder(Layer):
+    def __init__(self, num_chars, embedding_dim, h_size=512, num_layers=2,sequence_length=128,stateful=True, dropout_rate=0.2,bidirectional=False,use_attention=False,attention_size=16,teacher_forcing_ratio=1):
+        super().__init__()
+        self.teacher_forcing_ratio=teacher_forcing_ratio
+        self.num_chars = num_chars
+        self.embedding_dim=embedding_dim
+        self.h_size = h_size
+        self.num_layers = num_layers
+        self.sequence_length=sequence_length
+        self.embedding = Embedding(embedding_dim=256, num_embeddings=num_chars, sparse=False, norm_type=2, add_noise=True, noise_intensity=0.12)
+        self.lstm = LSTM(hidden_size=h_size, num_layers=num_layers, stateful=stateful, batch_first=False, dropout_rate=dropout_rate, bidirectional=bidirectional, use_attention=use_attention, attention_size=attention_size)
+        self.fc_out =Dense(num_chars,use_bias=False,activation=leaky_relu)
+        self.softmax=SoftMax(axis=-1)
+
+
+    def forward(self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None
+                ) -> Tuple[Tensor, Tuple[Tensor, Tensor]]:  # noqa: F811
+        pass
+
+    def forward(self, *x, **kwargs):  # noqa: F811
+        # input = [batch size]
+        # hidden = [n layers * n directions, batch size, hid dim]
+        # cell = [n layers * n directions, batch size, hid dim]
+
+        # n directions in the decoder will both always be 1, therefore:
+        # hidden = [n layers, batch size, hid dim]
+        # context = [n layers, batch size, hid dim]
+        x,(self.hidden_state, self.cell_state) =unpack_singleton(x)
+        B,N,C=int_shape(x)
+        outputs =[]
+        # input = [batch size,1]
+
+
+        decoder_input =expand_dims(x[:,-1,:] ,1) # shape: (batch_size, input_size)
+        decoder_hidden = (self.hidden_state, self.cell_state)
+
+        # predict recursively
+        for t in range(self.sequence_length):
+            decoder_output, decoder_hidden =  self.lstm(decoder_input, decoder_hidden)
+            outputs.append(self.softmax(self.fc_out (decoder_output.squeeze(1))))
+            decoder_input = decoder_output
+        return stack(outputs,1)
+
+
 
 
 class GRU(RNNBase):

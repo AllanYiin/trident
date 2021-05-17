@@ -62,12 +62,13 @@ elif get_backend()=='tensorflow':
     from trident.layers.tensorflow_pooling import *
     from trident.layers.tensorflow_blocks import *
     from trident.layers.tensorflow_normalizations import *
-    from trident.optims.tensorflow_trainer import *
+    from trident.layers.tensorflow_rnn import *
 
     from trident.optims.tensorflow_constraints import *
     from trident.optims.tensorflow_regularizers import *
     from trident.optims.tensorflow_losses import *
     from trident.optims.tensorflow_metrics import *
+    from trident.optims.tensorflow_trainer import *
 
 
 

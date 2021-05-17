@@ -15,7 +15,7 @@ from trident.backend.common import epsilon, get_function, get_session, enforce_s
 from trident.backend.pytorch_backend import Layer,get_device
 from trident.backend.pytorch_ops import *
 
-__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
+__all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','AdaptiveInstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
 _session = get_session()
 _epsilon=_session.epsilon
 
@@ -154,11 +154,11 @@ class BatchNorm(Layer):
             if self.track_running_stats:
                 self.register_buffer('running_mean', zeros(self.input_filters))
                 self.register_buffer('running_var', ones(self.input_filters))
-                self.register_buffer('num_batches_tracked',to_tensor(0, dtype=torch.long))
+                self.register_buffer('num_batches_tracked',to_tensor(0, dtype=torch.long),persistent=False)
             else:
                 self.register_buffer('running_mean', None)
                 self.register_buffer('running_var', None)
-                self.register_buffer('num_batches_tracked', None)
+                self.register_buffer('num_batches_tracked', None,persistent=False)
 
 
             self.to(get_device())
@@ -399,7 +399,7 @@ class InstanceNorm(Layer):
             init.ones_(self.weight)
             init.zeros_(self.bias)
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             if self.affine:
                 self.weight = Parameter(torch.Tensor(self.input_filters)).to(get_device())
                 self.bias = Parameter(torch.Tensor(self.input_filters)).to(get_device())
@@ -433,6 +433,31 @@ class InstanceNorm(Layer):
 
 InstanceNorm2d=InstanceNorm
 InstanceNorm3d=InstanceNorm
+
+class AdaptiveInstanceNorm(Layer):
+    def __init__(self):
+        super().__init__()
+
+    def mu(self, x):
+        """ Takes a (n,c,h,w) tensor as input and returns the average across
+        it's spatial dimensions as (h,w) tensor [See eq. 5 of paper]"""
+        return torch.sum(x,(2,3))/(x.shape[2]*x.shape[3])
+
+    def sigma(self, x):
+        """ Takes a (n,c,h,w) tensor as input and returns the standard deviation
+        across it's spatial dimensions as (h,w) tensor [See eq. 6 of paper] Note
+        the permutations are required for broadcasting"""
+        return torch.sqrt((torch.sum((x.permute([2,3,0,1])-self.mu(x)).permute([2,3,0,1])**2,(2,3))+0.000000023)/(x.shape[2]*x.shape[3]))
+
+    def build(self, input_shape:TensorShape):
+        if not self._built:
+            self._built=True
+    def forward(self, x, y):
+        """ Takes a content embeding x and a style embeding y and changes
+        transforms the mean and standard deviation of the content embedding to
+        that of the style. [See eq. 8 of paper] Note the permutations are
+        required for broadcasting"""
+        return (self.sigma(y)*((x.permute([2,3,0,1])-self.mu(x))/self.sigma(x)) + self.mu(y)).permute([2,3,0,1])
 
 
 class LayerNorm(Layer):
@@ -631,16 +656,20 @@ class SpectralNorm(Layer):
 
     def _made_params(self):
         try:
-            u = getattr(self.module, self.name + "_u")
-            v = getattr(self.module, self.name + "_v")
-            w = getattr(self.module, self.name + "_bar")
-            return True
+            u = getattr(self.module, 'weight' + "_u")
+            v = getattr(self.module,'weight'+ "_v")
+            w = getattr(self.module, 'weight' + "_bar")
+            if u is None or v is None or w is None:
+                return False
+            else:
+                return True
         except AttributeError:
             return False
 
 
     def _make_params(self):
-        w = getattr(self.module, self.name)
+
+        w = getattr(self.module, 'weight')
 
         height = w.data.shape[0]
         width = w.view(height, -1).data.shape[1]
@@ -651,13 +680,14 @@ class SpectralNorm(Layer):
         v.data = l2_normalize(v.data)
         w_bar = Parameter(w.data).to(get_device())
 
-        del self.module._parameters[self.name]
+        del self.module._parameters['weight']
 
-        self.module.register_parameter(self.name + "_u", u)
-        self.module.register_parameter(self.name + "_v", v)
-        self.module.register_parameter(self.name + "_bar", w_bar)
+        self.module.register_parameter('weight' + "_u", u)
+        self.module.register_parameter('weight' + "_v", v)
+        self.module.register_parameter('weight' + "_bar", w_bar)
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
+            self.module.build(input_shape)
             if not self._made_params():
                 self._make_params()
             self._built = True

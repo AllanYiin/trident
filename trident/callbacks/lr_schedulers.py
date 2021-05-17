@@ -209,7 +209,7 @@ class StepLR(AdjustLRCallbackBase):
 
     def on_epoch_end(self, training_context):
         current_epoch = training_context['current_epoch']
-        if current_epoch > 0 and self.unit == 'epoch' and (current_epoch + 1) % self.frequency == 0:
+        if self.unit == 'epoch' and (current_epoch + 1) % self.frequency == 0:
             self.adjust_learning_rate(training_context,training_context['optimizer'].lr*self.gamma,verbose=True)
 
     def on_batch_end(self, training_context):
@@ -541,5 +541,3 @@ def get_lr_scheduler(lr_scheduler_name):
             lr_scheduler_fn = get_function(snake2camel(lr_scheduler_name), lr_scheduler_modules)
     return lr_scheduler_fn
 
-import torch
-torch.optim.lr_scheduler.StepLR

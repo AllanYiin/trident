@@ -1,19 +1,25 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import copy
 import datetime
 import locale
 import os
 from tqdm import tqdm
 from collections import *
 from typing import Optional,List,Tuple
+
+
+
 from trident.backend.common import *
 from trident.backend.pytorch_ops import *
-from trident.backend.pytorch_backend import to_tensor, get_device, load,fix_layer
+from trident.backend.pytorch_backend import to_tensor, get_device, load,fix_layer,set_device
 from trident.data.utils import download_model_from_google_drive,download_file_from_google_drive
 from trident.layers.pytorch_layers import *
+from trident import context
 
-_locale = locale.getdefaultlocale()[0].lower()
+ctx=context._context()
 
 __all__ = ['Word2Vec','ChineseWord2Vec']
 
@@ -46,31 +52,14 @@ class Word2Vec(Embedding):
         """
         super().__init__(num_embeddings=num_embeddings, embedding_dim=embedding_dim, max_norm=max_norm, norm_type=norm_type, scale_grad_by_freq=scale_grad_by_freq, sparse=sparse,
                          _weight=_weight, filter_index=filter_index, keep_output=keep_output, name=name)
-        self.locale = _locale
-        if _locale is None:
-            self.locale = locale.getdefaultlocale()[0].lower()
+        self.locale =ctx.locale
         print('locale:', self.locale)
 
         self._vocabs = OrderedDict()
-
-
+        if vocabs is not None:
+            for k in range(len(vocabs)):
+                self._vocabs[vocabs[k]] = k
         download_file_from_google_drive(file_id='16yDlJJ4-O9pHF-ZbXy7XPZZk6vo3aw4e', dirname=os.path.join(_trident_dir, 'download'), filename='vocabs_tw.txt')
-        with open(download_path, 'r', encoding='utf-8-sig') as f:
-            vocabs_tw = f.readlines()
-            vocabs_tw = [s.replace('\n', '') for s in vocabs_tw if s != '\n']
-            if vocabs_tw is not None:
-                for k in range(len(vocabs_tw)):
-                    self._vocabs[vocabs_tw[k]] = k
-
-            if not hasattr(self, 'tw2cn') or self.tw2cn is None:
-
-                    self.tw2cn = OrderedDict()
-                    self.cn2tw = OrderedDict()
-
-                    for i, (w, w_cn) in tqdm(enumerate(zip(vocabs_tw, self._vocabs.keys()))):
-                        if w not in self.tw2cn:
-                            self.tw2cn[w] = w_cn
-                        self.cn2tw[w_cn] = w
 
     @property
     def vocabs(self):
@@ -100,27 +89,23 @@ class Word2Vec(Embedding):
     def load(cls):
         # 從google drive載入模型
         st = datetime.datetime.now()
+        set_device('cpu')
+        dirname = os.path.join(get_trident_dir(), 'models')
         download_model_from_google_drive('13XZPWh8QhEsC8EdIp1niLtZz0ipatSGC', dirname, 'word2vec_chinese.pth')
-        recovery_model = fix_layer(load(os.path.join(dirname, 'word2vec_chinese.pth')))
+        recovery_model = load(os.path.join(dirname, 'word2vec_chinese.pth'))
+        recovery_weight=recovery_model.state_dict()['weight']
+        shp=int_shape(recovery_weight)
 
-        recovery_model.locale = locale.getdefaultlocale()[0].lower()
-        recovery_model.to(get_device())
-        download_file_from_google_drive(file_id='16yDlJJ4-O9pHF-ZbXy7XPZZk6vo3aw4e', dirname=os.path.join(_trident_dir, 'download'),filename='vocabs_tw.txt')
-        if not hasattr(recovery_model, 'tw2cn') or recovery_model.tw2cn is None:
-            with open(download_path, 'r', encoding='utf-8-sig') as f:
-                vocabs_tw = f.readlines()
-                vocabs_tw = [s.replace('\n', '') for s in vocabs_tw if s != '\n']
-                recovery_model.tw2cn = OrderedDict()
-                recovery_model.cn2tw = OrderedDict()
-
-                for i, (w, w_cn) in tqdm(enumerate(zip(vocabs_tw, recovery_model._vocabs.keys()))):
-                    if w not in recovery_model.tw2cn:
-                        recovery_model.tw2cn[w] = w_cn
-                    recovery_model.cn2tw[w_cn] = w
-
+        v = cls(pretrained=True,num_embeddings=shp[0], embedding_dim=shp[-1],_weight=recovery_weight,name='word2vec_chinese')
+        v._vocabs=copy.deepcopy(recovery_model._vocabs)
+        v.tw2cn =copy.deepcopy(recovery_model.tw2cn)
+        v.cn2tw = copy.deepcopy(recovery_model.cn2tw)
+        del recovery_model
+        v.locale =ctx.locale
+        v.to(get_device())
         et = datetime.datetime.now()
         print('total loading time:{0}'.format(et - st))
-        return recovery_model
+        return v
 
     def find_similar(self, reprt: (str, Tensor), n: int = 10, ignore_indexes=None):
         # 根據文字或是向量查詢空間中最近文字

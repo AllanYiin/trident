@@ -38,7 +38,7 @@ from torch._six import container_abcs
 from torch.nn.parameter import Parameter
 from trident.backend.tensorspec import *
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path
+    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
@@ -82,7 +82,7 @@ def get_device():
     Returns: device string ('cpu', 'cuda)
 
     """
-    if get_session().device is None:
+    if ctx.device is None:
         set_device("cuda" if torch.cuda.is_available() else "cpu")
     return get_session().device
 
@@ -98,12 +98,12 @@ def set_device(device='cpu'):
             for i in range(len(gcitems)):
                 obj = gcitems[i]
                 try:
-                    if is_tensor(obj) or hasattr(obj, 'data'):
+                    if is_tensor(obj) :
                         obj.to(device)
                     elif isinstance(obj, nn.Module):
                         obj.to(device)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(e)
     except Exception as e:
         print(e)
 
@@ -386,7 +386,7 @@ class Layer(nn.Module):
         self.input_filters = None
 
         self.keep_output = keep_output
-        self.register_buffer('_output_tensor', None, False)
+        self.register_buffer('_output_tensor', None,persistent= False)
 
         self._signature = None
         self._device = get_device()
@@ -957,14 +957,15 @@ class Layer(nn.Module):
                 if self.is_root:
                     self.signature.inputs['input'] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False)
                 del inp
-            elif isinstance(input, (tuple, list)):
-                if isinstance(input[0], numbers.Number):
-                    self.input_shape = TensorShape(list(input))
+            elif isinstance(inp, (tuple, list)):
+                if isinstance(inp[0], numbers.Number):
+                    self.input_shape = TensorShape(list(inp))
                 else:
-                    self.build(*[tensor_to_shape(inp, need_exclude_batch_axis=True) for inp in input])
-
+                    shp=tensor_to_shape(inp[0], need_exclude_batch_axis=True)
+                    self.input_filters = shp[self.filter_index]
+                    self.build(shp)
             else:
-                self.input_shape = TensorShape(list(input))
+                self.input_shape = TensorShape(list(inp))
                 print('input shou be tensor or tuple of tensor')
 
             self._built = True
@@ -973,12 +974,13 @@ class Layer(nn.Module):
             result = self._slow_forward(*input, **kwargs)
         else:
             result = self.forward(*input, **kwargs)
+            result=unpack_singleton(result)
 
             if hasattr(self, 'keep_output') and self.keep_output == True:
                 # make a op
-                self._output_tensor = identity(unpack_singleton(result))
+                self._output_tensor =result
             if self._output_shape is None or is_built == False:
-                output = unpack_singleton(result)
+                output = result
                 if is_tensor(output):  # one output
                     self._output_shape = tensor_to_shape(output)
                 elif isinstance(output, (list, tuple)):
@@ -1266,8 +1268,21 @@ class Sequential(Layer):
 
     def forward(self, x, **kwargs):
         for module in self._modules.values():
-            x = enforce_singleton(x)
-            x = module(x)
+            #x = enforce_singleton(x)
+            if isinstance(x, tuple):
+                arg_spec=get_args_spec(module.forward)
+                if len(arg_spec.args)==1:
+                    x=enforce_singleton(x)
+                x = module(x, **kwargs)
+
+            else:
+                x = module(x, **kwargs)
+            # class_name=module.__class__.__name__.lower()
+            # if 'lstm' in class_name or 'gru' in class_name:
+            #     if isinstance(x,tuple):
+            #         x
+            #         kwargs['hx']=hx
+
         return x
 
 
@@ -1295,8 +1310,9 @@ class ModuleList(Layer):
                 return x
     """
 
-    def __init__(self, modules=None, name=None):
-        super(ModuleList, self).__init__()
+    def __init__(self, modules=None, name=None, keep_output=False):
+        super(ModuleList, self).__init__(name=name, keep_output=keep_output)
+        self.uuid = uuid.uuid4().node
         self._name = name
         if isinstance(modules, dict):
             for key, value in modules.items():
@@ -1429,6 +1445,7 @@ class ModuleDict(Layer):
 
     def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False, is_multicasting=False, **kwargs) -> None:
         super(ModuleDict, self).__init__(name=None, keep_output=False, **kwargs)
+        self.uuid = uuid.uuid4().node
         self.is_multicasting = is_multicasting
         if modules is not None:
             if len(modules) > 0:
@@ -1547,10 +1564,11 @@ class ModuleDict(Layer):
 
     def forward(self, x, **kwargs):
         if self.is_multicasting:
-            x = enforce_singleton(x)
+
+            #x = enforce_singleton(x)
             results = OrderedDict()
             for name, module in self.items():
-                out = module(x)
+                out = module(x, **kwargs)
                 results[name] = out
             return results
         else:

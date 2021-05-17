@@ -1091,8 +1091,8 @@ class ModelBase(object):
     def test(self, input,target):
         raise NotImplementedError
 
-    def trigger_when(self, when='on_batch_end',epoch=None,batch=None,epoch_frequency=None,batch_frequency=None,action=None):
-        new_callbacks=LambdaCallback(when,epoch=epoch,batch=batch,epoch_frequency=epoch_frequency,batch_frequency=batch_frequency,action=action)
+    def trigger_when(self, when='on_batch_end',frequency=None,unit='batch',action=None):
+        new_callbacks=LambdaCallback(when,frequency=frequency,unit=unit,action=action)
         self.with_callbacks(new_callbacks)
         return self
 

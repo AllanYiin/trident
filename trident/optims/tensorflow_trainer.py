@@ -1821,4 +1821,156 @@ class FaceRecognitionModel(Model):
 class LanguageModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(LanguageModel, self).__init__(inputs, input_shape, output)
+        self.vocabs=None
         self.preprocess_flow = []
+
+    def save_model(self, save_path=None):
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_start(self.training_context)
+
+        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+            for para in self._model.parameters():
+                if any_abnormal_number(para.value()):
+                    para.assign(where(is_nan(para), random_normal_like(para.value(), mean=0, std=0.02).to(para.device), para))
+
+        if save_path is not None:
+            pass
+        else:
+            save_path = self.training_context['save_path']
+        folder, filename, ext = split_path(save_path)
+        if filename == '':
+            filename = self.name
+        if not filename.endswith('_tf'):
+            filename += '_tf'
+        save_path = os.path.join(folder, filename + ext)
+        self.training_context['save_path'] = save_path
+
+        if isinstance(self._model, Layer):
+            folder, filename, ext = split_path(save_path)
+            ext = '.pth.tar_'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
+            save_path = sanitize_path(save_path)
+            device = get_device()
+            self._model.eval()
+
+            with tf.device('/cpu:0'):
+                save({
+                    'state_dict': self._model.state_dict(),
+                    'backend': 'tensorflow',
+                    'trident_version': __version__,
+                    'tensorflow_version': tf.version.VERSION,
+                    'signature': self.signature
+                }, save_path, is_compressed=True)
+
+                shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
+                os.remove(save_path)
+                save_path = save_path.replace('pth.tar_', 'pth_')
+                save(self._model, save_path)
+                shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
+                os.remove(save_path)
+            gc.collect()
+            with tf.device(device):
+                self._model.train()
+
+
+
+
+
+        elif is_tensor(self._model):
+            save_path = self.get_save_path(save_path, default_folder='Models',
+                                           default_file_name='{0}_epoch{1}.npy_'.format(self._model.name,
+                                                                                        self.training_context[
+                                                                                            'current_epoch']))
+            numpy_model = to_numpy(self._model)
+            save_path = sanitize_path(save_path)
+            self.current_save_path = save_path
+            np.save(save_path, numpy_model)
+            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
+            os.remove(save_path)
+            sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
+        else:
+            raise ValueError(
+                'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_end(self.training_context)
+
+    def save_onnx(self, file_path):
+        pass
+
+    def save_weights(self, file_path):
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_start(self.training_context)
+
+        if file_path is not None:
+            self._model.save_weights(file_path)
+        elif 'save_path' in self.training_context and self.training_context['save_path'] is not None:
+            self._model.save_weights(self.training_context['save_path'])
+
+        else:
+            if 'Models' is not None and len('Models') > 1 and not os.path.exists('Models'):
+                try:
+                    os.makedirs('Models')
+                except Exception as e:
+                    pass
+            save_full_path = os.path.join('Models/', 'model_{0}_epoch{1}.h5'.format(self._model.__name__,
+                                                                                    self.training_context[
+                                                                                        'current_epoch']))
+            self._model.save_weights(self.training_context['save_full_path'])
+
+        self._model.train()
+
+    def load_model(self, file_path):
+        print('Loading pretrained model from {}'.format(file_path))
+        folder, filename, ext = split_path(file_path)
+        if filename == '':
+            filename = self.name
+        state_dict = None
+        pretrained_dict = None
+        if ext == '.pth.tar':
+            state_dict = load_pthtar(file_path)
+        elif ext == '.pth':
+            load_path = file_path
+            if not os.path.exists(file_path):
+                if os.path.exists(file_path.replace(ext, '.pth.tar')):
+                    load_path = file_path.replace(ext, '.pth.tar')
+                elif os.path.exists(os.path.join(working_directory, filename + ext)):
+                    load_path = os.path.join(working_directory, filename + ext)
+            recovery_pth = load_pthtar(load_path)
+
+            if isinstance(recovery_pth, dict):
+                state_dict = recovery_pth
+
+            elif isinstance(recovery_pth, Layer):
+                state_dict = recovery_pth.state_dict()
+
+        if 'backend' in state_dict and state_dict['backend'] != 'tensorflow':
+            raise RuntimeError(
+                'The model archive {0} is a {1}-based model, but current backend is Tensorflow, so cannot load model properly.'.format(file_path, state_dict['backend']))
+
+        if "state_dict" in state_dict.keys():
+            pretrained_dict = state_dict['state_dict']
+        else:
+            pretrained_dict = state_dict
+
+        if check_keys(self._model, pretrained_dict):
+            has_abnormal = False
+            for key in pretrained_dict.keys():
+                value = pretrained_dict[key]
+                if is_tensor(value) and any_abnormal_number(value):
+                    has_abnormal = True
+                    pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                if is_tensor(value) and ndim(value) == 0:
+                    pretrained_dict[key] = to_tensor(value.item())
+
+            if has_abnormal:
+                sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
+            self._model.load_state_dict(pretrained_dict, strict=False)
+            print('Model loaded!')
+            # must switch to evluate first beforeinference or training
+            # Dropout and Batch normalization will behavior change!!!
+
+            self._model.eval()
+        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
+            self._model.signature = state_dict['signature']
+        self._model.to(get_device())

@@ -285,7 +285,7 @@ def file2array(img_path,flag = cv2.IMREAD_COLOR):
         img_np = np.frombuffer(f.read(), np.uint8)
 
         img = cv2.imdecode(img_np, flag)
-        cv2.cvtColor(img, cv2.COLOR_BGR2RGB, img)
+        cv2.cvtColor(img, cv2.COLOR_BGR2RGB,dst= img)
         return img.astype(np.float32)
 
 def file2array1(img_path):

@@ -221,7 +221,7 @@ def SE_ResNet152(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(3, 224, 224)
-    resnet152 =SE_ResNet(se_bottleneck [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
+    resnet152 =SE_ResNet(se_bottleneck,[3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     if pretrained==True:
         download_model_from_google_drive(model_urls['se_resnet152'],dirname,'se_resnet152.pth')
         recovery_model=load(os.path.join(dirname,'se_resnet152.pth'))

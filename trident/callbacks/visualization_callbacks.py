@@ -14,28 +14,30 @@ from trident.backend.common import *
 from trident.backend.load_backend import *
 from trident.backend.pillow_backend import image2array
 from trident.callbacks.callback_base import CallbackBase
-from trident.data.dataset import MaskDataset,ImageDataset,ZipDataset
+from trident.data.dataset import MaskDataset, ImageDataset, ZipDataset
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
 from trident.data.bbox_common import *
 
 if get_backend() == 'pytorch':
-    from trident.backend.pytorch_backend import try_map_args_and_call,Layer
-    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp, expand_dims
+    from trident.backend.pytorch_backend import try_map_args_and_call, Layer
+    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp, \
+        expand_dims
 
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_backend import try_map_args_and_call,Layer
-    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, any_abnormal_number, ndim, exp, not_equal, reduce_any, expand_dims
+    from trident.backend.tensorflow_backend import try_map_args_and_call, Layer
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, \
+        any_abnormal_number, ndim, exp, not_equal, reduce_any, expand_dims
 
 if is_in_ipython() or is_in_colab():
     from IPython import display
 
-ctx =context._context()
+ctx = context._context()
 _backend = get_backend()
 
 __all__ = ['VisualizationCallbackBase', 'TileImageCallback', 'PrintGradientsCallback', 'SegTileImageCallback',
-           'PlotLossMetricsCallback', 'DetectionPlotImageCallback','GanTileImageCallback']
+           'PlotLossMetricsCallback', 'DetectionPlotImageCallback', 'GanTileImageCallback']
 
 
 class VisualizationCallbackBase(CallbackBase):
@@ -75,66 +77,90 @@ class TileImageCallback(VisualizationCallbackBase):
         input = None
         target = None
         output = None
-        mask=None
-        legend=[]
+        mask = None
+        legend = []
 
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
-        dataprovider=enforce_singleton(ctx.get_data_provider())
-        input = to_numpy(data[dataprovider.traindata.data.symbol].copy())
-        if  'tensor' in model.__class__.__name__.lower():
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        input = to_numpy(data[data_feed['input']])
+        if 'tensor' in model.__class__.__name__.lower():
             output = to_numpy(model.clone())
-        elif isinstance(model,Layer) and  input is not None:
-            output = to_numpy(model(input))
+        elif isinstance(model, Layer):
+            output = to_numpy(data[data_feed['output']].copy())
         if self.include_target:
-            target = to_numpy(data[dataprovider.traindata.label.symbol].copy())
+            target = to_numpy(data[data_feed['target']].copy())
         if self.include_mask:
-            if isinstance(dataprovider.traindata.label,MaskDataset):
+            if isinstance(dataprovider.traindata.label, MaskDataset):
                 mask = to_numpy(data[dataprovider.traindata.label.symbol])
-            elif isinstance(dataprovider.traindata.label,ZipDataset):
-                for ds in  dataprovider.traindata.label._datasets:
+            elif isinstance(dataprovider.traindata.label, ZipDataset):
+                for ds in dataprovider.traindata.label._datasets:
                     if isinstance(ds, MaskDataset):
                         mask = to_numpy(data[ds.symbol])
 
-        reverse_image_transform = dataprovider.traindata.data.reverse_image_transform
+        reverse_image_transform = dataprovider.reverse_image_transform
+        reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
         if self.include_input and input is not None:
-            if reverse_image_transform is not None:
+            if len(reverse_image_transform_funcs) > 1:
                 input_arr = []
                 for i in range(len(input)):
                     input_arr.append(reverse_image_transform(input[i]))
                 tile_images_list.append(input_arr)
             else:
                 input_arr = to_numpy(input).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(input)
-                tile_images_list.append(input_arr * 127.5 + 127.5)
+                max_value = input_arr.max()
+                min_value = input_arr.min()
+                if max_value <= 1.1 and min_value >= 0:
+                    tile_images_list.append(input_arr * 255.0)
+                elif max_value <= 1.1 and min_value >= -1.1:
+                    tile_images_list.append(input_arr * 128 + 127)
+                else:
+                    print(max_value, min_value)
+                    tile_images_list.append(input_arr)
             legend.append('input')
         if self.include_target and target is not None:
-            if reverse_image_transform is not None:
+            if len(reverse_image_transform_funcs) > 1:
                 target_arr = []
                 for i in range(len(target)):
                     target_arr.append(reverse_image_transform(target[i]))
                 tile_images_list.append(target_arr)
             else:
                 target_arr = to_numpy(target).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(target)
-                tile_images_list.append(target_arr * 127.5 + 127.5)
+
+                if target_arr.max() <= 1.1 and target_arr.min() >= 0:
+                    tile_images_list.append(target_arr * 255)
+                elif target_arr.max() <= 1.1 and target_arr.min() >= -1.1:
+                    tile_images_list.append(target_arr * 128 + 127)
+                else:
+                    tile_images_list.append(target_arr)
             legend.append('target')
         if self.include_output and output is not None:
-            if reverse_image_transform is not None:
+            if len(reverse_image_transform_funcs) > 1:
                 output_arr = []
                 for i in range(len(output)):
                     output_arr.append(reverse_image_transform(output[i]))
                 tile_images_list.append(output_arr)
             else:
                 output_arr = to_numpy(output).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(output)
-                tile_images_list.append(output_arr * 127.5 + 127.5)
+
+                if output_arr.max() <= 1.2 and output_arr.min() >= 0:
+                    tile_images_list.append(output_arr * 255)
+                elif output_arr.max() <= 1.2 and output_arr.min() >= -1.2:
+
+                    tile_images_list.append(output_arr * 128 + 127)
+                else:
+                    tile_images_list.append(output_arr)
+
             legend.append('output')
 
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True,legend=legend)
+        fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=legend)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
-            ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True,  walltime=time.time())
+            ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
         plt.close()
+
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0):
             self.plot_tile_image(training_context)
@@ -162,7 +188,6 @@ class GanTileImageCallback(VisualizationCallbackBase):
         self.tile_images_list = []
         self.output_arr = []
 
-
     def plot_tile_image(self, training_context):
 
         output = None
@@ -179,12 +204,12 @@ class GanTileImageCallback(VisualizationCallbackBase):
         if reverse_image_transform is not None:
             for i in range(len(output)):
                 self.output_arr.append(reverse_image_transform(output[i]))
-                if len(self.output_arr)==self.row:
+                if len(self.output_arr) == self.row:
                     self.tile_images_list.append(self.output_arr)
-                    if len(self.tile_images_list)==self.row:
+                    if len(self.tile_images_list) == self.row:
                         self.sample_enough = True
                         break
-                    self.output_arr=[]
+                    self.output_arr = []
 
         legend.append('output')
 
@@ -196,18 +221,18 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
     def on_batch_end(self, training_context):
         if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0 or not self.sample_enough):
-            if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0) :
-                self.tile_images_list=[]
-                self.output_arr=[]
-                self.sample_enough=False
+            if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0):
+                self.tile_images_list = []
+                self.output_arr = []
+                self.sample_enough = False
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
         if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0 or not self.sample_enough):
-            if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0) :
-                self.tile_images_list=[]
-                self.output_arr=[]
-                self.sample_enough=False
+            if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0):
+                self.tile_images_list = []
+                self.output_arr = []
+                self.sample_enough = False
             self.plot_tile_image(training_context)
 
 
@@ -243,9 +268,9 @@ class SegTileImageCallback(VisualizationCallbackBase):
                 input = data[data_feed[model.signature.inputs.key_list[0]]]
                 model.eval()
                 if is_label_mask:
-                    output =to_numpy(argmax(model(input), axis=axis))
+                    output = to_numpy(argmax(model(input), axis=axis))
                 else:
-                    output=to_numpy(expand_dims(cast(argmax(model(input),axis=axis), input.dtype),axis=-1))
+                    output = to_numpy(expand_dims(cast(argmax(model(input), axis=axis), input.dtype), axis=-1))
 
                 model.train()
 
@@ -257,7 +282,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
             elif (
                     'target' in data_key or 'label' in data_key or 'mask' in data_key) and not 'output' in data_key and data_key in data_feed.value_list:
                 target = to_numpy(data[data_key])
-        output_arr=None
+        output_arr = None
         if 'alpha' not in data:
             output_arr = output.copy()
             if is_label_mask:
@@ -265,9 +290,9 @@ class SegTileImageCallback(VisualizationCallbackBase):
                 output = label2color(output, self.palette)
         else:
             if get_backend() == 'tensorflow':
-                output = output[:, :, :, 1:2]* argmax(output, axis)
+                output = output[:, :, :, 1:2] * argmax(output, axis)
             else:
-                output = (output[:, 1:2, :, :] * argmax(output, axis)).transpose(0,2,3,1)
+                output = (output[:, 1:2, :, :] * argmax(output, axis)).transpose(0, 2, 3, 1)
             target = to_numpy(data['alpha'])
 
         input_arr = []
@@ -289,8 +314,6 @@ class SegTileImageCallback(VisualizationCallbackBase):
                 else:
                     target_arr = np.expand_dims(target, 1)
 
-
-
             if 'alpha' not in data:
                 target_arr[target_arr > 0] = 1
 
@@ -305,7 +328,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
         fig = tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/segtile_image', fig, global_step=training_context['steps'], close=True,
-                                                          walltime=time.time())
+                                          walltime=time.time())
         plt.close()
 
     def on_batch_end(self, training_context):
@@ -366,7 +389,7 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
         fig = tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/detection_plot', fig, global_step=training_context['steps'], close=True,
-                                                          walltime=time.time())
+                                          walltime=time.time())
         plt.close()
 
     def on_batch_end(self, training_context):
@@ -404,14 +427,14 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                     self.counter = 0
                 self.loss_history_list = []
                 self.metric_history_list = []
-                plotable_metric_names=OrderedDict()
+                plotable_metric_names = OrderedDict()
                 for i in range(len(self.training_items.value_list)):
-                    trainitem=self.training_items.value_list[i]
+                    trainitem = self.training_items.value_list[i]
                     self.loss_history_list.append(trainitem.batch_loss_history)
-                    plotable_metric_names[i]=[k for k,v in trainitem._metrics.item_list if v.print_only==False]
+                    plotable_metric_names[i] = [k for k, v in trainitem._metrics.item_list if v.print_only == False]
                     self.metric_history_list.append(trainitem.batch_metric_history)
                 self.counter += 1
-                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list,metrics_names=plotable_metric_names,
+                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list, metrics_names=plotable_metric_names,
                                         legend=training_context['training_names'].value_list, calculate_base='batch',
                                         max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
                                         imshow=self.imshow)
@@ -419,11 +442,17 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                 if ctx.enable_tensorboard and ctx.summary_writer is not None:
                     ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
                 plt.close()
-                # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
+                # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k,
+                # trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #
+                # loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch',
+                # max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #
+                # imshow=True)
 
     # def on_batch_end(self, training_context):
     #     if self.is_inplace:
-    #         if (self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['current_batch'] + 1) % self.batch_inteval == 0) or (self.epoch_inteval > 0 and self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch']  and (self.training_items.value_list[0].training_context['current_epoch'] + 1) % self.epoch_inteval == 0):
+    #         if (self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['current_batch'] + 1) % self.batch_inteval == 0) or (self.epoch_inteval > 0 and
+    #         self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch']  and (
+    #         self.training_items.value_list[0].training_context['current_epoch'] + 1) % self.epoch_inteval == 0):
     #             if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
     #                 display.clear_output(wait=True)
     #                 self.counter = 0
@@ -438,7 +467,11 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
     #                               imshow=self.imshow)
     #
     #
-    #             # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k, trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #     loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch', max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #                       imshow=True)
+    #             # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k,
+    #             trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #
+    #             loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch',
+    #             max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #
+    #             imshow=True)
 
 
 class PrintGradientsCallback(VisualizationCallbackBase):

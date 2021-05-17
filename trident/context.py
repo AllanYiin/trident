@@ -7,6 +7,7 @@ import threading
 import platform
 from collections import OrderedDict
 import numpy as np
+import locale
 
 _trident_context=None
 
@@ -171,6 +172,7 @@ class _Context:
         self.backend = 'pytorch'
         self.enable_tensorboard=False
         self.summary_writer=None
+        self.locale = locale.getdefaultlocale()[0].lower()
 
         self.image_backend = 'opencv'
         self.epoch_equivalent = 1000
@@ -276,8 +278,24 @@ class _Context:
         if not hasattr(self._thread_local_info,'data_providers'):
             self._thread_local_info.data_providers=OrderedDict()
         self._thread_local_info.data_providers[getattr(data_provider,'uuid')]=data_provider
+
     def get_data_provider(self):
         return list(self._thread_local_info.data_providers.values())
+
+    def regist_resources(self,resource_name,resource ):
+        if not hasattr(self._thread_local_info,'resources'):
+            self._thread_local_info.resources=OrderedDict()
+        self._thread_local_info.resources[resource_name]=resource
+        return self._thread_local_info.resources[resource_name]
+
+    def get_resources(self,resource_name):
+        if not hasattr(self._thread_local_info, 'resources'):
+            self._thread_local_info.resources = OrderedDict()
+        if resource_name in self._thread_local_info.resources:
+            return self._thread_local_info.resources[resource_name]
+        else:
+            return None
+
 
 
 

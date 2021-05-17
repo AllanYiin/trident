@@ -811,6 +811,7 @@ class TextSequenceDataset(Dataset):
     def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, storage_unit='section',section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
                  object_type=ObjectType.corpus, symbol=None, **kwargs):
         super().__init__(None,symbol=symbol, object_type=object_type, **kwargs)
+        self.sequence_length = sequence_length
         self.sequence_start_at = sequence_start_at
         self.transform_funcs = []
         if len(section_delimiter) == 2:
@@ -829,7 +830,7 @@ class TextSequenceDataset(Dataset):
         self.dtype = np.float32 if self.is_onehot else np.int64
 
         self.is_paired_process = False
-        self.sequence_length = sequence_length
+
 
     def add_corpus(self,corpus):
         if hasattr(corpus, "__iter__"):
@@ -885,23 +886,37 @@ class TextSequenceDataset(Dataset):
 
             if self.sequence_start_at == 'random':
                 for k,v in self.length_index.item_list:
-                    if v>=index:
+                    if v>index:
                         last_v = self.length_index[k - 1] if k>0 else 0
                         sectiontext = list(self.items[k])
                         sectiontext.insert(0, '[CLS]')
+                        is_end=self.items[k].endswith('\n\n')
+                        if is_end:
+                            sectiontext=sectiontext[:-2]
                         sectiontext.append('[SEP]')
-                        if k+1<len( self.length_index):
+                        if k+1<len( self.length_index) and not is_end :
                             sectiontext.append('[CLS]')
                             sectiontext.extend(list(self.items[k+1]))
+                            is_end = self.items[k+1].endswith('\n\n')
+                            if is_end:
+                                sectiontext = sectiontext[:-2]
+                            sectiontext.append('[SEP]')
+                        if k + 2 < len(self.length_index) and not is_end:
+                            sectiontext.append('[CLS]')
+                            sectiontext.extend(list(self.items[k + 2]))
+                            is_end = self.items[k + 2].endswith('\n\n')
+                            if is_end:
+                                sectiontext = sectiontext[:-2]
                             sectiontext.append('[SEP]')
                         idx=index-last_v
-                        sequencetext =sectiontext[idx+self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length, self.len())]
+
+                        sequencetext =sectiontext[idx+self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length,len(sectiontext))]
                         break
             elif self.sequence_start_at == 'section_start':
                 sectiontext = list(self.items[index])
                 sectiontext.insert(0, '[CLS]')
                 sectiontext.append('[SEP]')
-                sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length, self.len())]
+                sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length,len(sectiontext))]
         return sequencetext
 
         if self.is_paired_process == False and len(self.transform_funcs) == 0:

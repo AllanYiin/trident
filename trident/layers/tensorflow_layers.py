@@ -113,7 +113,7 @@ class Dense(Layer):
 
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             with tf.device(get_device()):
                 with self.name_scope:
                     if len(input_shape.dims) == 1:
@@ -164,13 +164,17 @@ class Embedding(Layer):
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
         if _weight is not None and int_shape(_weight)[-1] == embedding_dim and len( int_shape(_weight))==2:
-            self.weight =Parameter(_weight)
+            with tf.device(get_device()):
+                with self.name_scope:
+                    self.weight =Parameter(tf.identity(_weight),trainable=True, name='weight')
             self.num_embeddings = int_shape(self.weight)[0]
             self._built = True
         elif _weight is not None :
             raise  ValueError('Shape[-1] of weight does not match embedding_dim')
         elif _weight is None and self.num_embeddings is not None:
-            self.weight =Parameter(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02, name='weight')
+            with tf.device(get_device()):
+                with self.name_scope:
+                    self.weight =Parameter(tf.identity(tf.random.normal(shape=(self.num_embeddings, self.embedding_dim), mean=0, stddev=1) * 0.02),trainable=True, name='weight')
             self._built = True
         if self._built:
            # self.to(self.device)
@@ -181,7 +185,7 @@ class Embedding(Layer):
 
 
     def build(self, input_shape:TensorShape):
-        if self._built == False:
+        if not self._built:
             with tf.device(get_device()):
                 with self.name_scope:
                     if len(input_shape.dims) == 1:
@@ -197,7 +201,7 @@ class Embedding(Layer):
 
     def forward(self, x, **kwargs) :
         dtype = x.dtype
-        if dtype != tf.int32 and dtype !=tf.int64:
+        if dtype != tf.int32 :
             x = math_ops.cast(x,tf.int32)
         if isinstance(self.weight, sharded_variable.ShardedVariable):
             x = embedding_ops.embedding_lookup_v2(self.weight.variables,x )
@@ -361,7 +365,7 @@ class SoftMax(Layer):
         if self.training:
             x = tf.math.log_softmax(x, self.axis)
             if self.add_noise == True:
-                noise = self.noise_intensity * tf.random.normal(shape=x.get_shape(), mean=1, stddev=1)
+                noise = self.noise_intensity * tf.random.normal(shape=x.get_shape(), mean=1, stddev=1,dtype=x.dtype)
                 x = x + noise
 
         else:
@@ -1483,12 +1487,18 @@ class Reshape(Layer):
 
 
     def forward(self, x, **kwargs) :
+        shp = self.target_shape
+        if -1 in shp:
+            return tf.reshape(x, tf.constant((int_shape(x)[0],) + tuple(shp), dtype=tf.int32))
+        else:
+            return  tf.reshape(x, tf.constant((-1,) + tuple(shp), dtype=tf.int32))
 
-        x = tf.reshape(x, tf.constant((int_shape(x)[0], *self.target_shape), dtype=tf.int32))
-        return x
 
     def extra_repr(self):
         s = 'target_shape={0}'.format(self.target_shape)
+
+
+
 
 
 class Dropout(Layer):

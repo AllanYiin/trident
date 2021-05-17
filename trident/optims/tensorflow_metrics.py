@@ -80,7 +80,7 @@ def accuracy(output, target, topk=1, axis=-1,ignore_index=-100, exclude_mask=Fal
 
     batch_size = int_shape(target_tensor)[0]
     if topk == 1:
-        return reduce_sum(equal(input_tensor,target_tensor,dtype=_dtype)*input_mask)/clip(reduce_sum(input_mask),min=1)
+        return reduce_mean(equal(input_tensor,target_tensor,dtype=_dtype))
     else:
         _,pred = input_tensor.topk(topk)
         pred = cast(tf.transpose(pred),'float32')

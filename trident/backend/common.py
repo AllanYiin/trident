@@ -1029,7 +1029,7 @@ def enforce_singleton(x):
     """
     if 'tensor' in x.__class__.__name__.lower() or isinstance(x, np.ndarray):
         return x
-    elif hasattr(x, '__len__'):
+    elif hasattr(x, '__len__') and len(x)>0:
         return x[0]
     return x
 

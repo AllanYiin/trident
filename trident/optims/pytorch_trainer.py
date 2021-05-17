@@ -65,7 +65,7 @@ from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from trident import context
 
 __all__ = ['Model', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
-           'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel']
+           'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel','LanguageModel']
 
 ctx = context._context()
 
@@ -1022,8 +1022,9 @@ class Model(model.ModelBase):
 
             outputs = self._model(dummy_input)
             if dynamic_axes is None:
-                dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
-                                self.outputs.key_list[0]: [0]}
+                # dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
+                #                 self.outputs.key_list[0]: [0]}
+                dynamic_axes = {self.inputs.key_list[0]: {0: 'batch'}, self.outputs.key_list[0]: {0: 'batch'}}
 
             # dynamic_axes = {}
             #
@@ -1031,15 +1032,17 @@ class Model(model.ModelBase):
             #     dynamic_axes[inp] = [0]
             # for out in self.outputs.key_list:
             #     dynamic_axes[out] = [0]
-            torch.onnx.export(self._model,  # model being run
-                              dummy_input,  # model input (or a tuple for multiple inputs)
-                              save_path,  # where to save the model (can be a file or file-like object)
-                              export_params=True,  # store the trained parameter weights inside the model file
-                              opset_version=11,  # the ONNX version to export the model to
-                              do_constant_folding=False,  # whether to execute constant folding for optimization
-                              input_names=self.signature.inputs.key_list,  # the model's input names
-                              output_names=self.signature.outputs.key_list,  # the model's output names
-                              dynamic_axes=dynamic_axes)
+            with torch.no_grad():
+                with torch.cuda.amp.autocast(enabled=False):
+                    torch.onnx.export(self._model,  # model being run
+                                      dummy_input,  # model input (or a tuple for multiple inputs)
+                                      save_path,  # where to save the model (can be a file or file-like object)
+                                      export_params=True,  # store the trained parameter weights inside the model file
+                                      opset_version=11,  # the ONNX version to export the model to
+                                      do_constant_folding=False,  # whether to execute constant folding for optimization
+                                      input_names=self.signature.inputs.key_list,  # the model's input names
+                                      output_names=self.signature.outputs.key_list,  # the model's output names
+                                      dynamic_axes=dynamic_axes)
             self._model.train()
             shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
             os.remove(save_path)
@@ -1604,8 +1607,183 @@ class FaceRecognitionModel(Model):
 class LanguageModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(LanguageModel, self).__init__(inputs, input_shape, output)
+        self.vocabs=None
         self.preprocess_flow = []
+    def save_model(self, save_path=None):
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_start(self.training_context)
+
+        if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+            for para in self._model.parameters():
+                if any_abnormal_number(para):
+                    para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+
+            sys.stderr.write(self._get_name() + '  nan detected!!\n')
+        if save_path is not None:
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filename = self.name
+            self.training_context['save_path'] = save_path
+        else:
+            save_path = self.training_context['save_path']
+
+        if isinstance(self._model, nn.Module):
+            try:
+                folder, filename, ext = split_path(save_path)
+                if filename == '':
+                    filename = self.name
+
+                ext = '.pth.tar_'
+                save_path = os.path.join(folder, filename + ext)
+                make_dir_if_need(sanitize_path(save_path))
+                save_path = sanitize_path(save_path)
+                device = get_device()
+                self._model.eval()
+                self._model.cpu()
+                torch.save({
+                    'state_dict': self._model.state_dict(),
+                    'vocabs':self.vocabs,
+                    'backend': 'pytorch',
+                    'trident_version': __version__,
+                    'pytorch_version': torch.__version__,
+                    'signature': self._model.signature
+                }, save_path)
+
+                shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
+                os.remove(save_path)
+                save_path = save_path.replace('pth.tar_', 'pth_')
+                save(self._model, save_path)
+                shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
+                os.remove(save_path)
+                self._model.train()
+                self._model.to(device)
+            except Exception as e:
+                print(e)
+                PrintException()
+
+        elif isinstance(self._model, torch.Tensor):
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filenam = self.name
+
+            ext = '.npy_'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
+            save_path = sanitize_path(save_path)
+            numpy_model = to_numpy(self._model)
+            np.save(save_path, numpy_model)
+            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
+            os.remove(save_path)
+            sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
+        else:
+            raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
+
+        for callback in self.training_context['callbacks']:
+            callback.on_model_saving_end(self.training_context)
+
+    def save_onnx(self, save_path, dynamic_axes=None):
+        if isinstance(self._model, nn.Module):
+
+            import_or_install('torch.onnx')
+            self._model.eval()
+
+            dummy_input = (to_tensor(self.signature.inputs.value_list[0].shape.get_dummy_tensor()))
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filenam = self.name
+
+            ext = '.onnx_'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
+            save_path = sanitize_path(save_path)
+
+            outputs = self._model(dummy_input)
+            if dynamic_axes is None:
+                dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
+                                self.outputs.key_list[0]: [0]}
+
+            # dynamic_axes = {}
+            #
+            # for inp in self.inputs.key_list:
+            #     dynamic_axes[inp] = [0]
+            # for out in self.outputs.key_list:
+            #     dynamic_axes[out] = [0]
+            torch.onnx.export(self._model,  # model being run
+                              dummy_input,  # model input (or a tuple for multiple inputs)
+                              save_path,  # where to save the model (can be a file or file-like object)
+                              export_params=True,  # store the trained parameter weights inside the model file
+                              opset_version=11,  # the ONNX version to export the model to
+                              do_constant_folding=False,  # whether to execute constant folding for optimization
+                              input_names=self.signature.inputs.key_list,  # the model's input names
+                              output_names=self.signature.outputs.key_list,  # the model's output names
+                              dynamic_axes=dynamic_axes)
+            self._model.train()
+            shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
+            os.remove(save_path)
+            for callback in self.training_context['callbacks']:
+                callback.on_model_saving_end(self.training_context)
+        else:
+            raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
+
+    def load_model(self, file_path):
+        print('Loading pretrained model from {}'.format(file_path))
+        folder, filename, ext = split_path(file_path)
+        if filename == '':
+            filename = self.name
+        state_dict = None
+        pretrained_dict = None
+        if ext == '.pth.tar':
+            state_dict = torch.load(file_path, map_location=torch.device(get_device()))
+        elif ext == '.pth':
+            load_path = file_path
+            if not os.path.exists(file_path):
+                if os.path.exists(file_path.replace(ext, '.pth.tar')):
+                    load_path = file_path.replace(ext, '.pth.tar')
+                elif os.path.exists(os.path.join(working_directory, filename + ext)):
+                    load_path = os.path.join(working_directory, filename + ext)
+            recovery_pth = torch.load(load_path, map_location=torch.device(get_device()))
+
+            if isinstance(recovery_pth, dict):
+                state_dict = recovery_pth
+
+            elif isinstance(recovery_pth, Layer):
+                state_dict = recovery_pth.state_dict()
+
+        if 'vocabs' in state_dict :
+            self.vocabs=state_dict['vocabs']
+        if 'backend' in state_dict and state_dict['backend'] != 'pytorch':
+            raise RuntimeError(
+                'The model archive {0} is a {1}-based model, but current backend is PyTorch, so cannot load model properly.'.format(file_path, state_dict['backend']))
+
+        if "state_dict" in state_dict.keys():
+            pretrained_dict = state_dict['state_dict']
+        else:
+            pretrained_dict = state_dict
+
+        if isinstance(self._model, Layer):
+            if check_keys(self._model, pretrained_dict):
+                has_abnormal = False
+                for key in pretrained_dict.keys():
+                    value = pretrained_dict[key]
+                    if is_tensor(value) and any_abnormal_number(value):
+                        has_abnormal = True
+                        print('detect abnormal in state_dict[{0}],value:{1}'.format(key), value)
+                        pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                    if is_tensor(value) and ndim(value) == 0:
+                        pretrained_dict[key] = to_tensor(value.item())
+
+                if has_abnormal:
+                    sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
+                self._model.load_state_dict(pretrained_dict, strict=False)
+                print('Model loaded!')
+                # must switch to evluate first beforeinference or training
+                # Dropout and Batch normalization will behavior change!!!
+
+                self._model.eval()
+        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
+            self._model.signature = state_dict['signature']
+        self._model.to(get_device())
 
 
-TrainingItem = Model
+
 

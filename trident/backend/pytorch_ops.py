@@ -71,8 +71,8 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth','pad', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
-           'leaky_relu6', 'smooth_relu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
-           'soft_sign', 'soft_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
+           'leaky_relu6', 'smooth_relu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'silu','lecun_tanh',
+           'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather', 'index_select','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy','rgb2xyz','rgb2hsv','rgb2lab','rgb2gray','xyz2lab','xyz2rgb','lab2xyz','lab2rgb']
@@ -418,10 +418,12 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
         TensorShape([None, 64, 32, 32])
 
     """
-    if isinstance(x,numbers.Number):
-        return TensorShape((None,))
+    if isinstance(x,numbers.Number) or (is_tensor(x) and ndim(x)==0):
+        return TensorShape([None])
     if need_exclude_batch_axis and is_singleton==False:
         shp=list(int_shape(x))
+        if len(shp)==0:
+            print('')
         shp[0]=None
         return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton==True:
@@ -2576,6 +2578,20 @@ def soft_plus(x):
     return F.softplus(x)
 
 @numpy_compatible
+def square_plus(x):
+    """
+
+    Args:
+        x (Tensor): input tensor.
+
+    Returns:
+        (Tensor): output tensor and have same shape with x.
+
+
+    """
+    return  (x+(x**2+4).sqrt())/2.0
+
+@numpy_compatible
 def logit(x):
     """
 
@@ -2764,7 +2780,8 @@ def gpt_gelu(x):
     """
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
 
-
+def silu(x):
+    return torch.nn.functional.silu(x)
 ############################
 ## normalization operation
 ###########################
@@ -3951,21 +3968,44 @@ def binary_hinge(output, target, margin=1, pos_weight=1.0):
 ## color space
 ###########################
 
-def rgb2gray(rgb:Tensor):
-    """Compute luminance of an RGB image.
+def rgb2gray(rgb:Tensor,axis=-1):
+    """Compute grayscale of an RGB image.
 
     Args:
-        rgb (tensor):  rgb image (shape:(H,W,C))
+        rgb (tensor):  rgb image (shape:(H,W,C)), range [0,255]
+        axis(int): the channel axis
     Returns:
-        gray(tensor):  gray-scale image(shape:(H,W))
+        gray(tensor):  gray-scale image(shape:(H,W)), range [0,255]
+
+    Examples:
+        >>> import cv2
+        >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
+        >>> gray_tensor=to_numpy(rgb2gray(to_tensor(img.copy()).float()))
+        >>> groundtruth_gray=cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
+        >>> abs(np.round(gray_tensor.astype(np.float32))-groundtruth_gray.astype(np.float32)).mean()<2
+        True
+        >>> print( groundtruth_gray.shape,groundtruth_gray)
+        >>> print( gray_tensor.shape,gray_tensor.astype(np.uint8))
+        >>> print( abs(np.round(gray_tensor.astype(np.float32))-groundtruth_gray.astype(np.float32)).mean())
 
     """
     rgb=rgb.copy().float()
-    if ndim(rgb)!=3 :
+    if ndim(rgb) not in [3,4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
-    r,g,b=split(rgb,3,axis=-1)
-    gray = 0.2125*r + 0.7154*g + 0.0721*b
-    return gray
+    if ndim(rgb) ==3:
+        r,g,b=split(rgb,3,axis=axis)
+        gray = clip((0.2125*r + 0.7154*g + 0.0721*b).squeeze(axis),0,255)
+        return gray
+    elif ndim(rgb) ==4:
+        shp=int_shape(rgb)
+        if shp[-1]==3:
+            axis=-1
+        elif shp[1]==3:
+            axis = 1
+        r, g, b = split(rgb, 3, axis=axis)
+        gray = clip((0.2125 * r + 0.7154 * g + 0.0721 * b).squeeze(axis),0,255)
+        return gray
+
 
 
 def rgb2hsv(rgb:Tensor):
@@ -3977,58 +4017,63 @@ def rgb2hsv(rgb:Tensor):
         gray(tensor):  gray-scale image(shape:(H,W))
 
     Examples:
-        >>> import cv2
-        >>> from skimage import color
+         >>> import cv2
         >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
-        >>> hsv_Img=rgb2hsv(to_tensor(img.copy()).float())
-        >>> ground_truth_hsv=to_tensor(color.rgb2hsv(img.copy()/255.)*255.0).float()
-        >>> abs(hsv_Img-ground_truth_hsv).mean().item()<2
+        >>> hsv_tensor=to_numpy(rgb2hsv(to_tensor(img.copy()).float()))
+        >>> groundtruth_hsv=cv2.cvtColor(img,cv2.COLOR_RGB2HSV)
+        >>> abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean()<2
         True
-        >>> print( ground_truth_hsv)
-        >>> print( hsv_Img)
-        >>> print( abs(hsv_Img-ground_truth_hsv).mean().item())
+        >>> print( groundtruth_hsv.shape,groundtruth_hsv)
+        >>> print( hsv_tensor.shape,hsv_tensor.astype(np.uint8))
+        >>> print(abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean())
 
     """
-    rgb=rgb.float()/255.0
-    if ndim(rgb)!=3 :
+    rgb = rgb.float() / 255.0
+    if ndim(rgb) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
-    #rgb=rgb[np.newaxis, ...]
+    # rgb=rgb[np.newaxis, ...]
     out = zeros_like(rgb.copy())
+    axis = -1
+    if ndim(rgb) == 4:
+        axis = 1
 
     # -- V channel
-    out_v = reduce_max(rgb.copy(),-1)
+    out_v = reduce_max(rgb.copy(), axis=axis, keepdims=True)
 
     # -- S channel
-    delta =reduce_max(rgb.copy(),-1)-reduce_min(rgb.copy(),-1)
-    delta_zero=zeros_like(delta,dtype=delta.dtype)
-    out_s = where(delta==0,delta_zero,delta / out_v)
+    delta = reduce_max(rgb.copy(), axis=axis, keepdims=True) - reduce_min(rgb.copy(), axis=axis, keepdims=True)
+    delta_zeros = zeros_like(delta, dtype=delta.dtype)
+    out_s = where(delta == 0, delta_zeros, delta / out_v)
 
     # -- H channel
     # red is max
-    out0=zeros_like(delta,dtype=delta.dtype)
-    idx = (rgb[..., 0] == out_v)
+    maxc_tmp = equal(out_v, rgb, dtype=dtype.float32)
+    _, max_indices = rgb.copy().max(dim=axis)
+    out_h = None
+    if ndim(rgb) == 3:
+        rc, gc, bc = split(maxc_tmp.copy(), 3, axis=axis)
 
-    out0[idx] = (rgb[..., 1][idx] - rgb[..., 2][idx]) / delta[idx]
-
-    # green is max
-    idx = (rgb[..., 1] == out_v)
-    out0[idx] =  2. + (rgb[..., 2][idx] - rgb[..., 1][idx]) / delta[idx]
-
-    # blue is max
-    idx = (rgb[..., 2] == out_v)
-    out0[idx] =  4. + (rgb[..., 0][idx] - rgb[..., 1][idx]) / delta[idx]
+        out_h = torch.cat([
+            bc - gc,
+            2.0 * delta + rc - bc,
+            4.0 * delta + gc - rc, ], dim=axis)
+        out_h = torch.gather(out_h, dim=axis, index=max_indices[:, :, None])
 
 
-    out_h = (out0/ 6.) % 1.
-    out_h[delta == 0.] = 0.
+    elif ndim(rgb) == 4:
+        rc, gc, bc = split(maxc_tmp.copy(), 3, axis=-3)
+        out_h = torch.cat([
+            bc - gc,
+            2.0 * delta + rc - bc,
+            4.0 * delta + gc - rc,
+        ], dim=-3)
+        out_h = torch.gather(out_h, dim=-3, index=max_indices[..., None, :, :])
+
+    #out_h = out_h / delta
+    out_h = (out_h / 6.0) % 1.0
 
     # -- output
-    out[..., 0] = out_h
-    out[..., 1] = out_s
-    out[..., 2] = out_v
-
-
-    return out*255.0
+    return torch.cat([out_h*255.0, out_s*255.0, out_v*255.0], dim=axis)
 
 
 def xyz2rgb(xyz:Tensor):
@@ -4881,6 +4926,7 @@ _FUN_NAMES = [
     ('lecun_tanh', lecun_tanh),
     ('soft_sign', soft_sign),
     ('soft_plus', soft_plus),
+    ('square_plus', square_plus),
     ('hard_tanh', hard_tanh),
     ('logit', logit),
     ('log_log', log_log),

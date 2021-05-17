@@ -132,7 +132,7 @@ class Dense(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-        x=enforce_singleton(x)
+        #x=enforce_singleton(x)
         if ndim(x)>2:
             x=squeeze(x)
         shp=None
@@ -934,6 +934,7 @@ class Conv1d(_ConvNd):
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1076,6 +1077,7 @@ class Conv2d(_ConvNd):
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1117,6 +1119,7 @@ class Conv3d(_ConvNd):
         return F.conv3d(x, self.weight, self.bias, self.strides, _triple(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv3d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1154,6 +1157,7 @@ class TransConv1d(_ConvNd):
         return F.conv_transpose1d(x, self.weight, self.bias, self.strides, padding=_single(0), output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1227,6 +1231,7 @@ class TransConv2d(_ConvNd):
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1276,6 +1281,7 @@ class TransConv3d(_ConvNd):
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv3d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1353,6 +1359,7 @@ class SeparableConv2d(_ConvNd):
             self._built = True
 
     def forward(self, x, **kwargs):
+        
         x = self.conv1(x)
         x = self.pointwise(x)
 
@@ -1396,6 +1403,7 @@ class SeparableConv3d(_ConvNd):
             self._built = True
 
     def forward(self, x, **kwargs):
+        
         x = self.conv1(x)
         x = self.pointwise(x)
         if self.activation is not None:
@@ -1434,6 +1442,7 @@ class DepthwiseConv1d(_ConvNd):
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
+        
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -1552,6 +1561,7 @@ class DepthwiseConv2d(_ConvNd):
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
+        
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1696,12 +1706,12 @@ class DeformConv2d(Layer):
     def forward(self, x, **kwargs):
         """
         Args:
-            input (Tensor[batch_size, in_channels, in_height, in_width]): input tensor
+            x (Tensor[batch_size, in_channels, in_height, in_width]): input tensor
             offset (Tensor[batch_size, 2 * offset_groups * kernel_height * kernel_width,
                 out_height, out_width]): offsets to be applied for each position in the
                 convolution kernel.
         """
-
+        
         # B 2*input,H,W
         offset = self.offetconv2d_forward(x).round_()
         # 2,H,W-->B,2,H,W
@@ -1805,7 +1815,7 @@ class GcdConv1d(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-
+        
         if self.auto_pad:
             ih, iw = x.size()[-2:]
             kh, kw = self.kernel_size[-2:]
@@ -1875,6 +1885,7 @@ class GatedConv2d(Conv2d):
         self.norm = norm
 
     def forward(self, x, **kwargs):
+        
         x = super().forward(x)
         if self.strides == (2, 2):
             x = x[:, :, 1::2, 1::2]
@@ -2009,7 +2020,7 @@ class GcdConv2d(_ConvNd):
             self._built = True
 
     def forward(self, x, **kwargs):
-
+        
         x = x.view(x.size(0), x.size(1) // self.groups, self.groups, x.size(2), x.size(3))
         x = F.pad(x, (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 0, 0), mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
@@ -2073,6 +2084,7 @@ class Reshape(Layer):
             self.target_shape=target_shape
 
     def forward(self, x, **kwargs):
+        x=enforce_singleton(x)
         shp = self.target_shape
         if -1 in shp:
             return torch.reshape(x,(int_shape(x)[0],)+ tuple(shp))
@@ -2096,6 +2108,7 @@ class Permute(Layer):
         self.pattern = args
 
     def forward(self, x, **kwargs):
+        
         return permute(x, self.pattern)
 
 
@@ -2111,9 +2124,9 @@ class SelfAttention(Layer):
         self.key_conv = None
         self.value_conv = None
         self.attention = None
-        self.gamma = nn.Parameter(torch.zeros(1))
-        init.zeros_(self.gamma)
-        self._parameters['gamma'] = self.gamma
+        self.register_parameter('gamma', nn.Parameter(torch.zeros(1)))
+
+
 
         self.softmax = nn.Softmax(dim=-1)  #
 
@@ -2131,7 +2144,7 @@ class SelfAttention(Layer):
                 out : self attention value + input feature
                 attention: B X N X N (N is Width*Height)
         """
-
+        
         B, C, width, height = x.size()
         proj_query = self.query_conv(x).view(B, -1, width * height).permute(0, 2, 1)  # B X CX(N)
         proj_key = self.key_conv(x).view(B, -1, width * height)  # B X C x (*W*H)
@@ -2210,7 +2223,7 @@ class CoordConv2d(Layer):
         return ret
 
     def forward(self, x, **kwargs):
-
+        
         ret = self.append_coords(x)
         ret = self.conv(ret)
         return ret
@@ -2229,7 +2242,36 @@ class Upsampling2d(Layer):
         self.align_corners = align_corners
 
     def forward(self, x, **kwargs):
+        
+        if self.mode == 'pixel_shuffle':
+            return F.pixel_shuffle(x, int(self.scale_factor))
+        elif self.mode == 'nearest':
+            return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
+        else:
+            return F.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners)
 
+    def extra_repr(self):
+        if self.scale_factor is not None:
+            info = 'scale_factor=' + str(self.scale_factor)
+        else:
+            info = 'size=' + str(self.size)
+        info += ', mode=' + self.mode
+        return info
+
+class Upsampling1d(Layer):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None,keep_output=False, **kwargs):
+        super(Upsampling1d, self).__init__(keep_output=keep_output, name=name)
+        self.rank = 1
+        self.size = size
+        if isinstance(scale_factor, tuple):
+            self.scale_factor = tuple(float(factor) for factor in scale_factor)
+        else:
+            self.scale_factor = float(scale_factor) if scale_factor else None
+        self.mode = mode
+        self.align_corners = align_corners
+
+    def forward(self, x, **kwargs):
+        
         if self.mode == 'pixel_shuffle':
             return F.pixel_shuffle(x, int(self.scale_factor))
         elif self.mode == 'nearest':
@@ -2248,7 +2290,6 @@ class Upsampling2d(Layer):
 
 
 
-
 class Dropout(Layer):
     def __init__(self, dropout_rate=0, name=None,keep_output=False, **kwargs):
         super(Dropout, self).__init__(keep_output=keep_output, name=name)
@@ -2258,6 +2299,7 @@ class Dropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x, **kwargs):
+        
         return F.dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2284,6 +2326,7 @@ class AlphaDropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x, **kwargs):
+        
         return F.alpha_dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2320,7 +2363,7 @@ class DropBlock2d(Layer):
         self.block_size = block_size
 
     def forward(self, x, **kwargs):
-
+        
         if not self.training or self.dropout_rate == 0:
             return x
         gamma = self.dropout_rate / self.block_size ** 2

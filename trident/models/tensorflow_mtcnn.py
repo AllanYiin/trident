@@ -122,7 +122,7 @@ def Pnet(pretrained=True,
         input_shape=(3,12,12)
     pnet =ImageDetectionModel(input_shape=(3,12,12),output=p_net())
     pnet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
-    if pretrained==True:
+    if pretrained:
         download_model_from_google_drive('1w9ahipO8D9U1dAXMc2BewuL0UqIBYWSX',dirname,'pnet.pth')
         recovery_model=load(os.path.join(dirname,'pnet.pth'))
         recovery_model.to(_device)
@@ -139,7 +139,7 @@ def Rnet(pretrained=True,
         input_shape=(3,24,24)
     rnet =ImageDetectionModel(input_shape=(3,24,24),output=r_net())
     rnet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
-    if pretrained==True:
+    if pretrained:
         download_model_from_google_drive('1CH7z133_KrcWMx9zXAblMCV8luiQ3wph',dirname,'rnet.pth')
         recovery_model=load(os.path.join(dirname,'rnet.pth'))
         recovery_model.to(_device)
@@ -155,7 +155,7 @@ def Onet(pretrained=True,
         input_shape=(3,48,48)
     onet =ImageDetectionModel(input_shape=(3,48,48),output=o_net())
     onet.preprocess_flow = [Normalize(0, 255), image_backend_adaption]
-    if pretrained==True:
+    if pretrained:
         download_model_from_google_drive('1a1dAlSzJOAfIz77Ic38JMQJYWDG_b7-_',dirname,'onet.pth')
         recovery_model=load(os.path.join(dirname,'onet.pth'))
         recovery_model.to(_device)

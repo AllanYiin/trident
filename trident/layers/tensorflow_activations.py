@@ -599,11 +599,10 @@ def get_activation(fn_name,only_layer=False):
         trident_fn_modules = ['trident.layers.tensorflow_activations']
     try:
         if isinstance(fn_name, str):
-            if camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name:
+            if not only_layer and (camel2snake(fn_name)== fn_name or fn_name.lower()== fn_name):
                 if fn_name == 'p_relu' or fn_name == 'prelu':
                     return PRelu()
-                activation_fn = get_function(fn_name, trident_fn_modules if fn_name in __all__
-                else fn_modules)
+                activation_fn = get_function(fn_name, trident_fn_modules)
                 return activation_fn
             else:
                 try:
@@ -621,7 +620,7 @@ def get_activation(fn_name,only_layer=False):
                 return fn_name
         elif inspect.isfunction(fn_name) and getattr(fn_name, '__module__', None) == 'trident.backend.tensorflow_ops':
             if only_layer:
-                activation_layer = get_class(snake2camel(fn_name.__class__.__name__), trident_fn_modules)
+                activation_layer = get_class(snake2camel(fn_name.__name__), trident_fn_modules)
                 return activation_layer()
             else:
                 return fn_name

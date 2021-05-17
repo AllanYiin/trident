@@ -34,12 +34,12 @@ from trident.backend.pytorch_ops import *
 from trident.backend.pytorch_backend import Layer, Sequential,get_device,ModuleList
 
 
-__all__ = ['Mlp','BERT','BERTEmbedding']
+__all__ = ['Mlp','BERT','BERTEmbedding','PositionalEmbedding','PositionwiseFeedForward']
 
-def Mlp(hidden_features=None, out_features=None,drop=0):
+def Mlp(hidden_features=None, out_features=None,dropout_rate=0):
     return Sequential(
-        FullConnect_Block(num_filters=hidden_features,activation=Gelu(),dropout_rate=drop,normalization=None),
-        FullConnect_Block(num_filters=out_features, activation=Gelu(), dropout_rate=drop,normalization=None),
+        FullConnect_Block(num_filters=hidden_features,activation=Gelu(),dropout_rate=dropout_rate,normalization=None),
+        FullConnect_Block(num_filters=out_features, activation=Gelu(), dropout_rate=dropout_rate,normalization=None),
     )
 
 
@@ -67,11 +67,11 @@ class PositionalEmbedding(Layer):
 class PositionwiseFeedForward(Layer):
     "Implements FFN equation."
 
-    def __init__(self, d_model, d_ff, dropout=0.1):
+    def __init__(self, d_model, d_ff, dropout_rate=0.1):
         super(PositionwiseFeedForward, self).__init__()
         self.w_1 = nn.Linear(d_model, d_ff)
         self.w_2 = nn.Linear(d_ff, d_model)
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = Dropout(dropout_rate)
         self.activation = Gelu()
 
     def forward(self, x):
@@ -157,7 +157,7 @@ class BERTEmbedding(Layer):
         sum of all these features are output of BERTEmbedding
     """
 
-    def __init__(self, vocab_size, embed_size, dropout=0.1):
+    def __init__(self, vocab_size, embed_size, dropout_rate=0.1):
         """
         :param vocab_size: total vocab size
         :param embed_size: embedding size of token embedding
@@ -167,7 +167,7 @@ class BERTEmbedding(Layer):
         self.token = Embedding(num_embeddings=vocab_size,embedding_dim=embed_size)
         self.position = PositionalEmbedding(d_model=self.token.embedding_dim)
         self.segment = Embedding(num_embeddings=3,embedding_dim=self.token.embedding_dim)
-        self.dropout = Dropout(dropout)
+        self.dropout = Dropout(dropout_rate)
         self.embed_size = embed_size
 
     def forward(self, x,segment_label):
@@ -216,7 +216,7 @@ class MultiHeadedAttention(Layer):
     Take in model size and number of heads.
     """
 
-    def __init__(self, h, d_model, dropout=0.1):
+    def __init__(self, h, d_model, dropout_rate=0.1):
         super().__init__()
         assert d_model % h == 0
 
@@ -228,7 +228,7 @@ class MultiHeadedAttention(Layer):
         self.output_linear = Dense(d_model)
         self.attention = Attention()
 
-        self.dropout = Dropout(dropout)
+        self.dropout = Dropout(dropout_rate)
 
     def forward(self, query, key, value, mask=None):
         batch_size = query.size(0)
@@ -251,10 +251,10 @@ class SublayerConnection(Layer):
     Note for code simplicity the norm is first as opposed to last.
     """
 
-    def __init__(self, size, dropout):
+    def __init__(self, size, dropout_rate=0.0):
         super(SublayerConnection, self).__init__()
         self.norm = LayerNorm(size)
-        self.dropout = Dropout(dropout)
+        self.dropout = Dropout(dropout_rate)
 
 
     def forward(self, x,sublayer):
@@ -267,7 +267,7 @@ class TransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout_rate=0.1):
         """
         :param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -277,10 +277,10 @@ class TransformerBlock(Layer):
 
         super().__init__()
         self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
-        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout=dropout)
-        self.input_sublayer = SublayerConnection(size=hidden, dropout=dropout)
-        self.output_sublayer = SublayerConnection(size=hidden, dropout=dropout)
-        self.dropout = Dropout(dropout_rate=dropout)
+        self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
+        self.input_sublayer = SublayerConnection(size=hidden, dropout_rate=dropout_rate)
+        self.output_sublayer = SublayerConnection(size=hidden, dropout_rate=dropout_rate)
+        self.dropout = Dropout(dropout_rate=dropout_rate)
 
     def forward(self, x, mask):
         x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
@@ -292,7 +292,7 @@ class BERT(Layer):
     BERT model : Bidirectional Encoder Representations from Transformers.
     """
 
-    def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout=0.1,pad_idx=3):
+    def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1,pad_idx=3):
         """
         :param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -306,6 +306,7 @@ class BERT(Layer):
         self.n_layers = n_layers
         self.attn_heads = attn_heads
         self.pad_idx=pad_idx
+        self.dropout_rate=dropout_rate
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
         self.feed_forward_hidden = hidden * 4
@@ -313,7 +314,7 @@ class BERT(Layer):
         # embedding for BERT, sum of positional, segment, token embeddings
         self.embedding = BERTEmbedding(vocab_size=vocab_size, embed_size=hidden)
         for i in range(n_layers):
-            self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout) )
+            self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate) )
 
     def forward(self, x):
         if int_shape(x)[1]==2:

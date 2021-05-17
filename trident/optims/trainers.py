@@ -66,7 +66,7 @@ class TrainingPlan(object):
         self.training_names = OrderedDict()
         self._dataloaders = OrderedDict()
         self.num_epochs = 1
-        self._minibatch_size = 1
+        self._batch_size = 1
         self.steps = 0
         self.warmup = 0
         self.default_collect_data_inteval = 1
@@ -90,14 +90,23 @@ class TrainingPlan(object):
 
     @property
     def minibatch_size(self):
-        return self._minibatch_size
+        return self._batch_size
 
     @minibatch_size.setter
     def minibatch_size(self, value):
-        self._minibatch_size = value
-        for i, (k, v) in enumerate(self._dataloaders.items()):
-            v.minibatch_size = value
-            self._dataloaders[k] = v
+        self._batch_size = value
+        for k, v in self._dataloaders.item_list:
+            v.batch_size = value
+
+    @property
+    def batch_size(self):
+        return self._batch_size
+
+    @batch_size.setter
+    def batch_size(self, value):
+        self._batch_size = value
+        for k, v in self._dataloaders.item_list:
+            v.batch_size = value
 
     def with_callbacks(self, *callbacks):
         if len(self.callbacks) == 0:
@@ -225,11 +234,11 @@ class TrainingPlan(object):
 
     @deprecated('0.7.0', 'with_batch_size')
     def within_minibatch_size(self, minibatch_size: int):
-        self.minibatch_size = minibatch_size
+        self._batch_size = minibatch_size
         return self
 
-    def with_batch_size(self, minibatch_size: int):
-        self.minibatch_size = minibatch_size
+    def with_batch_size(self, batch_size: int):
+        self._batch_size = batch_size
         return self
 
     @deprecated('0.7.0', 'with_tensorboard')
@@ -438,7 +447,7 @@ class TrainingPlan(object):
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
         data_provider = self._dataloaders.value_list[0]
-        data_provider.minibatch_size = self.minibatch_size
+        data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'
         try:
             self.execution_id = get_time_suffix()
@@ -1086,7 +1095,7 @@ class GanTrainingPlan(TrainingPlan):
 
         data_provider = self._dataloaders.value_list[0]
 
-        data_provider.minibatch_size = self.minibatch_size
+        data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'
         # generate data feed
         self.generate_datafeed(data_provider)

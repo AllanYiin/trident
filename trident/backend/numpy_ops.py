@@ -2978,6 +2978,8 @@ def binary_crossentropy(target, output, from_logits=False):
 
 
 def conv2d(input, weight,bias: Optional[np.ndarray]=None, strides=1, padding=0,dilation=1,groups=1):
+    strides=(strides,strides)
+    padding=(padding,padding)
     ish = input.shape
     fsh = weight.shape
     output = np.zeros([ish[0],(ish[1]-fsh[0])//strides[1]+1,(ish[2]-fsh[1])//strides[2]+1,fsh[3]])
@@ -3102,7 +3104,7 @@ def xyz2rgb(xyz:np.ndarray):
     xyz=xyz/255.0
     transform_tensor = np.array([[3.2404542, - 1.5371385, - 0.4985314],
                                      [-0.9692660, 1.8760108, 0.0415560],
-                                     [0.0556434, - 0.2040259, 1.0572252]],dtype=xyz.dtype,requires_grad=False)
+                                     [0.0556434, - 0.2040259, 1.0572252]],dtype=xyz.dtype)
 
     transform_tensor=np.expand_dims(np.expand_dims(transform_tensor,2),3)
     convolved=None
@@ -3144,13 +3146,13 @@ def rgb2xyz(rgb:np.ndarray):
         elif  int_shape(rgb)[0]==3:
             pass
     rgb=rgb/255.0
-    rgb = np.where(rgb > 0.04045, ((rgb + 0.055) / 1.055).pow(2.4), rgb / 12.92)
+    rgb = np.where(rgb > 0.04045, ((rgb + 0.055) / 1.055)**2.4, rgb / 12.92)
 
     transform_tensor = np.array([[0.4124564, 0.3575761, 0.1804375],
                                      [0.2126729, 0.7151522, 0.0721750],
-                                     [0.0193339, 0.1191920, 0.9503041]],dtype=rgb.dtype,requires_grad=False)
+                                     [0.0193339, 0.1191920, 0.9503041]],dtype=rgb.dtype)
 
-    transform_tensor.unsqueeze_(2).unsqueeze_(3)
+    transform_tensor=np.expand_dims(np.expand_dims(transform_tensor,2),3)
     xyz=None
     if len(rgb.shape) == 4:
         xyz=conv2d(rgb, transform_tensor)

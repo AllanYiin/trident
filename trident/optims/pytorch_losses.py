@@ -24,6 +24,7 @@ from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import sigmoid
 from trident.optims.losses import Loss
+#from trident.optims.pytorch_trainer import Model
 
 _session = get_session()
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -167,6 +168,8 @@ class _ClassificationLoss(Loss):
 
         """
         # check num_clases
+        if len(output) == 0:
+            return to_tensor(0.0)
         if self.num_classes is None:
             self.num_classes = int_shape(output)[self.axis]
 
@@ -181,7 +184,7 @@ class _ClassificationLoss(Loss):
 
         output_exp = exp(output)
 
-        if (ndim(output) >= 1 and 'float' in str(output.dtype) and output.min() >= 0 and output.max() <= 1):
+        if (ndim(output) >= 1 and 'float' in str(output.dtype) and reduce_min(output) >= 0 and reduce_max(output) <= 1):
             self.is_logsoftmax = False
             self.from_logits = True
             if self.auto_balance and self.label_statistics is not None:
@@ -556,7 +559,7 @@ class CrossEntropyLoss(_ClassificationLoss):
         loss=to_tensor(0.0)
         output,target=self.flatten_check( output,target)
         if not self.need_target_onehot:
-            if self.is_target_onehot:
+            if self.is_target_onehot and target.dtype!=dtype.long:
                 target = argmax(target, self.axis)
             if not self.is_logsoftmax:
                 return  torch.nn.functional.nll_loss(torch.nn.functional.log_softmax(output,dim=1),target,weight=self.sample_weight,ignore_index=self.ignore_index,reduction='none')
@@ -1886,9 +1889,11 @@ class StyleLoss(nn.Module):
         return F.mse_loss(G, Gt).div((img_size[1] * img_size[2] * img_size[3]))
 
 
-class PerceptionLoss(_Loss):
+class PerceptionLoss(_PairwiseLoss):
     def __init__(self, net, reduction="mean"):
         super(PerceptionLoss, self).__init__()
+        if isinstance(net,Model):
+            net=net.model
         self.ref_model = net
         self.ref_model.trainable = False
         self.ref_model.eval()
@@ -1900,13 +1905,24 @@ class PerceptionLoss(_Loss):
         self.reduction = reduction
         self.to(_device)
 
-    def preprocess(self, img):
+    def vgg_preprocess(self, img):
         return ((img + 1) / 2) * to_tensor([[0.485, 0.456, 0.406]]).unsqueeze(-1).unsqueeze(-1) + to_tensor([[0.229, 0.224, 0.225]]).unsqueeze(-1).unsqueeze(-1)
 
-    def forward(self, output, target) -> 'loss':
+
+    def calculate_loss(self, output, target, **kwargs):
+        """
+
+        Args:
+            output ():
+            target ():
+            **kwargs ():
+
+        Returns:
+
+        """
         target_features = OrderedDict()
         output_features = OrderedDict()
-        _ = self.ref_model(self.preprocess(output))
+        _ = self.ref_model(self.vgg_preprocess(output))
         for item in self.layer_name_mapping.values():
             output_features[item] = getattr(self.ref_model, item).output
 

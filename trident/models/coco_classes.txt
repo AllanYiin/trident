@@ -7,7 +7,7 @@ bus
 train
 truck
 boat
-traffic light
+traffic_light
 fire hydrant
 stop sign
 parking meter

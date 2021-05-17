@@ -9,17 +9,15 @@ from trident.backend.common import TensorShape, OrderedDict
 from trident.layers.pytorch_normalizations import LayerNorm
 from trident.backend.pytorch_ops import int_shape,meshgrid,expand_dims,squeeze,softmax,sqrt,pow,reshape,permute,space_to_depth,depth_to_space
 from trident.layers.pytorch_activations import Gelu, Identity, Tanh
-from trident.layers.pytorch_blocks import ShortCut,For
+from trident.layers.pytorch_blocks import ShortCut, For, FullConnect_Block
 from trident.layers.pytorch_layers import Dense, Dropout, Conv2d, SoftMax,Aggregation,Reshape,Permute,TransConv2d
 from trident.backend.pytorch_backend import Sequential, Layer, ModuleList,Parameter,get_device
 
 __all__ = ['VisionTransformer_small','TransformerGenerator','VisionTransformer','PatchToImage','ImageToPatch','Block','PatchEmbed','PositionEmbed','Attention','TransformerUpsampling']
 def Mlp(hidden_features=None, out_features=None,drop=0):
     return Sequential(
-        Dense(num_filters=hidden_features,activation=Gelu()),
-        Dropout(dropout_rate=0),
-        Dense(num_filters=out_features, activation=Gelu()),
-        Dropout(dropout_rate=0)
+        FullConnect_Block(num_filters=hidden_features,activation=Gelu(),dropout_rate=drop,normalization=None),
+        FullConnect_Block(num_filters=out_features, activation=Gelu(), dropout_rate=drop,normalization=None),
     )
 
 

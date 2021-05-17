@@ -6,6 +6,7 @@ import numbers
 import random
 import inspect
 import string
+import sys
 from functools import wraps
 from typing import Sequence, Tuple, Dict, Union, Optional
 import collections
@@ -27,11 +28,31 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 from trident.data.transform import TextTransform
 
-__all__ = ['bpmf_phonetic','RandomSwapChar','RandomInsertChar','ToHalfWidth','RandomMask','BopomofoConvert','ChineseConvert','RandomHomophonicTypo','RandomHomomorphicTypo']
+__all__ = ['bpmf_phonetic','numbers','alphabets','chinese_characters','RandomSwapChar','RandomInsertChar','ToHalfWidth','RandomMask','BopomofoConvert','ChineseConvert','RandomHomophonicTypo','RandomHomomorphicTypo']
 
 
 bpmf_phonetic='ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄚㄛㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦㄧㄨㄩ'
+numbers='0123456789'
+alphabets='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+# Ideographic number zero+CJK Unified Ideographs
+chinese_characters='\u3007'.encode('utf-8').decode('utf-8')+''.join([chr(i) for i in range(19968,40959)] )
+#CJK Unified Ideographs Extension A
+# ch2=''.join([chr(i) for i in range(13312,19903)] )
+#CJK Compatibility Ideographs
+# ch3=''.join([chr(i) for i in range(63744,64255)] )
 
+# if sys.maxunicode > 0xFFFF:
+#     chinese_characters += (
+#         '\U00020000-\U0002A6DF'  # CJK Unified Ideographs Extension B
+#         '\U0002A700-\U0002B73F'  # CJK Unified Ideographs Extension C
+#         '\U0002B740-\U0002B81F'  # CJK Unified Ideographs Extension D
+#         '\U0002F800-\U0002FA1F'  # CJK Compatibility Ideographs Supplement
+#     )
+#
+# chinese_radicals = (
+#     '\u2F00-\u2FD5'  # Kangxi Radicals
+#     '\u2E80-\u2EF3'  # CJK Radicals Supplement
+# )
 
 
 class RandomSwapChar(TextTransform):
@@ -411,7 +432,7 @@ class RandomMask(TextTransform):
             else:
                 if self.unit=='word':
                     rr = random.random()
-                    if rr<self.convert_ratio and len(word)>1 and word!=' ' and not is_punctuation(word) and not any([s in string.digits for s in x.lower()]) and out_str[-1]!='<mask/>':
+                    if rr<self.convert_ratio and len(word)>1 and word!=' ' and not is_punctuation(word) and not any([s in string.digits for s in word.lower()]) and out_str[-1]!='[MASK]':
                         for char in word:
                             out_str.append('[MASK]')
                     else:
@@ -421,7 +442,7 @@ class RandomMask(TextTransform):
                         for char in word:
                             rr = random.random()
                             if len(out_str)>2 and out_str[-2]!='[MASK]' and out_str[-1]=='[MASK]':
-                                rr=rr*0.5
+                                rr=rr*0.75
                             if rr < self.convert_ratio and  char != ' ' and char not in string.punctuation and char not in string.digits:
                                 out_str.append('[MASK]')
                             else:

@@ -49,9 +49,13 @@ elif get_backend() == 'tensorflow':
     from trident.layers.tensorflow_layers import *
 
 
-def _make_recovery_model_include_top(recovery_model:Layer,input_shape=None, include_top=True, classes=1000, freeze_features=False):
+def _make_recovery_model_include_top(recovery_model:Layer,default_shape=None,input_shape=None, include_top=True, classes=1000, freeze_features=False):
     size_change=False
-    default_shape=(3,224,224) if get_backend() == 'pytorch' else (224,224,3)
+    if default_shape is None:
+        if recovery_model.built:
+            default_shape=tuple(recovery_model._input_shape.dims[1:] if isinstance(recovery_model._input_shape,TensorShape) else recovery_model._input_shape)
+        else:
+            default_shape=(3,224,224) if get_backend() == 'pytorch' else (224,224,3)
     if input_shape is not None and input_shape !=default_shape:
         size_change=True
         dims = list(input_shape)
@@ -59,7 +63,7 @@ def _make_recovery_model_include_top(recovery_model:Layer,input_shape=None, incl
 
         if isinstance(recovery_model.signature, Signature):
             recovery_model._input_shape = TensorShape(dims)
-            recovery_model.input_spec.shape = TensorShape(dims)
+            recovery_model.signature.inputs.value_list[0].shape = TensorShape(dims)
             recovery_model.signature.inputs.value_list[0].object_type=ObjectType.rgb
 
     if freeze_features:

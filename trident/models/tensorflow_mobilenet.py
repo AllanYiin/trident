@@ -17,7 +17,7 @@ import tensorflow as tf
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load,get_device
+from trident.backend.tensorflow_backend import to_numpy, to_tensor, Layer, Sequential,load,get_device,fix_layer
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
 from trident.layers.tensorflow_activations import get_activation, Identity
@@ -130,7 +130,7 @@ def MobileNetV2(include_top=True,
     mob =MobileNet(input_shape=(224, 224,3), classes=classes, use_bias=False, width_mult=1.0,round_nearest=8, include_top=include_top, model_name='mobilenet')
     if pretrained==True:
         download_model_from_google_drive('15LtLJHpvimV6cFGqAwJ4QALNEjeATrKe',dirname,'mobilenet_v2_tf.pth')
-        recovery_model=load(os.path.join(dirname,'mobilenet_v2_tf.pth'))
+        recovery_model=fix_layer(load(os.path.join(dirname,'mobilenet_v2_tf.pth')))
         recovery_model.eval()
         with tf.device(get_device()):
             if include_top==False:

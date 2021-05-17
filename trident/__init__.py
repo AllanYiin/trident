@@ -15,7 +15,7 @@ if sys.getdefaultencoding() != defaultencoding:
 PACKAGE_ROOT = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 
-__version__ = '0.7.2'
+__version__ = '0.7.3'
 stderr.write('trident {0}\n'.format(__version__))
 
 from trident import context

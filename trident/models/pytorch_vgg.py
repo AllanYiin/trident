@@ -81,7 +81,7 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
             vgg.add_module('block{0}_relu{1}'.format(block, conv),Relu(name='block{0}_relu{1}'.format(block, conv)))
             conv+=1
             in_channels = v
-    if include_top==True:
+    if include_top:
         vgg.add_module('avgpool',AdaptiveAvgPool2d((7,7)))
         vgg.add_module('flattened', Flatten())
         vgg.add_module('fc1',Dense(4096,use_bias=True, activation='relu'))
@@ -117,7 +117,7 @@ def VGG11(include_top=True,
         input_shape=(3, 224, 224)
     vgg11 =make_vgg_layers(cfgs['A'], classes)
     vgg11.input_shape =input_shape
-    if pretrained==True:
+    if pretrained:
         download_model_from_google_drive('1PV9-AwgD1v-JxDRzduOjjGduIR7MDhPW',dirname,'vgg11.pth')
         recovery_model=load(os.path.join(dirname,'vgg11.pth'))
         recovery_model = fix_layer(recovery_model)

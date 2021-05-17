@@ -11,6 +11,7 @@ if get_backend()=='pytorch':
     from . import pytorch_senet as senet
     from . import pytorch_densenet as densenet
     from . import pytorch_efficientnet as efficientnet
+    from . import pytorch_efficientnetv2 as efficientnet_v2
     from . import pytorch_mobilenet as mobilenet
     from . import pytorch_deeplab as deeplab
     from . import pytorch_arcfacenet as arcfacenet

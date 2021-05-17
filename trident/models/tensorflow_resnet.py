@@ -207,8 +207,8 @@ def ResNet152(include_top=True,
     resnet152 =ResNet(bottleneck, [3, 8, 36, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet152')
     with tf.device(get_device()):
         if pretrained==True:
-            download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152.pth')
-            recovery_model=load(os.path.join(dirname,'resnet152.pth'))
+            download_model_from_google_drive('1TeVBB5ynW9E4_EgxIdjugLT8oaXnQH_c',dirname,'resnet152_tf.pth')
+            recovery_model=load(os.path.join(dirname,'resnet152_tf.pth'))
             recovery_model = fix_layer(recovery_model)
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             resnet152.model = recovery_model

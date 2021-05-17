@@ -151,10 +151,14 @@ class Adam(Optimizer):
                 loss = closure()
 
         for group in self.param_groups:
+            params_with_grad = []
+            grads = []
+
+
             for p in group['params'] :
                 if p.grad is None or not p.requires_grad:
                     continue
-                grad = p.grad
+                grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
                 if any_abnormal_number(grad):
@@ -709,7 +713,7 @@ class RAdam(Optimizer):
             loss = closure()
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
                 if grad.is_sparse:
@@ -1092,7 +1096,7 @@ class Ranger(Optimizer):
         # Evaluate averages and grad, update param tensors
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None and not p.requires_grad:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data
 
@@ -1147,7 +1151,7 @@ class Ranger(Optimizer):
                     buffered[2] = step_size
 
                 if group['weight_decay'] != 0:
-                    p_data.add_(p_data, alpha=-group['weight_decay'] * group['lr'])
+                    grad = grad.add(p, alpha=group['weight_decay'])
 
 
                 if N_sma > 5:
@@ -1259,7 +1263,7 @@ class Ranger_new(Optimizer):
         all_para=sum([len(group['params']) for group in self.param_groups])
         for group in self.param_groups:
             for p in group['params']:
-                if p.grad is None and not p.requires_grad:
+                if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
 
@@ -1327,8 +1331,9 @@ class Ranger_new(Optimizer):
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
 
+
                 if group['weight_decay'] != 0:
-                    p_data = p_data - p.value() * group['weight_decay']* state['layer_lr']
+                    grad = grad.add(p, alpha=group['weight_decay']* state['layer_lr'])
 
 
                 if N_sma > 5:
@@ -1481,8 +1486,10 @@ class RangerLars(Optimizer):
                     else:
                         update.add_(exp_avg, alpha=step_size)
 
+                    # if group['weight_decay'] != 0:
+                    #     update.add_(group['weight_decay'], p_data)
                     if group['weight_decay'] != 0:
-                        update.add_(group['weight_decay'], p_data)
+                        grad = grad.add(p, alpha=group['weight_decay'] )
 
                     radam_norm = update.pow(2.0).sum().sqrt()
                     weight_norm = p.data.pow(2.0).sum().sqrt()
@@ -1772,8 +1779,9 @@ class AdaBelief(Optimizer):
                 bias_correction1 = 1 - beta1 ** state['step']
                 bias_correction2 = 1 - beta2 ** state['step']
 
+
                 if group['weight_decay'] != 0:
-                    p_data.add_(p_data, alpha=-group['weight_decay'] * group['lr'])
+                    grad = grad.add(p, alpha=group['weight_decay'])
 
                 # Decay the first and second moment running average coefficient
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)

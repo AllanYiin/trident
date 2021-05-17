@@ -50,7 +50,7 @@ class ImageDataProvider(object):
     supporting integer indexing in range from 0 to len(self) exclusive.
     """
 
-    def __init__(self, dataset_name='', traindata=None, testdata=None, minibatch_size=8, mode='tuple', **kwargs):
+    def __init__(self, dataset_name='', traindata=None, testdata=None, batch_size=8, mode='tuple', **kwargs):
         self.__name__ = dataset_name
         self.uuid = uuid.uuid4().node
         self.traindata = traindata
@@ -64,7 +64,7 @@ class ImageDataProvider(object):
         else:
             raise ValueError("Valid mode should be tuple or dict ")
 
-        self._minibatch_size = minibatch_size
+        self._batch_size = batch_size
         self.__default_language__ = 'en-us'
         if len(self._class_names) > 0:
             if _locale in self._class_names:
@@ -116,16 +116,16 @@ class ImageDataProvider(object):
             return []
 
     @property
-    def minibatch_size(self):
-        return self._minibatch_size
+    def batch_size(self):
+        return self._batch_size
 
-    @minibatch_size.setter
-    def minibatch_size(self, value):
-        self._minibatch_size = value
-        if self.traindata is not None and hasattr(self.traindata, '_minibatch_size'):
-            self.traindata.minibatch_size = self._minibatch_size
-        if self.testdata is not None and hasattr(self.testdata, '_minibatch_size'):
-            self.testdata.minibatch_size = self._minibatch_size
+    @batch_size.setter
+    def batch_size(self, value):
+        self._batch_size = value
+        if self.traindata is not None and hasattr(self.traindata, '_batch_size'):
+            self.traindata.batch_size = self._batch_size
+        if self.testdata is not None and hasattr(self.testdata, '_batch_size'):
+            self.testdata.batch_size = self._batch_size
 
     @property
     def palette(self):
@@ -443,8 +443,9 @@ class TextSequenceDataProvider(object):
     supporting integer indexing in range from 0 to len(self) exclusive.
     """
 
-    def __init__(self, dataset_name='', traindata=None, testdata=None, minibatch_size=8, mode='tuple', **kwargs):
+    def __init__(self, dataset_name='', traindata=None, testdata=None, batch_size=8,sequence_length=64, mode='tuple', **kwargs):
         self.__name__ = dataset_name
+        self.sequence_length = sequence_length
         self.uuid = uuid.uuid4().node
         if mode in ['tuple', 'dict']:
             self.mode = mode
@@ -458,7 +459,7 @@ class TextSequenceDataProvider(object):
         self.scenario = 'train'
         self._class_names = {}
 
-        self._minibatch_size = minibatch_size
+        self._batch_size = batch_size
         self.__default_language__ = 'en-us'
         if len(self._class_names) > 0:
             if _locale in self._class_names:
@@ -467,6 +468,15 @@ class TextSequenceDataProvider(object):
                 if _locale.split('-')[0] in k:
                     self.__default_language__ = k
                     break
+
+        if isinstance(self.traindata ,Iterator):
+            for ds in self.traindata.get_datasets():
+                if isinstance(ds,TextSequenceDataset):
+                    ds.sequence_length=self.sequence_length
+        if isinstance(self.testdata, Iterator):
+            for ds in self.testdata.get_datasets():
+                if isinstance(ds,TextSequenceDataset):
+                    ds.sequence_length=self.sequence_length
 
         self._idx2lab = {}
         self._lab2idx = {}
@@ -519,16 +529,16 @@ class TextSequenceDataProvider(object):
             return []
 
     @property
-    def minibatch_size(self):
-        return self._minibatch_size
+    def batch_size(self):
+        return self._batch_size
 
-    @minibatch_size.setter
-    def minibatch_size(self, value):
-        self._minibatch_size = value
-        if self.traindata is not None and hasattr(self.traindata, '_minibatch_size'):
-            self.traindata.minibatch_size = self._minibatch_size
-        if self.testdata is not None and hasattr(self.testdata, '_minibatch_size'):
-            self.testdata.minibatch_size = self._minibatch_size
+    @batch_size.setter
+    def batch_size(self, value):
+        self._batch_size = value
+        if self.traindata is not None and hasattr(self.traindata, '_batch_size'):
+            self.traindata.batch_size = self._batch_size
+        if self.testdata is not None and hasattr(self.testdata, '_batch_size'):
+            self.testdata.batch_size = self._batch_size
 
     @property
     def palette(self):
@@ -777,6 +787,21 @@ class TextSequenceDataProvider(object):
             return self.testdata.label.vocabs
         else:
             return self.traindata.label.vocabs
+
+
+    def __setattr__(self, name: str, value) -> None:
+        object.__setattr__(self, name, value)
+        if name in ['traindata','testdata','sequence_length']:
+            if hasattr(self,'sequence_length') and self.sequence_length is not None:
+                if hasattr(self,'traindata') and isinstance(self.traindata, Iterator):
+                    for ds in self.traindata.get_datasets():
+                        if isinstance(ds, TextSequenceDataset):
+                            ds.sequence_length = self.sequence_length
+                if hasattr(self,'testdata') and isinstance(self.testdata, Iterator):
+                    for ds in self.testdata.get_datasets():
+                        if isinstance(ds, TextSequenceDataset):
+                            ds.sequence_length = self.sequence_length
+
 
 
 
