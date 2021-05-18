@@ -564,10 +564,10 @@ class SIREN(Layer):
     Sitzmann et. al. (https://arxiv.org/abs/2006.09661)
     """
 
-    def __init__(self,w0=30.0, name=None):
+    def __init__(self,w0=1.0, name=None):
         super(SIREN, self).__init__()
         self._built = True
-        self.w0=tf.Variable(initial_value=w0)
+        self.w0=w0
     def forward(self, x,**kwargs):
         x=sin(self.w0*x)
         return x
