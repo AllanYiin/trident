@@ -631,8 +631,8 @@ class Model(model.ModelBase):
             the model self
 
         """
-        if ctx.amp_available == True:
-            ctx.is_autocast_enabled = True
+        if ctx.amp_available:
+            self.is_autocast_enabled = True
             self.gradscaler = torch.cuda.amp.GradScaler()
             sys.stdout.write('Automatic Mixed Precision:{0}.\n'.format('Turn On'))
         else:
@@ -846,11 +846,11 @@ class Model(model.ModelBase):
                 self._model.train()
 
             if self.training_context['stop_update'] < 1:
-                if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
                     if self.gradscaler is None:
                         self.gradscaler = torch.cuda.amp.GradScaler()
                     self.gradscaler.scale(self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
-
+                    self.gradscaler.unscale_(self.optimizer)
                 else:
                     (self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
                 if not accumulate_grads:
@@ -860,8 +860,7 @@ class Model(model.ModelBase):
 
                     if isinstance(self._model, nn.Module) and self.grad_clipping_by_norm:
 
-                        if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
-                            self.gradscaler.unscale_(self.optimizer)
+                        if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
                             torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
                         else:
@@ -880,8 +879,10 @@ class Model(model.ModelBase):
 
             if self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update']):
                 if not accumulate_grads:
+
                     # amp support
-                    if ctx.amp_available and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                    if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
+
                         self.gradscaler.step(self.optimizer)
                         self.gradscaler.update()
                     else:

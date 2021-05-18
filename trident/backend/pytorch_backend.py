@@ -93,17 +93,17 @@ def set_device(device='cpu'):
         raise ValueError('Gpu is not available...')
     try:
         set_session('device', device)
-        if device == 'cpu':
-            gcitems = gc.get_objects()
-            for i in range(len(gcitems)):
-                obj = gcitems[i]
-                try:
-                    if is_tensor(obj) :
-                        obj.to(device)
-                    elif isinstance(obj, nn.Module):
-                        obj.to(device)
-                except Exception as e:
-                    print(e)
+
+        gcitems = gc.get_objects()
+        for i in range(len(gcitems)):
+            obj = gcitems[i]
+            try:
+                if is_tensor(obj) :
+                    obj.to(device)
+                elif isinstance(obj, nn.Module):
+                    obj.to(device)
+            except Exception as e:
+                print(e)
     except Exception as e:
         print(e)
 
@@ -1940,13 +1940,15 @@ def get_human_readable_count(number):
     return '{int(number):,d} {labels[index]}'
 
 
-def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
+def try_map_args_and_call(fn, data: OrderedDict, data_feed=None,is_autocast_enabled=False):
     """This function is the core function for mapping callable and argments
 
     Args:
+
         fn (callable): the callable, maybe functions or layers
         data (OrderedDict): The key-value pair for available data.
         data_feed (OrderedDict): The relation between callable argments (key) and data (value)
+        is_autocast_enabled (bool):
 
     Returns:
         The result of the callable base on data_feed
@@ -1967,7 +1969,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                     else:
                         raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
                 # print('arg_map',arg_map.key_list)
-                if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         out = fn(*arg_map.value_list)
                 else:
@@ -1989,7 +1991,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
 
                         raise ValueError('arg :{0} cannot mapping correctly!'.format(arg))
                 # print('arg_map', arg_map.key_list)
-                if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         out = fn(*arg_map.value_list)
                 else:
@@ -2009,7 +2011,7 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None):
                     else:
                         arg_map[arg] = ''
                 # print('arg_map', arg_map.key_list)
-                if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
+                if ctx.amp_available == True and is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         out = fn(*arg_map.value_list)
                 else:
