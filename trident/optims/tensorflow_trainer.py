@@ -268,14 +268,7 @@ class Model(ModelBase):
 
     @property
     def outputs(self):
-        if self._model is not None and is_tensor(self._model):
-            return self._outputs
-        elif self._model is None or not self._model.built:
-            return None
-        elif len(self._outputs) >= 1:
-            return self._outputs
-        else:
-            return self._outputs
+        return self._outputs
 
     @property
     def device(self):
@@ -1069,21 +1062,21 @@ class Model(ModelBase):
                                 output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'])
                                 if isinstance(output, (list, tuple)):
                                     for i in range(len(output)):
-                                        self.train_data[self.outputs.key_list[i]] = output[i]
+                                        self.train_data[self.signature.outputs.key_list[0]] = output[i]
                                 elif isinstance(output, (OrderedDict)):
                                     for k, v in output.items():
                                         self.train_data[k] = v
                                 elif 'tensor' in output.__class__.__name__.lower():
-                                    self.train_data[self.outputs.key_list[0]] = output
+                                    self.train_data[self.signature.outputs.key_list[0]] = output
                                     if self.use_output_as_loss == True:
                                         this_loss = output.sum()
-                                        self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
+                                        self.training_context['losses'].collect(self.signature.outputs.key_list[0], self.training_context['steps'], this_loss)
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                                 else:
                                     self.train_data[self.outputs.key_list[0]] = output
                                     if self.use_output_as_loss:
                                         this_loss = output.sum()
-                                        self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
+                                        self.training_context['losses'].collect(self.signature.outputs.key_list[0], self.training_context['steps'], this_loss)
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                         except Exception as e:
                             print(e)
@@ -1196,7 +1189,7 @@ class Model(ModelBase):
                     tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'])
                     if isinstance(tmp_output, (list, tuple)):
                         for i in range(len(tmp_output)):
-                            self.test_data[self.outputs.key_list[i]] = tmp_output[i]
+                            self.test_data[self.signature.outputs.key_list[0]] = tmp_output[i]
                     elif 'tensor' in tmp_output.__class__.__name__.lower():
                         self.test_data[self.outputs.key_list[0]] = tmp_output
                     else:

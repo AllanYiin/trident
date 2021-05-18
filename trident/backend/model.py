@@ -88,6 +88,7 @@ class ModelBase(object):
         self.input_history = []
         self.target_history = []
         #self.callbacks = []
+        self.is_autocast_enabled=False
         self.gradscaler = None
         self.grad_clipping_by_norm = False
         self.grad_clipping_threshold = None
@@ -169,11 +170,7 @@ class ModelBase(object):
 
     @property
     def outputs(self):
-        if self._model is not None and isinstance(self._model ,Layer):
-            if len(self._outputs)==1 and is_tensor(self._model.output_shape)  and not assert_input_compatibility(self._outputs.value_list[0],self._model.output_shape):
-                self._outputs[self._outputs.key_list[0]]=TensorSpec(shape=self._model.output_shape,name=self._outputs.key_list[0])
-
-            return self._outputs
+        return self._outputs
 
     @outputs.setter
     def outputs(self, value):
@@ -802,7 +799,7 @@ class ModelBase(object):
                     if self.output_fn is not None and callable(self.output_fn):
                         self.output_fn()
                     else:
-                        output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'])
+                        output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled)
                         if isinstance(output, (list, tuple)):
                             for i in range(len(output)):
                                 self.train_data[self.signature.outputs.key_list[i]] = output[i]
@@ -850,7 +847,7 @@ class ModelBase(object):
                         if k in self.loss_weights:
                             loss_weight = self.loss_weights[k]
                         loss_weight=to_tensor(loss_weight,'float32')
-                        this_loss = loss_weight*try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) # v.forward(output, target) if hasattr(v, 'forward') else v(
+                        this_loss = loss_weight*try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled) # v.forward(output, target) if hasattr(v, 'forward') else v(
 
                         if isinstance(this_loss, tuple):
                             overall_loss =to_tensor(0.0,requires_grad=True)
@@ -891,7 +888,7 @@ class ModelBase(object):
                     this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,requires_grad=True)
                 elif 'output' in v.signature.inputs:
 
-                    this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
+                    this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled) if self.training_context['stop_update'] < 1 else to_tensor(0.0)
                 if not any_abnormal_number(this_loss):
                     # a leaf Variable that requires grad connotused in an in-place operation.
                     self.training_context['current_loss'] =self.training_context['current_loss'] + this_loss  # self.training_context[
@@ -928,7 +925,7 @@ class ModelBase(object):
 
 
             if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and  self.training_context['stop_update']<1 :
-                tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'])
+                tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'],self.is_autocast_enabled)
                 if isinstance(tmp_output, (list, tuple)):
                     for i in range(len(tmp_output)):
                         self.test_data[self.outputs.key_list[i]] = tmp_output[i]
@@ -952,12 +949,12 @@ class ModelBase(object):
                     self.training_context['metrics'].regist(k)
                 self.training_context['tmp_metrics'].regist(k)
 
-                this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed']) if  self.training_context['stop_update']<1 else to_tensor(0)
+                this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled) if  self.training_context['stop_update']<1 else to_tensor(0)
                 self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
 
 
                 if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 :
-                    this_out_metric = try_map_args_and_call(v, self.test_data , self.training_context['data_feed'])
+                    this_out_metric = try_map_args_and_call(v, self.test_data , self.training_context['data_feed'],self.is_autocast_enabled)
                     self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
 
             # ON_EVALUATION_END
