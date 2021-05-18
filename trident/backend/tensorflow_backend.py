@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import builtins
+import gc
 from enum import Enum
 from itertools import islice
 import operator
@@ -21,7 +22,7 @@ import weakref
 from collections import defaultdict, namedtuple
 from distutils.version import Version, LooseVersion
 from itertools import islice
-from typing import List, Callable, TypeVar, Union, Tuple, overload, Mapping, Dict, Optional, Iterable, Any
+from typing import Union, Tuple, Any, Callable, Iterator, Set, Optional, overload, TypeVar, Mapping, Dict,List,Iterable
 import typing
 import numpy as np
 import tensorflow as tf
@@ -51,10 +52,11 @@ for target_fun_name, source_fun in _FUN_NAMES:
 from trident.backend.tensorspec import *
 from trident.data.utils import pickle_it
 from trident.backend import tensorflow_serialization as serialization
-
+from trident import context
 __all__ = ['set_device', 'Layer', 'get_device', 'Parameter', 'Sequential', 'ModuleList', 'ModuleDict', 'summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call',
            'fix_layer']
 
+ctx = context._context()
 
 def get_device():
     """get current device
@@ -62,22 +64,21 @@ def get_device():
     Returns: device string ('cpu', 'cuda)
 
     """
-    if get_session().device is None or get_session().device == 'cuda':
+    if ctx.device is None or ctx.device == 'cuda':
         set_device('/gpu:0' if len(tf.config.list_physical_devices('GPU')) > 0 else "/cpu:0")
-    return get_session().device
+    return ctx.device
 
 
 def set_device(device='/cpu:0'):
     if device.lower() == 'cuda' or device.lower() == 'gpu':
-        device = '/gpu:0'
+        ctx.device = '/gpu:0'
     if device.lower() == 'cpu':
-        device = '/cpu:0'
+        ctx.device = '/cpu:0'
     if 'gpu' in device and len(tf.config.list_physical_devices('GPU')) == 0:
         raise ValueError('Gpu is not available...')
     try:
-        set_session('device', device)
 
-        if 'cpu' in device:
+        if 'cpu' in ctx.device:
             if len(tf.config.list_physical_devices('GPU')) > 0:
                 os.environ["CUDA_VISIBLE_DEVICES"] = '999'
             if tf.test.gpu_device_name():
@@ -87,6 +88,18 @@ def set_device(device='/cpu:0'):
         elif 'gpu' in device or 'cuda' in device:
             os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
             os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+
+        gcitems = gc.get_objects()
+        for i in range(len(gcitems)):
+            obj = gcitems[i]
+            try:
+                if is_tensor(obj):
+                    with tf.device(ctx.device):
+                        obj = tf.identity(device)
+                elif isinstance(obj, Layer):
+                    obj.to(device)
+            except Exception as e:
+                print(e)
 
     except Exception as e:
         print(e)
@@ -1521,8 +1534,8 @@ class Layer(tf.Module):
                 key = v.ref() if istensor else v
                 if v is None or key in memo:
                     continue
-                name = module_prefix + ('.' if module_prefix else '') + k
                 memo.add(key)
+                name = module_prefix + ('.' if module_prefix else '') + k
                 yield name, v
 
     def parameters(self, recurse=True):
@@ -1549,7 +1562,7 @@ class Layer(tf.Module):
         for name, param in self.named_parameters(recurse=recurse):
             yield param
 
-    def named_parameters(self, prefix='', recurse=True):
+    def named_parameters(self, prefix: str = '', recurse: bool = True) -> Iterator[Tuple[str, Tensor]]:
         r"""Returns an iterator over module parameters, yielding both the
         name of the parameter as well as the parameter itself.
 
@@ -1562,14 +1575,16 @@ class Layer(tf.Module):
         Yields:
             (string, Parameter): Tuple containing the name and parameter
 
-        Examples:
+        Example::
 
             >>> for name, param in self.named_parameters():
             >>>    if name in ['bias']:
             >>>        print(param.size())
 
         """
-        gen = self._named_members(lambda module: module._parameters.items(), prefix=prefix, recurse=recurse)
+        gen = self._named_members(
+            lambda module: module._parameters.items(),
+            prefix=prefix, recurse=recurse)
         for elem in gen:
             yield elem
 
