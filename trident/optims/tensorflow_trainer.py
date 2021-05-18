@@ -660,10 +660,13 @@ class Model(ModelBase):
             print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v,value_type='loss')) for k, v in temp.items()]) + ' }')
 
     def do_on_data_received(self, train_data, test_data):
+
+        # fields=train_data._fields
+        # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or self.training_context['current_batch'] + self.training_context[
-            'current_epoch'] == 0:
+        if self.training_context['steps'] == 0 and (
+                'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or None in self.training_context['data_feed'].value_list):
             try:
 
                 data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
@@ -694,7 +697,7 @@ class Model(ModelBase):
                                 available_fields.remove('input')
                             elif len(self._model.signature.inputs.key_list) == 1:
                                 for item in available_fields:
-                                    data_shape = tensor_to_shape(train_data[item])
+                                    data_shape = train_data[item].shape if len(train_data[item].shape) > 2 else TensorShape([None])
                                     if 'target' not in item and 'output' != item and data_shape == inshapes[0].shape:
                                         data_feed[arg] = item
                                         available_fields.remove(item)
@@ -726,12 +729,12 @@ class Model(ModelBase):
                                 elif len(available_fields) > 0:
                                     target_shape = outshapes
                                     for item in available_fields:
-                                        data_shape = tensor_to_shape(train_data[item])
+                                        data_shape = list(train_data[item].shape) if len(train_data[item].shape) > 1 else [None]
                                         if target_shape == data_shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
                                         elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                                train_data[item].dtype)) and target_shape== data_shape:
+                                                train_data[item].dtype)) and target_shape[:-1] == data_shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
                                         else:
@@ -750,29 +753,23 @@ class Model(ModelBase):
             except:
                 PrintException()
 
+        # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed[arg] for arg in self.signature.inputs.key_list]
+            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-                if item in input_list:
-                    # only model 's input argments
-                    train_data[item] = to_tensor(train_data[item].copy(), requires_grad=True)
-                elif item in self.targets.key_list or data_feed:
-                    train_data[item] = to_tensor(train_data[item].copy(), requires_grad=False)
-                else:
-                    train_data[item] = to_tensor(train_data[item].copy())
+                train_data[item] = to_tensor(train_data[item], device=get_device())
+                if item in input_list and 'float' in str(train_data[item].dtype):
+                    train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    test_data[item] = to_tensor(test_data[item].copy())
-
-                    # check target
+                    test_data[item] = to_tensor(test_data[item], device=get_device())  # .cpu()
 
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
 
         except:
             PrintException()
-
         return self.training_context['train_data'], self.training_context['test_data']
 
     def do_preparation_for_loss(self):
