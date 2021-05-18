@@ -9,7 +9,7 @@ import warnings
 import time
 import numpy as np
 from trident import context
-
+import numbers
 from trident.backend.common import *
 from trident.backend.load_backend import *
 from trident.backend.pillow_backend import image2array
@@ -22,12 +22,12 @@ from trident.data.bbox_common import *
 
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call, Layer
-    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp, \
+    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp,concate, \
         expand_dims
 
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import try_map_args_and_call, Layer
-    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, \
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax,concate, \
         any_abnormal_number, ndim, exp, not_equal, reduce_any, expand_dims
 
 if is_in_ipython() or is_in_colab():
@@ -480,69 +480,130 @@ class PrintGradientsCallback(VisualizationCallbackBase):
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.batch_inteval = batch_inteval
-        self.first_layer = ''
-        self.last_layer = ''
+        self.first_layer =OrderedDict()
+        self.last_layer =OrderedDict()
+        self.is_modulefict=False
         self.lines = []
 
     def on_optimization_step_start(self, training_context):
         if get_backend() == 'pytorch':
             if training_context['steps'] % self.batch_inteval == 0:
-                grad_dict = {}
+                grad_dict =OrderedDict()
                 if 'grads_state' not in training_context:
                     training_context['grads_state'] = OrderedDict()
-                    training_context['grads_state']['first_layer'] = []
-                    training_context['grads_state']['last_layer'] = []
                 if training_context['current_batch'] == 0 and training_context['current_epoch'] > 0:
                     # relocate the first/ last layers
-                    self.first_layer = ''
-                    self.last_layer = ''
-                if self.first_layer != '' and self.last_layer != '':
-                    for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
-                        if v is not None and v.requires_grad == True:
-                            if k == self.first_layer:
-                                training_context['grads_state']['first_layer'].append(
-                                    np.abs(to_numpy(0 if v.grad is None else v.grad)).mean())
-                            elif k == self.last_layer:
-                                training_context['grads_state']['last_layer'].append(
-                                    np.abs(to_numpy(0 if v.grad is None else v.grad)).mean())
+                    self.first_layer = OrderedDict()
+                    self.last_layer = OrderedDict()
 
-                else:
-                    for i, (k, v) in enumerate(training_context['current_model'].named_parameters()):
-                        if v.requires_grad:
-                            if 'bias' not in k and v is not None and v.grad is not None and not any_abnormal_number(v.grad) and v.requires_grad == True:
-                                if 'summary_writer' in training_context and training_context['summary_writer'] is not None:
-                                    training_context['summary_writer'].add_histogram(training_context['training_name'] + '/gradients/' + k, v.grad.data, training_context['steps'])
-                                    training_context['summary_writer'].add_histogram(training_context['training_name'] + '/weights/' + k, v.data, training_context['steps'])
-                                grad_dict[k] = np.abs(to_numpy(0 if v.grad is None else v.grad))
-                                if grad_dict[k].ndim > 1:
-                                    if self.first_layer == '':
-                                        self.first_layer = k
-                                    self.last_layer = k
-                    if self.first_layer != '' and self.first_layer in grad_dict:
-                        training_context['grads_state']['first_layer'].append(grad_dict[self.first_layer].mean())
-                    if self.last_layer != '' and self.last_layer in grad_dict:
-                        training_context['grads_state']['last_layer'].append(grad_dict[self.last_layer].mean())
+                if len(self.first_layer) ==0 and  len(self.last_layer) == 0:
+                    if  training_context['current_model'][-1].__class__.__name__=='ModuleDict':
+                        self.is_modulefict=True
+                        for k,v in training_context['current_model'][-1].items():
+                            last_layer_name=''
+                            for name,module in v.named_modules():
+                                if len([pk  for pk,pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad])> 0:
+                                    last_layer_name=module.relative_name
+                            if last_layer_name!='':
+                                self.last_layer[last_layer_name]=k
 
-                if len(training_context['grads_state']['first_layer']) > 0 and len(training_context['grads_state']['last_layer']) > 0:
-                    self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
-                        training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
-                        training_context['grads_state']['last_layer'][-1]))
+                    first_layer_name = ''
+                    last_layer_name = ''
+                    for k, v in training_context['current_model'].named_modules():
+                        if len([ pk  for pk,pv in v._parameters.items() if 'bias' not in pk and pv.requires_grad])> 0:
+                            if first_layer_name=='':
+                                first_layer_name =v.relative_name
+                                self.first_layer[first_layer_name] = 'first_layer'
+
+                            if not self.is_modulefict:
+                                last_layer_name=v.relative_name
+                    if last_layer_name != '' and not self.is_modulefict:
+                        self.last_layer[last_layer_name] =  'last_layer'
+
+
+                for name, module in training_context['current_model'].named_modules():
+                    if module.relative_name in self.first_layer or module.relative_name in self.last_layer:
+                        grads_data=[np.abs(np.reshape(to_numpy(pv.grad.data),-1))  for pk, pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad and pv.grad is not None]
+                        weights_data = [np.abs(np.reshape(to_numpy(pv.data), -1)) for pk, pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad ]
+                        if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                            ctx.summary_writer.add_histogram(training_context['training_name'] + '/gradients/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else self.last_layer[module.relative_name], np.concatenate(grads_data,axis=0), training_context['steps'])
+                            ctx.summary_writer.add_histogram(training_context['training_name'] + '/weights/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else self.last_layer[module.relative_name], np.concatenate(weights_data,axis=0), training_context['steps'])
+                        if len(grads_data)>0:
+                            grads_data=np.concatenate(grads_data,axis=0).mean()
+                        else:
+                            grads_data=None
+                        if module.relative_name in self.first_layer:
+                            training_context['grads_state']['first_layer']=grads_data
+                        elif module.relative_name in self.last_layer:
+                            training_context['grads_state'][self.last_layer[module.relative_name]]=grads_data
+
+                if len(training_context['grads_state']) > 0:
+                    self.lines.append('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(['{0} gradients: {1:<8.3e} '.format(k, v) for k,v in training_context['grads_state'].items() if isinstance(v,numbers.Number)]))
+
+
         elif get_backend() == 'tensorflow':
-            if (training_context['current_epoch'] * training_context['total_batch'] + training_context['current_batch']) % self.batch_inteval == 0:
+            if training_context['steps'] % self.batch_inteval == 0:
+                grad_dict =OrderedDict()
                 if 'grads_state' not in training_context:
                     training_context['grads_state'] = OrderedDict()
-                    training_context['grads_state']['first_layer'] = []
-                    training_context['grads_state']['last_layer'] = []
-                grads_and_vars = list(training_context['optimizer'].grads_and_vars)
-                grads_and_vars = [gv for gv in grads_and_vars if gv[1].trainable and reduce_any(not_equal(gv[0], 0))]
-                training_context['grads_state']['first_layer'].append(np.abs(to_numpy(grads_and_vars[0][0])).mean())
-                training_context['grads_state']['last_layer'].append(np.abs(to_numpy(grads_and_vars[-1][0])).mean())
+                if training_context['current_batch'] == 0 and training_context['current_epoch'] > 0:
+                    # relocate the first/ last layers
+                    self.first_layer = OrderedDict()
+                    self.last_layer = OrderedDict()
 
-                if len(training_context['grads_state']['first_layer']) > 0 and len(
-                        training_context['grads_state']['last_layer']) > 0:
-                    self.lines.append('{0:<16s}  first_layer gradients: {1:<8.3e}| last_layer gradients: {2:<8.3e}'.format(
-                        training_context['current_model'].name, training_context['grads_state']['first_layer'][-1],
-                        training_context['grads_state']['last_layer'][-1]))
+                if len(self.first_layer) == 0 and len(self.last_layer) == 0:
+                    if training_context['current_model'][-1].__class__.__name__ == 'ModuleDict':
+                        self.is_modulefict = True
+                        for k, v in training_context['current_model'][-1].items():
+                            last_layer_name = ''
+                            for name, module in v.named_modules():
+                                if len([pk for pk, pv in module._parameters.items() if 'bias' not in pk and pv.trainable]) > 0:
+                                    last_layer_name = module.relative_name
+                            if last_layer_name != '':
+                                self.last_layer[last_layer_name] = k
+                    first_layer_name = ''
+                    last_layer_name = ''
+                    for k, v in training_context['current_model'].named_modules():
+                        if len([pk for pk, pv in v._parameters.items() if 'bias' not in pk and pv.trainable]) > 0:
+                            if first_layer_name == '':
+                                first_layer_name = v.relative_name
+                                self.first_layer[first_layer_name] = 'first_layer'
+
+                            if not self.is_modulefict:
+                                last_layer_name = v.relative_name
+                    if last_layer_name != '' and not self.is_modulefict:
+                        self.last_layer[last_layer_name] = 'last_layer'
+
+                grads_and_vars = list(training_context['optimizer'].grads_and_vars)
+                grads_dict=OrderedDict()
+                for grad, var  in grads_and_vars:
+                    grads_dict[var.ref()]=to_numpy(grad)
+
+                for name, module in training_context['current_model'].named_modules():
+                    if module.relative_name in self.first_layer or module.relative_name in self.last_layer:
+                        grads_data = [np.abs(np.reshape(grads_dict[pv.ref()], -1)) for pk, pv in module._parameters.items() if  'bias' not in pk and pv.trainable and grads_dict[pv.ref()] is not None]
+                        weights_data = [np.abs(np.reshape(to_numpy(pv.value()), -1)) for pk, pv in module._parameters.items() if 'bias' not in pk and pv.trainable]
+                        if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                            ctx.summary_writer.add_histogram(
+                                training_context['training_name'] + '/gradients/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else
+                                self.last_layer[module.relative_name], np.concatenate(grads_data, axis=0), training_context['steps'])
+                            ctx.summary_writer.add_histogram(
+                                training_context['training_name'] + '/weights/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else
+                                self.last_layer[module.relative_name], np.concatenate(weights_data, axis=0), training_context['steps'])
+                        if len(grads_data) > 0:
+                            grads_data = np.concatenate(grads_data, axis=0).mean()
+                        else:
+                            grads_data = None
+                        if module.relative_name in self.first_layer:
+                            training_context['grads_state']['first_layer'] = grads_data
+                        elif module.relative_name in self.last_layer:
+                            training_context['grads_state'][self.last_layer[module.relative_name]] = grads_data
+
+                if len(training_context['grads_state']) > 0:
+                    self.lines.append('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(
+                        ['{0} gradients: {1:<8.3e} '.format(k, v) for k, v in training_context['grads_state'].items() if isinstance(v, numbers.Number)]))
+
+
 
     def on_overall_batch_end(self, training_context):
         if len(self.lines) > 0:
