@@ -377,6 +377,9 @@ class dtype:
         double = torch.float64
         long = torch.int64
         float = torch.float32
+        complex64=torch.complex64
+        complex128=torch.complex128
+        cfloat = torch.cfloat
     elif backend == 'tensorflow':
         import tensorflow as tf
         bool = tf.bool
@@ -400,6 +403,9 @@ class dtype:
         double = tf.float64
         long = tf.int64
         float = tf.float32
+        complex64=tf.complex64
+        complex128=tf.complex128
+        cfloat =tf.complex64
     elif backend== 'onnx':
         import onnx
         from onnx import helper, onnx_pb, defs, numpy_helper
@@ -423,6 +429,8 @@ class dtype:
         double =onnx_pb.TensorProto.DOUBLE
         long =onnx_pb.TensorProto.INT64
         float =onnx_pb.TensorProto.FLOAT
+
+
     elif backend == 'numpy':
         bool = np.bool
 
@@ -445,6 +453,10 @@ class dtype:
         double = np.float64
         long = np.int64
         float = np.float32
+        complex64 = np.complex64
+        complex128 = np.complex128
+        cfloat = np.complex64
+
 
 
 
