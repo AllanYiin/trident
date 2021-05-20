@@ -935,13 +935,17 @@ class Model(model.ModelBase):
             self.weights_history.append(weight_dict)
 
     def save_model(self, save_path=None):
+        is_abnormal=False
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
         if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+            is_abnormal=True
             for para in self._model.parameters():
                 if any_abnormal_number(para):
-                    para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+                    para.data.copy_(where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+        if is_tensor(self._model ) and any_abnormal_number(self._model):
+            is_abnormal = True
 
             sys.stderr.write(self._get_name() + '  nan detected!!\n')
         if save_path is not None:
@@ -952,7 +956,7 @@ class Model(model.ModelBase):
         else:
             save_path = self.training_context['save_path']
 
-        if isinstance(self._model, nn.Module):
+        if isinstance(self._model, nn.Module) and not is_abnormal:
             try:
                 folder, filename, ext = split_path(save_path)
                 if filename == '':
@@ -985,7 +989,7 @@ class Model(model.ModelBase):
                 print(e)
                 PrintException()
 
-        elif isinstance(self._model, torch.Tensor):
+        elif is_tensor(self._model)and not is_abnormal:
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
