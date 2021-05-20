@@ -850,7 +850,7 @@ class Model(model.ModelBase):
                     if self.gradscaler is None:
                         self.gradscaler = torch.cuda.amp.GradScaler()
                     self.gradscaler.scale(self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
-                    self.gradscaler.unscale_(self.optimizer)
+
                 else:
                     (self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
                 if not accumulate_grads:
@@ -882,7 +882,7 @@ class Model(model.ModelBase):
 
                     # amp support
                     if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-
+                        self.gradscaler.unscale_(self.optimizer)
                         self.gradscaler.step(self.optimizer)
                         self.gradscaler.update()
                     else:
