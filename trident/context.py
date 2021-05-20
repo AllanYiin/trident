@@ -177,7 +177,7 @@ class _Context:
         self.image_backend = 'opencv'
         self.epoch_equivalent = 1000
         self.floatx = 'float32'
-        self.epsilon = 1e-8
+        self.epsilon = 1e-7
         self.working_directory = os.getcwd()
         self.plateform = self._get_plateform()
         self.numpy_print_format = '{0:.4e}'
