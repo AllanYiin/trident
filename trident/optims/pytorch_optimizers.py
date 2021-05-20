@@ -116,7 +116,7 @@ class Adam(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
+    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-7, weight_decay=0, amsgrad=False,
                  gradient_centralization=None, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -424,7 +424,7 @@ class Adadelta(adadelta.Adadelta):
 
     __ https://arxiv.org/abs/1212.5701
     """
-    def __init__(self, params, lr=1.0, rho=0.9, eps=1e-6, weight_decay=0):
+    def __init__(self, params, lr=1.0, rho=0.9, eps=1e-7, weight_decay=0):
         super().__init__(params, lr=lr, rho=rho, eps=eps, weight_decay=weight_decay)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -493,7 +493,7 @@ class Adagrad(adagrad.Adagrad):
      .. _Adaptive Subgradient Methods for Online Learning and Stochastic
          Optimization: http://jmlr.org/papers/v12/duchi11a.html
      """
-    def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-10):
+    def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-7):
         super().__init__(params, lr=lr, lr_decay=lr_decay, eps=eps, weight_decay=weight_decay,initial_accumulator_value=initial_accumulator_value)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -572,7 +572,7 @@ class RMSprop(rmsprop.RMSprop):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
 
     """
-    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-8, weight_decay=0, momentum=0, centered=False,gradient_centralization=None):
+    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-7, weight_decay=0, momentum=0, centered=False,gradient_centralization=None):
         super().__init__(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay,momentum=momentum,centered=centered)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -662,7 +662,7 @@ class RAdam(Optimizer):
         ```
         """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, N_sma_threshhold=5,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, N_sma_threshhold=5,
                  degenerated_to_sgd=True,gradient_centralization=None):
         """Construct a new RAdam optimizer.
         Args:
@@ -876,7 +876,7 @@ class AdamW(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, warmup=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, warmup=0,gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -1022,7 +1022,7 @@ class Ranger(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
+    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
                  weight_decay=0,gradient_centralization=None):
         self.gradient_centralization=gradient_centralization
         # parameter checks
@@ -1186,7 +1186,7 @@ class Ranger_new(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
+    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
                  weight_decay=0,gradient_centralization=None):
         self.gradient_centralization=gradient_centralization
         # parameter checks
@@ -1369,7 +1369,7 @@ class RangerLars(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3,betas=(0.9, 0.999),alpha=0.5, k=6,N_sma_threshhold=5,eps=1e-8, weight_decay=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3,betas=(0.9, 0.999),alpha=0.5, k=6,N_sma_threshhold=5,eps=1e-7, weight_decay=0,gradient_centralization=None):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -1714,7 +1714,7 @@ class AdaBelief(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-8, weight_decay=0, amsgrad=False,
+    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-7, weight_decay=0, amsgrad=False,
                  gradient_centralization=None, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
@@ -1808,7 +1808,7 @@ class RangerBelief(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
+    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
                  weight_decay=0,gradient_centralization=None):
         # parameter checks
         self.first_run_check=0
@@ -1999,7 +1999,7 @@ class DiffGrad(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0,gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
