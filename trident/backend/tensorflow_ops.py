@@ -38,7 +38,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy'
            'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse','index_select',
            'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
-           'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_crossentropy']
+           'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_cross_entropy']
 
 ctx=get_session()
 Tensor=tf.Tensor
@@ -3992,23 +3992,24 @@ def random_bernoulli(x: Tensor):
 
 
 @numpy_compatible
-def binary_crossentropy(output,target,  from_logits=False):
-  """
-  Binary crossentropy between an output tensor and a target tensor.
-  Args:
-      target: A tensor with the same shape as `output`.
-      output: A tensor.
-      from_logits: Whether `output` is expected to be a logits tensor.
-          By default, we consider that `output`
-          encodes a probability distribution.
-  Returns:
-      A tensor.
-  """
-
-  # Compute cross entropy from probabilities.
-  bce = target *log(output + epsilon())
-  bce += (1 - target) *log(1 - output + epsilon())
-  return -bce
+def binary_cross_entropy(output,target,from_logits=False):
+    """Binary crossentropy between an output tensor and a target tensor.
+      Args:
+          target: A tensor with the same shape as `output`.
+          output: A tensor.
+          from_logits: Whether `output` is expected to be a logits tensor.
+              By default, we consider that `output`
+              encodes a probability distribution.
+      Returns:
+          A tensor.
+      """
+    if from_logits:
+        output = clip(output, 1e-7, 1 - 1e-7)
+    else:
+        output = clip(sigmoid(output), 1e-7, 1 - 1e-7)
+    bce = target * tf.math.log(output)
+    bce += (1 - target) * tf.math.log(1 - output)
+    return -bce
 
 
 

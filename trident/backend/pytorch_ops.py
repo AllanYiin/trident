@@ -3926,14 +3926,26 @@ def random_bernoulli(x: Tensor):
 ## loss
 ###########################
 
+@numpy_compatible
+def binary_cross_entropy(output,target,from_logits=False):
+    """Binary crossentropy between an output tensor and a target tensor.
+      Args:
+          target: A tensor with the same shape as `output`.
+          output: A tensor.
+          from_logits: Whether `output` is expected to be a logits tensor.
+              By default, we consider that `output`
+              encodes a probability distribution.
+      Returns:
+          A tensor.
+      """
+    if from_logits:
+        output = clip(output, 1e-7, 1 - 1e-7)
+    else:
+        output = clip(sigmoid(output), 1e-7, 1 - 1e-7)
+    bce = target * torch.log(output)
+    bce += (1 - target) * torch.log(1 - output)
+    return -bce
 
-def binary_cross_entropy(output,target, from_logits=False):
-    if not from_logits:
-        output = output.sigmoid()
-    output = output.clamp(epsilon(), 1.0 - epsilon())
-    target = target.clamp(epsilon(), 1.0 - epsilon())
-    loss = -target * torch.log(output) # (1.0 - target) * torch.log(1.0 - output)
-    return loss
 
 
 

@@ -753,12 +753,8 @@ class BCELoss(_ClassificationLoss):
 
         """
         with self._name_scope:
-            if self.is_logsoftmax:
-                output = exp(output)
-            # Compute cross entropy from probabilities.
-            bce = target * log(output + epsilon())
-            bce += (1 - target) * log(1 - output + epsilon())
-            return -bce
+            loss=binary_cross_entropy(output,target,from_logits=self.from_logits)
+            return loss
 
 
 
