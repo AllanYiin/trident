@@ -40,7 +40,7 @@ __all__ = ['get_session','set_session','get_session_value','is_autocast_enabled'
            'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein','is_alphabet','is_punctuation','remove_nonprintable',
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode','adaptive_format','num_cpus',
-          'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map','dtype']
+          'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map','dtype','red_color','green_color','cyan_color','blue_color','orange_color','gray_color','yellow_color']
 
 
 # In some cases, these basic types are shadowed by corresponding
@@ -1675,7 +1675,49 @@ class _empty:
     """Marker object for Signature.empty and Parameter.empty."""
 
 
+def red_color(text,bolder=False):
+    if bolder:
+        return '\033[1;31m{0}\033[0;0m'.format(text)
+    else:
+        return '\033[31m{0}\033[0;0m'.format(text)
 
+def green_color(text,bolder=False):
+    if bolder:
+        return '\033[1;32m{0}\033[0;0m'.format( text)
+    else:
+        return '\033[32m{0}\033[0;0m'.format( text)
+
+def blue_color(text,bolder=False):
+    if bolder:
+        return '\033[1;34m{0}\033[0m'.format(text)
+    else:
+        return '\033[34m{0}\033[0;0m'.format( text)
+
+def cyan_color(text,bolder=False):
+    if bolder:
+        return '\033[1;96m{0}\033[0m'.format(text)
+    else:
+        return '\033[96m{0}\033[0;0m'.format( text)
+
+def yellow_color(text,bolder=False):
+    if bolder:
+        return '\033[1;93m{0}\033[0m' .format(text)
+    else:
+        return '\033[93m{0}\033[0;0m'.format( text)
+
+
+
+def orange_color(text,bolder=False):
+    if bolder:
+        return u'\033[1;33m%s\033[0m' % text
+    else:
+        return '\033[33m {0}\033[0;0m'.format( text)
+
+def gray_color(text,bolder=False):
+    if bolder:
+        return u'\033[1;337m%s\033[0m' % text
+    else:
+        return '\033[37m {0}\033[0;0m'.format(text)
 
 
 def get_args_spec(fn):

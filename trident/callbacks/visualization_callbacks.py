@@ -8,6 +8,8 @@ import sys
 import warnings
 import time
 import numpy as np
+import torch
+
 from trident import context
 import numbers
 from trident.backend.common import *
@@ -41,12 +43,15 @@ __all__ = ['VisualizationCallbackBase', 'TileImageCallback', 'PrintGradientsCall
 
 
 class VisualizationCallbackBase(CallbackBase):
-    def __init__(self, epoch_inteval, batch_inteval, save_path: str = None, imshow=False):
+    def __init__(self, frequency=-1, unit='batch',  save_path: str = None, imshow=False):
         super(VisualizationCallbackBase, self).__init__()
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
-        self.epoch_inteval = epoch_inteval
-        self.batch_inteval = batch_inteval
+        self.frequency = frequency
+        if unit in ('batch','step','epoch'):
+            self.unit = unit
+        else:
+            print(red_color('Only [batch, step, epoch] are valid unit.',True))
         if save_path is None:
             save_path = 'results'
         self.save_path = make_dir_if_need(save_path)
@@ -56,10 +61,10 @@ class VisualizationCallbackBase(CallbackBase):
 
 
 class TileImageCallback(VisualizationCallbackBase):
-    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results',
+    def __init__(self, frequency=-1, unit='batch',  save_path: str = 'results',
                  name_prefix: str = 'tile_image_{0}.png', row=3, include_input=True, include_output=True, include_target=True,
                  include_mask=None, reverse_image_transform=None, imshow=False):
-        super(TileImageCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        super(TileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.tile_image_name_prefix = name_prefix
@@ -162,19 +167,19 @@ class TileImageCallback(VisualizationCallbackBase):
         plt.close()
 
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0):
+        if self.frequency>0  and ((self.unit=='batch' and (training_context['current_batch']+1) % self.frequency == 0) or (self.unit=='step' and (training_context['steps']+1) % self.frequency == 0) ):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0):
+        if self.frequency>0  and (self.unit=='epoch' and training_context['current_batch']==0 and  (training_context['current_epoch']+1) % self.frequency == 0):
             self.plot_tile_image(training_context)
 
 
 class GanTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results',
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results',
                  name_prefix: str = 'tile_image_{0}.png', row=3,
                  include_mask=None, reverse_image_transform=None, imshow=False):
-        super(GanTileImageCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        super(GanTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.tile_image_name_prefix = name_prefix
@@ -220,16 +225,16 @@ class GanTileImageCallback(VisualizationCallbackBase):
             plt.close()
 
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0 or not self.sample_enough):
-            if self.batch_inteval > 0 and (training_context['steps'] % self.batch_inteval == 0):
+        if self.frequency>0  and ((self.unit=='batch' and (training_context['current_batch']+1) % self.frequency == 0) or (self.unit=='step' and (training_context['steps']+1) % self.frequency == 0) or not self.sample_enough ):
+            if self.sample_enough:
                 self.tile_images_list = []
                 self.output_arr = []
                 self.sample_enough = False
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0 or not self.sample_enough):
-            if self.epoch_inteval > 0 and (training_context['current_epoch'] % self.epoch_inteval == 0):
+        if self.frequency>0  and ((self.unit=='epoch' and training_context['current_batch']==0 and  (training_context['current_epoch']+1) % self.frequency == 0)or not self.sample_enough):
+            if self.sample_enough:
                 self.tile_images_list = []
                 self.output_arr = []
                 self.sample_enough = False
@@ -237,9 +242,9 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
 
 class SegTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results', reverse_image_transform=None,
+    def __init__(self, frequency=-1, unit='batch',  save_path: str = 'results', reverse_image_transform=None,
                  palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False):
-        super(SegTileImageCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        super(SegTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.palette = palette
@@ -332,18 +337,18 @@ class SegTileImageCallback(VisualizationCallbackBase):
         plt.close()
 
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['steps']) % self.batch_inteval == 0:
+        if self.frequency>0  and ((self.unit=='batch' and (training_context['current_batch']+1) % self.frequency == 0) or (self.unit=='step' and (training_context['steps']+1) % self.frequency == 0) ):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
+        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] + 1) % self.frequency == 0):
             self.plot_tile_image(training_context)
 
 
 class DetectionPlotImageCallback(VisualizationCallbackBase):
-    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results', reverse_image_transform=None, labels=None,
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results', reverse_image_transform=None, labels=None,
                  palette=None, background=(120, 120, 120), name_prefix: str = 'detection_plot_image_{0}.png', imshow=False):
-        super(DetectionPlotImageCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        super(DetectionPlotImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
         self.labels = labels
@@ -393,18 +398,18 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
         plt.close()
 
     def on_batch_end(self, training_context):
-        if self.batch_inteval > 0 and (training_context['steps']) % self.batch_inteval == 0:
+        if self.frequency>0  and ((self.unit=='batch' and (training_context['current_batch']+1) % self.frequency == 0) or (self.unit=='step' and (training_context['steps']+1) % self.frequency == 0) ):
             self.plot_detection_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.epoch_inteval > 0 and (training_context['current_epoch']) % self.epoch_inteval == 0:
+        if self.frequency>0  and (self.unit=='epoch' and training_context['current_batch']==0 and  (training_context['current_epoch']+1) % self.frequency == 0):
             self.plot_detection_image(training_context)
 
 
 class PlotLossMetricsCallback(VisualizationCallbackBase):
-    def __init__(self, epoch_inteval=-1, batch_inteval=-1, save_path: str = 'results', clean_ipython_output_frequency=5,
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results', clean_ipython_output_frequency=5,
                  name_prefix: str = 'loss_metric_curve_{0}.png', is_inplace=False, imshow=False):
-        super(PlotLossMetricsCallback, self).__init__(epoch_inteval, batch_inteval, save_path, imshow)
+        super(PlotLossMetricsCallback, self).__init__(frequency, unit, save_path, imshow)
         self.training_items = None
         self.name_prefix = name_prefix
         self.is_inplace = is_inplace
@@ -421,7 +426,8 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
 
     def on_overall_batch_end(self, training_context):
         if not self.is_inplace:
-            if self.batch_inteval > 0 and (self.training_items.value_list[0].training_context['steps'] + 1) % self.batch_inteval == 0:
+            if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
+                    self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
                 if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
                     display.clear_output(wait=True)
                     self.counter = 0
@@ -475,11 +481,9 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
 
 
 class PrintGradientsCallback(VisualizationCallbackBase):
-    def __init__(self, batch_inteval=100):
-        super(PrintGradientsCallback, self).__init__(epoch_inteval=-1, batch_inteval=batch_inteval)
-        self.is_in_ipython = is_in_ipython()
-        self.is_in_colab = is_in_colab()
-        self.batch_inteval = batch_inteval
+    def __init__(self, frequency=-1, unit='batch'):
+        super(PrintGradientsCallback, self).__init__(frequency, unit)
+
         self.first_layer =OrderedDict()
         self.last_layer =OrderedDict()
         self.is_modulefict=False
@@ -487,62 +491,64 @@ class PrintGradientsCallback(VisualizationCallbackBase):
 
     def on_optimization_step_start(self, training_context):
         if get_backend() == 'pytorch':
-            if training_context['steps'] % self.batch_inteval == 0:
-                grad_dict =OrderedDict()
-                if 'grads_state' not in training_context:
-                    training_context['grads_state'] = OrderedDict()
-                if training_context['current_batch'] == 0 and training_context['current_epoch'] > 0:
-                    # relocate the first/ last layers
-                    self.first_layer = OrderedDict()
-                    self.last_layer = OrderedDict()
+            with torch.no_grad():
+                if self.frequency>0  and ((self.unit=='batch' and (training_context['current_batch']+1) % self.frequency == 0) or (self.unit=='step' and (training_context['steps']+1) % self.frequency == 0) or (self.unit=='epoch' and  (training_context['current_epoch']+1) % self.frequency == 0)):
+                    grad_dict =OrderedDict()
+                    if 'grads_state' not in training_context:
+                        training_context['grads_state'] = OrderedDict()
+                    if training_context['current_batch'] == 0 and training_context['current_epoch'] > 0:
+                        # relocate the first/ last layers
+                        self.first_layer = OrderedDict()
+                        self.last_layer = OrderedDict()
 
-                if len(self.first_layer) ==0 and  len(self.last_layer) == 0:
-                    if  training_context['current_model'][-1].__class__.__name__=='ModuleDict':
-                        self.is_modulefict=True
-                        for k,v in training_context['current_model'][-1].items():
-                            last_layer_name=''
-                            for name,module in v.named_modules():
-                                if len([pk  for pk,pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad])> 0:
-                                    last_layer_name=module.relative_name
-                            if last_layer_name!='':
-                                self.last_layer[last_layer_name]=k
+                    if len(self.first_layer) ==0 and  len(self.last_layer) == 0:
+                        if  training_context['current_model'][-1].__class__.__name__=='ModuleDict':
+                            self.is_modulefict=True
+                            for k,v in training_context['current_model'][-1].items():
+                                last_layer_name=''
+                                for name,module in v.named_modules():
+                                    if len([pk  for pk,pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad])> 0:
+                                        last_layer_name=module.relative_name
+                                if last_layer_name!='':
+                                    self.last_layer[last_layer_name]=k
 
-                    first_layer_name = ''
-                    last_layer_name = ''
-                    for k, v in training_context['current_model'].named_modules():
-                        if len([ pk  for pk,pv in v._parameters.items() if 'bias' not in pk and pv.requires_grad])> 0:
-                            if first_layer_name=='':
-                                first_layer_name =v.relative_name
-                                self.first_layer[first_layer_name] = 'first_layer'
+                        first_layer_name = ''
+                        last_layer_name = ''
+                        for k, v in training_context['current_model'].named_modules():
+                            if len([ pk  for pk,pv in v._parameters.items() if 'bias' not in pk and pv is not None and pv.requires_grad])> 0:
+                                if first_layer_name=='':
+                                    first_layer_name =v.relative_name
+                                    self.first_layer[first_layer_name] = 'first_layer'
 
-                            if not self.is_modulefict:
-                                last_layer_name=v.relative_name
-                    if last_layer_name != '' and not self.is_modulefict:
-                        self.last_layer[last_layer_name] =  'last_layer'
+                                if not self.is_modulefict:
+                                    last_layer_name=v.relative_name
+                        if last_layer_name != '' and not self.is_modulefict:
+                            self.last_layer[last_layer_name] =  'last_layer'
 
 
-                for name, module in training_context['current_model'].named_modules():
-                    if module.relative_name in self.first_layer or module.relative_name in self.last_layer:
-                        grads_data=[np.abs(np.reshape(to_numpy(pv.grad.data),-1))  for pk, pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad and pv.grad is not None]
-                        weights_data = [np.abs(np.reshape(to_numpy(pv.data), -1)) for pk, pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad ]
-                        if ctx.enable_tensorboard and ctx.summary_writer is not None:
-                            ctx.summary_writer.add_histogram(training_context['training_name'] + '/gradients/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else self.last_layer[module.relative_name], np.concatenate(grads_data,axis=0), training_context['steps'])
-                            ctx.summary_writer.add_histogram(training_context['training_name'] + '/weights/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else self.last_layer[module.relative_name], np.concatenate(weights_data,axis=0), training_context['steps'])
-                        if len(grads_data)>0:
-                            grads_data=np.concatenate(grads_data,axis=0).mean()
-                        else:
-                            grads_data=None
-                        if module.relative_name in self.first_layer:
-                            training_context['grads_state']['first_layer']=grads_data
-                        elif module.relative_name in self.last_layer:
-                            training_context['grads_state'][self.last_layer[module.relative_name]]=grads_data
+                    for name, module in training_context['current_model'].named_modules():
+                        if module.relative_name in self.first_layer or module.relative_name in self.last_layer:
+                            grads_data=[np.abs(np.reshape(to_numpy(pv.grad.data),-1))  for pk, pv in module._parameters.items() if 'bias' not in pk and pv is not None and pv.requires_grad and pv.grad is not None]
+                            weights_data = [np.abs(np.reshape(to_numpy(pv.data), -1)) for pk, pv in module._parameters.items() if 'bias' not in pk and pv is not None and pv.requires_grad ]
+                            if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                                ctx.summary_writer.add_histogram(training_context['training_name'] + '/gradients/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else self.last_layer[module.relative_name], np.concatenate(grads_data,axis=0), training_context['steps'])
+                                ctx.summary_writer.add_histogram(training_context['training_name'] + '/weights/' + self.first_layer[module.relative_name] if module.relative_name in self.first_layer else self.last_layer[module.relative_name], np.concatenate(weights_data,axis=0), training_context['steps'])
+                            if len(grads_data)>0:
+                                grads_data=np.concatenate(grads_data,axis=0).mean()
+                            else:
+                                grads_data=None
+                            if module.relative_name in self.first_layer:
+                                training_context['grads_state']['first_layer']=grads_data
+                            elif module.relative_name in self.last_layer:
+                                training_context['grads_state'][self.last_layer[module.relative_name]]=grads_data
 
-                if len(training_context['grads_state']) > 0:
-                    self.lines.append('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(['{0} gradients: {1:<8.3e} '.format(k, v) for k,v in training_context['grads_state'].items() if isinstance(v,numbers.Number)]))
+                    if len(training_context['grads_state']) > 0:
+                        grads_str=yellow_color('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(['{0} gradients: {1:<8.3e} '.format(k, v) for k,v in training_context['grads_state'].items() if isinstance(v,numbers.Number)]))
+                        self.lines.append(grads_str+'\n')
 
 
         elif get_backend() == 'tensorflow':
-            if training_context['steps'] % self.batch_inteval == 0:
+            if self.frequency>0  and ((self.unit=='batch' and (training_context['current_batch']+1) % self.frequency == 0) or (self.unit=='step' and (training_context['steps']+1) % self.frequency == 0) or (self.unit=='epoch' and training_context['current_batch']==0 and  (training_context['current_epoch']+1) % self.frequency == 0)):
                 grad_dict =OrderedDict()
                 if 'grads_state' not in training_context:
                     training_context['grads_state'] = OrderedDict()
@@ -557,14 +563,14 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                         for k, v in training_context['current_model'][-1].items():
                             last_layer_name = ''
                             for name, module in v.named_modules():
-                                if len([pk for pk, pv in module._parameters.items() if 'bias' not in pk and pv.trainable]) > 0:
+                                if len([pk for pk, pv in module._parameters.items() if 'bias' not in pk and pv is not None and pv.trainable]) > 0:
                                     last_layer_name = module.relative_name
                             if last_layer_name != '':
                                 self.last_layer[last_layer_name] = k
                     first_layer_name = ''
                     last_layer_name = ''
                     for k, v in training_context['current_model'].named_modules():
-                        if len([pk for pk, pv in v._parameters.items() if 'bias' not in pk and pv.trainable]) > 0:
+                        if len([pk for pk, pv in v._parameters.items() if 'bias' not in pk and pv is not None and pv.trainable]) > 0:
                             if first_layer_name == '':
                                 first_layer_name = v.relative_name
                                 self.first_layer[first_layer_name] = 'first_layer'
@@ -600,15 +606,15 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                             training_context['grads_state'][self.last_layer[module.relative_name]] = grads_data
 
                 if len(training_context['grads_state']) > 0:
-                    self.lines.append('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(
+                    grad_str=yellow_color('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(
                         ['{0} gradients: {1:<8.3e} '.format(k, v) for k, v in training_context['grads_state'].items() if isinstance(v, numbers.Number)]))
+                    self.lines.append(grad_str+'\n')
 
 
 
     def on_overall_batch_end(self, training_context):
         if len(self.lines) > 0:
-            sys.stdout.writelines(self.lines)
-            sys.stdout.write('\n')
-            sys.stdout.flush()
+            for line in self.lines:
+                print(line)
             self.lines = []
 
