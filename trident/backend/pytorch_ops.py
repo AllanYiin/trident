@@ -563,7 +563,7 @@ def to(x, *args,**kwargs):
 ############################
 ## check operation
 ###########################
-
+@numpy_compatible
 def is_nan(x):
     """
 
@@ -582,7 +582,7 @@ def is_nan(x):
     else:
         raise NotImplementedError
 
-
+@numpy_compatible
 def is_inf(x):
     """
 
@@ -601,7 +601,7 @@ def is_inf(x):
     else:
         raise NotImplementedError
 
-
+@numpy_compatible
 def is_abnormal_number(x):
     """
 
@@ -613,7 +613,7 @@ def is_abnormal_number(x):
     """
     return is_nan(x) |is_inf(x)
 
-
+@numpy_compatible
 def any_nan(x):
     """
 
@@ -635,7 +635,7 @@ def any_nan(x):
     else:
         raise NotImplementedError
 
-
+@numpy_compatible
 def any_inf(x):
     """
 
@@ -657,7 +657,7 @@ def any_inf(x):
     else:
         raise NotImplementedError
 
-
+@numpy_compatible
 def any_abnormal_number(x):
     """
 
@@ -675,7 +675,7 @@ def any_abnormal_number(x):
 ## logical  operation
 ###########################
 
-
+@numpy_compatible
 def logical_and(left, right):
     """Element-wise `logical and: x && y`.
     Args:
@@ -688,7 +688,7 @@ def logical_and(left, right):
     """
     return torch.logical_and(left, right)
 
-
+@numpy_compatible
 def logical_not(x:Tensor):
     """Element-wise `logical not: ~x`
     Args:
@@ -698,7 +698,7 @@ def logical_not(x:Tensor):
     """
     return torch.logical_not(x)
 
-
+@numpy_compatible
 def logical_or(left, right):
     """Element-wise `logical or: x || y`.
     Args:
@@ -709,7 +709,7 @@ def logical_or(left, right):
     """
     return torch.logical_or(left, right)
 
-
+@numpy_compatible
 def logical_xor(left, right):
     """Element-wise `logical xor: x ^ y`.
     Args:
@@ -3704,7 +3704,7 @@ def random_normal(shape, mean=0.0, std=1.0, dtype=dtype.float32, seed=None):
 
 
 @numpy_compatible
-def random_normal_like(x, mean=0.0, std=1.0, dtype=dtype.float32, seed=None):
+def random_normal_like(x, mean=0.0, std=1.0, dtype=None, seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3741,11 +3741,21 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=dtype.float32, seed=None):
     """
     if seed is not None:
         set_seed(seed)
-        if dtype is not None:
-            dtype = str2dtype(dtype)
     if dtype is not None:
-        return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=torch.float32)
+        dtype = str2dtype(dtype)
+    else:
+        dtype=x.dtype
+    if is_abnormal_number(std):
+        std=1
+    if is_abnormal_number(mean):
+        mean=0
+    if is_tensor(std):
+        std=std.item()
+    if is_tensor(mean):
+        mean=mean.item()
+
+    return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=dtype)
+
 
 
 
