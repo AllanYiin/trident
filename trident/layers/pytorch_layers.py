@@ -34,10 +34,11 @@ from trident.layers.pytorch_activations import get_activation
 from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_initializers import *
 from trident.backend import dtype
+
 __all__ = ['Dense', 'Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot', 'Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
            'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape', 'Permute',
-           'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer','Aggregation']
+           'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer', 'Aggregation']
 
 _session = get_session()
 
@@ -93,11 +94,11 @@ class Dense(Layer):
         torch.Size([2, 30])
     """
 
-    def __init__(self, num_filters=None, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None,filter_index=-1, depth_multiplier=1,**kwargs):
+    def __init__(self, num_filters=None, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None, filter_index=-1, depth_multiplier=1, **kwargs):
         super(Dense, self).__init__(name=name, keep_output=keep_output)
         self.rank = 0
-        self.filter_index=-1
-        self.depth_multiplier=depth_multiplier
+        self.filter_index = -1
+        self.depth_multiplier = depth_multiplier
         if isinstance(num_filters, int) or num_filters is None:
             self.num_filters = num_filters
         elif isinstance(num_filters, tuple):
@@ -113,14 +114,14 @@ class Dense(Layer):
             self.weights_norm = None
         self.activation = get_activation(activation)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if not self._built:
             if len(input_shape.dims) == 1:
                 self.input_filters = input_shape.dims[0]
             else:
                 self.input_filters = input_shape[self.filter_index]
             if self.num_filters is None:
-                self.num_filters=int(self.input_filters*self.depth_multiplier)
+                self.num_filters = int(self.input_filters * self.depth_multiplier)
             self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters))
             kaiming_uniform(self.weight, a=math.sqrt(5))
             # self._parameters['weight'] =self.weight
@@ -132,15 +133,15 @@ class Dense(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-        #x=enforce_singleton(x)
-        if ndim(x)>2:
-            x=squeeze(x)
-        shp=None
+        # x=enforce_singleton(x)
+        if ndim(x) > 2:
+            x = squeeze(x)
+        shp = None
         # if hasattr(self, 'in_sequence') and self.in_sequence:
         #     x=x.permute(0,2,1)
 
         if hasattr(self, 'weights_norm') and self.weights_norm is not None:
-            x = F.linear(x, self.weights_norm(self.weight) , self.bias)
+            x = F.linear(x, self.weights_norm(self.weight), self.bias)
         else:
             x = F.linear(x, self.weight, self.bias)
 
@@ -234,13 +235,14 @@ class Embedding(Layer):
 
     def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = None,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
-                 sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=1, keep_output: bool = False, name: Optional[str] = None,add_noise=False, noise_intensity=0.005) -> None:
+                 sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=1, keep_output: bool = False, name: Optional[str] = None, add_noise=False,
+                 noise_intensity=0.005) -> None:
         super(Embedding, self).__init__(keep_output=keep_output, name=name)
         self.filter_index = filter_index
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
-        self.add_noise=add_noise
-        self.noise_intensity=noise_intensity
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
 
         self.register_parameter('weight', None)
 
@@ -272,7 +274,7 @@ class Embedding(Layer):
                     self.weight[self.padding_idx].fill_(0)
         self.sparse = sparse
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False and self.sparse == False:
             raise ValueError('Only sparse embedding support shape inferred, please setting num_embeddings manually. ')
         elif not self._built:
@@ -290,17 +292,16 @@ class Embedding(Layer):
             self._built = True
 
     def forward(self, x: torch.Tensor) -> Tensor:
-        if self.sparse and x.dtype !=dtype.long and int_shape(x)[-1] == self.num_embeddings:
+        if self.sparse and x.dtype != dtype.long and int_shape(x)[-1] == self.num_embeddings:
             x = argmax(x, -1)
-        elif not self.sparse and x.dtype !=dtype.long and int_shape(x)[-1] != self.num_embeddings:
+        elif not self.sparse and x.dtype != dtype.long and int_shape(x)[-1] != self.num_embeddings:
             x = x.long()
 
-        embed=F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
+        embed = F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
         if self.add_noise == True and self.training == True:
-            noise = self.noise_intensity * random_normal_like(embed,mean=embed.mean().item(),std=embed.std().item(),dtype=embed.dtype).detach().to(embed.device)
+            noise = self.noise_intensity * random_normal_like(embed, mean=embed.mean(), std=embed.std(), dtype=embed.dtype).detach().to(embed.device)
             embed = embed + noise
         return embed
-
 
     def extra_repr(self) -> str:
         s = '{num_embeddings}, {embedding_dim}'
@@ -400,7 +401,7 @@ class Add(Layer):
     def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Add, self).__init__(name=name, keep_output=keep_output)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             self.output_shape = input_shape
             self._built = True
@@ -422,7 +423,7 @@ class Subtract(Layer):
     def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Subtract, self).__init__(name=name, keep_output=keep_output)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             self.output_shape = input_shape
             self._built = True
@@ -444,7 +445,7 @@ class Dot(Layer):
     def __init__(self, axis=1, keep_output: bool = False, name: Optional[str] = None):
         super(Dot, self).__init__(name=name, keep_output=keep_output)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             self.output_shape = input_shape
             self._built = True
@@ -524,12 +525,12 @@ class Scale(Layer):
 
         if mode == 'uniform' and (numel(self._scale) != 1.0 or numel(self._shift) != 1.0 or numel(self._power) != 1):
             raise ValueError('Scale/ Shift/ Power should float, 0d Tensor or One element Tensor whem mode=uniform')
-        if mode in ['uniform','constant', 'channel', 'elementwise']:
+        if mode in ['uniform', 'constant', 'channel', 'elementwise']:
             self.mode = mode
         else:
             raise ValueError('Only [uniform,channel,elementwise] is valid value for mode ')
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         def remove_from(name: str, *dicts):
             for d in dicts:
                 if name in d:
@@ -542,15 +543,15 @@ class Scale(Layer):
                 self.power = Parameter(ones((1)).to(self.get_root().device) * self._power, trainable=True)
             elif self.mode == 'constant':
                 self.scale = ones((1)).to(self.get_root().device) * self._scale
-                self.shift = ones((1)).to(self.get_root().device)  * self._shift
-                self.power = ones((1)).to(self.get_root().device) *  self._power
+                self.shift = ones((1)).to(self.get_root().device) * self._shift
+                self.power = ones((1)).to(self.get_root().device) * self._power
             elif self.mode == 'channel':
-                new_shape=[1,]*(input_shape.rank)
-                new_shape[self.filter_index]=self.input_filters
-                new_shape=tuple(new_shape[1:])
-                self.scale = Parameter(ones(new_shape).to(self.get_root().device)*self._scale,trainable=True)
-                self.shift = Parameter(ones(new_shape).to(self.get_root().device)*self._shift,trainable=True)
-                self.power = Parameter(ones(new_shape).to(self.get_root().device)*self._power,trainable=True)
+                new_shape = [1, ] * (input_shape.rank)
+                new_shape[self.filter_index] = self.input_filters
+                new_shape = tuple(new_shape[1:])
+                self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
+                self.shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
+                self.power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
             elif self.mode == 'elementwise':
                 new_shape = input_shape.dims[1:]
                 self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
@@ -562,9 +563,9 @@ class Scale(Layer):
             self._built = True
 
     def forward(self, x, **kwargs) -> torch.Tensor:
-        self.scale=self.scale.to(x.device)
-        self.shift=self.shift.to(x.device)
-        self.power=self.power.to(x.device)
+        self.scale = self.scale.to(x.device)
+        self.shift = self.shift.to(x.device)
+        self.power = self.power.to(x.device)
         x = pow(x * self.scale + self.shift, self.power)
         return x
 
@@ -572,47 +573,48 @@ class Scale(Layer):
 class Aggregation(Layer):
     """Flatten layer to flatten a tensor after convolution."""
 
-    def __init__(self, mode='mean', axis=1, keepdims=True,keep_output: bool = False, name: Optional[str] = None):
+    def __init__(self, mode='mean', axis=1, keepdims=True, keep_output: bool = False, name: Optional[str] = None):
         super(Aggregation, self).__init__(name=name, keep_output=keep_output)
-        valid_mode=['mean','sum','max','min','first','last' ]
+        valid_mode = ['mean', 'sum', 'max', 'min', 'first', 'last']
         if mode in valid_mode:
-            self.mode=mode
+            self.mode = mode
         else:
-            raise  ValueError('{0} is not valid mode. please use one of {1}'.format(mode,valid_mode))
-        self.axis=unpack_singleton(axis)
-        if mode in ['first','last' ] and isinstance(self.axis,(list,tuple)):
+            raise ValueError('{0} is not valid mode. please use one of {1}'.format(mode, valid_mode))
+        self.axis = unpack_singleton(axis)
+        if mode in ['first', 'last'] and isinstance(self.axis, (list, tuple)):
             raise ValueError('{0} only can reduction along one axis.'.format(mode))
 
-        self.keepdims=keepdims
+        self.keepdims = keepdims
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             dims = input_shape.dims
-            if self.keepdims==True:
-                dims[self.axis]=1
+            if self.keepdims == True:
+                dims[self.axis] = 1
             else:
                 dims.pop(self.axis)
             self.output_shape = TensorShape(dims)
             self._built = True
 
     def forward(self, x, **kwargs) -> torch.Tensor:
-        if self.mode=='mean':
-            x=reduce_mean(x,axis=self.axis,keepdims=self.keepdims)
+        if self.mode == 'mean':
+            x = reduce_mean(x, axis=self.axis, keepdims=self.keepdims)
         elif self.mode == 'sum':
             x = reduce_sum(x, axis=self.axis, keepdims=self.keepdims)
-        elif self.mode=='max':
+        elif self.mode == 'max':
             x = reduce_max(x, axis=self.axis, keepdims=self.keepdims)
-        elif self.mode=='min':
+        elif self.mode == 'min':
             x = reduce_min(x, axis=self.axis, keepdims=self.keepdims)
         elif self.mode == 'first':
-            x = x.select(dim=self.axis,index=0)
+            x = x.select(dim=self.axis, index=0)
             if self.keepdims:
-                x=expand_dims(x,axis=self.axis)
+                x = expand_dims(x, axis=self.axis)
         elif self.mode == 'last':
             x = x.select(dim=self.axis, index=-1)
             if self.keepdims:
                 x = expand_dims(x, axis=self.axis)
         return x
+
 
 _gcd = gcd
 _get_divisors = get_divisors
@@ -699,8 +701,8 @@ class _ConvNd(Layer):
                      'groups', 'transposed']
 
     def __init__(self, rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias, dilation, groups,
-                 transposed=False, name=None, depth_multiplier=1, depthwise=False, separable=False, keep_output=False,**kwargs):
-        super(_ConvNd, self).__init__(keep_output=keep_output,name=name)
+                 transposed=False, name=None, depth_multiplier=1, depthwise=False, separable=False, keep_output=False, **kwargs):
+        super(_ConvNd, self).__init__(keep_output=keep_output, name=name)
         self.rank = rank
         self.num_filters = num_filters
         self.depth_multiplier = depth_multiplier
@@ -730,9 +732,9 @@ class _ConvNd(Layer):
         self.use_bias = use_bias
         self.to(self.device)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if not self._built:
-            self.input_filters =int(input_shape[self.filter_index])
+            self.input_filters = int(input_shape[self.filter_index])
             if self.auto_pad:
                 if not self.transposed:
                     self.padding = get_static_padding(self.rank, self.kernel_size, self.strides, self.dilation, input_shape.dims[2:])
@@ -767,7 +769,7 @@ class _ConvNd(Layer):
             if self.depthwise and self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
 
-            #channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
+            # channel_multiplier = int(self.num_filters // self.groups) if self.depth_multiplier is None else self.depth_multiplier  # default channel_multiplier
 
             if self.transposed:
                 self.weight = Parameter(torch.Tensor(int(self.input_filters), self.num_filters // self.groups, *self.kernel_size))
@@ -782,7 +784,6 @@ class _ConvNd(Layer):
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(int(self.num_filters)))
                 init.zeros_(self.bias)
-
 
             self.to(get_device())
             self._built = True
@@ -906,7 +907,7 @@ class Conv1d(_ConvNd):
         """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -925,7 +926,7 @@ class Conv1d(_ConvNd):
         elif isinstance(padding, tuple):
             pass
         super(Conv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias, dilation,
-                                     groups, transposed=False, name=name, depth_multiplier=depth_multiplier, depthwise=False, separable=False, keep_output=keep_output,**kwargs)
+                                     groups, transposed=False, name=name, depth_multiplier=depth_multiplier, depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
 
@@ -934,7 +935,7 @@ class Conv1d(_ConvNd):
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1035,7 +1036,7 @@ class Conv2d(_ConvNd):
         """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1059,7 +1060,7 @@ class Conv2d(_ConvNd):
             pass
         super(Conv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                      dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                     depthwise=False, separable=False, keep_output=keep_output,**kwargs)
+                                     depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.rank = 2
@@ -1077,7 +1078,7 @@ class Conv2d(_ConvNd):
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1086,7 +1087,7 @@ class Conv2d(_ConvNd):
 
 class Conv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1103,7 +1104,7 @@ class Conv3d(_ConvNd):
             pass
         super(Conv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                      dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                     depthwise=False, separable=False, keep_output=keep_output,**kwargs)
+                                     depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1119,7 +1120,7 @@ class Conv3d(_ConvNd):
         return F.conv3d(x, self.weight, self.bias, self.strides, _triple(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv3d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1128,7 +1129,7 @@ class Conv3d(_ConvNd):
 
 class TransConv1d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None,keep_output=False, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -1145,7 +1146,7 @@ class TransConv1d(_ConvNd):
             pass
         super(TransConv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                           dilation, groups, transposed=True, name=name, depth_multiplier=depth_multiplier,
-                                          depthwise=False, separable=False, keep_output=keep_output,**kwargs)
+                                          depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.output_padding = _single(0)
@@ -1157,7 +1158,7 @@ class TransConv1d(_ConvNd):
         return F.conv_transpose1d(x, self.weight, self.bias, self.strides, padding=_single(0), output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv1d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1180,7 +1181,7 @@ class TransConv2d(_ConvNd):
     """
 
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1197,7 +1198,7 @@ class TransConv2d(_ConvNd):
             pass
         super(TransConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                           dilation, groups, transposed=True, name=name, depth_multiplier=depth_multiplier,
-                                          depthwise=False, separable=False, keep_output=keep_output,**kwargs)
+                                          depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.output_padding = _pair(0)
@@ -1231,7 +1232,7 @@ class TransConv2d(_ConvNd):
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1240,7 +1241,7 @@ class TransConv2d(_ConvNd):
 
 class TransConv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1257,7 +1258,7 @@ class TransConv3d(_ConvNd):
             pass
         super(TransConv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                           dilation, groups, transposed=True, name=name, depth_multiplier=depth_multiplier,
-                                          depthwise=False, separable=False,keep_output=keep_output, **kwargs)
+                                          depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.output_padding = _triple(0)
@@ -1281,7 +1282,7 @@ class TransConv3d(_ConvNd):
                                   output_padding=self.output_padding, dilation=self.dilation, groups=self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv3d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1290,7 +1291,7 @@ class TransConv3d(_ConvNd):
 
 class SeparableConv1d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False, **kwargs):
         rank = 1
         kernel_size = _single(kernel_size)
         strides = _single(kwargs.get('stride', strides))
@@ -1307,11 +1308,23 @@ class SeparableConv1d(_ConvNd):
             pass
         super(SeparableConv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=True, separable=True, keep_output=keep_output,**kwargs)
+                                              depthwise=True, separable=True, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.conv1 = None
         self.pointwise = None
+
+    def build(self, input_shape: TensorShape):
+        if self._built == False or self.conv1 is None:
+            if self.num_filters is None:
+                self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
+            self.conv1 = DepthwiseConv1d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
+                                         strides=self.strides, auto_pad=self.auto_pad, padding_mode=self.padding_mode,
+                                         activation=self.activation, dilation=self.dilation, use_bias=self.use_bias)
+            self.pointwise = Conv1d(kernel_size=1, num_filters=self.num_filters, strides=1, use_bias=self.use_bias,
+                                    dilation=1, groups=1)
+            self.to(self.device)
+            self._built = True
 
     def forward(self, x, **kwargs):
         x = self.conv1(x)
@@ -1323,7 +1336,7 @@ class SeparableConv1d(_ConvNd):
 
 class SeparableConv2d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero',
-                 activation=None, use_bias=False, dilation=1, groups=1, name=None, keep_output=False,**kwargs):
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, keep_output=False, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1340,13 +1353,13 @@ class SeparableConv2d(_ConvNd):
             pass
         super(SeparableConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=True, separable=True, keep_output=keep_output,**kwargs)
+                                              depthwise=True, separable=True, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.pointwise = None
         self._built = False
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False or self.conv1 is None:
             if self.num_filters is None:
                 self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
@@ -1359,7 +1372,7 @@ class SeparableConv2d(_ConvNd):
             self._built = True
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv1(x)
         x = self.pointwise(x)
 
@@ -1368,7 +1381,7 @@ class SeparableConv2d(_ConvNd):
 
 class SeparableConv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None,keep_output=False, **kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1385,12 +1398,12 @@ class SeparableConv3d(_ConvNd):
             pass
         super(SeparableConv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=True, separable=True, keep_output=keep_output,**kwargs)
+                                              depthwise=True, separable=True, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
         self.pointwise = None
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False or self.conv1 is None:
             self.num_filters = self.input_filters * self.depth_multiplier if self.depth_multiplier is not None else self.num_filters
             self.conv1 = DepthwiseConv3d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier,
@@ -1403,7 +1416,7 @@ class SeparableConv3d(_ConvNd):
             self._built = True
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv1(x)
         x = self.pointwise(x)
         if self.activation is not None:
@@ -1413,7 +1426,7 @@ class SeparableConv3d(_ConvNd):
 
 class DepthwiseConv1d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, name=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, name=None, keep_output=False, **kwargs):
 
         rank = 1
         kernel_size = _single(kernel_size)
@@ -1433,7 +1446,7 @@ class DepthwiseConv1d(_ConvNd):
         super(DepthwiseConv1d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode,
                                               use_bias, dilation, groups, transposed=False, name=name,
                                               depth_multiplier=depth_multiplier, depthwise=True, separable=False,
-                                              keep_output=keep_output,**kwargs)
+                                              keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1442,7 +1455,7 @@ class DepthwiseConv1d(_ConvNd):
         return F.conv1d(x, self.weight, self.bias, self.strides, _single(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -1525,7 +1538,7 @@ class DepthwiseConv2d(_ConvNd):
      """
 
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, name=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, name=None, keep_output=False, **kwargs):
         rank = 2
         kernel_size = _pair(kernel_size)
         strides = _pair(kwargs.get('stride', strides))
@@ -1544,7 +1557,7 @@ class DepthwiseConv2d(_ConvNd):
         super(DepthwiseConv2d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode,
                                               use_bias, dilation, groups, transposed=False, name=name,
                                               depth_multiplier=depth_multiplier, depthwise=True, separable=False,
-                                              keep_output=keep_output,**kwargs)
+                                              keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
 
@@ -1561,7 +1574,7 @@ class DepthwiseConv2d(_ConvNd):
         return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
-        
+
         x = self.conv2d_forward(x)
         if self.activation is not None:
             x = self.activation(x)
@@ -1570,7 +1583,7 @@ class DepthwiseConv2d(_ConvNd):
 
 class DepthwiseConv3d(_ConvNd):
     def __init__(self, kernel_size, depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
-                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False,**kwargs):
+                 use_bias=False, dilation=1, groups=1, name=None, keep_output=False, **kwargs):
         rank = 3
         kernel_size = _triple(kernel_size)
         strides = _triple(kwargs.get('stride', strides))
@@ -1587,7 +1600,7 @@ class DepthwiseConv3d(_ConvNd):
             pass
         super(DepthwiseConv3d, self).__init__(rank, kernel_size, num_filters, strides, auto_pad, padding, padding_mode, use_bias,
                                               dilation, groups, transposed=False, name=name, depth_multiplier=depth_multiplier,
-                                              depthwise=False, separable=False, keep_output=False,**kwargs)
+                                              depthwise=False, separable=False, keep_output=False, **kwargs)
 
         self.activation = get_activation(activation)
         self._built = False
@@ -1636,8 +1649,8 @@ class DepthwiseConv3d(_ConvNd):
 
 class DeformConv2d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, offset_group=2, auto_pad=True, padding_mode='zero',
-                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False,**kwargs):
-        super(DeformConv2d, self).__init__(keep_output=keep_output,name=name)
+                 activation=None, use_bias=False, dilation=1, groups=1, name=None, depth_multiplier=None, keep_output=False, **kwargs):
+        super(DeformConv2d, self).__init__(keep_output=keep_output, name=name)
         self.rank = 2
         self.kernel_size = _pair(kernel_size)
         self.num_filters = kwargs.get('num_filters')
@@ -1662,7 +1675,7 @@ class DeformConv2d(Layer):
         if self.input_filters % self.groups != 0:
             raise ValueError('in_channels must be divisible by groups')
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             if self.num_filters % self.groups != 0:
                 raise ValueError('out_channels must be divisible by groups')
@@ -1711,7 +1724,7 @@ class DeformConv2d(Layer):
                 out_height, out_width]): offsets to be applied for each position in the
                 convolution kernel.
         """
-        
+
         # B 2*input,H,W
         offset = self.offetconv2d_forward(x).round_()
         # 2,H,W-->B,2,H,W
@@ -1738,8 +1751,8 @@ class DeformConv2d(Layer):
 class GcdConv1d(Layer):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding_mode='zero', activation=None,
                  use_bias=False, dilation=1, divisor_rank=0, self_norm=True, is_shuffle=False, name=None,
-                 depth_multiplier=None,keep_output=False, **kwargs):
-        super(GcdConv1d, self).__init__(keep_output=keep_output,name=name)
+                 depth_multiplier=None, keep_output=False, **kwargs):
+        super(GcdConv1d, self).__init__(keep_output=keep_output, name=name)
         self.rank = 1
         self.kernel_size = _single(kernel_size)
         self.num_filters = num_filters
@@ -1777,7 +1790,7 @@ class GcdConv1d(Layer):
         if self.input_filters == self.num_filters or self.input_filters == self.gcd or self.num_filters == self.gcd:
             self.groups = gcd_list[min(int(self.divisor_rank + 1), len(gcd_list))]
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if not self._built:
             self.calculate_gcd()
             # print('input:{0} -> output:{1}   {2}  {3}  gcd:{4} group:{5}   通道縮放倍數:{5} '.format(self.input_filters,
@@ -1815,7 +1828,7 @@ class GcdConv1d(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-        
+
         if self.auto_pad:
             ih, iw = x.size()[-2:]
             kh, kw = self.kernel_size[-2:]
@@ -1862,7 +1875,6 @@ class GcdConv1d(Layer):
         return s.format(**self.__dict__)
 
 
-
 class GatedConv2d(Conv2d):
     """
     A wrapper around :class:`torch.nn.Conv2d` to support zero-size tensor and more features.
@@ -1885,7 +1897,7 @@ class GatedConv2d(Conv2d):
         self.norm = norm
 
     def forward(self, x, **kwargs):
-        
+
         x = super().forward(x)
         if self.strides == (2, 2):
             x = x[:, :, 1::2, 1::2]
@@ -1978,7 +1990,7 @@ class GcdConv2d(_ConvNd):
         else:
             self.padding = (pad_z, pad_h // 2, pad_w // 2)
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if self._built == False:
             self.input_filters = input_shape[self.filter_index]
             self.calculate_gcd()
@@ -2020,7 +2032,7 @@ class GcdConv2d(_ConvNd):
             self._built = True
 
     def forward(self, x, **kwargs):
-        
+
         x = x.view(x.size(0), x.size(1) // self.groups, self.groups, x.size(2), x.size(3))
         x = F.pad(x, (self.padding[2], self.padding[2], self.padding[1], self.padding[1], 0, 0), mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
@@ -2067,6 +2079,7 @@ class Lambda(Layer):
     def forward(self, x):
         return self.funcs(x)
 
+
 class Reshape(Layer):
     def __init__(self, target_shape, keep_output=False, name=None):
         """
@@ -2076,18 +2089,18 @@ class Reshape(Layer):
             dimension, as it will remain unchanged.
         """
         super(Reshape, self).__init__(keep_output=keep_output, name=name)
-        if isinstance(target_shape,numbers.Integral):
-            self.target_shape=(target_shape,)
-        elif isinstance(target_shape,list):
-            self.target_shape= tuple(target_shape)
+        if isinstance(target_shape, numbers.Integral):
+            self.target_shape = (target_shape,)
+        elif isinstance(target_shape, list):
+            self.target_shape = tuple(target_shape)
         else:
-            self.target_shape=target_shape
+            self.target_shape = target_shape
 
     def forward(self, x, **kwargs):
-        x=enforce_singleton(x)
+        x = enforce_singleton(x)
         shp = self.target_shape
         if -1 in shp:
-            return torch.reshape(x,(int_shape(x)[0],)+ tuple(shp))
+            return torch.reshape(x, (int_shape(x)[0],) + tuple(shp))
         else:
             return torch.reshape(x, (-1,) + tuple(shp))
 
@@ -2108,7 +2121,6 @@ class Permute(Layer):
         self.pattern = args
 
     def forward(self, x, **kwargs):
-        
         return permute(x, self.pattern)
 
 
@@ -2126,14 +2138,12 @@ class SelfAttention(Layer):
         self.attention = None
         self.register_parameter('gamma', nn.Parameter(torch.zeros(1)))
 
-
-
         self.softmax = nn.Softmax(dim=-1)  #
 
-    def build(self, input_shape:TensorShape):
-        self.query_conv =Conv2d((1,1),depth_multiplier=1.0/self.reduction_factor)
-        self.key_conv = Conv2d((1,1),depth_multiplier=1.0/self.reduction_factor)
-        self.value_conv = Conv2d((1,1),depth_multiplier=1)
+    def build(self, input_shape: TensorShape):
+        self.query_conv = Conv2d((1, 1), depth_multiplier=1.0 / self.reduction_factor)
+        self.key_conv = Conv2d((1, 1), depth_multiplier=1.0 / self.reduction_factor)
+        self.value_conv = Conv2d((1, 1), depth_multiplier=1)
         self.to(self.device)
 
     def forward(self, x, **kwargs):
@@ -2144,7 +2154,7 @@ class SelfAttention(Layer):
                 out : self attention value + input feature
                 attention: B X N X N (N is Width*Height)
         """
-        
+
         B, C, width, height = x.size()
         proj_query = self.query_conv(x).view(B, -1, width * height).permute(0, 2, 1)  # B X CX(N)
         proj_key = self.key_conv(x).view(B, -1, width * height)  # B X C x (*W*H)
@@ -2192,7 +2202,7 @@ class CoordConv2d(Layer):
             self.comput_coord(image_size)
 
     def comput_coord(self, input_shape):
-        _,_, y_dim, x_dim = input_shape.dims
+        _, _, y_dim, x_dim = input_shape.dims
         xs = torch.linspace(0, 1, x_dim, requires_grad=False)
         ys = torch.linspace(0, 1, y_dim, requires_grad=False)
         grid_x, grid_y = torch.meshgrid([xs, ys])
@@ -2201,7 +2211,7 @@ class CoordConv2d(Layer):
         grid = grid.transpose(2, 3)
         self.register_buffer('coord', grid.float().detach())
 
-    def build(self, input_shape:TensorShape):
+    def build(self, input_shape: TensorShape):
         if not self._built:
             self.comput_coord(input_shape)
 
@@ -2223,14 +2233,14 @@ class CoordConv2d(Layer):
         return ret
 
     def forward(self, x, **kwargs):
-        
+
         ret = self.append_coords(x)
         ret = self.conv(ret)
         return ret
 
 
 class Upsampling2d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None,keep_output=False, **kwargs):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False, **kwargs):
         super(Upsampling2d, self).__init__(keep_output=keep_output, name=name)
         self.rank = 2
         self.size = size
@@ -2242,7 +2252,7 @@ class Upsampling2d(Layer):
         self.align_corners = align_corners
 
     def forward(self, x, **kwargs):
-        
+
         if self.mode == 'pixel_shuffle':
             return F.pixel_shuffle(x, int(self.scale_factor))
         elif self.mode == 'nearest':
@@ -2258,8 +2268,9 @@ class Upsampling2d(Layer):
         info += ', mode=' + self.mode
         return info
 
+
 class Upsampling1d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None,keep_output=False, **kwargs):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False, **kwargs):
         super(Upsampling1d, self).__init__(keep_output=keep_output, name=name)
         self.rank = 1
         self.size = size
@@ -2271,7 +2282,7 @@ class Upsampling1d(Layer):
         self.align_corners = align_corners
 
     def forward(self, x, **kwargs):
-        
+
         if self.mode == 'pixel_shuffle':
             return F.pixel_shuffle(x, int(self.scale_factor))
         elif self.mode == 'nearest':
@@ -2288,10 +2299,8 @@ class Upsampling1d(Layer):
         return info
 
 
-
-
 class Dropout(Layer):
-    def __init__(self, dropout_rate=0, name=None,keep_output=False, **kwargs):
+    def __init__(self, dropout_rate=0, name=None, keep_output=False, **kwargs):
         super(Dropout, self).__init__(keep_output=keep_output, name=name)
         self.inplace = True
         if dropout_rate < 0 or dropout_rate > 1:
@@ -2299,7 +2308,6 @@ class Dropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x, **kwargs):
-        
         return F.dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2318,7 +2326,7 @@ class AlphaDropout(Layer):
      .. _Self-Normalizing Neural Networks: https://arxiv.org/abs/1706.02515
     """
 
-    def __init__(self, dropout_rate=0, name=None,keep_output=False,**kwargs ):
+    def __init__(self, dropout_rate=0, name=None, keep_output=False, **kwargs):
         super(AlphaDropout, self).__init__(keep_output=keep_output, name=name)
         self.inplace = True
         if dropout_rate < 0 or dropout_rate > 1:
@@ -2326,7 +2334,6 @@ class AlphaDropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x, **kwargs):
-        
         return F.alpha_dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2357,13 +2364,13 @@ class DropBlock2d(Layer):
        https://arxiv.org/abs/1810.12890
     """
 
-    def __init__(self, dropout_rate=0.1, block_size=7,name=None,keep_output=False,**kwargs ):
-        super(DropBlock2d, self).__init__(keep_output=keep_output,name=name )
+    def __init__(self, dropout_rate=0.1, block_size=7, name=None, keep_output=False, **kwargs):
+        super(DropBlock2d, self).__init__(keep_output=keep_output, name=name)
         self.dropout_rate = dropout_rate
         self.block_size = block_size
 
     def forward(self, x, **kwargs):
-        
+
         if not self.training or self.dropout_rate == 0:
             return x
         gamma = self.dropout_rate / self.block_size ** 2
@@ -2380,7 +2387,7 @@ class DropBlock2d(Layer):
 
 
 class SingleImageLayer(Layer):
-    def __init__(self, image, is_recursive=False, name=None,keep_output=False,**kwargs ):
+    def __init__(self, image, is_recursive=False, name=None, keep_output=False, **kwargs):
         super(SingleImageLayer, self).__init__(keep_output=keep_output, name=name)
         self.rank = 2
         if isinstance(image, (np.ndarray, torch.Tensor)):
