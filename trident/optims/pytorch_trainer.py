@@ -853,11 +853,12 @@ class Model(model.ModelBase):
 
                 else:
                     (self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
+
+                for callback in self.training_context['callbacks']:
+                    callback.on_optimization_step_start(self.training_context)
+
                 if not accumulate_grads:
                     # only check once every epoch start.
-                    for callback in self.training_context['callbacks']:
-                        callback.on_optimization_step_start(self.training_context)
-
                     if isinstance(self._model, nn.Module) and self.grad_clipping_by_norm:
 
                         if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
@@ -1039,6 +1040,7 @@ class Model(model.ModelBase):
             #     dynamic_axes[out] = [0]
             with torch.no_grad():
                 with torch.cuda.amp.autocast(enabled=False):
+
                     torch.onnx.export(self._model,  # model being run
                                       dummy_input,  # model input (or a tuple for multiple inputs)
                                       save_path,  # where to save the model (can be a file or file-like object)
@@ -1049,7 +1051,12 @@ class Model(model.ModelBase):
                                       output_names=self.signature.outputs.key_list,  # the model's output names
                                       dynamic_axes=dynamic_axes)
             self._model.train()
+
             shutil.copy(save_path, save_path.replace('.onnx_', '.onnx'))
+
+            import onnx
+            from onnx import shape_inference
+            onnx.save(shape_inference.infer_shapes(onnx.load(save_path.replace('.onnx_', '.onnx'))),save_path.replace('.onnx_', '.onnx'))
             os.remove(save_path)
             for callback in self.training_context['callbacks']:
                 callback.on_model_saving_end(self.training_context)
