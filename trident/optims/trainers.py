@@ -79,7 +79,7 @@ class TrainingPlan(object):
         self.save_model_frequency = -1
         self.save_model_unit = 'batch'
         self.execution_id = None
-        self.enable_tensorboard = False
+        self.enable_tensorboard = ctx.enable_tensorboard
         self._is_optimizer_warmup = False
 
         self.callbacks = []  # if self.callbacks is None:  #     self.callbacks = [  #
@@ -243,12 +243,12 @@ class TrainingPlan(object):
 
     @deprecated('0.7.0', 'with_tensorboard')
     def within_tensorboard(self):
-        self.enable_tensorboard = True
+        make_dir_if_need(os.path.join(working_directory, 'Logs'))
         # check weather have tensorboard
         if get_backend() == 'pytorch':
             try:
                 from trident.loggers.pytorch_tensorboard import SummaryWriter
-                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
 
             except Exception as e:
                 print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
@@ -257,7 +257,8 @@ class TrainingPlan(object):
         elif get_backend() == 'tensorflow':
             try:
                 from trident.loggers.tensorflow_tensorboard import SummaryWriter
-                self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
+
             except Exception as e:
                 print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
                 print(e)
@@ -265,7 +266,6 @@ class TrainingPlan(object):
         return self
 
     def with_tensorboard(self):
-        self.enable_tensorboard = True
         make_dir_if_need(os.path.join(working_directory, 'Logs'))
         # check weather have tensorboard
         if get_backend() == 'pytorch':
@@ -315,7 +315,7 @@ class TrainingPlan(object):
 
     def print_gradients_scheduling(self, frequency: int, unit='batch'):
 
-        pg = PrintGradientsCallback(batch_inteval=frequency)
+        pg = PrintGradientsCallback(frequency=frequency,unit=unit,)
         pg.is_shared = False
         self.callbacks.append(pg)
         return self
@@ -338,7 +338,7 @@ class TrainingPlan(object):
         if unit not in ['batch', 'epoch']:
             raise ValueError('unit should be batch or epoch')
 
-        tile = TileImageCallback(frequency if unit == 'epoch' else -1, frequency if unit == 'batch' else -1,
+        tile = TileImageCallback(frequency=frequency,unit=unit,
                                  save_path=save_path, name_prefix=name_prefix, include_input=include_input,
                                  include_output=include_output, include_target=include_target,
                                  include_mask=include_mask, imshow=imshow)
@@ -362,7 +362,7 @@ class TrainingPlan(object):
                 except Exception as e:
                     PrintException()
                     raise ValueError('save_path:{0} is not valid path'.format(folder))
-        plot = PlotLossMetricsCallback(frequency if unit == 'epoch' else -1, frequency if unit == 'batch' else -1,
+        plot = PlotLossMetricsCallback(frequency=frequency,unit=unit,
                                        save_path=save_path, name_prefix=name_prefix.format(get_time_suffix()),
                                        clean_ipython_output_frequency=clean_ipython_output_frequency, imshow=imshow)
         self.callbacks.append(plot)
@@ -454,7 +454,7 @@ class TrainingPlan(object):
             exception_cnt = 0
             abnormal_num_count = 0
             # update callback
-            if self.enable_tensorboard:
+            if ctx.enable_tensorboard:
                 for idx, (item, item_name) in enumerate(zip(self.training_items.value_list, self.training_names.value_list)):
                     if hasattr(item, 'training_context'):
                         for context_item in list(item.training_context.values()):
@@ -536,7 +536,7 @@ class TrainingPlan(object):
                                 need_out_sample_evaluation = True
 
                             iter_testdata = None
-                            if isinstance(data_provider, DataProvider) and data_provider.testdata is not None and need_out_sample_evaluation:
+                            if isinstance(data_provider, (DataProvider,TextSequenceDataProvider)) and data_provider.testdata is not None and need_out_sample_evaluation:
                                 return_test = data_provider.next_test()
                                 if return_test is not None:
                                     iter_testdata = OrderedDict()
@@ -570,7 +570,7 @@ class TrainingPlan(object):
                                                       accumulate_grads=(trainitem.training_context['steps']+1) % trainitem.accumulation_steps != 0, is_out_sample_evaluation=need_out_sample_evaluation)
                             self.steps += 1
 
-                            if self.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
+                            if ctx.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
                                 compare_dict = OrderedDict()
                                 step = None
                                 for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
@@ -606,9 +606,9 @@ class TrainingPlan(object):
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'])
-                                    if self.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
+                                    if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
                                         trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        self.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
+                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
                                         trainitem.training_context['upload_onnx'] = True
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
@@ -1104,7 +1104,7 @@ class GanTrainingPlan(TrainingPlan):
             exception_cnt = 0
             abnormal_num_count = 0
             # update callback
-            if self.enable_tensorboard:
+            if ctx.enable_tensorboard:
                 for idx, (item, item_name) in enumerate(zip(self.training_items.value_list, self.training_names.value_list)):
                     if hasattr(item, 'training_context'):
                         for context_item in list(item.training_context.values()):
@@ -1250,7 +1250,7 @@ class GanTrainingPlan(TrainingPlan):
                                                       accumulate_grads=False, is_out_sample_evaluation=need_out_sample_evaluation)
                             self.steps += 1
 
-                            if self.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
+                            if ctx.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
                                 compare_dict = OrderedDict()
                                 step = None
                                 for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
@@ -1283,9 +1283,9 @@ class GanTrainingPlan(TrainingPlan):
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'])
-                                    if self.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
+                                    if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
                                         trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        self.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
+                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
                                         trainitem.training_context['upload_onnx'] = True
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
