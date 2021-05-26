@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import functools
 import builtins
 import gc
 from enum import Enum
@@ -36,7 +36,8 @@ from tensorflow.python.training.tracking import data_structures, tracking
 from tensorflow.python.training.tracking import layer_utils as trackable_layer_utils
 from tensorflow.python.util import object_identity
 from trident.backend import iteration_tools
-from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException, TensorShape
+from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException, TensorShape, \
+    get_args_spec
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
 from trident.backend.common import dtype as Dtype
@@ -177,22 +178,127 @@ class RemovableHandle(object):
 
     def __exit__(self, type, value, tb):
         self.remove()
+#
+# class BackwardHook(object):
+#     """
+#     A wrapper class to implement nn.Module backward hooks.
+#     It handles:
+#       - Ignoring non-Tensor inputs and replacing them by None before calling the user hook
+#       - Generating the proper Node to capture a set of Tensor's gradients
+#       - Linking the gradients captures for the outputs with the gradients captured for the input
+#       - Calling the user hook once both output and input gradients are available
+#     """
+#
+#     def __init__(self, module, user_hooks):
+#         self.user_hooks = user_hooks
+#         self.module = module
+#
+#         self.grad_outputs = None
+#         self.n_outputs = -1
+#         self.output_tensors_index = None
+#         self.n_inputs = -1
+#         self.input_tensors_index = None
+#
+#     def _pack_with_none(self, indices, values, size):
+#         res = [None] * size
+#         for idx, val in zip(indices, values):
+#             res[idx] = val
+#
+#         return tuple(res)
+#
+#     def _unpack_none(self, indices, values):
+#         res = []
+#         for idx in indices:
+#             res.append(values[idx])
+#
+#         return tuple(res)
+#
+#     def _set_user_hook(self, grad_fn, user_hook):
+#         @functools.wraps(user_hook)
+#         def hook(grad_input, _):
+#             if self.grad_outputs is None:
+#                 raise RuntimeError("Module backward hook for grad_input is called before "
+#                                    "the grad_output one. This happens because the gradient "
+#                                    "in your nn.Module flows to the Module's input without "
+#                                    "passing through the Module's output. Make sure that the "
+#                                    "output depends on the input and that the loss is computed "
+#                                    "based on the output.")
+#
+#             grad_input = self._pack_with_none(self.input_tensors_index, grad_input, self.n_inputs)
+#             res = user_hook(self.module, grad_input, self.grad_outputs)
+#             if res is None:
+#                 return res
+#
+#             if len(res) != len(grad_input):
+#                 raise RuntimeError("Backward hook returned an invalid number of grad_input, "
+#                                    "got {}, but expected {}".format(len(res), len(grad_input)))
+#             return self._unpack_none(self.input_tensors_index, res)
+#         grad_fn.register_hook(hook)
+#
+#     def _apply_on_tensors(self, fn, args):
+#         # Can be used to apply the given function to the tensors contained in the
+#         # args. Will return updated args and the tensors indices
+#         tensors_idx = []
+#         tensors = []
+#
+#         requires_grad = False
+#         for i, arg in enumerate(args):
+#             if is_tensor(arg):
+#                 tensors_idx.append(i)
+#                 tensors.append(arg)
+#                 requires_grad |= arg.requires_grad
+#
+#         if not requires_grad:
+#             return args, None
+#
+#         new_tensors = torch.nn.modules._functions.BackwardHookFunction.apply(*tensors)
+#         if len(new_tensors) == 0:
+#             raise RuntimeError("Cannot set Module backward hook for a Module with no input Tensors.")
+#         grad_fn = new_tensors[0].grad_fn
+#         if not grad_fn.name() == "BackwardHookFunctionBackward":
+#             raise RuntimeError("Error while setting up backward hooks. Please open "
+#                                "an issue with a code sample to reproduce this.")
+#
+#         fn(grad_fn)
+#
+#         arg_list = list(args)
+#         for idx, val in zip(tensors_idx, new_tensors):
+#             arg_list[idx] = val
+#
+#         return tuple(arg_list), tensors_idx
+#
+#     def setup_input_hook(self, args):
+#         def fn(grad_fn):
+#             for hook in self.user_hooks:
+#                 self._set_user_hook(grad_fn, hook)
+#
+#         res, input_idx = self._apply_on_tensors(fn, args)
+#         self.n_inputs = len(args)
+#         self.input_tensors_index = input_idx
+#         return res
+#
+#     def setup_output_hook(self, args):
+#         def fn(grad_fn):
+#             def hook(_, grad_output):
+#                 self.grad_outputs = self._pack_with_none(self.output_tensors_index,
+#                                                          grad_output,
+#                                                          self.n_outputs)
+#             grad_fn.register_hook(hook)
+#
+#         is_tuple = True
+#         if not isinstance(args, tuple):
+#             args = (args,)
+#             is_tuple = False
+#
+#         res, output_idx = self._apply_on_tensors(fn, args)
+#         self.n_outputs = len(args)
+#         self.output_tensors_index = output_idx
+#
+#         if not is_tuple:
+#             res = res[0]
+#         return res
 
 
-# def get_flops(model):
-#     run_meta = tf.compat.v1.RunMetadata()
-#     opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
-#     with graph.as_default():
-#         with session.as_default():
-#
-#             run_meta = tf.compat.v1.RunMetadata()
-#             opts = tf.compat.v1.profiler.ProfileOptionBuilder.float_operation()
-#
-#             # We use the Keras session graph in the call to the profiler.
-#             flops = tf.compat.v1.profiler.profile(graph= tf.compat.v1.get_default_graph(), run_meta=run_meta,
-#                                                   cmd='op', options=opts)
-#
-#     return flops.total_float_ops  # Prints the "flops" of the model.
 
 
 def _is_not_trainable_variable(obj):
@@ -390,6 +496,22 @@ def register_module_backward_hook(
     return handle
 
 
+# Trick mypy into not applying contravariance rules to inputs by defining
+# forward as a value, rather than a function.  See also
+# https://github.com/python/mypy/issues/8795
+def _forward_unimplemented(self, *input: Any) -> None:
+    r"""Defines the computation performed at every call.
+
+    Should be overridden by all subclasses.
+
+    .. note::
+        Although the recipe for forward pass needs to be defined within
+        this function, one should call the :class:`Module` instance afterwards
+        instead of this since the former takes care of running the
+        registered hooks while the latter silently ignores them.
+    """
+    raise NotImplementedError
+
 def Parameter(data, trainable=True, dtype=None, name=None, **kwargs):
     if dtype is None:
         dtype = tf.float32
@@ -499,9 +621,10 @@ class Layer(tf.Module):
     # Trick mypy into not applying contravariance rules to inputs by defining
     # forward as a value, rather than a function.  See also
     # https://github.com/python/mypy/issues/8795
+    forward: Callable[..., Any] = _forward_unimplemented
 
-    def forward(self, *input, **kwargs):
-        raise NotImplementedError
+    # def forward(self, *input, **kwargs):
+    #     raise NotImplementedError
 
     def get_root(self):
         if not hasattr(self, '_nodes') or self._nodes is None:
@@ -1365,8 +1488,12 @@ class Layer(tf.Module):
         return self._call_impl(*input, **kwargs)
 
     @tf.Module.with_name_scope
-    def __call__(self, *input, **kwargs):
+    def _call_impl(self, *input, **kwargs):
         # Maintains info about the `Layer.call` stack.
+        full_backward_hooks, non_full_backward_hooks = [], []
+        if len(self._backward_hooks) > 0 or len(_global_backward_hooks) > 0:
+            full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
+
         is_all_numpy = False
         is_built = self._built
 
@@ -1379,13 +1506,23 @@ class Layer(tf.Module):
                     is_all_numpy = True
                 input = to_tensor(input, device=get_device())
                 input = (input,)
-        for hook in itertools.chain(_global_forward_pre_hooks.values(), self._forward_pre_hooks.values()):
+
+        for hook in itertools.chain(
+                _global_forward_pre_hooks.values(),
+                self._forward_pre_hooks.values()):
             result = hook(self, input)
             if result is not None:
                 if not isinstance(result, tuple):
                     result = (result,)
                 input = result
-        if self._built == False:
+
+        #bw_hook = None
+        #if len(full_backward_hooks) > 0:
+            #bw_hook = BackwardHook(self, full_backward_hooks)
+            #input = bw_hook.setup_input_hook(input)
+
+
+        if not self._built:
             inp = tf.stop_gradient(unpack_singleton(input))
             if is_tensor(inp):
                 shp = tensor_to_shape(inp)
@@ -1394,12 +1531,13 @@ class Layer(tf.Module):
                 self.input_spec = TensorSpec.tensor_to_spec(inp)
                 # dont do it  in tensorflow
                 # del inp
-            elif isinstance(input, (tuple, list)):
-                if isinstance(input[0], numbers.Number):
-                    self.input_shape = TensorShape(list(input))
+            elif isinstance(inp, (tuple, list)):
+                if isinstance(inp[0], numbers.Number):
+                    self.input_shape = TensorShape(list(inp))
                 else:
-                    self.build(*[tensor_to_shape(inp, need_exclude_batch_axis=True) for inp in input])
-
+                    shp = tensor_to_shape(inp[0], need_exclude_batch_axis=True)
+                    self.input_filters = shp[self.filter_index]
+                    self.forward(*inp)
             else:
                 self.input_shape = TensorShape(list(input))
                 print('input shou be tensor or tuple of tensor')
@@ -1437,6 +1575,8 @@ class Layer(tf.Module):
             print(e)
             PrintException()
             raise e
+
+    __call__ : Callable[..., Any] = _call_impl
 
     def __getstate__(self):
         return self.__dict__
@@ -1728,7 +1868,7 @@ class Layer(tf.Module):
                 for m in module.named_modules(memo, submodule_prefix):
                     yield m
 
-    def train(self, mode=True):
+    def train(self: T, mode: bool = True) -> T:
         r"""Sets the module in training mode.
 
         This has any effect only on certain modules. See documentations of
@@ -1744,11 +1884,11 @@ class Layer(tf.Module):
             Module: self
         """
         self.training = mode
-        for module in self.modules():
-            module.training = mode
+        for module in self.children():
+            module.train(mode)
         return self
 
-    def eval(self):
+    def eval(self: T) -> T:
         r"""Sets the module in evaluation mode.
 
         This has any effect only on certain modules. See documentations of
@@ -2046,10 +2186,19 @@ class Sequential(Layer):
         keys = [key for key in keys if not key.isdigit()]
         return keys
 
-    def forward(self, x):
+    def forward(self, *x, **kwargs):
+        x = unpack_singleton(x)
         for module in self._modules.values():
-            x = enforce_singleton(x)
-            x = module(x)
+            # x = enforce_singleton(x)
+            if isinstance(x, tuple):
+                arg_spec = get_args_spec(module.forward)
+                if len(arg_spec.args) == 2:  # self,x
+                    x = enforce_singleton(x)
+                    x = module(x, **kwargs)
+                else:
+                    x = module(*x, **kwargs)
+            else:
+                x = module(x, **kwargs)
         return x
 
 
@@ -2326,12 +2475,13 @@ class ModuleDict(Layer):
                 module.output_shape = tensor_to_shape(out)
             self._built = True
 
-    def forward(self, x):
-        if self.is_multicasting == True:
+    def forward(self, x, **kwargs):
+        if self.is_multicasting:
+
+            # x = enforce_singleton(x)
             results = OrderedDict()
-            x = enforce_singleton(x)
             for name, module in self.items():
-                out = module(x)
+                out = module(x, **kwargs)
                 results[name] = out
             return results
         else:

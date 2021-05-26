@@ -155,11 +155,21 @@ class Model(model.ModelBase):
                 input_name = 'input'
                 self.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[0]), name=input_name)
             else:
+                input_names=[]
+                if not hasattr(output,'signature') or output.signature is None:
+                    output.signature =Signature()
+                if isinstance(output,Sequential):
+                    arg_spec = get_args_spec(output[0].forward)
+                    input_names=arg_spec.args
+                    if 'self' in input_names:
+                        input_names.remove('self')
+
                 for m in range(len(inputs)):
                     inp = inputs[m]
                     if is_tensor(inp) or isinstance(inp, np.ndarray):
-                        input_name = 'input_{0}'.format(m)
+                        input_name = input_names[m] if len(input_names)==len(inputs) else ' input_{0}'.format(m)
                         self.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[m]), name=input_name)
+                        output.signature.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[m]), name=input_name)
         elif isinstance(inputs, dict):
             for k, v in inputs.items():
                 if isinstance(v, TensorSpec):
@@ -167,6 +177,7 @@ class Model(model.ModelBase):
                 elif is_tensor(v) or isinstance(v, np.ndarray):
                     if isinstance(v, np.ndarray):
                         v = to_tensor(v)
+                    output.signature[k] = TensorSpec(shape=tensor_to_shape(v), dtype=v.dtype, name=k)
                     self.inputs[k] = TensorSpec(shape=tensor_to_shape(v), dtype=v.dtype, name=k)
         elif is_tensor(inputs):
             self.inputs['input'] = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True), dtype=inputs.dtype, name='input')
@@ -980,13 +991,14 @@ class Model(model.ModelBase):
                     'pytorch_version': torch.__version__,
                     'signature': self._model.signature
                 }, save_path)
+                os.remove(save_path.replace('.pth.tar_', '.pth.tar'))
+                os.rename(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
 
-                shutil.copyfile(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
-                os.remove(save_path)
                 save_path = save_path.replace('pth.tar_', 'pth_')
                 save(self._model, save_path)
-                shutil.copyfile(save_path, save_path.replace('.pth_', '.pth'))
-                os.remove(save_path)
+                os.remove(save_path.replace('.pth_', '.pth'))
+                os.rename(save_path, save_path.replace('.pth_', '.pth'))
+
                 self._model.train()
                 self._model.to(device)
             except Exception as e:

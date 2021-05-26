@@ -926,6 +926,10 @@ class Layer(nn.Module):
         os.remove(save_path)
 
     def _call_impl(self, *input, **kwargs):
+        full_backward_hooks, non_full_backward_hooks = [], []
+        if len(self._backward_hooks) > 0 or len(_global_backward_hooks) > 0:
+            full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
+
         is_all_numpy = False
         is_built = self._built
 
@@ -940,6 +944,7 @@ class Layer(nn.Module):
                     is_all_numpy = True
                 input = to_tensor(input, device=get_device())
                 input = (input,)
+
         for hook in itertools.chain(
                 _global_forward_pre_hooks.values(),
                 self._forward_pre_hooks.values()):
@@ -948,6 +953,15 @@ class Layer(nn.Module):
                 if not isinstance(result, tuple):
                     result = (result,)
                 input = result
+
+        bw_hook = None
+        if len(full_backward_hooks) > 0:
+            bw_hook = hooks.BackwardHook(self, full_backward_hooks)
+            input = bw_hook.setup_input_hook(input)
+
+
+
+
         if not self._built:
             inp = unpack_singleton(input)
             if is_tensor(inp):
@@ -963,7 +977,7 @@ class Layer(nn.Module):
                 else:
                     shp=tensor_to_shape(inp[0], need_exclude_batch_axis=True)
                     self.input_filters = shp[self.filter_index]
-                    self.build(shp)
+                    self.forward(*inp)
             else:
                 self.input_shape = TensorShape(list(inp))
                 print('input shou be tensor or tuple of tensor')
@@ -1198,16 +1212,22 @@ class Sequential(Layer):
             self._modules[name] = module
             self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
             self.get_root().signature.outputs.value_list[0].shape = self._output_shape.copy()
+
         else:
             super(Sequential, self).add_module(name, module)
+        if len(self)>0:
+            self.__signature__ = self[0].__signature__
 
     def remove_at(self, idx):
         self.__delitem__(idx)
+        if len(self)>0:
+            self.__signature__ = self[0].__signature__
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
             if isinstance(self._signature, Signature):
                 self._signature.outputs = OrderedDict()
                 self._signature.outputs['output'] = TensorSpec(shape=self[-1]._output_shape)
+
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -1266,15 +1286,17 @@ class Sequential(Layer):
         keys = [key for key in keys if not key.isdigit()]
         return keys
 
-    def forward(self, x, **kwargs):
+    def forward(self, *x, **kwargs):
+        x=unpack_singleton(x)
         for module in self._modules.values():
             #x = enforce_singleton(x)
             if isinstance(x, tuple):
                 arg_spec=get_args_spec(module.forward)
-                if len(arg_spec.args)==1:
+                if len(arg_spec.args)==2: #self,x
                     x=enforce_singleton(x)
-                x = module(x, **kwargs)
-
+                    x = module(x, **kwargs)
+                else:
+                    x = module(*x, **kwargs)
             else:
                 x = module(x, **kwargs)
             # class_name=module.__class__.__name__.lower()
