@@ -978,11 +978,11 @@ class Model(model.ModelBase):
                     'signature': self._model.signature
                 }, save_path)
 
-                shutil.copy2(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
+                shutil.copyfile(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
                 os.remove(save_path)
                 save_path = save_path.replace('pth.tar_', 'pth_')
                 save(self._model, save_path)
-                shutil.copy2(save_path, save_path.replace('.pth_', '.pth'))
+                shutil.copyfile(save_path, save_path.replace('.pth_', '.pth'))
                 os.remove(save_path)
                 self._model.train()
                 self._model.to(device)
@@ -1001,7 +1001,7 @@ class Model(model.ModelBase):
             save_path = sanitize_path(save_path)
             numpy_model = to_numpy(self._model)
             np.save(save_path, numpy_model)
-            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
+            shutil.copyfile(save_path, save_path.replace('.npy_', '.npy'))
             os.remove(save_path)
             sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
         else:
@@ -1127,7 +1127,9 @@ class Model(model.ModelBase):
         return self
 
     def predict(self, input):
-        raise NotImplementedError
+        if isinstance(self._model,Layer):
+            self._model.eval()
+
 
     def test(self, input, target):
         raise NotImplementedError
