@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import json
 import numbers
 import builtins
 import copy
@@ -725,91 +727,92 @@ class Model(model.ModelBase):
         # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if self.training_context['steps'] == 0 and (
-                'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or None in self.training_context['data_feed'].value_list):
+        if self.training_context['steps'] == 0 and (   'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len([v for v in  self.training_context['data_feed'].value_list if v is None])>0):
             try:
-
                 data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
-                inshapes = self.inputs.value_list
-                outshapes = self.targets.value_list
-                available_fields = copy.deepcopy(train_data.key_list)
-                if train_data is not None:
-                    # check input
-                    for arg in self._model.signature.inputs.key_list:
-                        if arg in data_feed and data_feed[arg] in available_fields:
-                            available_fields.remove(data_feed[arg])
-                        else:
-                            data_feed[arg] = ''
-                            if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
-                                data_feed[arg] = train_data.key_list[0]
-                                available_fields.remove(train_data.key_list[0])
-                            elif arg in available_fields:
-                                data_feed[arg] = arg
-                                available_fields.remove(arg)
-                            elif arg in ['x', 'input'] and 'data' in available_fields:
-                                data_feed[arg] = 'data'
-                                available_fields.remove('data')
-                            elif arg in ['x', 'input'] and 'image' in available_fields:
-                                data_feed[arg] = 'image'
-                                available_fields.remove('image')
-                            elif arg == 'x' and 'input' in available_fields:
-                                data_feed[arg] = 'input'
-                                available_fields.remove('input')
-                            elif len(self._model.signature.inputs.key_list) == 1:
-                                for item in available_fields:
-                                    data_shape = train_data[item].shape if len(train_data[item].shape) > 2 else TensorShape([None])
-                                    if 'target' not in item and 'output' != item and data_shape == inshapes[0].shape:
-                                        data_feed[arg] = item
-                                        available_fields.remove(item)
-                                        break
-                            else:
-                                Warning(
-                                    'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                        arg))
+                if isinstance(self._model,Layer):
 
-                    # check for target
-                    if len(available_fields) > 0:
-                        if len(available_fields) == 1:
-                            data_feed['target'] = available_fields[0]
-                        else:
-                            for i in range(len(self.targets)):
-                                arg = self.targets.key_list[i]
+                    inshapes = self.inputs.value_list
+                    outshapes = self.targets.value_list
+                    available_fields = copy.deepcopy(train_data.key_list)
+                    if train_data is not None:
+                        # check input
+                        for arg in self._model.signature.inputs.key_list:
+                            if arg in data_feed and data_feed[arg] in available_fields:
+                                available_fields.remove(data_feed[arg])
+                            else:
                                 data_feed[arg] = ''
-                                if len(train_data) == 1:
-                                    data_feed[self.targets.key_list[0]] = train_data.key_list[0]
+                                if len(train_data) == 1 and len(self._model.signature.inputs.key_list) == 1:
+                                    data_feed[arg] = train_data.key_list[0]
+                                    available_fields.remove(train_data.key_list[0])
                                 elif arg in available_fields:
                                     data_feed[arg] = arg
                                     available_fields.remove(arg)
-                                elif arg == 'target' and 'label' in available_fields:
-                                    data_feed[arg] = 'label'
-                                    available_fields.remove('label')
-                                elif arg == 'target' and len(available_fields) == 1:
-                                    data_feed[arg] = available_fields[0]
-                                    available_fields.remove(available_fields[0])
-                                elif len(available_fields) > 0:
-                                    target_shape = outshapes
+                                elif arg in ['x', 'input'] and 'data' in available_fields:
+                                    data_feed[arg] = 'data'
+                                    available_fields.remove('data')
+                                elif arg in ['x', 'input'] and 'image' in available_fields:
+                                    data_feed[arg] = 'image'
+                                    available_fields.remove('image')
+                                elif arg == 'x' and 'input' in available_fields:
+                                    data_feed[arg] = 'input'
+                                    available_fields.remove('input')
+                                elif len(self._model.signature.inputs.key_list) == 1:
                                     for item in available_fields:
-                                        data_shape = list(train_data[item].shape) if len(train_data[item].shape) > 1 else [None]
-                                        if target_shape == data_shape:
+                                        data_shape = train_data[item].shape if len(train_data[item].shape) > 2 else TensorShape([None])
+                                        if 'target' not in item and 'output' != item and data_shape == inshapes[0].shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
-                                        elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
-                                                train_data[item].dtype)) and target_shape[:-1] == data_shape:
-                                            data_feed[arg] = item
-                                            available_fields.remove(item)
-                                        else:
-                                            Warning(
-                                                'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
-                                                    arg))
-                            # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
-                            #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
+                                            break
+                                else:
+                                    Warning(
+                                        'input argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                            arg))
 
-                    # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
-                    #     self.training_context['data_feed'] = data_feed
-                    # elif '' not in data_feed.value_list:
-                    self.training_context['data_feed'] = data_feed
+                        # check for target
+                        if len(available_fields) > 0:
+                            if len(available_fields) == 1:
+                                data_feed['target'] = available_fields[0]
+                            else:
+                                for i in range(len(self.targets)):
+                                    arg = self.targets.key_list[i]
+                                    data_feed[arg] = ''
+                                    if len(train_data) == 1:
+                                        data_feed[self.targets.key_list[0]] = train_data.key_list[0]
+                                    elif arg in available_fields:
+                                        data_feed[arg] = arg
+                                        available_fields.remove(arg)
+                                    elif arg == 'target' and 'label' in available_fields:
+                                        data_feed[arg] = 'label'
+                                        available_fields.remove('label')
+                                    elif arg == 'target' and len(available_fields) == 1:
+                                        data_feed[arg] = available_fields[0]
+                                        available_fields.remove(available_fields[0])
+                                    elif len(available_fields) > 0:
+                                        target_shape = outshapes
+                                        for item in available_fields:
+                                            data_shape = list(train_data[item].shape) if len(train_data[item].shape) > 1 else [None]
+                                            if target_shape == data_shape:
+                                                data_feed[arg] = item
+                                                available_fields.remove(item)
+                                            elif ('int64' in str(train_data[item].dtype) or 'int32' in str(
+                                                    train_data[item].dtype)) and target_shape[:-1] == data_shape:
+                                                data_feed[arg] = item
+                                                available_fields.remove(item)
+                                            else:
+                                                Warning(
+                                                    'target argment {0} cannot mapping to any data, please check it and update the datafeed'.format(
+                                                        arg))
+                                # if len(self.targets) == 1 and data_feed[self.targets.key_list[0]] != None:
+                                #     self.training_context['current_target'] = train_data[data_feed[self.targets.key_list[0]]]
 
-                    print('data_feed', data_feed)
+                        # if len(self._signature.inputs.key_list) == 1 and data_feed[self._signature.inputs.key_list[0]] != None:
+                        #     self.training_context['data_feed'] = data_feed
+                        # elif '' not in data_feed.value_list:
+                        self.training_context['data_feed'] = data_feed
+                        print('data_feed for {0} :'.format(self.name))
+                        print(json.dumps(data_feed, indent=4, sort_keys=True))
+
             except:
                 PrintException()
 

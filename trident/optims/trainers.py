@@ -442,7 +442,9 @@ class TrainingPlan(object):
                 #     available_items.remove(out.replace("output","target").replace("student","teacher"))
 
             trainingitem.training_context['data_feed'] = data_feed
-            print('data_feed for {0} :{1}'.format(trainingitem.name, data_feed))
+            print('data_feed for {0} :'.format(trainingitem.name))
+            print(json.dumps(data_feed, indent=4, sort_keys=True))
+
 
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
