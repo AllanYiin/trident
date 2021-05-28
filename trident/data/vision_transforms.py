@@ -1170,18 +1170,27 @@ class InvertColor(VisionTransform):
 
 
 class GrayScale(VisionTransform):
-    def __init__(self, name='gray_scale',**kwargs):
+    def __init__(self, keepdims=True,name='gray_scale',**kwargs):
         super().__init__(name)
         self.is_spatial = False
+        self.keepdims=keepdims
 
     def apply(self, input: Tuple,spec:TensorSpec):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-        if image.ndim == 3:
+        if image.ndim == 4 and self.keepdims:
+            return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGBA2GRAY),cv2.COLOR_GRAY2RGB)
+        elif image.ndim == 4 and not self.keepdims:
+            return cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGBA2GRAY)
+        elif image.ndim == 3 and self.keepdims:
             return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGB2GRAY),cv2.COLOR_GRAY2RGB)
-        elif image.ndim == 2:
+        elif image.ndim == 3 and not self.keepdims:
+            return cv2.cvtColor(image.astype(np.float32),cv2.COLOR_RGB2GRAY)
+        elif image.ndim == 2 and self.keepdims:
             return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+        else:
+            return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
