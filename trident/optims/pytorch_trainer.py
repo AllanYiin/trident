@@ -67,7 +67,7 @@ from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from trident import context
 
 __all__ = ['Model', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
-           'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel','LanguageModel']
+           'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel', 'LanguageModel']
 
 ctx = context._context()
 
@@ -155,19 +155,19 @@ class Model(model.ModelBase):
                 input_name = 'input'
                 self.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[0]), name=input_name)
             else:
-                input_names=[]
-                if not hasattr(output,'signature') or output.signature is None:
-                    output.signature =Signature()
-                if isinstance(output,Sequential):
+                input_names = []
+                if not hasattr(output, 'signature') or output.signature is None:
+                    output.signature = Signature()
+                if isinstance(output, Sequential):
                     arg_spec = get_args_spec(output[0].forward)
-                    input_names=arg_spec.args
+                    input_names = arg_spec.args
                     if 'self' in input_names:
                         input_names.remove('self')
 
                 for m in range(len(inputs)):
                     inp = inputs[m]
                     if is_tensor(inp) or isinstance(inp, np.ndarray):
-                        input_name = input_names[m] if len(input_names)==len(inputs) else ' input_{0}'.format(m)
+                        input_name = input_names[m] if len(input_names) == len(inputs) else ' input_{0}'.format(m)
                         self.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[m]), name=input_name)
                         output.signature.inputs[input_name] = TensorSpec(shape=tensor_to_shape(inputs[m]), name=input_name)
         elif isinstance(inputs, dict):
@@ -738,10 +738,11 @@ class Model(model.ModelBase):
         # for i in range(len(fields)):
         if train_data is None and test_data is None:
             return self.training_context['train_data'], self.training_context['test_data']
-        if self.training_context['steps'] == 0 and (   'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len([v for v in  self.training_context['data_feed'].value_list if v is None])>0):
+        if self.training_context['steps'] == 0 and ('data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len(
+                [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
             try:
                 data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
-                if isinstance(self._model,Layer):
+                if isinstance(self._model, Layer):
 
                     inshapes = self.inputs.value_list
                     outshapes = self.targets.value_list
@@ -950,16 +951,16 @@ class Model(model.ModelBase):
             self.weights_history.append(weight_dict)
 
     def save_model(self, save_path=None):
-        is_abnormal=False
+        is_abnormal = False
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
         if isinstance(self._model, Layer) and any_abnormal_number(self._model):
-            is_abnormal=True
+            is_abnormal = True
             for para in self._model.parameters():
                 if any_abnormal_number(para):
                     para.data.copy_(where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
-        if is_tensor(self._model ) and any_abnormal_number(self._model):
+        if is_tensor(self._model) and any_abnormal_number(self._model):
             is_abnormal = True
 
             sys.stderr.write(self._get_name() + '  nan detected!!\n')
@@ -977,13 +978,18 @@ class Model(model.ModelBase):
                 if filename == '':
                     filename = self.name
 
-                ext = '.pth.tar_'
+                ext = '.pth.tar'
                 save_path = os.path.join(folder, filename + ext)
                 make_dir_if_need(sanitize_path(save_path))
                 save_path = sanitize_path(save_path)
                 device = get_device()
                 self._model.eval()
                 self._model.cpu()
+
+                if os.path.exists(save_path) and os.path.exists(save_path + '_'):
+                    os.replace(save_path, save_path + '_')
+                elif os.path.exists(save_path) :
+                    os.rename(save_path, save_path + '_')
                 torch.save({
                     'state_dict': self._model.state_dict(),
                     'backend': 'pytorch',
@@ -991,13 +997,13 @@ class Model(model.ModelBase):
                     'pytorch_version': torch.__version__,
                     'signature': self._model.signature
                 }, save_path)
-                os.remove(save_path.replace('.pth.tar_', '.pth.tar'))
-                os.rename(save_path, save_path.replace('.pth.tar_', '.pth.tar'))
 
-                save_path = save_path.replace('pth.tar_', 'pth_')
+                save_path = save_path.replace('pth.tar', 'pth')
+                if os.path.exists(save_path) and os.path.exists(save_path + '_'):
+                    os.replace(save_path, save_path + '_')
+                elif os.path.exists(save_path) :
+                    os.rename(save_path, save_path + '_')
                 save(self._model, save_path)
-                os.remove(save_path.replace('.pth_', '.pth'))
-                os.rename(save_path, save_path.replace('.pth_', '.pth'))
 
                 self._model.train()
                 self._model.to(device)
@@ -1005,19 +1011,23 @@ class Model(model.ModelBase):
                 print(e)
                 PrintException()
 
-        elif is_tensor(self._model)and not is_abnormal:
+        elif is_tensor(self._model) and not is_abnormal:
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
 
-            ext = '.npy_'
+            ext = '.npy'
             save_path = os.path.join(folder, filename + ext)
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
             numpy_model = to_numpy(self._model)
+
+            if os.path.exists(save_path) and os.path.exists(save_path + '_'):
+                os.replace(save_path, save_path + '_')
+            elif os.path.exists(save_path):
+                os.rename(save_path, save_path + '_')
             np.save(save_path, numpy_model)
-            shutil.copyfile(save_path, save_path.replace('.npy_', '.npy'))
-            os.remove(save_path)
+
             sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
         else:
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
@@ -1055,7 +1065,6 @@ class Model(model.ModelBase):
             #     dynamic_axes[out] = [0]
             with torch.no_grad():
                 with torch.cuda.amp.autocast(enabled=False):
-
                     torch.onnx.export(self._model,  # model being run
                                       dummy_input,  # model input (or a tuple for multiple inputs)
                                       save_path,  # where to save the model (can be a file or file-like object)
@@ -1071,7 +1080,7 @@ class Model(model.ModelBase):
 
             import onnx
             from onnx import shape_inference
-            onnx.save(shape_inference.infer_shapes(onnx.load(save_path.replace('.onnx_', '.onnx'))),save_path.replace('.onnx_', '.onnx'))
+            onnx.save(shape_inference.infer_shapes(onnx.load(save_path.replace('.onnx_', '.onnx'))), save_path.replace('.onnx_', '.onnx'))
             os.remove(save_path)
             for callback in self.training_context['callbacks']:
                 callback.on_model_saving_end(self.training_context)
@@ -1142,9 +1151,8 @@ class Model(model.ModelBase):
         return self
 
     def predict(self, input):
-        if isinstance(self._model,Layer):
+        if isinstance(self._model, Layer):
             self._model.eval()
-
 
     def test(self, input, target):
         raise NotImplementedError
@@ -1636,8 +1644,9 @@ class FaceRecognitionModel(Model):
 class LanguageModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(LanguageModel, self).__init__(inputs, input_shape, output)
-        self.vocabs=None
+        self.vocabs = None
         self.preprocess_flow = []
+
     def save_model(self, save_path=None):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
@@ -1671,7 +1680,7 @@ class LanguageModel(Model):
                 self._model.cpu()
                 torch.save({
                     'state_dict': self._model.state_dict(),
-                    'vocabs':self.vocabs,
+                    'vocabs': self.vocabs,
                     'backend': 'pytorch',
                     'trident_version': __version__,
                     'pytorch_version': torch.__version__,
@@ -1778,8 +1787,8 @@ class LanguageModel(Model):
             elif isinstance(recovery_pth, Layer):
                 state_dict = recovery_pth.state_dict()
 
-        if 'vocabs' in state_dict :
-            self.vocabs=state_dict['vocabs']
+        if 'vocabs' in state_dict:
+            self.vocabs = state_dict['vocabs']
         if 'backend' in state_dict and state_dict['backend'] != 'pytorch':
             raise RuntimeError(
                 'The model archive {0} is a {1}-based model, but current backend is PyTorch, so cannot load model properly.'.format(file_path, state_dict['backend']))
