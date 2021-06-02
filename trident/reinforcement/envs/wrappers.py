@@ -3,6 +3,8 @@ import base64
 import datetime
 import io
 import os
+import random
+
 import numpy as np
 import cv2
 from typing import Optional
@@ -22,7 +24,46 @@ from gym.wrappers import Monitor as _monitor
 from gym.wrappers import LazyFrames
 from matplotlib import animation
 from pyvirtualdisplay import Display
-from trident.reinforcement import ObservationType
+
+from trident.backend.common import make_dir_if_need, get_plateform, get_time_suffix, sanitize_path
+from trident.misc.ipython_utils import *
+from trident.reinforcement.utils import ObservationType, ActionStrategy
+from trident import context
+
+ctx = context._context()
+__all__ = ['NoopResetEnv', 'EpisodicLifeEnv', 'MaxAndSkipEnv', 'WarpFrame', 'FrameStack', 'TimeAwareObservation', 'VideoRecording']
+
+
+class NoopResetEnv(gym.Wrapper):
+    def __init__(self, env, noop_max=30, preferred_actions=None):
+        """Sample initial states by taking random number of no-ops on reset.
+        No-op is assumed to be action 0.
+        """
+        gym.Wrapper.__init__(self, env)
+        self.noop_max = noop_max
+        self.override_num_noops = None
+        self.noop_action = 0
+        self.preferred_actions = preferred_actions
+        # assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
+
+    def reset(self, **kwargs):
+        """ Do no-op action for a number of steps in [1, noop_max]."""
+        self.env.reset(**kwargs)
+        if self.override_num_noops is not None:
+            noops = self.override_num_noops
+        else:
+            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1)
+        assert noops > 0
+
+        obs = None
+        for _ in range(noops):
+            if isinstance(self.preferred_actions, list) and len(self.preferred_actions) > 0:
+                obs, _, done, _ = self.env.step(random.choice(self.preferred_actions))
+            else:
+                obs, _, done, _ = self.env.step(self.noop_action)
+            if done:
+                obs = self.env.reset(**kwargs)
+        return obs
 
 
 class EpisodicLifeEnv(gym.Wrapper):
@@ -32,7 +73,7 @@ class EpisodicLifeEnv(gym.Wrapper):
         """
         gym.Wrapper.__init__(self, env)
         self.lives = 0
-        self.was_real_done  = True
+        self.was_real_done = True
 
     def step(self, action):
         obs, reward, done, info = self.env.step(action)
@@ -40,7 +81,7 @@ class EpisodicLifeEnv(gym.Wrapper):
         # check current lives, make loss of life terminal,
         # then update lives to handle bonus lives
         lives = self.env.unwrapped._life
-        #lives = self.env.unwrapped.ale.lives()
+        # lives = self.env.unwrapped.ale.lives()
         if self.lives > lives > 0:
             # for Qbert sometimes we stay in lives == 0 condition for a few frames
             # so it's important to keep lives > 0, so that we only reset once
@@ -59,7 +100,7 @@ class EpisodicLifeEnv(gym.Wrapper):
         else:
             # no-op step to advance from terminal/lost life state
             obs, _, _, _ = self.env.step(0)
-        #self.lives = self.env.unwrapped.ale.lives()
+        # self.lives = self.env.unwrapped.ale.lives()
         self.lives = self.env.unwrapped._life
         return obs
 
@@ -69,8 +110,8 @@ class MaxAndSkipEnv(gym.Wrapper):
         """Return only every `skip`-th frame"""
         gym.Wrapper.__init__(self, env)
         # most recent raw observations (for max pooling across time steps)
-        self._obs_buffer = np.zeros((2,)+env.observation_space.shape, dtype=np.uint8)
-        self._skip       = skip
+        self._obs_buffer = np.zeros((2,) + env.observation_space.shape, dtype=np.uint8)
+        self._skip = skip
 
     def step(self, action):
         """Repeat action, sum reward, and max over last observations."""
@@ -178,66 +219,79 @@ class FrameStack(gym.Wrapper):
         assert len(self.frames) == self.k
         return LazyFrames(list(self.frames))
 
+
 class TimeAwareObservation(gym.ObservationWrapper):
     r"""Augment the observation with current time step in the trajectory.
     .. note::
         Currently it only works with one-dimensional observation space. It doesn't
         support pixel observation space yet.
     """
+
     def __init__(self, env, max_time=None):
         super(TimeAwareObservation, self).__init__(env)
-        self.max_time=max_time
-        if  isinstance(env.observation_space, Box) and env.observation_space.dtype == np.float32:
+        self.max_time = max_time
+        if isinstance(env.observation_space, Box) and env.observation_space.dtype == np.float32:
             low = np.append(self.observation_space.low, 0.0)
             high = np.append(self.observation_space.high, np.inf)
             self.observation_space = Box(low, high, dtype=np.float32)
-            self.obsetvation_type=ObservationType.Box
-        elif  isinstance(env.observation_space, Box) and env.observation_space.dtype == np.float32:
+            self.obsetvation_type = ObservationType.Box
+        elif isinstance(env.observation_space, Box) and (
+                (env.observation_space.low.max() == 0 and env.observation_space.high.min() == 255) or env.observation_space.dtype == np.uint8):
             self.obsetvation_type = ObservationType.Image
 
     def observation(self, observation):
-        if self.obsetvation_type==ObservationType.Box:
-            return np.append(observation, self.t if self.max_time is None or self.max_time==0 else self.t/float(self.max_time ))
-        elif self.obsetvation_type==ObservationType.Image and self.max_time>0:
-            ratio=self.t/float(self.max_time)
-            pixels=builtins.round(self.observation_space.shape[1]*ratio)
-            if len(self.observation_space.shape)==2:
-                observation[-3:, :]=255
-                observation[-3:, :pixels] = 0
-            elif len(self.observation_space.shape) == 2:
-                observation[-3:, :,:] =0
-                observation[-3:, :, 0] = 255
-                observation[-3:, :pixels,0] = 0
+        observation = observation.copy()
+        if self.obsetvation_type == ObservationType.Box:
+            return np.append(observation, self.t if self.max_time is None or self.max_time == 0 else self.t / float(self.max_time))
+        elif self.obsetvation_type == ObservationType.Image and self.max_time > 0:
+            ratio = self.t / float(self.max_time)
+            if hasattr(super(TimeAwareObservation, self).unwrapped, '_time'):
+                ratio = (super(TimeAwareObservation, self).unwrapped._time / float(self.max_time))
+
+            pixels = builtins.round(self.observation_space.shape[1] * ratio)
+            if len(self.observation_space.shape) == 2:
+                observation[-10:, :] = 0
+                observation[-10:, -pixels:] = 255
+            elif len(self.observation_space.shape) == 3:
+                observation[-10:, :, :] = 0
+                observation[-10:, -pixels:, :] = 255
             return observation
 
-
     def step(self, action):
-        self.t += 1
         return super(TimeAwareObservation, self).step(action)
 
     def reset(self, **kwargs):
         self.t = 0
         return super(TimeAwareObservation, self).reset(**kwargs)
 
+    # def render(self, mode='human', **kwargs):
+    #     if mode=='human':
+    #         return super(TimeAwareObservation, self).render(mode, **kwargs)
+    #     elif mode == 'observation':
+    #         return self.observation(super(TimeAwareObservation, self).render('rgb_array').copy())
+    #     elif mode=='rgb_array':
+    #         return super(TimeAwareObservation, self).render('rgb_array')
+
+
 class _VirtualDisplaySingleton(object):
-    def __new__(cls,*args,**kwargs):
-        if not hasattr(cls,"_instance"):
+    def __new__(cls, *args, **kwargs):
+        if not hasattr(cls, "_instance"):
             cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self,size=(1024, 768)):
+    def __init__(self, size=(1024, 768)):
         self.size = size
 
-        if not hasattr(self,"_display"):
-            self._display = Display(visible=0,size=self.size)
-
+        if not hasattr(self, "_display"):
+            self._display = Display(visible=0, size=self.size)
             original = subprocess.Popen
-            def Popen(cmd,pass_fds,stdout,stderr,shell):
-                return original(cmd,pass_fds=pass_fds,
-                                stdout=stdout,stderr=stderr,
-                                shell=shell,preexec_fn=os.setpgrp)
 
-            with patch("subprocess.Popen",Popen):
+            def Popen(cmd, pass_fds, stdout, stderr, shell):
+                return original(cmd, pass_fds=pass_fds,
+                                stdout=stdout, stderr=stderr,
+                                shell=shell, preexec_fn=os.setpgrp)
+
+            with patch("subprocess.Popen", Popen):
                 self._display.start()
 
     def _restart_display(self):
@@ -249,7 +303,8 @@ class VirtualDisplay(Wrapper):
     """
     Wrapper for running Xvfb
     """
-    def __init__(self,env,size=(1024, 768)):
+
+    def __init__(self, env, size=(1024, 768)):
         """
         Wrapping environment and start Xvfb
         """
@@ -257,14 +312,14 @@ class VirtualDisplay(Wrapper):
         self.size = size
         self._display = _VirtualDisplaySingleton(size)
 
-    def render(self,mode=None,**kwargs):
+    def render(self, mode=None, **kwargs):
         """
         Render environment
         """
-        return self.env.render(mode='rgb_array',**kwargs)
+        return self.env.render(mode='rgb_array', **kwargs)
 
 
-class Monitor(_monitor):
+class VideoRecording(gym.Wrapper):
     """
     Monitor wrapper to store images as videos.
 
@@ -275,8 +330,8 @@ class Monitor(_monitor):
     --------
     gym.wrappers.Monitor : https://github.com/openai/gym/blob/master/gym/wrappers/monitor.py
     """
-    def __init__(self,env,directory: Optional[str]=None,size=(1024, 768),
-                 *args,**kwargs):
+
+    def __init__(self, env, directory: Optional[str] = None, enabled=False, name_prefix=None, **kwargs):
         """
         Initialize Monitor class
 
@@ -286,44 +341,89 @@ class Monitor(_monitor):
             Directory to store output movies. When the value is `None`,
             which is default, "%Y%m%d-%H%M%S" is used for directory.
         """
+        gym.Wrapper.__init__(self, env)
+        self._recording_enabled = enabled
+        self._is_recording = False
+        self.num_frames = 0
+        self.directory = None
+        self.videos = []
         if directory is None:
-            directory = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            self.directory = make_dir_if_need('videos')
+        else:
+            self.directory = make_dir_if_need(sanitize_path(directory))
 
-        self._display = _VirtualDisplaySingleton(size)
-        super().__init__(env,directory,*args,**kwargs)
+        self._display = None
+        shp = env.observation_space.shape
+        if get_plateform() != 'windows':
+            self._display = _VirtualDisplaySingleton((shp[1], shp[0]))
+        if name_prefix is None:
+            name_prefix = 'video'
+        self.name_prefix = name_prefix
+        self.current_recording_path = None
+        self.vw = None
+        self.vw2 = None
 
-    def _close_running_video(self):
-        if self.video_recorder:
-            self._close_video_recorder()
-            self.video_recorder = None
-        self._flush(force=True)
+    def create_video_writer(self):
+        shp = super().render(mode='rgb_array').shape
+        video_name = os.path.join(self.directory, self.name_prefix + '_' + get_time_suffix() + '.avi')
+        video_name2 = os.path.join(self.directory, self.name_prefix + '_obj_' + get_time_suffix() + '.avi')
+        self.current_recording_path = video_name
 
-    def step(self,action):
+        self.vw = cv2.VideoWriter(video_name, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), self.env.metadata['video.frames_per_second'], (shp[1], shp[0]))
+
+        self.vw2 = cv2.VideoWriter(video_name2, cv2.VideoWriter_fourcc('M', 'J', 'P', 'G'), self.env.metadata['video.frames_per_second'], (84 * 4, 84 * 4))
+
+        self._is_recording = True
+        self.num_frames = 0
+
+    def close_video_recorder(self):
+
+        if self._is_recording and (self.vw is not None and self.num_frames > 0):
+            self.vw.release()
+            self.vw2.release()
+            self._is_recording = False
+            self.videos.append(self.current_recording_path)
+
+    def step(self, action):
         """
         Step Environment
         """
+
         try:
-            return super().step(action)
+            observation, reward, done, info = super().step(action)
+            if self.vw is None:
+                self.create_video_writer()
+            if done:
+                self.close_video_recorder()
+            else:
+                if self._recording_enabled:
+                    self.vw.write(cv2.cvtColor(self.env.render(mode='rgb_array').copy(), cv2.COLOR_RGB2BGR))
+
+                    obj_frame = cv2.resize(cv2.cvtColor(observation.copy(), cv2.COLOR_RGB2BGR), (84 * 4, 84 * 4))
+
+                    self.vw2.write(obj_frame)
+                    self.num_frames += 1
+            return observation, reward, done, info
         except KeyboardInterrupt as k:
-            self._close_running_video()
+            self.close_video_recorder()
             raise
 
-    def reset(self,**kwargs):
+    def reset(self, **kwargs):
         """
         Reset Environment
         """
         try:
-            if self.stats_recorder and not self.stats_recorder.done:
-                # StatsRecorder requires `done=True` before `reset()`
-                self.stats_recorder.done = True
-                self.stats_recorder.save_complete()
 
-            return super().reset(**kwargs)
+            self.close_video_recorder()
+            initial_state = super().reset(**kwargs)
+            if self._recording_enabled and (self.vw is None or self.num_frames > 0):
+                self.create_video_writer()
+            return initial_state
         except KeyboardInterrupt:
-            self._close_running_video()
+            self.close_video_recorder()
             raise
 
-    def display(self,reset: bool=False):
+    def display(self, reset: bool = False):
         """
         Display saved all movies
 
@@ -338,20 +438,20 @@ class Monitor(_monitor):
 
         # Close current video.
         self._close_running_video()
+        if is_in_ipython():
+            for f in self.videos:
+                if not os.path.exists(f):
+                    continue
 
-        for f in self.videos:
-            if not os.path.exists(f[0]):
-                continue
+                video = io.open(f[0], "r+b").read()
+                encoded = base64.b64encode(video)
 
-            video = io.open(f[0], "r+b").read()
-            encoded = base64.b64encode(video)
-
-            display.display(os.path.basename(f[0]))
-            display.display(display.HTML(data="""
-            <video alt="test" controls>
-            <source src="data:video/mp4;base64,{0}" type="video/mp4" />
-            </video>
-            """.format(encoded.decode('ascii'))))
+                display.display(os.path.basename(f))
+                display.display(display.HTML(data="""
+                <video alt="test" controls>
+                <source src="data:video/mp4;base64,{0}" type="video/mp4" />
+                </video>
+                """.format(encoded.decode('ascii'))))
 
         if reset:
             self.videos = []
