@@ -3013,6 +3013,8 @@ def fix_layer(layer: Layer):
         setattr(layer, 'get_root', MethodType(get_root, layer))
 
     for module in layer.modules():
+        if not hasattr(module,'__signature__'):
+            module.__signature__ = inspect.signature(module.forward)
         class_name = module.__class__.__name__
         if not hasattr(layer, 'get_root'):
             setattr(layer, 'get_root', MethodType(get_root, layer))
