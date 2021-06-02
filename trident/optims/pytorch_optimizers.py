@@ -1,22 +1,21 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import re
+
 import math
+import re
 import sys
 from collections import defaultdict
-from functools import reduce
+
 import torch
 import torch.optim as optim
-from torch.optim import optimizer,lbfgs,adagrad,adadelta,rmsprop
+from torch.optim import optimizer, lbfgs, adagrad, adadelta, rmsprop
+
 from trident.backend.common import get_class, snake2camel
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'PlainRAdam', 'AdamW', 'Lookahead',
-           'Ranger', 'RangerLars','AdaBelief','RangerBelief','DiffGrad','Lamb','get_optimizer']
-
-
-
+           'Ranger', 'RangerLars', 'AdaBelief', 'RangerBelief', 'DiffGrad', 'Lamb', 'get_optimizer']
 
 
 class Optimizer(optimizer.Optimizer):
@@ -39,8 +38,7 @@ class Optimizer(optimizer.Optimizer):
     def __init__(self, params, defaults):
         super().__init__(params, defaults)
         self._base_lr = 1e-3
-        self.gradient_centralization=None
-
+        self.gradient_centralization = None
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -154,8 +152,7 @@ class Adam(Optimizer):
             params_with_grad = []
             grads = []
 
-
-            for p in group['params'] :
+            for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data
@@ -174,7 +171,7 @@ class Adam(Optimizer):
                     state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
                     # Exponential moving average of squared gradient values
                     state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-                    #if amsgrad:
+                    # if amsgrad:
                     # Maintains max of all exp. moving avg. of sq. grad. values
                     state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
 
@@ -265,6 +262,7 @@ class SGD(optim.SGD):
 
         The Nesterov version is analogously modified.
     """
+
     def __init__(self, params, lr=1e-3, momentum=0, dampening=0,
                  weight_decay=0, nesterov=False):
         super().__init__(params, lr=lr, momentum=momentum, dampening=dampening, weight_decay=weight_decay, nesterov=nesterov)
@@ -356,7 +354,8 @@ class LBFGS(lbfgs.LBFGS):
                  tolerance_change=1e-9,
                  history_size=100,
                  line_search_fn=None):
-        super().__init__(params, lr=lr, max_iter=max_iter,max_eval=max_eval, tolerance_grad=tolerance_grad, tolerance_change=tolerance_change, history_size=history_size,line_search_fn=line_search_fn)
+        super().__init__(params, lr=lr, max_iter=max_iter, max_eval=max_eval, tolerance_grad=tolerance_grad, tolerance_change=tolerance_change, history_size=history_size,
+                         line_search_fn=line_search_fn)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -424,6 +423,7 @@ class Adadelta(adadelta.Adadelta):
 
     __ https://arxiv.org/abs/1212.5701
     """
+
     def __init__(self, params, lr=1.0, rho=0.9, eps=1e-7, weight_decay=0):
         super().__init__(params, lr=lr, rho=rho, eps=eps, weight_decay=weight_decay)
 
@@ -493,8 +493,9 @@ class Adagrad(adagrad.Adagrad):
      .. _Adaptive Subgradient Methods for Online Learning and Stochastic
          Optimization: http://jmlr.org/papers/v12/duchi11a.html
      """
+
     def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-7):
-        super().__init__(params, lr=lr, lr_decay=lr_decay, eps=eps, weight_decay=weight_decay,initial_accumulator_value=initial_accumulator_value)
+        super().__init__(params, lr=lr, lr_decay=lr_decay, eps=eps, weight_decay=weight_decay, initial_accumulator_value=initial_accumulator_value)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -572,8 +573,9 @@ class RMSprop(rmsprop.RMSprop):
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
 
     """
-    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-7, weight_decay=0, momentum=0, centered=False,gradient_centralization=None):
-        super().__init__(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay,momentum=momentum,centered=centered)
+
+    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-7, weight_decay=0, momentum=0, centered=False, gradient_centralization=None):
+        super().__init__(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay, momentum=momentum, centered=centered)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
         """
@@ -663,7 +665,7 @@ class RAdam(Optimizer):
         """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, N_sma_threshhold=5,
-                 degenerated_to_sgd=True,gradient_centralization=None):
+                 degenerated_to_sgd=True, gradient_centralization=None):
         """Construct a new RAdam optimizer.
         Args:
             params: trainable parameters from model
@@ -734,7 +736,7 @@ class RAdam(Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
 
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad,value=1 - beta2)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
                 state['step'] += 1
@@ -764,7 +766,7 @@ class RAdam(Optimizer):
                 # more conservative since it's an approximated value
                 if N_sma >= self.N_sma_threshhold:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(exp_avg, denom,value=-step_size * group['lr'])
+                    p_data.addcdiv_(exp_avg, denom, value=-step_size * group['lr'])
 
                 elif step_size > 0:
                     p_data.add_(exp_avg, alpha=-step_size * group['lr'])
@@ -774,7 +776,7 @@ class RAdam(Optimizer):
 
 
 class PlainRAdam(Optimizer):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -828,7 +830,7 @@ class PlainRAdam(Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
 
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad,value=1 - beta2)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
                 state['step'] += 1
@@ -850,7 +852,7 @@ class PlainRAdam(Optimizer):
                     if group['weight_decay'] != 0:
                         p_data.add_(p_data, alpha=-group['weight_decay'] * group['lr'])
                     step_size = group['lr'] / (1 - beta1 ** state['step'])
-                    p_data.add_(grad,alpha=-step_size)
+                    p_data.add_(grad, alpha=-step_size)
                     p.data.copy_(p_data)
 
         return loss
@@ -876,7 +878,7 @@ class AdamW(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, warmup=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, warmup=0, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -930,7 +932,7 @@ class AdamW(Optimizer):
 
                 state['step'] += 1
 
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad,value=1 - beta2)
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
                 denom = exp_avg_sq.sqrt().add_(group['eps'])
@@ -947,7 +949,7 @@ class AdamW(Optimizer):
                 if group['weight_decay'] != 0:
                     p_data.add_(p_data, alpha=-group['weight_decay'] * scheduled_lr)
 
-                p_data.addcdiv_( grad, denom,value=-step_size)
+                p_data.addcdiv_(grad, denom, value=-step_size)
 
                 p.data.copy_(p_data)
 
@@ -965,8 +967,8 @@ class Lookahead(Optimizer):
         self.fast_state = self.optimizer.state
         for group in self.param_groups:
             group["counter"] = 0
-        self.gradient_centralization=gradient_centralization
-        self.optimizer.gradient_centralization=gradient_centralization
+        self.gradient_centralization = gradient_centralization
+        self.optimizer.gradient_centralization = gradient_centralization
 
     def update(self, group):
         for fast in group["params"]:
@@ -1017,14 +1019,15 @@ class Lookahead(Optimizer):
         param_group["counter"] = 0
         self.optimizer.add_param_group(param_group)
 
+
 class Ranger(Optimizer):
     """
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
-                 weight_decay=0,gradient_centralization=None):
-        self.gradient_centralization=gradient_centralization
+                 weight_decay=0, gradient_centralization=None):
+        self.gradient_centralization = gradient_centralization
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {}'.format(alpha))
@@ -1077,6 +1080,7 @@ class Ranger(Optimizer):
         # don't use grad for lookahead weights
         # for w in it.chain(*self.slow_weights):
         #    w.requires_grad = False
+
     def __setstate__(self, state):
         super(Ranger, self).__setstate__(state)
 
@@ -1130,7 +1134,6 @@ class Ranger(Optimizer):
 
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
-
                 state['step'] += 1.0
                 buffered = self.radam_buffer[int(state['step'] % 10)]
                 if state['step'] == buffered[0]:
@@ -1153,221 +1156,33 @@ class Ranger(Optimizer):
                 if group['weight_decay'] != 0:
                     grad = grad.add(p, alpha=group['weight_decay'])
 
+                if self.gradient_centralization in ['all', 'gc']:
+                    if len(list(grad.size())) > 1:
+                        grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
 
                 if N_sma > 5:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(exp_avg, denom,value=-step_size * group['lr'])
+                    p_data.addcdiv_(exp_avg, denom, value=-step_size * group['lr'])
                 else:
-                    p_data.add_( exp_avg,alpha=-step_size * group['lr'])
+                    p_data.add_(exp_avg, alpha=-step_size * group['lr'])
 
                 if any_abnormal_number(p_data):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                    p_data=where(is_abnormal_number(p_data),p.data,p_data)
+                    p_data = where(is_abnormal_number(p_data), p.data, p_data)
 
                 p.data.copy_(p_data)
-
 
                 # integrated look ahead...
                 # we do it at the param level instead of group level
                 if state['step'] % group['k'] == 0:
                     slow_p = state['slow_buffer']  # get access to slow param tensor
-                    slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                    slow_p.add_(p.data - slow_p, alpha=self.alpha)  # (fast weights - slow weights) * alpha
                     if any_abnormal_number(slow_p):
                         sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                         slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
                     p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
 
         return loss
-
-
-
-class Ranger_new(Optimizer):
-    """
-    https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
-    """
-
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
-                 weight_decay=0,gradient_centralization=None):
-        self.gradient_centralization=gradient_centralization
-        # parameter checks
-        if not 0.0 <= alpha <= 1.0:
-            raise ValueError('Invalid slow update rate: {}'.format(alpha))
-        if not 1 <= k:
-            raise ValueError('Invalid lookahead steps: {}'.format(k))
-        if not lr > 0:
-            raise ValueError('Invalid Learning Rate: {}'.format(lr))
-        if not eps > 0:
-            raise ValueError('Invalid eps: {}'.format(eps))
-
-        # parameter comments:
-        # beta1 (momentum) of .95 seems to work better than .90...
-        # N_sma_threshold of 5 seems better in testing than 4.
-        # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to
-        # make sure which works best for you.
-
-        # prep defaults and init torch.optim base
-        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
-                        N_sma_threshhold=N_sma_threshhold, eps=eps,
-                        weight_decay=weight_decay)
-        super().__init__(params, defaults)
-
-        # adjustable threshold
-        self.N_sma_threshhold = N_sma_threshhold
-
-        # now we can get to work...
-        # removed as we now use step from RAdam...no need for
-        # duplicate step counting
-        # for group in self.param_groups:
-        #    group["step_counter"] = 0
-        # print("group step counter init")
-
-        # look ahead params
-        self.alpha = alpha
-        self.k = k
-
-        # radam buffer for state
-        self.radam_buffer = [[None, None, None] for ind in range(10)]
-
-        # self.first_run_check=0
-
-        # lookahead weights
-        # 9/2/19 - lookahead param tensors have been moved to state storage.
-        # This should resolve issues with load/save where weights were left in
-        # GPU memory from first load, slowing down future runs.
-
-        # self.slow_weights = [[p.clone().detach() for p in group['params']]
-        #                     for group in self.param_groups]
-
-        # don't use grad for lookahead weights
-        # for w in it.chain(*self.slow_weights):
-        #    w.requires_grad = False
-    def __setstate__(self, state):
-        super(Ranger, self).__setstate__(state)
-
-    @torch.no_grad()
-    def step(self, closure=None):
-        """Performs a single optimization step.
-
-        Args:
-            closure (callable): call for get loss backward
-
-        """
-        loss = None
-
-        if closure is not None:
-            loss = closure()
-
-        # Evaluate averages and grad, update param tensors
-        n=0
-
-        all_para=sum([len(group['params']) for group in self.param_groups])
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None or not p.requires_grad:
-                    continue
-                grad = p.grad.data.float()
-
-                if grad.is_sparse:
-                    raise RuntimeError('Ranger optimizer does not support sparse gradients')
-
-                p_data = p.data.float()
-
-                state = self.state[p]  # get state dict for this param
-
-                if len(state) == 0:  # if first time to run...init dictionary with our desired entries
-                    state['step'] = 0.0
-                    state['global_step'] = 0
-                    state['layer_seq'] = n
-
-                    state['is_train'] =n // (all_para / 20) <= 0
-
-                    state['layer_lr'] = 1e-3 if state['is_train'] else 0
-                    state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
-                    state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
-
-                    # look ahead weight storage now in state dict
-                    state['slow_buffer'] = torch.empty_like(p.data)
-                    state['slow_buffer'].copy_(p.data)
-
-                else:
-
-                    state['exp_avg'] = state['exp_avg'].type_as(p_data)
-                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
-
-                    state['global_step']+=1
-                    state['is_train'] = n // (all_para / 20) <= state['global_step']//100
-                    if state['global_step']<=2000:
-                        state['layer_lr'] = 1e-3*pow(0.5, state['global_step']//100- n // (all_para / 20) ) if state['is_train'] else 0
-
-
-                # begin computations
-                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                beta1, beta2 = group['betas']
-                if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
-
-                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
-
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
-
-
-                state['step'] += 1.0
-                buffered = self.radam_buffer[int(state['step'] % 10)]
-                if state['step'] == buffered[0]:
-                    N_sma, step_size = buffered[1], buffered[2]
-                else:
-                    buffered[0] = state['step']
-                    beta2_t = beta2 ** state['step']
-                    N_sma_max = 2 / (1 - beta2) - 1
-                    N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
-                    buffered[1] = N_sma
-
-                    # more conservative since it's an approximated value
-                    if N_sma >= self.N_sma_threshhold:
-                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                N_sma_max - 2)) / (1 - beta1 ** state['step'])
-                    else:
-                        step_size = 1.0 / (1 - beta1 ** state['step'])
-                    buffered[2] = step_size
-
-
-                if group['weight_decay'] != 0:
-                    grad = grad.add(p, alpha=group['weight_decay']* state['layer_lr'])
-
-
-                if N_sma > 5:
-                    denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    G_grad = exp_avg / denom
-                    if self.gradient_centralization in ['all', 'gc']:
-                        if len(list(G_grad.size())) > 1:
-                            G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
-
-                    p_data.add_(G_grad,value=-step_size * state['layer_lr'])
-                else:
-                    p_data.add_( exp_avg,alpha=-step_size *state['layer_lr'])
-
-
-                if any_abnormal_number(p_data):
-                    sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                    p_data=where(is_abnormal_number(p_data),p.data,p_data)
-
-                p.data.copy_(p_data)
-
-
-                # integrated look ahead...
-                # we do it at the param level instead of group level
-                if state['step'] % group['k'] == 0:
-                    slow_p = state['slow_buffer']  # get access to slow param tensor
-                    slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
-                    if any_abnormal_number(slow_p):
-                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                        slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
-                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
-                n+=1
-
-        return loss
-
 
 
 class RangerLars(Optimizer):
@@ -1375,7 +1190,7 @@ class RangerLars(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3,betas=(0.9, 0.999),alpha=0.5, k=6,N_sma_threshhold=5,eps=1e-7, weight_decay=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6, N_sma_threshhold=5, eps=1e-7, weight_decay=0, gradient_centralization=None):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -1386,15 +1201,15 @@ class RangerLars(Optimizer):
             raise ValueError('Invalid Learning Rate: {lr}')
         if not eps > 0:
             raise ValueError('Invalid eps: {eps}')
-        self.gradient_centralization=gradient_centralization
-        self.N_sma_threshhold=N_sma_threshhold
+        self.gradient_centralization = gradient_centralization
+        self.N_sma_threshhold = N_sma_threshhold
         # parameter comments:
         # beta1 (momentum) of .95 seems to work better than .90...
         # N_sma_threshold of 5 seems better in testing than 4.
         # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
 
         # prep defaults and init torch.optim base
-        defaults = dict(lr=lr, alpha=alpha, k=k,  betas=betas, eps=eps, weight_decay=weight_decay)
+        defaults = dict(lr=lr, alpha=alpha, k=k, betas=betas, eps=eps, weight_decay=weight_decay)
 
         super().__init__(params, defaults)
         # radam buffer for state
@@ -1495,7 +1310,11 @@ class RangerLars(Optimizer):
                     # if group['weight_decay'] != 0:
                     #     update.add_(group['weight_decay'], p_data)
                     if group['weight_decay'] != 0:
-                        grad = grad.add(p, alpha=group['weight_decay'] )
+                        grad = grad.add(p, alpha=group['weight_decay'])
+
+                    if self.gradient_centralization in ['all', 'gc']:
+                        if len(list(grad.size())) > 1:
+                            grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
 
                     radam_norm = update.pow(2.0).sum().sqrt()
                     weight_norm = p.data.pow(2.0).sum().sqrt()
@@ -1504,7 +1323,7 @@ class RangerLars(Optimizer):
                     else:
                         trust_ratio = weight_norm / radam_norm
 
-                    trust_ratio = clip(to_tensor(trust_ratio),0.0,10.0)
+                    trust_ratio = clip(to_tensor(trust_ratio), 0.0, 10.0)
 
                     state['weight_norm'] = weight_norm
                     state['adam_norm'] = radam_norm
@@ -1528,9 +1347,7 @@ class RangerLars(Optimizer):
                         slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
                         p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
 
-
         return loss
-
 
 
 class LARS(Optimizer):
@@ -1541,15 +1358,15 @@ class LARS(Optimizer):
     """
 
     def __init__(
-        self,
-        params, lr=1e-2,
-        momentum=0.9,
-        use_nesterov=False,
-        weight_decay=0.0,
-        exclude_from_weight_decay=None,
-        exclude_from_layer_adaptation=None,
-        classic_momentum=True,
-        eeta=0.001):
+            self,
+            params, lr=1e-2,
+            momentum=0.9,
+            use_nesterov=False,
+            weight_decay=0.0,
+            exclude_from_weight_decay=None,
+            exclude_from_layer_adaptation=None,
+            classic_momentum=True,
+            eeta=0.001):
         """Constructs a LARSOptimizer.
         Args:
         lr: A `float` for learning rate.
@@ -1665,7 +1482,7 @@ class LARS(Optimizer):
                     else:
                         next_v = param_state["momentum_buffer"]
 
-                    next_v.mul_(momentum).add_(grad,alpha=scaled_lr)
+                    next_v.mul_(momentum).add_(grad, alpha=scaled_lr)
                     if self.use_nesterov:
                         update = (self.momentum * next_v) + (scaled_lr * grad)
                     else:
@@ -1697,10 +1514,9 @@ class LARS(Optimizer):
 
 
 class AdaBelief(Optimizer):
-    r"""Implements Adam algorithm.
+    r"""Implements AdaBelief algorithm. Modified from Adam in PyTorch
 
-    It has been proposed in `Adam: A Method for Stochastic Optimization`_.
-
+    https://github.com/juntang-zhuang/Adabelief-Optimizer
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
@@ -1708,20 +1524,32 @@ class AdaBelief(Optimizer):
         betas (Tuple[float, float], optional): coefficients used for computing
             running averages of gradient and its square (default: (0.9, 0.999))
         eps (float, optional): term added to the denominator to improve
-            numerical stability (default: 1e-8)
+            numerical stability (default: 1e-16)
         weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
         amsgrad (boolean, optional): whether to use the AMSGrad variant of this
             algorithm from the paper `On the Convergence of Adam and Beyond`_
             (default: False)
-
-    .. _Adam\: A Method for Stochastic Optimization:
-        https://arxiv.org/abs/1412.6980
-    .. _On the Convergence of Adam and Beyond:
-        https://openreview.net/forum?id=ryQu7f-RZ
+        weight_decouple (boolean, optional): ( default: True) If set as True, then
+            the optimizer uses decoupled weight decay as in AdamW
+        fixed_decay (boolean, optional): (default: False) This is used when weight_decouple
+            is set as True.
+            When fixed_decay == True, the weight decay is performed as
+            $W_{new} = W_{old} - W_{old} \times decay$.
+            When fixed_decay == False, the weight decay is performed as
+            $W_{new} = W_{old} - W_{old} \times decay \times lr$. Note that in this case, the
+            weight decay ratio decreases with learning rate (lr).
+        rectify (boolean, optional): (default: True) If set as True, then perform the rectified
+            update similar to RAdam
+        degenerated_to_sgd (boolean, optional) (default:True) If set as True, then perform SGD update
+            when variance of gradient is high
+        print_change_log (boolean, optional) (default: True) If set as True, print the modifcation to
+            default hyper-parameters
+    reference: AdaBelief Optimizer, adapting stepsizes by the belief in observed gradients, NeurIPS 2020
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-7, weight_decay=0, amsgrad=False,
-                 gradient_centralization=None, **kwargs):
+    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-16,
+                 weight_decay=0, amsgrad=False, weight_decouple=True, fixed_decay=False, rectify=True,
+                 degenerated_to_sgd=True, print_change_log=True, **kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -1732,14 +1560,56 @@ class AdaBelief(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         if not 0.0 <= weight_decay:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
+
+        self.degenerated_to_sgd = degenerated_to_sgd
+        if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
+            for param in params:
+                if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
+                    param['buffer'] = [[None, None, None] for _ in range(10)]
+
         defaults = dict(lr=lr, betas=betas, eps=eps,
-                        weight_decay=weight_decay, amsgrad=amsgrad)
+                        weight_decay=weight_decay, amsgrad=amsgrad, buffer=[[None, None, None] for _ in range(10)])
         super(AdaBelief, self).__init__(params, defaults)
+
+        self.degenerated_to_sgd = degenerated_to_sgd
+        self.weight_decouple = weight_decouple
+        self.rectify = rectify
+        self.fixed_decay = fixed_decay
+        if self.weight_decouple:
+            print('Weight decoupling enabled in AdaBelief')
+            if self.fixed_decay:
+                print('Weight decay fixed')
+        if self.rectify:
+            print('Rectification enabled in AdaBelief')
+        if amsgrad:
+            print('AMSGrad enabled in AdaBelief')
 
     def __setstate__(self, state):
         super(AdaBelief, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefault('amsgrad', False)
+
+    def reset(self):
+        version_higher = (torch.__version__ >= "1.5.0")
+        for group in self.param_groups:
+            for p in group['params']:
+                state = self.state[p]
+                amsgrad = group['amsgrad']
+
+                # State initialization
+                state['step'] = 0
+                # Exponential moving average of gradient values
+                state['exp_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                    if version_higher else torch.zeros_like(p.data)
+
+                # Exponential moving average of squared gradient values
+                state['exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                    if version_higher else torch.zeros_like(p.data)
+
+                if amsgrad:
+                    # Maintains max of all exp. moving avg. of sq. grad. values
+                    state['max_exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                        if version_higher else torch.zeros_like(p.data)
 
     @torch.no_grad()
     def step(self, closure=None):
@@ -1749,6 +1619,7 @@ class AdaBelief(Optimizer):
             closure (callable, optional): A closure that reevaluates the model
                 and returns the loss.
         """
+        version_higher = (torch.__version__ >= "1.5.0")
         loss = None
         if closure is not None:
             with torch.enable_grad():
@@ -1758,75 +1629,157 @@ class AdaBelief(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
-                grad = p.grad
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
+                grad = p.grad.data
                 if grad.is_sparse:
-                    raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
+                    raise RuntimeError(
+                        'AdaBelief does not support sparse gradients, please consider SparseAdam instead')
                 amsgrad = group['amsgrad']
-                p_data = p.data
+
                 state = self.state[p]
+
+                beta1, beta2 = group['betas']
 
                 # State initialization
                 if len(state) == 0:
                     state['step'] = 0
                     # Exponential moving average of gradient values
-                    state['exp_avg'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state['exp_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                        if version_higher else torch.zeros_like(p.data)
                     # Exponential moving average of squared gradient values
-                    state['exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
-                    #if amsgrad:
-                    # Maintains max of all exp. moving avg. of sq. grad. values
-                    state['max_exp_avg_sq'] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                    state['exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                        if version_higher else torch.zeros_like(p.data)
+                    if amsgrad:
+                        # Maintains max of all exp. moving avg. of sq. grad. values
+                        state['max_exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                            if version_higher else torch.zeros_like(p.data)
 
-                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                #if amsgrad:
-                max_exp_avg_sq = state['max_exp_avg_sq']
-                beta1, beta2 = group['betas']
+                # perform weight decay, check if decoupled weight decay
+                if self.weight_decouple:
+                    if not self.fixed_decay:
+                        p.data.mul_(1.0 - group['lr'] * group['weight_decay'])
+                    else:
+                        p.data.mul_(1.0 - group['weight_decay'])
+                else:
+                    if group['weight_decay'] != 0:
+                        grad.add_(p.data, alpha=group['weight_decay'])
+
+                # get current state variable
+                exp_avg, exp_avg_var = state['exp_avg'], state['exp_avg_var']
 
                 state['step'] += 1
                 bias_correction1 = 1 - beta1 ** state['step']
                 bias_correction2 = 1 - beta2 ** state['step']
 
-
-                if group['weight_decay'] != 0:
-                    grad = grad.add(p, alpha=group['weight_decay'])
-
-                # Decay the first and second moment running average coefficient
+                # Update first and second moment running average
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
-                grad_residual=grad-exp_avg
-                exp_avg_sq.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1 - beta2)
+                grad_residual = grad - exp_avg
+                exp_avg_var.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1 - beta2)
 
                 if amsgrad:
+                    max_exp_avg_var = state['max_exp_avg_var']
                     # Maintains the maximum of all 2nd moment running avg. till now
-                    torch.max(max_exp_avg_sq, exp_avg_sq, out=max_exp_avg_sq)
+                    torch.max(max_exp_avg_var, exp_avg_var.add_(group['eps']), out=max_exp_avg_var)
+
                     # Use the max. for normalizing running avg. of gradient
-                    denom = (max_exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
+                    denom = (max_exp_avg_var.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
                 else:
-                    denom = (exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
+                    denom = (exp_avg_var.add_(group['eps']).sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
 
-                step_size = group['lr'] / bias_correction1
+                # update
+                if not self.rectify:
+                    # Default update
+                    step_size = group['lr'] / bias_correction1
+                    p.data.addcdiv_(exp_avg, denom, value=-step_size)
 
-                p.addcdiv_(exp_avg, denom, value=-step_size)
+                else:  # Rectified update, forked from RAdam
+                    buffered = group['buffer'][int(state['step'] % 10)]
+                    if state['step'] == buffered[0]:
+                        N_sma, step_size = buffered[1], buffered[2]
+                    else:
+                        buffered[0] = state['step']
+                        beta2_t = beta2 ** state['step']
+                        N_sma_max = 2 / (1 - beta2) - 1
+                        N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                        buffered[1] = N_sma
 
+                        # more conservative since it's an approximated value
+                        if N_sma >= 5:
+                            step_size = math.sqrt(
+                                (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
+                                        N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                        elif self.degenerated_to_sgd:
+                            step_size = 1.0 / (1 - beta1 ** state['step'])
+                        else:
+                            step_size = -1
+                        buffered[2] = step_size
+
+                    if N_sma >= 5:
+                        denom = exp_avg_var.sqrt().add_(group['eps'])
+                        p.data.addcdiv_(exp_avg, denom, value=-step_size * group['lr'])
+                    elif step_size > 0:
+                        p.data.add_(exp_avg, alpha=-step_size * group['lr'])
+
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
-class RangerBelief(Optimizer):
-    """
-    https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
+class RangerAdaBelief(Optimizer):
+    r"""Implements AdaBelief algorithm. Modified from Adam in PyTorch
+
+    https://github.com/juntang-zhuang/Adabelief-Optimizer
+    Arguments:
+        params (iterable): iterable of parameters to optimize or dicts defining
+            parameter groups
+        lr (float, optional): learning rate (default: 1e-3)
+        betas (Tuple[float, float], optional): coefficients used for computing
+            running averages of gradient and its square (default: (0.9, 0.999))
+        eps (float, optional): term added to the denominator to improve
+            numerical stability (default: 1e-16)
+        weight_decay (float, optional): weight decay (L2 penalty) (default: 0)
+        amsgrad (boolean, optional): whether to use the AMSGrad variant of this
+            algorithm from the paper `On the Convergence of Adam and Beyond`_
+            (default: False)
+        weight_decouple (boolean, optional): ( default: True) If set as True, then
+            the optimizer uses decoupled weight decay as in AdamW
+        fixed_decay (boolean, optional): (default: False) This is used when weight_decouple
+            is set as True.
+            When fixed_decay == True, the weight decay is performed as
+            $W_{new} = W_{old} - W_{old} \times decay$.
+            When fixed_decay == False, the weight decay is performed as
+            $W_{new} = W_{old} - W_{old} \times decay \times lr$. Note that in this case, the
+            weight decay ratio decreases with learning rate (lr).
+        rectify (boolean, optional): (default: True) If set as True, then perform the rectified
+            update similar to RAdam
+        degenerated_to_sgd (boolean, optional) (default:True) If set as True, then perform SGD update
+            when variance of gradient is high
+        print_change_log (boolean, optional) (default: True) If set as True, print the modifcation to
+            default hyper-parameters
+    reference: AdaBelief Optimizer, adapting stepsizes by the belief in observed gradients, NeurIPS 2020
     """
 
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
-                 weight_decay=0,gradient_centralization=None):
-        # parameter checks
-        self.first_run_check=0
+    def __init__(self, params, lr=1e-3,  # lr
+                 alpha=0.5, k=6, N_sma_threshhold=5,  # Ranger options
+                 betas=(.95, 0.999), eps=1e-5, weight_decay=0,  # Adam options
+                 # Gradient centralization on or off, applied to conv layers only or conv + fc layers
+                 use_gc=True, gc_conv_only=False, gc_loc=True, adabelief=True, weight_decouple=True, **kwargs):
+
         if not 0.0 <= alpha <= 1.0:
-            raise ValueError('Invalid slow update rate: {alpha}')
+            raise ValueError(f'Invalid slow update rate: {alpha}')
         if not 1 <= k:
-            raise ValueError('Invalid lookahead steps: {k}')
+            raise ValueError(f'Invalid lookahead steps: {k}')
         if not lr > 0:
-            raise ValueError('Invalid Learning Rate: {lr}')
+            raise ValueError(f'Invalid Learning Rate: {lr}')
         if not eps > 0:
-            raise ValueError('Invalid eps: {eps}')
-        self.gradient_centralization=gradient_centralization
+            raise ValueError(f'Invalid eps: {eps}')
 
         # parameter comments:
         # beta1 (momentum) of .95 seems to work better than .90...
@@ -1834,148 +1787,170 @@ class RangerBelief(Optimizer):
         # In both cases, worth testing on your dataset (.90 vs .95, 4 vs 5) to make sure which works best for you.
 
         # prep defaults and init torch.optim base
-        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,
-                        eps=eps, weight_decay=weight_decay)
-        super(RangerBelief, self).__init__(params, defaults)
+        defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
+                        N_sma_threshhold=N_sma_threshhold, eps=eps, weight_decay=weight_decay)
+        super().__init__(params, defaults)
 
         # adjustable threshold
         self.N_sma_threshhold = N_sma_threshhold
 
-        # now we can get to work...
-        # removed as we now use step from RAdam...no need for duplicate step counting
-        for group in self.param_groups:
-           group["step_counter"] = 0
-        # print("group step counter init")
-
         # look ahead params
+
         self.alpha = alpha
         self.k = k
 
         # radam buffer for state
         self.radam_buffer = [[None, None, None] for ind in range(10)]
 
-        # self.first_run_check=0
+        # gc on or off
+        self.gc_loc = gc_loc
+        self.use_gc = use_gc
+        self.gc_conv_only = gc_conv_only
+        # level of gradient centralization
+        # self.gc_gradient_threshold = 3 if gc_conv_only else 1
 
-        # lookahead weights  # 9/2/19 - lookahead param tensors have been moved to state storage.  # This should   #
-        # resolve issues with load/save where weights were left in GPU memory from first load, slowing down future runs.
+        # Turn on AdaBelief or Not
+        self.adabelief = adabelief
 
-        # self.slow_weights = [[p.clone().detach() for p in group['params']]  #                     for group in
-        # self.param_groups]
+        # Turn on decoupled weight decay or not
+        self.weight_decouple = weight_decouple
 
-        # don't use grad for lookahead weights  # for w in it.chain(*self.slow_weights):  #    w.requires_grad = False
-
+        print(
+            f"Ranger optimizer loaded. \nGradient Centralization usage = {self.use_gc}")
+        if (self.use_gc and self.gc_conv_only == False):
+            print(f"GC applied to both conv and fc layers")
+        elif (self.use_gc and self.gc_conv_only == True):
+            print(f"GC applied to conv layers only")
 
     def __setstate__(self, state):
-        super(RangerBelief, self).__setstate__(state)
-        for group in self.param_groups:
-            group.setdefault('amsgrad', False)
+        print("set state called")
+        super(RangerAdaBelief, self).__setstate__(state)
 
     @torch.no_grad()
     def step(self, closure=None):
         """Performs a single optimization step.
 
-        Args:
-            closure (callable): call for get loss backward
-
+        Arguments:
+            closure (callable, optional): A closure that reevaluates the model
+                and returns the loss.
         """
+        version_higher = (torch.__version__ >= "1.5.0")
         loss = None
-
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
-        # Evaluate averages and grad, update param tensors
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
                 grad = p.grad.data.float()
 
-                if grad.is_sparse:
-                    raise RuntimeError('Ranger optimizer does not support sparse gradients')
+                if not self.weight_decouple:  # if not decoupled weight decay, add weight decay to grad
+                    grad.add_(p.data * group['weight_decay'])
 
-                p_data = p.data.float()
+                if grad.is_sparse:
+                    raise RuntimeError(
+                        'Ranger optimizer does not support sparse gradients')
+
+                p_data_fp32 = p.data.float()
 
                 state = self.state[p]  # get state dict for this param
 
                 if len(state) == 0:  # if first time to run...init dictionary with our desired entries
+                    # if self.first_run_check==0:
+                    # self.first_run_check=1
+                    # print("Initializing slow buffer...should not see this at load from saved model!")
                     state['step'] = 0
-                    state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
-                    state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
-                    state['previous_grad'] =torch.zeros_like(grad, memory_format=torch.preserve_format)
+                    state['exp_avg'] = torch.zeros_like(p_data_fp32)
+                    state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)
+
                     # look ahead weight storage now in state dict
                     state['slow_buffer'] = torch.empty_like(p.data)
                     state['slow_buffer'].copy_(p.data)
+
                 else:
-                    state['exp_avg'] = state['exp_avg'].type_as(p_data)
-                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
+                    state['exp_avg'] = state['exp_avg'].type_as(p_data_fp32)
+                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(
+                        p_data_fp32)
 
                 # begin computations
-                exp_avg, exp_avg_sq,previous_grad = state['exp_avg'], state['exp_avg_sq'],state['previous_grad']
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
+
+                # GC operation for Conv layers and FC layers
+                # if grad.dim() > self.gc_gradient_threshold:
+                #    grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
 
+                state['step'] += 1
 
+                # compute mean moving avg
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
-                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                # compute variance mov avg
+                if self.adabelief:
+                    exp_avg_sq.mul_(beta2).addcmul_(grad - exp_avg, grad - exp_avg, value=1 - beta2)
+                else:
+                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
-                #grad=_filter_grads(grad,self.gradient_centralization)
-
-                state['step'] += 1
                 buffered = self.radam_buffer[int(state['step'] % 10)]
+
                 if state['step'] == buffered[0]:
                     N_sma, step_size = buffered[1], buffered[2]
                 else:
                     buffered[0] = state['step']
                     beta2_t = beta2 ** state['step']
                     N_sma_max = 2 / (1 - beta2) - 1
-                    N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                    N_sma = N_sma_max - 2 * \
+                            state['step'] * beta2_t / (1 - beta2_t)
                     buffered[1] = N_sma
-
-                    # more conservative since it's an approximated value
-                    if N_sma >= self.N_sma_threshhold:
-                        step_size = math.sqrt( (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                    N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                    if N_sma > self.N_sma_threshhold:
+                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (
+                                N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     else:
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
 
-                if group['weight_decay'] != 0:
-                    p_data.add_(p_data,alpha= -group['weight_decay'] * group['lr'])
+                # if group['weight_decay'] != 0:
+                #    p_data_fp32.add_(-group['weight_decay']
+                #                     * group['lr'], p_data_fp32)
 
-                # compute diffgrad coefficient (dfc)
-                diff = abs(previous_grad - grad)
-                dfc = 1. / (1. + torch.exp(-diff))
-                state['previous_grad'] = grad
+                # apply lr
+                if N_sma > self.N_sma_threshhold:
+                    if self.adabelief:
+                        denom = exp_avg_sq.add_(group['eps']).sqrt().add_(group['eps'])
+                    else:
+                        denom = exp_avg_sq.sqrt().add_(group['eps'])
 
-                # update momentum with dfc
-                exp_avg1 = exp_avg * dfc
+                    G_grad = exp_avg / denom
+                else:
+                    G_grad = exp_avg
 
-                if N_sma >= self.N_sma_threshhold:
-                    denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(exp_avg1, denom, value=-step_size * group['lr'] )
-                elif step_size > 0:
-                    p_data.add_(exp_avg1, alpha=-step_size * group['lr'])
+                if self.weight_decouple and (group['weight_decay'] != 0):  # decoupled weight decay
+                    G_grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
-                if any_abnormal_number(p_data):
-                    sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                    p_data.copy_(where(is_abnormal_number(p_data),p.data,p_data))
+                # GC operation
 
-                p.data.copy_(p_data)
+                if self.gradient_centralization in ['all', 'gc']:
+                    if len(list(G_grad.size())) > 1:
+                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
+
+                p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
+
+                p.data.copy_(p_data_fp32)
 
                 # integrated look ahead...
                 # we do it at the param level instead of group level
                 if state['step'] % group['k'] == 0:
-                    slow_p = state['slow_buffer']  # get access to slow param tensor
-                    slow_p.add_( p.data - slow_p,alpha=self.alpha)  # (fast weights - slow weights) * alpha
-                    if any_abnormal_number(slow_p):
-                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                        slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
-                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
-
-
+                    # get access to slow param tensor
+                    slow_p = state['slow_buffer']
+                    # (fast weights - slow weights) * alpha
+                    slow_p.add_(p.data - slow_p, alpha=self.alpha)
+                    # copy interpolated weights to RAdam param tensor
+                    p.data.copy_(slow_p)
         return loss
 
 
@@ -2005,7 +1980,7 @@ class DiffGrad(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2014,8 +1989,8 @@ class DiffGrad(Optimizer):
             raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
         if not 0.0 <= betas[1] < 1.0:
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
-        self.gradient_centralization=gradient_centralization
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay,gradient_centralization=gradient_centralization)
+        self.gradient_centralization = gradient_centralization
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, gradient_centralization=gradient_centralization)
         super(DiffGrad, self).__init__(params, defaults)
 
     def __setstate__(self, state):
@@ -2051,7 +2026,7 @@ class DiffGrad(Optimizer):
                     # Exponential moving average of squared gradient values
                     state['exp_avg_sq'] = torch.zeros_like(p.data)
                     # Previous gradient
-                    state['previous_grad'] =  torch.zeros_like(p.data)
+                    state['previous_grad'] = torch.zeros_like(p.data)
 
                 exp_avg, exp_avg_sq, previous_grad = state['exp_avg'], state['exp_avg_sq'], state['previous_grad']
                 beta1, beta2 = group['betas']
@@ -2065,6 +2040,10 @@ class DiffGrad(Optimizer):
 
                 if group['weight_decay'] != 0:
                     grad.add_(group['weight_decay'], p.data)
+
+                if self.gradient_centralization in ['all', 'gc']:
+                    if len(list(grad.size())) > 1:
+                        grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
 
                 # Decay the first and second moment running average coefficient
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
@@ -2083,9 +2062,10 @@ class DiffGrad(Optimizer):
 
                 step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
 
-                p.data.add_(true_divide( exp_avg1, denom),alpha=-step_size)
+                p.data.add_(true_divide(exp_avg1, denom), alpha=-step_size)
 
         return loss
+
 
 class Lamb(Optimizer):
     r"""Implements Lamb algorithm.
@@ -2105,7 +2085,7 @@ class Lamb(Optimizer):
         https://arxiv.org/abs/1904.00962
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6,  weight_decay=0, adam=False,gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0, adam=False, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2115,7 +2095,7 @@ class Lamb(Optimizer):
         if not 0.0 <= betas[1] < 1.0:
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         self.gradient_centralization = gradient_centralization
-        defaults = dict(lr=lr, betas=betas, eps=eps,weight_decay=weight_decay,gradient_centralization = gradient_centralization)
+        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, gradient_centralization=gradient_centralization)
         self.adam = adam
         super(Lamb, self).__init__(params, defaults)
 
@@ -2165,7 +2145,7 @@ class Lamb(Optimizer):
                 # bias_correction1 = 1 - beta1 ** state['step']
                 # bias_correction2 = 1 - beta2 ** state['step']
                 # Apply bias to lr to avoid broadcast.
-                step_size = group['lr'] # * math.sqrt(bias_correction2) / bias_correction1
+                step_size = group['lr']  # * math.sqrt(bias_correction2) / bias_correction1
 
                 weight_norm = p.data.pow(2).sum().sqrt().clamp(0, 10)
 
