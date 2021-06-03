@@ -1,47 +1,44 @@
 """ common define the session ,basic class and basic function without internal dependency """
+import builtins
 import collections
+import copy
+import datetime
 import functools
 import importlib
-import datetime
 import inspect
-import builtins
-import string
-import copy
-import json
 import linecache
 import math
+import numbers
 import operator
 import os
 import platform
 import re
 import shlex
+import string
 import struct
-import gc
-import numbers
 import subprocess
 import sys
-import threading
 import time
 import traceback
 import types
-import warnings
 from enum import Enum
-from inspect import signature
 from pydoc import locate
+from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType
 
-from typing import Iterable,Generator,Sequence,Iterator,Union, Tuple, Any, overload, NewType, Text
 import numpy as np
 
-__all__ = ['get_session','set_session','get_session_value','is_autocast_enabled','set_autocast_enabled','get_backend','get_plateform','get_image_backend', 'get_trident_dir', 'epsilon', 'floatx','import_or_install',
-           'check_keys','make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
-           'get_time_suffix', 'get_file_modified_time','get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
-           'next_prime', 'prev_prime', 'nearest_prime', 'PrintException','TensorShape', 'unpack_singleton', 'enforce_singleton',
-           'OrderedDict','map_function_arguments', 'ClassfierType', 'PaddingMode','Signature','is_iter','get_string_actual_length',
-           'Interpolation','is_numpy','find_minimal_edit_distance_key','jaccard_similarity','text_similarity','levenshtein','is_alphabet','is_punctuation','remove_nonprintable',
+__all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabled', 'set_autocast_enabled', 'get_backend', 'get_plateform', 'get_image_backend', 'get_trident_dir',
+           'epsilon', 'floatx', 'import_or_install',
+           'check_keys', 'make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
+           'get_time_suffix', 'get_file_modified_time', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
+           'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'TensorShape', 'unpack_singleton', 'enforce_singleton',
+           'OrderedDict', 'map_function_arguments', 'ClassfierType', 'PaddingMode', 'Signature', 'is_iter', 'get_string_actual_length',
+           'Interpolation', 'is_numpy', 'find_minimal_edit_distance_key', 'jaccard_similarity', 'text_similarity', 'levenshtein', 'is_alphabet', 'is_punctuation',
+           'remove_nonprintable',
 
-           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode','adaptive_format','num_cpus',
-          'get_args_spec', 'get_gpu_memory_map','get_memory_profile','get_gpu_memory_map','dtype','red_color','green_color','cyan_color','blue_color','orange_color','gray_color','yellow_color']
-
+           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode', 'adaptive_format', 'num_cpus',
+           'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'get_gpu_memory_map', 'dtype', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
+           'gray_color', 'yellow_color']
 
 # In some cases, these basic types are shadowed by corresponding
 # top-level values.  The underscore variants let us refer to these
@@ -54,10 +51,7 @@ _int = builtins.int
 _float = builtins.float
 _bool = builtins.bool
 
-
-
 _SESSION = context._context()
-
 
 
 def sanitize_path(path):
@@ -75,7 +69,8 @@ def sanitize_path(path):
     else:
         return path
 
-def split_path(path:str):
+
+def split_path(path: str):
     """split path into folder, filename and ext
 
     Args:
@@ -99,6 +94,7 @@ def split_path(path:str):
         filename = ''
     return folder, filename, ext
 
+
 def make_dir_if_need(path):
     """Check the base folder in input path whether exist, if not , then create it.
 
@@ -119,12 +115,9 @@ def make_dir_if_need(path):
     return sanitize_path(path)
 
 
-
-
 def if_none(a, b):
     "`b` if `a` is None else `a`"
     return b if a is None else a
-
 
 
 def get_trident_dir():
@@ -147,7 +140,7 @@ def get_plateform():
         check current system os plateform.
 
     """
-    plateform_str=platform.system().lower()
+    plateform_str = platform.system().lower()
     if 'darwin' in plateform_str:
         return 'mac'
     elif 'linux' in plateform_str:
@@ -156,10 +149,6 @@ def get_plateform():
         return 'windows'
     else:
         return plateform_str
-
-
-
-
 
 
 def get_session():
@@ -171,6 +160,7 @@ def get_session():
     """
     return _SESSION
 
+
 def get_session_value(key):
     """
 
@@ -178,8 +168,8 @@ def get_session_value(key):
         the trident _SESSION
 
     """
-    if hasattr(_SESSION,key):
-        return getattr(_SESSION,key)
+    if hasattr(_SESSION, key):
+        return getattr(_SESSION, key)
     else:
         return None
 
@@ -197,28 +187,31 @@ def set_session(key, value):
     setattr(_SESSION, key, value)
     return _SESSION
 
+
 def get_backend():
     return context._context().get_backend()
+
 
 def get_image_backend():
     return context._context().image_backend
 
+
 def get_device():
     return context._context().device
+
 
 def is_autocast_enabled():
     return get_session_value('is_autocast_enabled')
 
-def set_autocast_enabled(enabled:bool):
-    set_session('is_autocast_enabled',enabled)
+
+def set_autocast_enabled(enabled: bool):
+    set_session('is_autocast_enabled', enabled)
 
 
 def _is_c_contiguous(data):
     while isinstance(data, list):
         data = data[0]
     return data.flags.c_contiguous
-
-
 
 
 def epsilon():
@@ -232,6 +225,7 @@ def epsilon():
 
     """
     return _SESSION.epsilon
+
 
 def floatx():
     """Returns the default float type, as a string.
@@ -280,35 +274,59 @@ def snake2camel(string1):
     else:
         return ''.join(x.capitalize() or '_' for x in string1.split('_'))
 
-def adaptive_format(num:numbers.Number, prev_value:Union[numbers.Number, Iterable]=None,value_type=None):
-    valid_value_type=['loss','metric']
+
+def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Iterable] = None, value_type=None, name=None):
+    valid_value_type = ['loss', 'metric']
+    percentage_name = ['accuracy', 'rate', 'ratio', 'iou', 'recall', 'rmse', 'similarity', 'fitness', 'utility']
+
     if num is None:
         return 'none'
-    is_current_num_integer=math.modf(num)[0]!=0
-    is_all_history_integer=all([math.modf(v)[0]!=0 for v in prev_value]) if isinstance(prev_value,Iterable) else math.modf(num)[0]!=0 if isinstance(prev_value,numbers.Number) else False
-    if is_current_num_integer and is_all_history_integer:
+    elif name is not None and any([name.lower().endswith(n) for n in percentage_name]):
+        return '{0:.3%}'.format(num)
+
+    is_current_num_integer = math.modf(num)[0] == 0
+    digitpart_list = [math.modf(v)[0] for v in prev_value] if isinstance(prev_value, Iterable) else []
+    is_all_history_integer = all([math.modf(v)[0] == 0 for v in prev_value]) if isinstance(prev_value, Iterable) else math.modf(num)[0] == 0 if isinstance(prev_value,
+                                                                                                                                                           numbers.Number) else \
+        False
+    if isinstance(num, numbers.Integral) or is_current_num_integer and is_all_history_integer:
+        if not isinstance(num, numbers.Integral):
+            num = int(num)
         return '{0:,}'.format(num)
-    format_string= '.3f'
-    if value_type=='metric':
-        format_string = '.3%'
-        if builtins.abs(num)>2:
-            format_string = '.3f'
-    elif value_type!='loss' and ((prev_value is None or prev_value==num) and 1e-3<=builtins.abs(num)<1.2):
-        format_string ='.3%'
-    elif  (prev_value is None or prev_value==num) and builtins.abs(num)<1e-3:
-        format_string = '.3e'
-    elif prev_value is  not None and builtins.abs(prev_value)>0 and builtins.abs(num) < 1e-3:
-        diff=builtins.min(builtins.max(3,-1*math.log10(builtins.abs(builtins.abs(prev_value)-builtins.abs(num)))),8)
-        format_string = '.{0}e'.format(diff)
-    elif prev_value is not None:
-        diff=prev_value-num
-        if  1e-3 < builtins.abs(diff) < 1.2:
-            format_string = '.3%'
-        elif builtins.abs(diff) <= 1e-3:
-            format_string = '.3e'
+    format_string = '.3f'
+    if isinstance(prev_value, Iterable) and len(prev_value)>1:
+        if all([1.2>=s>=0.001 or -0.001>=s>=-1.2 or s==0  for s in prev_value]):
+            return '{0:.3%}'.format(num)
+        elif len(prev_value) > 0:
+            digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean()[0])
+            if  digit>4:
+                return '{0:{1}}'.format(num,  '.3e')
+            elif digit < 2:
+                return '{0:{1}}'.format(num, '.3f')
+            else:
+                return '{0:.{1}%}'.format(num,digit)
+    else:
+
+        if value_type == 'metric':
+            if math.modf(num)[0] ==0:
+                num = int(num)
+                return '{0:,}'.format(num)
+            elif 1.2 >= num >= 0.001 or -0.001 >= num >= -1.2 or num == 0:
+                return '{0:.3%}'.format(num)
+            elif num>1.2 or num<-1.2:
+                return '{0:{1}}'.format(num, '.3f')
+            else:
+                return '{0:{1}}'.format(num, '.3e')
+        elif value_type != 'loss' :
+            if  1000 >= num >= 0.001 or -0.001 >= num >= -1000 or num == 0:
+                return '{0:{1}}'.format(num, '.3f')
+            else:
+                return '{0:{1}}'.format(num, '.3e')
+
     return '{0:{1}}'.format(num, format_string)
 
-def get_string_actual_length(input_string:str):
+
+def get_string_actual_length(input_string: str):
     """Get the string acutal length (considering Chinese double byte)
 
     Args:
@@ -324,7 +342,9 @@ def get_string_actual_length(input_string:str):
 
     """
 
-    return builtins.sum([len(input_string[i].encode("UTF-8")) if len(input_string[i].encode("UTF-8")) ==3 else len(input_string[i].encode("UTF-8"))  for i in range(len(input_string))])
+    return builtins.sum(
+        [len(input_string[i].encode("UTF-8")) if len(input_string[i].encode("UTF-8")) == 3 else len(input_string[i].encode("UTF-8")) for i in range(len(input_string))])
+
 
 def PrintException():
     """
@@ -343,9 +363,11 @@ def PrintException():
     # traceback.print_tb(tb, limit=1, file=sys.stdout)
     # traceback.print_exception(exc_type, exc_obj, tb, limit=2, file=sys.stdout)
 
+
 def make_sure(bool_val, error_msg, *args):
     if not bool_val:
         raise ValueError("make_sure failure: " + error_msg % args)
+
 
 class DeviceType(object):
     _Type = NewType('_Type', int)
@@ -357,7 +379,7 @@ class DeviceType(object):
 
 
 class dtype:
-    backend=get_backend()
+    backend = get_backend()
     if backend == 'pytorch':
         import torch
         # type definition
@@ -382,8 +404,8 @@ class dtype:
         double = torch.float64
         long = torch.int64
         float = torch.float32
-        complex64=torch.complex64
-        complex128=torch.complex128
+        complex64 = torch.complex64
+        complex128 = torch.complex128
         cfloat = torch.cfloat
     elif backend == 'tensorflow':
         import tensorflow as tf
@@ -408,32 +430,31 @@ class dtype:
         double = tf.float64
         long = tf.int64
         float = tf.float32
-        complex64=tf.complex64
-        complex128=tf.complex128
-        cfloat =tf.complex64
-    elif backend== 'onnx':
-        import onnx
-        from onnx import helper, onnx_pb, defs, numpy_helper
+        complex64 = tf.complex64
+        complex128 = tf.complex128
+        cfloat = tf.complex64
+    elif backend == 'onnx':
+        from onnx import onnx_pb
         bool = onnx_pb.TensorProto.BOOL
-        int8 =  onnx_pb.TensorProto.INT8
+        int8 = onnx_pb.TensorProto.INT8
         byte = onnx_pb.TensorProto.INT8
         int16 = onnx_pb.TensorProto.INT16
         short = onnx_pb.TensorProto.INT16
         int32 = onnx_pb.TensorProto.INT32
         intc = onnx_pb.TensorProto.INT32
         int64 = onnx_pb.TensorProto.INT64
-        intp =onnx_pb.TensorProto.INT64
+        intp = onnx_pb.TensorProto.INT64
 
         uint8 = onnx_pb.TensorProto.UINT8
-        ubyte =onnx_pb.TensorProto.UINT8
-        float16 =onnx_pb.TensorProto.FLOAT1
-        half =onnx_pb.TensorProto.FLOAT1
-        float32 =onnx_pb.TensorProto.FLOAT
+        ubyte = onnx_pb.TensorProto.UINT8
+        float16 = onnx_pb.TensorProto.FLOAT1
+        half = onnx_pb.TensorProto.FLOAT1
+        float32 = onnx_pb.TensorProto.FLOAT
         single = onnx_pb.TensorProto.FLOAT
-        float64 =onnx_pb.TensorProto.DOUBLE
-        double =onnx_pb.TensorProto.DOUBLE
-        long =onnx_pb.TensorProto.INT64
-        float =onnx_pb.TensorProto.FLOAT
+        float64 = onnx_pb.TensorProto.DOUBLE
+        double = onnx_pb.TensorProto.DOUBLE
+        long = onnx_pb.TensorProto.INT64
+        float = onnx_pb.TensorProto.FLOAT
 
 
     elif backend == 'numpy':
@@ -461,8 +482,6 @@ class dtype:
         complex64 = np.complex64
         complex128 = np.complex128
         cfloat = np.complex64
-
-
 
 
 # class Device(object):
@@ -526,16 +545,16 @@ class TensorShape(object):
         if dims is None:
             self._dims = None
         elif 'tensor' in dims.__class__.__name__.lower():
-            if hasattr(dims,'cpu'):
+            if hasattr(dims, 'cpu'):
                 dims.cpu()
             if hasattr(dims, 'detach'):
                 dims.detach().numpy()
             if hasattr(dims, 'numpy'):
-                dims=[d for d in dims]
+                dims = [d for d in dims]
             self._dims = [d for d in dims]
         elif isinstance(dims, (tuple, list)):  # Most common case.
-            self._dims = [d if isinstance(d, numbers.Integral) else None if d is None else d.item() if hasattr(d,"item") else d.numpy() for d in dims]
-        elif isinstance(dims,TensorShape):
+            self._dims = [d if isinstance(d, numbers.Integral) else None if d is None else d.item() if hasattr(d, "item") else d.numpy() for d in dims]
+        elif isinstance(dims, TensorShape):
             self._dims = dims.dims
         else:
             try:
@@ -558,14 +577,14 @@ class TensorShape(object):
                                     .format(dims, d)), e)
 
     def __repr__(self):
-            if self._dims is not None:
-                return "TensorShape(%r)" % [dim for dim in self._dims]
-            else:
-                return "TensorShape(None)"
+        if self._dims is not None:
+            return "TensorShape(%r)" % [dim for dim in self._dims]
+        else:
+            return "TensorShape(None)"
 
     def __str__(self):
         if self._dims is None:
-          return "<unknown>"
+            return "<unknown>"
         elif self.rank == 1:
             return "(%s,)" % self.dims[0]
         else:
@@ -618,8 +637,6 @@ class TensorShape(object):
     def copy(self):
         return copy.deepcopy(self)
 
-
-
     def __len__(self):
         """Returns the rank of this shape, or raises ValueError if unspecified."""
         if self._dims is None:
@@ -629,7 +646,7 @@ class TensorShape(object):
     def __iter__(self):
         """Returns `self.dims` if the rank is known, otherwise raises ValueError."""
         if self._dims is None:
-          raise ValueError("Cannot iterate over a shape with unknown rank.")
+            raise ValueError("Cannot iterate over a shape with unknown rank.")
         else:
             return iter(d for d in self._dims)
 
@@ -647,32 +664,32 @@ class TensorShape(object):
             the step is set.
         """
         if self._dims is not None:
-          if isinstance(key, slice):
-            return TensorShape(self._dims[key])
-          else:
-            return self._dims[key]
-        else:
-          if isinstance(key, slice):
-            start = key.start if key.start is not None else 0
-            stop = key.stop
-
-            if key.step is not None:
-              # TODO(mrry): Handle these maybe.
-              raise ValueError("Steps are not yet handled")
-            if stop is None:
-              # NOTE(mrry): This implies that TensorShape(None) is compatible with
-              # TensorShape(None)[1:], which is obviously not true. It would be
-              # possible to track the number of dimensions symbolically,
-              # and perhaps we should do that.
-              return TensorShape(None)
-            elif start < 0 or stop < 0:
-              # TODO(mrry): Handle this better, as it will be useful for handling
-              # suffixes of otherwise unknown shapes.
-              return TensorShape(None)
+            if isinstance(key, slice):
+                return TensorShape(self._dims[key])
             else:
-              return TensorShape(None)
-          else:
-            return None
+                return self._dims[key]
+        else:
+            if isinstance(key, slice):
+                start = key.start if key.start is not None else 0
+                stop = key.stop
+
+                if key.step is not None:
+                    # TODO(mrry): Handle these maybe.
+                    raise ValueError("Steps are not yet handled")
+                if stop is None:
+                    # NOTE(mrry): This implies that TensorShape(None) is compatible with
+                    # TensorShape(None)[1:], which is obviously not true. It would be
+                    # possible to track the number of dimensions symbolically,
+                    # and perhaps we should do that.
+                    return TensorShape(None)
+                elif start < 0 or stop < 0:
+                    # TODO(mrry): Handle this better, as it will be useful for handling
+                    # suffixes of otherwise unknown shapes.
+                    return TensorShape(None)
+                else:
+                    return TensorShape(None)
+            else:
+                return None
 
     def __eq__(self, other):
         """Returns True if `self` is equivalent to `other`."""
@@ -725,22 +742,20 @@ class TensorShape(object):
         """
         other = TensorShape(other)
         if self.dims is not None and other.dims is not None:
-          if self.rank != other.rank:
-            return False
-          for x_dim, y_dim in zip(self.dims, other.dims):
-            if x_dim!=y_dim and (x_dim is not None and y_dim is not None):
-              return False
+            if self.rank != other.rank:
+                return False
+            for x_dim, y_dim in zip(self.dims, other.dims):
+                if x_dim != y_dim and (x_dim is not None and y_dim is not None):
+                    return False
         return True
 
-
     def get_dummy_tensor(self):
-        shape=[d for d in self._dims]
+        shape = [d for d in self._dims]
         if shape[0] is None:
-            shape[0]=2
+            shape[0] = 2
         else:
-            shape=[2,]+shape
-        return np.clip(np.abs(np.random.standard_normal(shape)),0,1)
-
+            shape = [2, ] + shape
+        return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1)
 
 
 def as_shape(shape):
@@ -751,13 +766,9 @@ def as_shape(shape):
         return TensorShape(shape)
 
 
-
-
-
-
-
 class OrderedDict(collections.OrderedDict):
     """ more easy-to-use OrderedDict"""
+
     def __init__(self, *args, **kwds):
         super(OrderedDict, self).__init__(*args, **kwds)
 
@@ -793,15 +804,15 @@ class OrderedDict(collections.OrderedDict):
 
 
 class Signature(object):
-    def __init__(self, input_spec=None, output_spec=None,name=None):
+    def __init__(self, input_spec=None, output_spec=None, name=None):
         super().__init__()
         self.name = name
         self.inputs = OrderedDict()
         self.outputs = OrderedDict()
         if input_spec is not None:
-            self.inputs[input_spec.name if input_spec.name is not None else 'input']=input_spec
+            self.inputs[input_spec.name if input_spec.name is not None else 'input'] = input_spec
         if output_spec is not None:
-            self.outputs[output_spec.name if output_spec.name is not None else 'output']=output_spec
+            self.outputs[output_spec.name if output_spec.name is not None else 'output'] = output_spec
 
     # @classmethod
     # def get_signature(cls, fn:callable):
@@ -810,20 +821,17 @@ class Signature(object):
     #
     #     if inspect.isfunction(fn)
 
-
-
-
     def maybe_not_complete(self):
-        if len(self.inputs)<1 or len(self.outputs)<1:
+        if len(self.inputs) < 1 or len(self.outputs) < 1:
             return True
-        completeness=0
-        if self.inputs.value_list[0] is not None and self.inputs.value_list[0].__class__.__name__=='TensorSpec':
-            if isinstance(self.inputs.value_list[0].shape,TensorShape):
-                completeness+=1
-        if self.outputs.value_list[0] is not None and self.outputs.value_list[0].__class__.__name__=='TensorSpec':
-            if isinstance(self.outputs.value_list[0].shape,TensorShape):
-                completeness+=1
-        if completeness==2:
+        completeness = 0
+        if self.inputs.value_list[0] is not None and self.inputs.value_list[0].__class__.__name__ == 'TensorSpec':
+            if isinstance(self.inputs.value_list[0].shape, TensorShape):
+                completeness += 1
+        if self.outputs.value_list[0] is not None and self.outputs.value_list[0].__class__.__name__ == 'TensorSpec':
+            if isinstance(self.outputs.value_list[0].shape, TensorShape):
+                completeness += 1
+        if completeness == 2:
             return False
         else:
             True
@@ -833,10 +841,10 @@ class Signature(object):
             return '{0}'.format(k)
         elif isinstance(v, (list, tuple)):
             return '{0}: Tensor[{1}]'.format(k, v)
-        elif  v.__class__.__name__== "TensorSpec" and v.object_type is None:
+        elif v.__class__.__name__ == "TensorSpec" and v.object_type is None:
             return '{0}: Tensor[{1}] '.format(k, v._shape_tuple)
-        elif  v.__class__.__name__== "TensorSpec":
-            return '{0}: Tensor[{1}] ({2})'.format(k, v._shape_tuple,v.object_type)
+        elif v.__class__.__name__ == "TensorSpec":
+            return '{0}: Tensor[{1}] ({2})'.format(k, v._shape_tuple, v.object_type)
         else:
             return '{0}:{1}'.format(k, v)
 
@@ -848,6 +856,7 @@ class Signature(object):
         input_str = ', '.join([self._get_kvsting(k, v) for k, v in self.inputs.item_list]) if len(self.inputs.item_list) > 0 else ''
         output_str = ', '.join([self._get_kvsting(k, v) for k, v in self.outputs.item_list]) if len(self.outputs.item_list) > 0 else ''
         return '{0}( {1}) -> {2} '.format(self.name, input_str, output_str)
+
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
@@ -868,7 +877,7 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def import_or_install(package_name:str,install_package_name:str=None)->None:
+def import_or_install(package_name: str, install_package_name: str = None) -> None:
     """Import [package_name] if possibile, or install [install_package_name] and then import it
 
     Args:
@@ -887,7 +896,7 @@ def import_or_install(package_name:str,install_package_name:str=None)->None:
         importlib.import_module(package_name)
     except ImportError:
         if install_package_name is None:
-            install_package_name=package_name
+            install_package_name = package_name
         if os.system('PIP --version') == 0:
             # No error from running PIP in the Command Window, therefor PIP.exe is in the %PATH%
             os.system('PIP install {0}'.format(install_package_name))
@@ -960,10 +969,11 @@ def to_onehot(label, classes):
     onehot[label] = 1
     return onehot
 
+
 def is_iter(x):
     "Test whether `x 'can be used in a `for` loop"
-    #Rank 0 tensors in PyTorch are not really iterable
-    return isinstance(x, (Iterable,Generator)) and getattr(x,'ndim',1)
+    # Rank 0 tensors in PyTorch are not really iterable
+    return isinstance(x, (Iterable, Generator)) and getattr(x, 'ndim', 1)
 
 
 def to_list(x):
@@ -1026,24 +1036,26 @@ def to_list(x):
         except:
             return x.tolist()
 
+
 def is_numpy(x):
-    return isinstance(x,np.ndarray)
+    return isinstance(x, np.ndarray)
 
 
-def is_alphabet(x:str):
+def is_alphabet(x: str):
     return all([s in string.ascii_lowercase for s in x.lower()])
 
-def is_punctuation(x:str):
+
+def is_punctuation(x: str):
     return all([s in string.punctuation for s in x.lower()])
 
 
-def remove_nonprintable(x:str):
+def remove_nonprintable(x: str):
     import itertools
     # Use characters of control category
 
-    nonprintable = itertools.chain(range(0x00,0x20),range(0x7f,0xa0))
+    nonprintable = itertools.chain(range(0x00, 0x20), range(0x7f, 0xa0))
     # Use translate to remove all non-printable characters
-    return x.translate({character:None for character in nonprintable if chr(character) not in '\n\r\t'})
+    return x.translate({character: None for character in nonprintable if chr(character) not in '\n\r\t'})
 
 
 def unpack_singleton(x):
@@ -1091,7 +1103,7 @@ def enforce_singleton(x):
     """
     if 'tensor' in x.__class__.__name__.lower() or isinstance(x, np.ndarray):
         return x
-    elif hasattr(x, '__len__') and len(x)>0:
+    elif hasattr(x, '__len__') and len(x) > 0:
         return x[0]
     return x
 
@@ -1115,25 +1127,22 @@ def check_keys(model, pretrained_state_dict):
     print('Unused checkpoint keys:{}'.format(len(unused_pretrained_keys)))
     print('\n\t'.join(unused_pretrained_keys))
     print('Used keys:{}'.format(len(used_pretrained_keys)))
-    if len(missing_keys)>=len(unused_pretrained_keys)>0:
+    if len(missing_keys) >= len(unused_pretrained_keys) > 0:
         print('Try to mapping missing_keys to unused_pretrained_keys:')
-        tmp_unused_pretrained_keys=list(unused_pretrained_keys)
-        fix_dict=find_minimal_edit_distance_key(missing_keys,unused_pretrained_keys)
+        tmp_unused_pretrained_keys = list(unused_pretrained_keys)
+        fix_dict = find_minimal_edit_distance_key(missing_keys, unused_pretrained_keys)
         for k, v in fix_dict.items():
-            print('{0}=>{1}'.format(k,v))
+            print('{0}=>{1}'.format(k, v))
         print('Is mapping results accetable?')
         ans = input('(Y/N) << ').lower()
         if ans in ['yes', 'y']:
-            for k,v in fix_dict.items():
-                pretrained_state_dict[k]=pretrained_state_dict[v]
+            for k, v in fix_dict.items():
+                pretrained_state_dict[k] = pretrained_state_dict[v]
 
-
-
-    #print('\n\t'.join(used_pretrained_keys))
+    # print('\n\t'.join(used_pretrained_keys))
 
     assert len(used_pretrained_keys) > 0, 'load NONE from pretrained checkpoint'
     return True
-
 
 
 def levenshtein(seq1, seq2):
@@ -1154,59 +1163,61 @@ def levenshtein(seq1, seq2):
     """
     size_x = len(seq1) + 1
     size_y = len(seq2) + 1
-    matrix = np.zeros ((size_x, size_y))
+    matrix = np.zeros((size_x, size_y))
     for x in range(size_x):
-        matrix [x, 0] = x
+        matrix[x, 0] = x
     for y in range(size_y):
-        matrix [0, y] = y
+        matrix[0, y] = y
 
     for x in range(1, size_x):
         for y in range(1, size_y):
-            if seq1[x-1] == seq2[y-1]:
-                matrix [x,y] = min(
-                    matrix[x-1, y] + 1,
-                    matrix[x-1, y-1],
-                    matrix[x, y-1] + 1
+            if seq1[x - 1] == seq2[y - 1]:
+                matrix[x, y] = min(
+                    matrix[x - 1, y] + 1,
+                    matrix[x - 1, y - 1],
+                    matrix[x, y - 1] + 1
                 )
             else:
-                matrix [x,y] = min(
-                    matrix[x-1,y] + 1,
-                    matrix[x-1,y-1] + 1,
-                    matrix[x,y-1] + 1
+                matrix[x, y] = min(
+                    matrix[x - 1, y] + 1,
+                    matrix[x - 1, y - 1] + 1,
+                    matrix[x, y - 1] + 1
                 )
     return (matrix[size_x - 1, size_y - 1])
+
 
 def jaccard_similarity(list1, list2):
     s1 = set(list1)
     s2 = set(list2)
-    intersects=s1.intersection(s2)
+    intersects = s1.intersection(s2)
     return len(s1.intersection(s2)) / len(s1.union(s2))
+
 
 def text_similarity(list1, list2):
     # if len(list1)>0:
     #     first=list1[0]
     #     last=list1[-1]
-    tmp_list1=list1.copy()
+    tmp_list1 = list1.copy()
     tmp_list2 = list2.copy()
-    overlap=0
-    forward_idx=0
-    backward_idx=-1
+    overlap = 0
+    forward_idx = 0
+    backward_idx = -1
     for i in range(len(list1)):
-        if list1[i]==list2[i] and i==0:
-            overlap+=2
-            forward_idx=i
-            tmp_list1[i]=''
+        if list1[i] == list2[i] and i == 0:
+            overlap += 2
+            forward_idx = i
+            tmp_list1[i] = ''
             tmp_list2[i] = ''
-        elif list1[i]==list2[i] :
+        elif list1[i] == list2[i]:
             overlap += 1
-            forward_idx=i
+            forward_idx = i
             tmp_list1[i] = ''
             tmp_list2[i] = ''
         else:
             break
-    if forward_idx<len(list1):
-        for i in range(len(list1)-forward_idx):
-            backward_idx=-1-i
+    if forward_idx < len(list1):
+        for i in range(len(list1) - forward_idx):
+            backward_idx = -1 - i
             if list1[backward_idx] == list2[backward_idx] and backward_idx == -1:
                 overlap += 2
                 tmp_list1[backward_idx] = ''
@@ -1217,64 +1228,63 @@ def text_similarity(list1, list2):
                 tmp_list2[backward_idx] = ''
             else:
                 break
-    tmp_list1=list('.'.join([s for s in tmp_list1 if s!='']))
-    tmp_list2 =list('.'.join([s for s in tmp_list2 if s != '']))
-    edit_distance=levenshtein(tmp_list1,tmp_list2)
-    max_edit_length=builtins.max(len(tmp_list1),len(tmp_list2))
-    score=overlap+(builtins.max(max_edit_length-edit_distance,0)/max_edit_length)
-    return score/float(builtins.max(len(list1),1))
+    tmp_list1 = list('.'.join([s for s in tmp_list1 if s != '']))
+    tmp_list2 = list('.'.join([s for s in tmp_list2 if s != '']))
+    edit_distance = levenshtein(tmp_list1, tmp_list2)
+    max_edit_length = builtins.max(len(tmp_list1), len(tmp_list2))
+    score = overlap + (builtins.max(max_edit_length - edit_distance, 0) / max_edit_length)
+    return score / float(builtins.max(len(list1), 1))
 
 
-
-def find_minimal_edit_distance_key(keys,lookup_keys):
+def find_minimal_edit_distance_key(keys, lookup_keys):
     def only_keep_number(input_string):
-        input_string=input_string.split('_')[-1].split('-')[-1]
+        input_string = input_string.split('_')[-1].split('-')[-1]
         return ''.join([s for s in list(input_string) if s in string.digits])
 
-    candidates_keys=None
-    final_mapping=OrderedDict()
-    section_keys=[key.split('.') for key in keys]
-    is_allkey_same_section =len(list(set([len(k) for k in section_keys])))==1
-    section_keys_annotation=[]
-    section_dict=[]
-    section_lookup_keys=[key.split('.') for key in lookup_keys]
+    candidates_keys = None
+    final_mapping = OrderedDict()
+    section_keys = [key.split('.') for key in keys]
+    is_allkey_same_section = len(list(set([len(k) for k in section_keys]))) == 1
+    section_keys_annotation = []
+    section_dict = []
+    section_lookup_keys = [key.split('.') for key in lookup_keys]
     is_alllookupkey_same_section = len(list(set([len(k) for k in section_lookup_keys]))) == 1
-    avaiable_section=list(range(len(section_lookup_keys[0])))
+    avaiable_section = list(range(len(section_lookup_keys[0])))
 
     if is_allkey_same_section and is_alllookupkey_same_section:
         for k in range(len(section_keys[0])):
             section_dict.append(OrderedDict())
-            subdata=[item[k] for item in section_keys]
-            number_parts=[int(only_keep_number(item)) for item in subdata if len(only_keep_number(item)) ]
+            subdata = [item[k] for item in section_keys]
+            number_parts = [int(only_keep_number(item)) for item in subdata if len(only_keep_number(item))]
             section_distinct = len(set(subdata))
-            section_keys_annotation.append((len(set(subdata)),number_parts))
+            section_keys_annotation.append((len(set(subdata)), number_parts))
             for n in avaiable_section:
                 sublookup = [item[n] for item in section_lookup_keys]
-                lookup_number_parts = OrderedDict([(item,int(only_keep_number(item))) for item in sublookup if len(only_keep_number(item))])
-                lookup_section_distinct=len(set(sublookup))
+                lookup_number_parts = OrderedDict([(item, int(only_keep_number(item))) for item in sublookup if len(only_keep_number(item))])
+                lookup_section_distinct = len(set(sublookup))
 
-                if section_distinct==lookup_section_distinct:
-                    if len(lookup_number_parts) == len(set(number_parts))==section_distinct and len(set(lookup_number_parts.value_list))==lookup_section_distinct:
-                        if len(set(number_parts))==len(set(lookup_number_parts.value_list))==1:
-                            section_dict[k][str(subdata[0])]=sublookup[0]
+                if section_distinct == lookup_section_distinct:
+                    if len(lookup_number_parts) == len(set(number_parts)) == section_distinct and len(set(lookup_number_parts.value_list)) == lookup_section_distinct:
+                        if len(set(number_parts)) == len(set(lookup_number_parts.value_list)) == 1:
+                            section_dict[k][str(subdata[0])] = sublookup[0]
                             avaiable_section.remove(n)
                             break
-                        elif len(set(number_parts))==len(set(lookup_number_parts.value_list))==section_distinct:
-                            sorted_number_parts=list(sorted(set(number_parts)))
-                            sorted_lookup_number_parts=list(sorted(lookup_number_parts.value_list))
+                        elif len(set(number_parts)) == len(set(lookup_number_parts.value_list)) == section_distinct:
+                            sorted_number_parts = list(sorted(set(number_parts)))
+                            sorted_lookup_number_parts = list(sorted(lookup_number_parts.value_list))
 
                             for item in subdata:
-                                idx=sorted_number_parts.index(int(only_keep_number(item)))
-                                section_dict[k][str(item)]=lookup_number_parts.key_list[lookup_number_parts.value_list.index(sorted_lookup_number_parts[idx])]
+                                idx = sorted_number_parts.index(int(only_keep_number(item)))
+                                section_dict[k][str(item)] = lookup_number_parts.key_list[lookup_number_parts.value_list.index(sorted_lookup_number_parts[idx])]
                             avaiable_section.remove(n)
                             break
-                    elif  len(lookup_number_parts) == len(set(number_parts))==0:
-                        tmp_lookup_subdata=copy.deepcopy(sublookup)
+                    elif len(lookup_number_parts) == len(set(number_parts)) == 0:
+                        tmp_lookup_subdata = copy.deepcopy(sublookup)
                         for item in subdata:
                             candidates_keys = [text_similarity(list(item), key.split('.')) for key in tmp_lookup_subdata]
                             candidates_keys = np.array(candidates_keys)
                             candidate_idx = np.argmax(candidates_keys)
-                            section_dict[k][str(item)] =tmp_lookup_subdata[candidate_idx]
+                            section_dict[k][str(item)] = tmp_lookup_subdata[candidate_idx]
                             tmp_lookup_subdata.remove(tmp_lookup_subdata[candidate_idx])
                         avaiable_section.remove(n)
                         break
@@ -1283,24 +1293,17 @@ def find_minimal_edit_distance_key(keys,lookup_keys):
                         avaiable_section.remove(n)
                         break
 
-        for  section in section_keys:
-            conver_key=[]
+        for section in section_keys:
+            conver_key = []
             for i in range(len(section)):
                 if section[i] in section_dict[i]:
                     conver_key.append(section_dict[i][section[i]])
-            conver_key='.'.join(conver_key)
+            conver_key = '.'.join(conver_key)
             if conver_key in lookup_keys:
-                final_mapping['.'.join(section)]=conver_key
+                final_mapping['.'.join(section)] = conver_key
             else:
                 raise ValueError('{0} not exist!'.format(conver_key))
         return final_mapping
-
-
-
-
-
-
-
 
 
 def addindent(s_, numSpaces):
@@ -1364,8 +1367,9 @@ def get_time_suffix():
         timestamp string , usually use when save a file.
 
     """
-    prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-', '').replace( '.', '')
+    prefix = str(datetime.datetime.fromtimestamp(time.time())).replace(' ', '').replace(':', '').replace('-', '').replace('.', '')
     return prefix
+
 
 def get_file_modified_time(file_path):
     """
@@ -1373,17 +1377,17 @@ def get_file_modified_time(file_path):
     last modified if that isn't possible.
     See http://stackoverflow.com/a/39501288/1709587 for explanation.
     """
-    t=None
+    t = None
     try:
-        t= os.path.getmtime(file_path)
-    except :
+        t = os.path.getmtime(file_path)
+    except:
         stat = os.stat(file_path)
         try:
-            t= stat.st_birthtime
+            t = stat.st_birthtime
         except AttributeError:
             # We're probably on Linux. No easy way to get creation dates here,
             # so we'll settle for when its content was last modified.
-            t= stat.st_mtime
+            t = stat.st_mtime
     if t is not None:
         return datetime.datetime.fromtimestamp(t)
     else:
@@ -1411,7 +1415,7 @@ def get_function(fn_name, module_paths=None):
     """
     if callable(fn_name):
         return fn_name
-    fn=None
+    fn = None
     if (fn_name is not None) and (module_paths is not None):
         for module_path in module_paths:
             fn = locate('.'.join([module_path, fn_name]))
@@ -1447,7 +1451,7 @@ def get_class(class_name, module_paths=None):
             :attr:`module_paths`.
 
     """
-    class_ =None
+    class_ = None
     if (class_name is not None) and (module_paths is not None):
         for module_path in module_paths:
             class_ = locate('.'.join([module_path, class_name]))
@@ -1541,9 +1545,6 @@ def get_terminal_size():
     return tuple_xy
 
 
-
-
-
 def gcd(x, y):
     gcds = []
     gcd = 1
@@ -1564,7 +1565,7 @@ def isprime(n):
     if n >= 9:
         divisors = [d for d in range(2, int(math.sqrt(n))) if n % d == 0]
         return all(n % od != 0 for od in divisors if od != n)
-    elif n in [1, 2,3, 5, 7]:
+    elif n in [1, 2, 3, 5, 7]:
         return True
     else:
         return False
@@ -1586,7 +1587,6 @@ def prev_prime(n):
         pos -= 1
 
 
-
 def nearest_prime(n):
     nextp = next_prime(n)
     prevp = prev_prime(n)
@@ -1595,10 +1595,13 @@ def nearest_prime(n):
     else:
         return nextp
 
+
 def num_cpus():
     "Get number of cpus"
-    try:                   return len(os.sched_getaffinity(0))
-    except AttributeError: return os.cpu_count()
+    try:
+        return len(os.sched_getaffinity(0))
+    except AttributeError:
+        return os.cpu_count()
 
 
 def get_memory_profile(mode):
@@ -1647,8 +1650,6 @@ def get_gpu_memory_map():
     return gpu_memory_map
 
 
-
-
 def map_function_arguments(params, params_dict, *args, **kwargs):
     """
     Helper to determine the argument map for use with various call operations.
@@ -1673,9 +1674,6 @@ def map_function_arguments(params, params_dict, *args, **kwargs):
     assert len(arg_map) == len(params)
 
     return arg_map
-
-
-
 
 
 class ClassfierType(Enum):
@@ -1710,10 +1708,6 @@ class Interpolation(Enum):
     Bicubic = 'Bicubic'
 
 
-
-
-
-
 class GetImageMode(Enum):
     path = 'path'
     raw = 'raw'
@@ -1725,45 +1719,49 @@ class _empty:
     """Marker object for Signature.empty and Parameter.empty."""
 
 
-def red_color(text,bolder=False):
+def red_color(text, bolder=False):
     if bolder:
         return '\033[1;31m{0}\033[0;0m'.format(text)
     else:
         return '\033[31m{0}\033[0;0m'.format(text)
 
-def green_color(text,bolder=False):
-    if bolder:
-        return '\033[1;32m{0}\033[0;0m'.format( text)
-    else:
-        return '\033[32m{0}\033[0;0m'.format( text)
 
-def blue_color(text,bolder=False):
+def green_color(text, bolder=False):
+    if bolder:
+        return '\033[1;32m{0}\033[0;0m'.format(text)
+    else:
+        return '\033[32m{0}\033[0;0m'.format(text)
+
+
+def blue_color(text, bolder=False):
     if bolder:
         return '\033[1;34m{0}\033[0m'.format(text)
     else:
-        return '\033[34m{0}\033[0;0m'.format( text)
+        return '\033[34m{0}\033[0;0m'.format(text)
 
-def cyan_color(text,bolder=False):
+
+def cyan_color(text, bolder=False):
     if bolder:
         return '\033[1;96m{0}\033[0m'.format(text)
     else:
-        return '\033[96m{0}\033[0;0m'.format( text)
+        return '\033[96m{0}\033[0;0m'.format(text)
 
-def yellow_color(text,bolder=False):
+
+def yellow_color(text, bolder=False):
     if bolder:
-        return '\033[1;93m{0}\033[0m' .format(text)
+        return '\033[1;93m{0}\033[0m'.format(text)
     else:
-        return '\033[93m{0}\033[0;0m'.format( text)
+        return '\033[93m{0}\033[0;0m'.format(text)
 
 
-
-def orange_color(text,bolder=False):
+def orange_color(text, bolder=False):
     if bolder:
         return u'\033[1;33m%s\033[0m' % text
     else:
-        return '\033[33m {0}\033[0;0m'.format( text)
+        return '\033[33m {0}\033[0;0m'.format(text)
 
-def gray_color(text,bolder=False):
+
+def gray_color(text, bolder=False):
     if bolder:
         return u'\033[1;337m%s\033[0m' % text
     else:
@@ -1781,8 +1779,6 @@ def format_arg_spec(v, is_output=False):
     s = v.name + ': ' if not is_output and v.name else ''  # (suppress output names, since they duplicate the
     # function name)
     return s + str(v._type)
-
-
 
 
 def get_gpu_memory_map():
