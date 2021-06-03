@@ -280,9 +280,14 @@ def snake2camel(string1):
     else:
         return ''.join(x.capitalize() or '_' for x in string1.split('_'))
 
-def adaptive_format(num:numbers.Number, prev_value:numbers.Number=None,value_type=None):
+def adaptive_format(num:numbers.Number, prev_value:Union[numbers.Number, Iterable]=None,value_type=None):
+    valid_value_type=['loss','metric']
     if num is None:
-        return 'nan'
+        return 'none'
+    is_current_num_integer=math.modf(num)[0]!=0
+    is_all_history_integer=all([math.modf(v)[0]!=0 for v in prev_value]) if isinstance(prev_value,Iterable) else math.modf(num)[0]!=0 if isinstance(prev_value,numbers.Number) else False
+    if is_current_num_integer and is_all_history_integer:
+        return '{0:,}'.format(num)
     format_string= '.3f'
     if value_type=='metric':
         format_string = '.3%'
@@ -903,6 +908,51 @@ def import_or_install(package_name:str,install_package_name:str=None)->None:
                 # Neither Attempts found the PIP.exe file, So i Fail...
                 exit()
 
+
+class LazyLoader(types.ModuleType):
+    """Lazily import a module, mainly to avoid pulling in large dependencies.
+
+    This allows them to only be loaded when they are used.
+    Code copied from
+    https://github.com/tensorflow/tensorflow/blob/master/tensorflow/python/util/lazy_loader.py
+    """
+
+    def __init__(self, local_name, parent_module_globals, name):
+        self._local_name = local_name
+        self._parent_module_globals = parent_module_globals
+
+        super(LazyLoader, self).__init__(name)
+
+    def _load(self):
+        """Load the module and insert it into the parent's globals."""
+        # Import the target module and insert it into the parent's namespace
+        try:
+            module = importlib.import_module(self.__name__)
+        except ModuleNotFoundError as e:
+            raise ModuleNotFoundError(
+                f"Lazy module loader cannot find module "
+                f"named `{self.__name__}`. "
+                f"This might be because textflint does not automatically "
+                f"install some optional dependencies. "
+                f"Please run `pip install {self.__name__}` "
+                f"to install the package.") from e
+        self._parent_module_globals[self._local_name] = module
+
+        # Update this object's dict so that if someone keeps a reference to the
+        # LazyLoader, lookups are efficient
+        # (__getattr__ is only called on lookups
+        # that fail).
+        self.__dict__.update(module.__dict__)
+
+        return module
+
+    def __getattr__(self, item):
+        module = self._load()
+        return getattr(module, item)
+
+    def __dir__(self):
+        module = self._load()
+        return dir(module)
 
 
 def to_onehot(label, classes):

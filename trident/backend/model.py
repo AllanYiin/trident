@@ -22,7 +22,7 @@ from trident.data.vision_transforms import Unnormalize
 from trident.backend.opencv_backend import array2image
 
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, get_backend, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need, Signature, adaptive_format, dtype
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need, Signature, adaptive_format, dtype, cyan_color
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
 from trident.callbacks import LambdaCallback, UnfreezeModelCallback
@@ -341,7 +341,7 @@ class ModelBase(object):
     def _initial_graph(self, inputs=None, input_shape=None, output=None):
         pass
 
-    def complie(self,optimizer="Adam",
+    def complie(self,optimizer="Ranger",
                     loss=None,
                     metrics=None,
                     loss_weights=None,
@@ -445,13 +445,8 @@ class ModelBase(object):
                 object.__setattr__(self, name, value)
 
     def __call__(self, *input, **kwargs):
-        if self._model.training:
-            input = enforce_singleton(input)
-            return self._model(input, **kwargs)
-        else:
-            input=enforce_singleton(input)
-            input=self.data_preprocess(input)
-            return self._model(input, **kwargs)
+        return self._model(input, **kwargs)
+
 
     def with_optimizer(self, optimizer, **kwargs):
         return self
@@ -634,52 +629,35 @@ class ModelBase(object):
     def log_weight(self, weghts=None):
         raise NotImplementedError
 
-    def merge_grads(self, old_grads, new_grades):
-        raise NotImplementedError
-
-    # def get_save_path(self,save_path='',default_folder='log',default_file_name=''):
-    #     _,default_filename,default_ext=split_path(default_file_name)
-    #     if save_path is None or len(save_path) == 0:
-    #         save_path = self.training_context.get('save_path', getattr(self, 'save_path',''))
-    #
-    #     folder,filename,ext=split_path(save_path)
-    #     if folder=='':
-    #         folder=default_folder
-    #     if filename=='':
-    #         filename=default_filename
-    #     save_path = os.path.join(folder, filename+default_ext)
-    #     make_dir_if_need(sanitize_path(save_path))
-    #     return sanitize_path(save_path)
-
-
 
     def save_model(self, save_path ):
-        raise NotImplementedError
+        return NotImplemented
 
     def save_onnx(self, save_path):
-        raise NotImplementedError
+        return  NotImplemented
 
     def save_history(self, save_path=None):
+
         default_file_name = '{0}_history_{1}.json_'.format(self._model.name, self.training_context['execution_id'])
-        save_path = self.get_save_path(save_path, default_folder='Log',default_file_name=default_file_name)
-        folder,filename,ext=split_path(save_path)
-        save_path=os.path.join(folder,default_file_name)
-        out=OrderedDict()
-        out['batch_loss_history']=self.batch_loss_history
+        save_path =self.training_context['save_path']
+        folder, filename, ext = split_path(save_path)
+        if filename=='':
+            save_path = sanitize_path(os.path.join(folder, default_file_name))
+        out = OrderedDict()
+        out['batch_loss_history'] = self.batch_loss_history
         out['batch_metric_history'] = self.batch_metric_history
         out['epoch_loss_history'] = self.epoch_loss_history
         out['epoch_metric_history'] = self.epoch_metric_history
         with open(save_path, 'w') as f:
-            jstring=json.dumps(out, indent=4)
+            jstring = json.dumps(out, indent=4)
             f.write(jstring)
             shutil.copy(save_path, save_path.replace('.json_', '.json'))
 
-
     def save_weights(self, save_path):
-        raise NotImplementedError
+        return  NotImplemented
 
     def load_model(self, file_path, ):
-        raise NotImplementedError
+        return NotImplemented
 
     def print_batch_progress(self, print_batch_progress_frequency):
         if 'max_name_length' not in self.training_context:
@@ -693,12 +671,13 @@ class ModelBase(object):
                 batch_steps, batch_values = self.tmp_metrics.get_series(k)
                 metric_value = np.array(batch_values).mean()
             else:
-
                 if len(batch_values) > slice_length:
                     metric_value = np.array(batch_values[-1 * slice_length:]).mean()
                 else:
                     metric_value=np.array(batch_values).mean()
-            metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, value_type='metric')))
+
+            metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value,batch_values, value_type='metric')))
+
         loss_value=None
         loss_steps,loss_values=self.batch_loss_history.get_series('total_losses')
         if len(loss_values) == 0:
@@ -725,23 +704,21 @@ class ModelBase(object):
 
         loss_value = to_numpy(loss_values[-1*int(print_epoch_progress_frequency):]).astype(np.float32).mean()
         for k  in self.epoch_metric_history.key_list:
-            format_string='.3%'
+
             steps,values=self.epoch_metric_history.get_series(k)
             metric_value=to_numpy(values)
-            if np.max(metric_value)>5:
-                format_string = '.3f'
-            elif np.max(metric_value)<1e-3:
-                format_string = '.3e'
-
+            format_string=adaptive_format(metric_value,values,'metric')
             metric_strings.append('{0}: {1}'.format(k,adaptive_format(float(metric_value[-1*int(print_epoch_progress_frequency):].mean()),value_type='metric')))
         step_time = self.training_context['time_epoch_progress']
 
-        progress_bar(step_time,self.training_context['current_epoch'], self.training_context['total_epoch'],
+        progress_bar(step_time,self.training_context['current_epoch']+1, self.training_context['total_epoch'],
                      'Loss: {0}| {1} | lr: {2:<10.3e}'.format(adaptive_format(loss_value,value_type='loss'), ', '.join(metric_strings), self.training_context['current_lr']), name=self.name.ljust(self.training_context['max_name_length']+1,' '))
         self.training_context['time_epoch_progress'] = 0
 
+
+
     #@pysnooper.snoop()
-    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch,
+    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch=None,done=False,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
                     is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,is_out_sample_evaluation=False,**kwargs):
         try:
@@ -749,6 +726,7 @@ class ModelBase(object):
             self.training_context['current_batch'] = current_batch
             self.training_context['total_epoch'] = total_epoch
             self.training_context['total_batch'] = total_batch
+            self.training_context['done'] = done
             self.training_context['is_collect_data'] = is_collect_data
             self.training_context['log_gradients'] = log_gradients
             self.training_context['log_weights'] = log_weights
@@ -792,34 +770,63 @@ class ModelBase(object):
             self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
             self.do_preparation_for_loss()
 
+            def _generate_output(training_context, is_training=True, is_autocast_enabled=False):
+                model = training_context['current_model']
+                data = training_context['train_data'] if is_training or training_context['test_data'] is None or len(training_context['test_data']) == 0 else training_context[
+                    'test_data']
+                data_feed = training_context['data_feed']
+                signature = model.signature
+
+                output = try_map_args_and_call(model, data, data_feed, is_autocast_enabled)
+                if isinstance(output, (list, tuple)):
+                    for i in range(len(output)):
+                        data[signature.outputs.key_list[i]] = output[i]
+                elif isinstance(output, (OrderedDict)):
+                    for k, v in output.items():
+                        data[k] = v
+                elif 'tensor' in output.__class__.__name__.lower():
+                    data[signature.outputs.key_list[0]] = output
+                    if self.use_output_as_loss:
+                        this_loss = output.sum()
+                        training_context['losses'].collect(signature.outputs.key_list[0], training_context['steps'], this_loss)
+                        training_context['current_loss'] = training_context['current_loss'] + this_loss
+                else:
+                    self.train_data[self.signature.outputs.key_list[0]] = output
+                    if self.use_output_as_loss:
+                        this_loss = output.sum()
+                        training_context['losses'].collect(signature.outputs.key_list[0], training_context['steps'], this_loss)
+                        training_context['current_loss'] = training_context['current_loss'] + this_loss
+
 
 
             if  'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output']==False:
                 try:
                     if self.output_fn is not None and callable(self.output_fn):
-                        self.output_fn()
+                        self.output_fn(self.training_context,is_training=True,is_autocast_enabled=self.is_autocast_enabled)
                     else:
-                        output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled)
-                        if isinstance(output, (list, tuple)):
-                            for i in range(len(output)):
-                                self.train_data[self.signature.outputs.key_list[i]] = output[i]
-                        elif isinstance(output, (OrderedDict)):
-                            for k,v in output.items():
-                                self.train_data[k] = v
-                        elif 'tensor' in output.__class__.__name__.lower():
-                            self.train_data[self.signature.outputs.key_list[0]] = output
-                            if self.use_output_as_loss:
+                        _generate_output(self.training_context,is_training=True,is_autocast_enabled=self.is_autocast_enabled)
 
-                                this_loss=output.sum()
-                                self.training_context['losses'].collect(self.outputs.key_list[0],self.training_context['steps'],this_loss)
-                                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
-                        else:
-                            self.train_data[self.signature.outputs.key_list[0]] = output
-                            if self.use_output_as_loss:
-
-                                this_loss=output.sum()
-                                self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
-                                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                        # output = try_map_args_and_call(self._model, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled)
+                        # if isinstance(output, (list, tuple)):
+                        #     for i in range(len(output)):
+                        #         self.train_data[self.signature.outputs.key_list[i]] = output[i]
+                        # elif isinstance(output, (OrderedDict)):
+                        #     for k,v in output.items():
+                        #         self.train_data[k] = v
+                        # elif 'tensor' in output.__class__.__name__.lower():
+                        #     self.train_data[self.signature.outputs.key_list[0]] = output
+                        #     if self.use_output_as_loss:
+                        #
+                        #         this_loss=output.sum()
+                        #         self.training_context['losses'].collect(self.outputs.key_list[0],self.training_context['steps'],this_loss)
+                        #         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                        # else:
+                        #     self.train_data[self.signature.outputs.key_list[0]] = output
+                        #     if self.use_output_as_loss:
+                        #
+                        #         this_loss=output.sum()
+                        #         self.training_context['losses'].collect(self.outputs.key_list[0], self.training_context['steps'], this_loss)
+                        #         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                 except Exception as e:
                     print(e)
                     PrintException()
@@ -879,9 +886,7 @@ class ModelBase(object):
                 callback.on_loss_calculation_end(self.training_context)
 
 
-            # if self.accumulation_steps>1:
-            #     self.training_context['current_loss']=self.training_context['current_loss'] /self.accumulation_steps
-                # regularizer
+            #regularizer
             for k, v in self._regs.items():
                 this_loss=to_tensor(0.0,requires_grad=True)
                 if 'model' in v.signature.inputs:
@@ -925,14 +930,20 @@ class ModelBase(object):
 
 
             if is_out_sample_evaluation==True and self.test_data is not None and len(self.test_data) > 0 and  self.training_context['stop_update']<1 :
-                tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'],self.is_autocast_enabled)
-                if isinstance(tmp_output, (list, tuple)):
-                    for i in range(len(tmp_output)):
-                        self.test_data[self.outputs.key_list[i]] = tmp_output[i]
-                elif 'tensor' in tmp_output.__class__.__name__.lower():
-                    self.test_data[self.outputs.key_list[0]] = tmp_output
+
+                if self.output_fn is not None and callable(self.output_fn):
+                    self.output_fn(self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
                 else:
-                    self.test_data[self.outputs.key_list[0]] = tmp_output
+                    _generate_output(self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
+
+                # tmp_output = try_map_args_and_call(self._model, self.test_data, self.training_context['data_feed'],self.is_autocast_enabled)
+                # if isinstance(tmp_output, (list, tuple)):
+                #     for i in range(len(tmp_output)):
+                #         self.test_data[self.outputs.key_list[i]] = tmp_output[i]
+                # elif 'tensor' in tmp_output.__class__.__name__.lower():
+                #     self.test_data[self.outputs.key_list[0]] = tmp_output
+                # else:
+                #     self.test_data[self.outputs.key_list[0]] = tmp_output
 
 
 
@@ -965,7 +976,7 @@ class ModelBase(object):
             #callback's metric can keep in epoch_metric_history
 
 
-            if is_collect_data:
+            if is_print_batch_progress or is_print_epoch_progress or self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
                 #aggregate tmp data and move to metrics history
                 for k, v in self.training_context['tmp_metrics'].items():
                     steps,values=self.training_context['tmp_metrics'].get_series(k)
@@ -1014,7 +1025,8 @@ class ModelBase(object):
                     history_metric_value=np.array(test_values).mean()
 
                     verbose.append('{0}: {1}'.format(k, adaptive_format(metric_value)))
-                print(self.training_context['model_name'] + ': out-of-sample evaluation: ',','.join(verbose))
+                out_sample_evaluation_str=cyan_color(self.training_context['model_name'] +' '+'out-of-sample evaluation: '+','.join(verbose))
+                print(out_sample_evaluation_str)
             #self.training_context['steps'] += 1
 
             if self.training_context['current_batch'] == self.training_context['total_batch'] - 1:
@@ -1072,17 +1084,7 @@ class ModelBase(object):
         raise NotImplementedError
 
     def predict(self,input):
-        if isinstance(input,(Tensor,np.ndarray)):
-            if isinstance(input,np.ndarray):
-                input=to_tensor(input)
-            if len(input.shape)==len(self.inputs.value_list[0])+1:
-                return self._model(input.unsqueeze(0))
-            elif len(input.shape)==len(self.inputs.value_list[0]):
-                return self._model(input)
-            else:
-                return None
-        else:
-            raise NotImplementedError
+        raise NotImplementedError
 
 
     def test(self, input,target):
@@ -1123,20 +1125,14 @@ class ModelBase(object):
 
 
 
+
+
 def progress_bar(step_time,current, total, msg=None, name=''):
     cur_len = builtins.max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
     rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
-    # sys.stdout.write(' [')
-    # for i in range(cur_len):
-    #     sys.stdout.write('=')
-    # sys.stdout.write('>')
-    # for i in range(rest_len):
-    #     sys.stdout.write('.')
-    # sys.stdout.write(']')
 
-    L = []
-    L.append('{0:<12s}'.format(name))
-    L.append(' Step: {0:<8s}'.format(format_time(step_time)))
+
+    L = ['{0:<12s}'.format(name), ' Step: {0:<8s}'.format(format_time(step_time))]
     # L.append(' | Tot: {0:<12s}'.format(format_time(tot_time)))
     if msg:
         L.append(' | ' + msg)
