@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import numbers
 import random
 import math
 import os
@@ -180,7 +182,7 @@ def is_nan(x):
     if isinstance(x, np.ndarray):
         return np.isnan(x)
     else:
-        raise NotImplementedError
+        return math.isnan(x)
 
 
 def is_inf(x):
@@ -195,7 +197,8 @@ def is_inf(x):
     if isinstance(x, np.ndarray):
         return np.isinf(x)
     else:
-        raise NotImplementedError
+        return math.isinf(x)
+
 
 
 def is_abnormal_number(x):
@@ -221,8 +224,10 @@ def any_nan(x):
     """
     if isinstance(x, np.ndarray):
         return np.isnan(x).any()
+    elif isinstance(x, Iterable):
+        return any([is_nan(n) for n in x])
     else:
-        raise NotImplementedError
+        return is_nan(x)
 
 
 def any_inf(x):
@@ -236,8 +241,10 @@ def any_inf(x):
     """
     if isinstance(x, np.ndarray):
         return np.isinf(x).any()
+    elif isinstance(x, Iterable):
+        return any([is_inf(n) for n in x])
     else:
-        raise NotImplementedError
+        return is_inf(x)
 
 
 def any_abnormal_number(x):
@@ -2871,9 +2878,9 @@ def random_choice(t:np.ndarray,n:int=1):
     idx =idxes[:n]
 
     if isinstance(t, (list, tuple)):
-        return unpack_singleton([t[idx] for idx in idxes[:n]])
+        return [t[idx] for idx in idxes[:n]]
     else:
-        return unpack_singleton(t[idx])
+        return t[idx]
 
 
 def random_normal(shape, dtype='float32', mean=0.0, std=1.0, seed=None):
