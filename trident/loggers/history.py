@@ -3,7 +3,7 @@ import sys
 import builtins
 import numbers
 import time
-
+import math
 import numpy as np
 from trident import context
 
@@ -30,10 +30,11 @@ elif _backend == 'tensorflow':
 
 
 class HistoryBase(OrderedDict):
-    def __init__(self, name='', *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, prevent_redundant=True,name='', **kwargs):
+        super().__init__(**kwargs)
         self.name=name
         self.training_name=None
+        self.prevent_redundant=prevent_redundant
 
         self.summary_writer=ctx.summary_writer
 
@@ -50,39 +51,21 @@ class HistoryBase(OrderedDict):
         if data_name not in self:
             self.regist(data_name)
 
-        if value is not None:
-            if isinstance(value,(list,tuple)):
-                value=to_tensor(value)
-            elif isinstance(value,np.ndarray):
-                value = to_tensor(value)
+        if value is  None:
+            pass
+        elif isinstance(value,(list,tuple)):
+            value=builtins.sum(value)/len(value)
+        elif isinstance(value,np.ndarray):
+            value = to_tensor(value).mean()
+        elif is_tensor(value):
+            value = to_numpy(value).mean()
+        is_redundant_skip=False
+        if self.prevent_redundant:
+            if  (step, value) in self[data_name]:
+                is_redundant_skip=True
 
-
-            if get_backend() == 'pytorch':
-                if isinstance(value,numbers.Number):
-                    self[data_name].append((step, value))
-                elif is_tensor(value):
-                    value=value.copy().cpu().detach().mean().item()
-                    self[data_name].append((step, value))
-                elif isinstance(value, np.ndarray):
-                    value = value.mean()[0]
-                    self[data_name].append((step, value))
-            elif get_backend() == 'tensorflow':
-                with tf.device('/cpu:0'):
-                    value = tf.identity(value).numpy().mean()
-                    self[data_name].append((step, value))
-
-            # if is_tensor(value):
-            #     if get_backend()=='pytorch':
-            #         value=to_numpy(value.copy().cpu().detach()).mean()
-            #         self[data_name].append((step, value))
-            #     elif get_backend()=='tensorflow':
-            #         with tf.device('/cpu:0'):
-            #             value = to_numpy(tf.identity(value)).mean()
-            #             self[data_name].append((step, value))
-            #
-            #
-            # else:
-            #     self[data_name].append((step, value))
+        if not is_redundant_skip:
+            self[data_name].append((step, value))
             if ctx.enable_tensorboard:
                 if self.training_name is None:
                     ctx.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
@@ -105,7 +88,7 @@ class HistoryBase(OrderedDict):
             return [], []
 
     def get_last(self,data_name):
-        if data_name in self:
+        if data_name in self and len(self[data_name])>0:
             return self[data_name][-1]
         else:
             return []
