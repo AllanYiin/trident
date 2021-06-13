@@ -560,16 +560,26 @@ class TrainingPlan(object):
                                 if epoch < int(trainitem.start_epoch):
                                     trainitem.training_context['stop_update'] = 1
 
+                                num_batches=len(data_provider.batch_sampler) if only_steps == False else max_batches
+                                current_batch=mbs if only_steps == False else self.steps
+                                current_epoch=epoch if only_steps == False else 0
+                                if current_batch ==0:
+                                    if current_epoch==0:
+                                        trainitem.do_on_training_start()
+                                    trainitem.do_on_epoch_start()
                                 trainitem.train_model(train_data, test_data,
                                                       epoch if only_steps == False else 0,
                                                       mbs if only_steps == False else self.steps,
                                                       self.num_epochs if only_steps == False else 1,
-                                                      len(data_provider.batch_sampler) if only_steps == False else max_batches,
+                                                      num_batches,
+                                                      done=None,
                                                       is_collect_data=mbs == 0 or mbs % collect_data_inteval == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
                                                       accumulate_grads=(trainitem.training_context['steps']+1) % trainitem.accumulation_steps != 0, is_out_sample_evaluation=need_out_sample_evaluation)
+                                if current_batch==num_batches-1:
+                                    trainitem.do_on_epoch_end()
                             self.steps += 1
 
                             if ctx.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
