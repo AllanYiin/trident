@@ -2,6 +2,7 @@
 import builtins
 import collections
 import copy
+import json
 import datetime
 import functools
 import importlib
@@ -23,7 +24,7 @@ import traceback
 import types
 from enum import Enum
 from pydoc import locate
-from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType
+from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType,Dict
 
 import numpy as np
 
@@ -117,7 +118,7 @@ def make_dir_if_need(path):
 
 def if_none(a, b):
     "`b` if `a` is None else `a`"
-    return b if a is None else a
+    return a if a is not None else b
 
 
 def get_trident_dir():
@@ -286,27 +287,31 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
 
     is_current_num_integer = math.modf(num)[0] == 0
     digitpart_list = [math.modf(v)[0] for v in prev_value] if isinstance(prev_value, Iterable) else []
-    is_all_history_integer = all([math.modf(v)[0] == 0 for v in prev_value]) if isinstance(prev_value, Iterable) else math.modf(num)[0] == 0 if isinstance(prev_value,
-                                                                                                                                                           numbers.Number) else \
-        False
+    is_all_history_integer = all([math.modf(v)[0] == 0 for v in prev_value]) if isinstance(prev_value, Iterable) \
+        else math.modf(num)[0] == 0 if isinstance(prev_value, numbers.Number) else  False
+    
+
     if isinstance(num, numbers.Integral) or is_current_num_integer and is_all_history_integer:
         if not isinstance(num, numbers.Integral):
             num = int(num)
         return '{0:,}'.format(num)
-    format_string = '.3f'
-    if isinstance(prev_value, Iterable) and len(prev_value)>1:
+    elif isinstance(prev_value, Iterable) and len(prev_value)>1:
         if all([1.2>=s>=0.001 or -0.001>=s>=-1.2 or s==0  for s in prev_value]):
             return '{0:.3%}'.format(num)
         elif len(prev_value) > 0:
-            digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean()[0])
+            digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean())
             if  digit>4:
                 return '{0:{1}}'.format(num,  '.3e')
             elif digit < 2:
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:.{1}%}'.format(num,digit)
+    elif name is not None and len(name)>=3 and any([name.lower() in  s.lower() for s in percentage_name ]):
+        return '{0:.3%}'.format(num)
+    elif name is not None and len(name)>=3 and (name.endswith('s')):
+        return '{0:{1}}'.format(num, '.3f')
     else:
-
+        format_string = '.3f'
         if value_type == 'metric':
             if math.modf(num)[0] ==0:
                 num = int(num)
@@ -455,8 +460,6 @@ class dtype:
         double = onnx_pb.TensorProto.DOUBLE
         long = onnx_pb.TensorProto.INT64
         float = onnx_pb.TensorProto.FLOAT
-
-
     elif backend == 'numpy':
         bool = np.bool
 
@@ -482,6 +485,8 @@ class dtype:
         complex64 = np.complex64
         complex128 = np.complex128
         cfloat = np.complex64
+
+
 
 
 # class Device(object):
@@ -804,16 +809,27 @@ class OrderedDict(collections.OrderedDict):
 
 
 class Signature(object):
-    def __init__(self, input_spec=None, output_spec=None, name=None):
+    def __init__(self, inputs=None, outputs=None, name=None):
         super().__init__()
         self.name = name
-        self.inputs = OrderedDict()
-        self.outputs = OrderedDict()
-        if input_spec is not None:
-            self.inputs[input_spec.name if input_spec.name is not None else 'input'] = input_spec
-        if output_spec is not None:
-            self.outputs[output_spec.name if output_spec.name is not None else 'output'] = output_spec
+        self.inputs = OrderedDict() if inputs is None else inputs
+        self.outputs = OrderedDict()  if outputs is None else outputs
 
+
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        Serialize into a 'jsonable' dictionary.
+
+        Input and output schema are represented as json strings. This is so that the
+        representation is compact when embedded in a MLmofel yaml file.
+
+        :return: dictionary representation with input and output shcema represented as json strings.
+        """
+
+        return {
+            "inputs":  json.dumps([x.to_dict() for x in self.inputs.value_list]) if self.inputs is not None else None,
+            "outputs": json.dumps([x.to_dict() for x in self.outputs.value_list]) if self.outputs is not None else None,
+        }
     # @classmethod
     # def get_signature(cls, fn:callable):
     #
@@ -1781,30 +1797,18 @@ def format_arg_spec(v, is_output=False):
     return s + str(v._type)
 
 
-def get_gpu_memory_map():
-    """
 
-    Returns:
-        usage: dict
-        Keys are device ids as integers.
-        Values are memory usage as integers in MB.
-    """
-    pathes = [p for p in os.environ['path'].split(';') if 'NVIDIA' in p and 'Corporation' in p]
-    nv_path = 'C:/Program Files/NVIDIA Corporation/'
-    sp = subprocess.Popen(['{0}/NVSMI/nvidia-smi'.format(nv_path), '-q'], encoding='utf-8-sig', stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE)
 
-    out_str = sp.communicate()
-    out_list = out_str[0].split('\n')
 
-    # Convert lines into a dictionary
-
-    gpu_memory_map = {}
-    for item in out_list:
-        try:
-            key, val = item.split(':')
-            key, val = key.strip(), val.strip()
-            gpu_memory_map[key] = val
-        except:
-            pass
-    return gpu_memory_map
+def is_instance(instance,check_class):
+    if not inspect.isclass(instance) and inspect.isclass(check_class):
+        mro_list=[b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
+        return  check_class.__module__ + '.' + check_class.__qualname__ in mro_list
+    elif not inspect.isclass(instance) and isinstance(check_class,str):
+        mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
+        mro_list2 = [b.__qualname__ for b in instance.__class__.__mro__]
+        return check_class in mro_list or check_class in mro_list2
+    else:
+        if not inspect.isclass(check_class):
+            print(red_color('Input check_class should a class, but {0}'))
+        return False
