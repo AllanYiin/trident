@@ -1089,7 +1089,7 @@ class AdjustGamma(VisionTransform):
         if self.gamma == 1:
             return image
         image = image.astype(np.float32)
-        image = 255. * self.gain * np.power(image / 255., self.gamma)
+        image = 255. * self.gain * np.power(np.clip(image / 255.,0,1), self.gamma)
         return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -1431,8 +1431,8 @@ class AdaptiveBinarization(VisionTransform):
         ret=None
         th=127.5
         if self.threshold_type=='otsu':
-            th = threshold_otsu(gray)
-            #ret, th = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            #th = threshold_otsu(gray)
+            th,ret = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         elif self.threshold_type == 'minimum':
             th = threshold_minimum(gray)
         elif self.threshold_type == 'yen':
@@ -1450,7 +1450,8 @@ class AdaptiveBinarization(VisionTransform):
             elif abs(gray.mean() - p90) > abs(gray.mean() - p10) and p90 - p10 > 80:  # white background
                 gray[gray > p90] = 255
                 gray[gray < p10] = 0
-        gray = (gray > th).astype(np.float32) * 255.0
+
+        gray =ret if ret is not None else  (gray > th).astype(np.float32) * 255.0
         if gray.max() - gray.min() < 20:
             return clip(image,0,255).astype(np.float32)
         image=cv2.cvtColor(gray, cv2.COLOR_GRAY2RGB)
