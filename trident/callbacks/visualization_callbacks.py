@@ -89,7 +89,8 @@ class TileImageCallback(VisualizationCallbackBase):
         data = training_context['train_data']
         model = training_context['current_model']
         dataprovider = enforce_singleton(ctx.get_data_provider())
-        input = to_numpy(data[data_feed['input']])
+        if self.include_input:
+            input = to_numpy(data[data_feed['input']])
         if 'tensor' in model.__class__.__name__.lower():
             output = to_numpy(model.clone())
         elif isinstance(model, Layer):
@@ -144,18 +145,19 @@ class TileImageCallback(VisualizationCallbackBase):
             if len(reverse_image_transform_funcs) > 1:
                 output_arr = []
                 for i in range(len(output)):
-                    output_arr.append(reverse_image_transform(output[i]))
+                    out=reverse_image_transform(output[i])
+                    output_arr.append(np.clip(out,0,255))
                 tile_images_list.append(output_arr)
             else:
                 output_arr = to_numpy(output).transpose([0, 2, 3, 1]) if get_backend() != 'tensorflow' else to_numpy(output)
 
                 if output_arr.max() <= 1.2 and output_arr.min() >= 0:
-                    tile_images_list.append(output_arr * 255)
+                    tile_images_list.append(np.clip(output_arr * 255,0,255))
                 elif output_arr.max() <= 1.2 and output_arr.min() >= -1.2:
 
-                    tile_images_list.append(output_arr * 128 + 127)
+                    tile_images_list.append(np.clip(output_arr * 128 + 127,0,255))
                 else:
-                    tile_images_list.append(output_arr)
+                    tile_images_list.append(np.clip(output_arr,0,255))
 
             legend.append('output')
 
@@ -425,7 +427,7 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
             self.training_items = training_context['training_items']
 
     def on_overall_batch_end(self, training_context):
-        if not self.is_inplace:
+        if not self.is_inplace  and training_context['steps']>10:
             if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                     self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
                 if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
