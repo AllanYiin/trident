@@ -34,7 +34,7 @@ from trident.backend.pytorch_ops import *
 from trident.backend.pytorch_backend import Layer, Sequential,get_device,ModuleList
 
 
-__all__ = ['Mlp','BERT','BERTEmbedding','PositionalEmbedding','PositionwiseFeedForward']
+__all__ = ['Mlp','BERT','BERTEmbedding','PositionalEmbedding','PositionwiseFeedForward','DropPath','Attention','MultiHeadedAttention','SublayerConnection','TransformerBlock']
 
 def Mlp(hidden_features=None, out_features=None,dropout_rate=0):
     return Sequential(
@@ -49,11 +49,11 @@ class PositionalEmbedding(Layer):
         super().__init__()
 
         # Compute the positional encodings once in log space.
-        pe = torch.zeros(max_len, d_model).float()
+        pe = torch.zeros(max_len, d_model).float().to(get_device())
         pe.require_grad = False
 
-        position = torch.arange(0, max_len).float().unsqueeze(1)
-        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp()
+        position = torch.arange(0, max_len).float().unsqueeze(1).to(get_device())
+        div_term = (torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model)).exp().to(get_device())
 
         pe[:, 0::2] = torch.sin(position * div_term)
         pe[:, 1::2] = torch.cos(position * div_term)
@@ -157,23 +157,52 @@ class BERTEmbedding(Layer):
         sum of all these features are output of BERTEmbedding
     """
 
-    def __init__(self, vocab_size, embed_size, dropout_rate=0.1):
+    def __init__(self, vocab_size, embedding_dim,cls_idx=0,sep_idx=1,unk_idx=2,pad_idx=3,mask_idx=4, dropout_rate=0.1, add_noise=False,noise_intensity=0.05):
         """
         :param vocab_size: total vocab size
         :param embed_size: embedding size of token embedding
         :param dropout: dropout rate
         """
         super().__init__()
-        self.token = Embedding(num_embeddings=vocab_size,embedding_dim=embed_size)
+        self.token = Embedding(num_embeddings=vocab_size,embedding_dim=embedding_dim,padding_idx=3,add_noise=add_noise,noise_intensity=noise_intensity)
         self.position = PositionalEmbedding(d_model=self.token.embedding_dim)
-        self.segment = Embedding(num_embeddings=3,embedding_dim=self.token.embedding_dim)
+        self.segment = Embedding(num_embeddings=3,embedding_dim=self.token.embedding_dim,padding_idx=0)
+        self.cls_idx=cls_idx
+        self.sep_idx=sep_idx
+        self.pad_idx=pad_idx
+        self.unk_idx=unk_idx
+        self.mask_idx=mask_idx
+        self.dropout_rate=dropout_rate
         self.dropout = Dropout(dropout_rate)
-        self.embed_size = embed_size
+        self.norm=LayerNorm()
+        self.embedding_dim = embedding_dim
 
-    def forward(self, x,segment_label):
+    def forward(self, x,segments_tensor=None):
+        if segments_tensor is None:
+            segments_tensor_list=[]
+            B,N=int_shape(x)
+            sep_tuples=(x == self.sep_idx).nonzero()(as_tuple=True)
+            for i in range(B):
+                sep_tuple=sep_tuples[i]
+                if len(sep_tuple)<=1:
+                    segments_tensor_list.append(zeros_like(x[i]))
+                elif  sep_tuple==2:
+                    t=zeros_like([i]).detach()
+                    sep_tuple[:sep_tuple[0]+1]=1
+                    sep_tuple[sep_tuple[0]+1:sep_tuple[1] + 1] = 2
+                    segments_tensor_list.append(t)
+            segments_tensor=stack(segments_tensor_list,axis=0).to(get_device())
 
-        x = self.token(x) + self.position(x) + self.segment(segment_label)
-        return self.dropout(x)
+
+
+
+
+
+        x = self.token(x) + self.position(x) + self.segment(segments_tensor)
+        x=self.norm(x)
+        if self.dropout_rate>0 and self.training:
+            x=self.dropout(x)
+        return x
 
 class DropPath(Layer):
     """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
@@ -282,7 +311,7 @@ class TransformerBlock(Layer):
         self.output_sublayer = SublayerConnection(size=hidden, dropout_rate=dropout_rate)
         self.dropout = Dropout(dropout_rate=dropout_rate)
 
-    def forward(self, x, mask):
+    def forward(self, x, mask=None):
         x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
         x = self.output_sublayer(x, self.feed_forward)
         return self.dropout(x)
@@ -312,23 +341,23 @@ class BERT(Layer):
         self.feed_forward_hidden = hidden * 4
 
         # embedding for BERT, sum of positional, segment, token embeddings
-        self.embedding = BERTEmbedding(vocab_size=vocab_size, embed_size=hidden)
+        self.embedding = BERTEmbedding(vocab_size=vocab_size, embedding_dim=hidden)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate) )
 
     def forward(self, x):
         if int_shape(x)[1]==2:
-            x,segment_info=split(x,num_splits=2,axis=1)
+            x,segments_tensor=split(x,num_splits=2,axis=1)
             x=x.squeeze(1)
-            segment_info=segment_info.squeeze(1)
+            segments_tensor=segments_tensor.squeeze(1)
         else:
-            segment_info = zeros_like(x, dtype=x.dtype).to(get_device())
+            segments_tensor = zeros_like(x, dtype=x.dtype).to(get_device())
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
         mask = (x != self.pad_idx).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1).detach()
 
         # embedding the indexed sequence to sequence of vectors
-        x = self.embedding(x, segment_info)
+        x = self.embedding(x, segments_tensor)
 
         # running over multiple transformer blocks
         for name,transformer in self.named_children():
