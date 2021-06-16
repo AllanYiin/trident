@@ -5,19 +5,21 @@ import sys
 from collections import Counter
 from enum import Enum
 from inspect import signature
-from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, dtype
+from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, dtype, is_instance
 from typing import Optional, Union, overload
 import numpy as np
 
-__all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType','object_type_inference','distict_color_count']
+__all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType',
+           'object_type_inference', 'distict_color_count']
 
-
-if get_backend()== 'pytorch':
-    from  trident.backend.pytorch_ops import *
+if get_backend() == 'pytorch':
+    from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_ops  import *
+    from trident.backend.tensorflow_ops import *
 
-_primes=[1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167, 173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251]
+_primes = [1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167,
+           173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251]
+
 
 class ObjectType(Enum):
     array_data = 'array_data'
@@ -35,10 +37,9 @@ class ObjectType(Enum):
     random_noise = 'random_noise'
     classification_label = 'classification_label'
     corpus = 'corpus'
-    sequence_label='sequence_label'
+    sequence_label = 'sequence_label'
     sequence_mask = 'sequence_mask'
-    embedding='embedding'
-
+    embedding = 'embedding'
 
 
 def distict_color_count(img):
@@ -58,58 +59,65 @@ def distict_color_count(img):
     """
     return Counter([tuple(colors) for i in img for colors in i])
 
+
 def pixel_numbers(data):
     return list(set(data.reshape(-1).tolist()))
 
+
 def object_type_inference(data):
-    if isinstance(data,np.ndarray):
+    if isinstance(data, np.ndarray):
         if data.ndim == 2 and data.shape[-1] == 2:
             return ObjectType.landmarks
-        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0 <= data.max().round(0) <= 255 and 0 <= data.min().round(0) <= 255:
             return ObjectType.absolute_bbox
-        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
+        elif data.ndim == 2 and data.shape[-1] in (4, 5) and 0 <= data.max().round(0) <= 1 and 0 <= data.min().round(0) <= 1:
             return ObjectType.relative_bbox
-        elif data.ndim == 2 and len(distict_color_count(np.expand_dims(data,-1)))==2:
+        elif data.ndim == 2 and len(distict_color_count(np.expand_dims(data, -1))) == 2:
             return ObjectType.binary_mask
-        elif data.ndim == 2 and (data.max()-data.min()+1)== len(distict_color_count(np.expand_dims(data,-1))):
+        elif data.ndim == 2 and (data.max() - data.min() + 1) == len(distict_color_count(np.expand_dims(data, -1))):
             return ObjectType.label_mask
-        elif data.ndim == 2 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+        elif data.ndim == 2 and 0 <= data.max().round(0) <= 255 and 0 <= data.min().round(0) <= 255:
             return ObjectType.gray
-        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0]==1 ) and len(distict_color_count(data))==2:
+        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0] == 1) and len(distict_color_count(data)) == 2:
             return ObjectType.binary_mask
-        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0]==1) and (data.max()-data.min()+1)== len(distict_color_count(data)):
+        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0] == 1) and (data.max() - data.min() + 1) == len(distict_color_count(data)):
             return ObjectType.label_mask
-        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0]==1)and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+        elif data.ndim == 3 and (data.shape[-1] == 1 or data.shape[0] == 1) and 0 <= data.max().round(0) <= 255 and 0 <= data.min().round(0) <= 255:
             return ObjectType.gray
-        elif data.ndim == 3 and (data.shape[-1] == 3 or data.shape[0]==3) and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255 :
-            if np.array_equal(data[:,:,0],data[:,:,1]) and np.array_equal(data[:,:,2],data[:,:,1]):
+        elif data.ndim == 3 and (data.shape[-1] == 3 or data.shape[0] == 3) and 0 <= data.max().round(0) <= 255 and 0 <= data.min().round(0) <= 255:
+            if np.array_equal(data[:, :, 0], data[:, :, 1]) and np.array_equal(data[:, :, 2], data[:, :, 1]):
                 return ObjectType.gray
-            elif np.array_equal(data[0,:,:],data[0,:,:]) and np.array_equal(data[2,:,:],data[2,:,:]):
+            elif np.array_equal(data[0, :, :], data[0, :, :]) and np.array_equal(data[2, :, :], data[2, :, :]):
                 return ObjectType.gray
-            elif not np.array_equal(data,data.round()):
+            elif not np.array_equal(data, data.round()):
                 return ObjectType.rgb
-            elif len(list(set(pixel_numbers(data)) & set(_primes[3:])))>3 :
+            elif len(list(set(pixel_numbers(data)) & set(_primes[3:]))) > 3:
                 return ObjectType.rgb
             elif len(distict_color_count(data)) < 100:
                 return ObjectType.color_mask
             else:
                 return ObjectType.rgb
-        elif data.ndim == 3 and data.shape[-1] == 4 and 0<=data.max().round(0)<=255 and 0<=data.min().round(0)<=255:
+        elif data.ndim == 3 and data.shape[-1] == 4 and 0 <= data.max().round(0) <= 255 and 0 <= data.min().round(0) <= 255:
             return ObjectType.rgba
-        elif data.ndim == 3 and data.dtype==np.int64 and 0<=data.max().round(0)<=1 and 0<=data.min().round(0)<=1:
+        elif data.ndim == 3 and data.dtype == np.int64 and 0 <= data.max().round(0) <= 1 and 0 <= data.min().round(0) <= 1:
             return ObjectType.binary_mask
-        elif data.ndim == 3 and data.dtype in [np.float32,np.float16] and 0<=data.max()<=1 and 0<=data.min().round(0)<=1:
+        elif data.ndim == 3 and data.dtype in [np.float32, np.float16] and 0 <= data.max() <= 1 and 0 <= data.min().round(0) <= 1:
             return ObjectType.alpha_mask
-        elif data.ndim <= 1 and data.dtype==np.int64 :
+        elif data.ndim <= 1 and data.dtype == np.int64:
             return ObjectType.classification_label
-        elif data.ndim == 2 and data.dtype==np.int64:
+        elif data.ndim == 2 and data.dtype == np.int64:
             return ObjectType.color_mask
         else:
-            sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape,data.dtype,data.min(),data.max())+'\n')
+            sys.stderr.write('Object type cannot be inferred: shape:{0} dtype:{1} min:{2} max:{3} .'.format(data.shape, data.dtype, data.min(), data.max()) + '\n')
             return ObjectType.array_data
-    elif isinstance(data,str):
+    elif isinstance(data, list):
+        data = unpack_singleton(data)
+        if isinstance(data, str):
+            return ObjectType.corpus
+        elif len(data) > 0 and isinstance(data[0], str):
+            return ObjectType.corpus
+    elif isinstance(data, str):
         return ObjectType.corpus
-
 
 
 ExpectDataType = ObjectType
@@ -149,33 +157,36 @@ class TensorSpec(object):
     """
 
     def __init__(self,
-                 shape:Union[None,TensorShape]=None,
-                 ndim:Union[None,int]=None,
-                 max_ndim:Union[None,int]=None,
-                 min_ndim:Union[None,int]=None,
+                 shape: Union[None, TensorShape] = None,
+                 ndim: Union[None, int] = None,
+                 max_ndim: Union[None, int] = None,
+                 min_ndim: Union[None, int] = None,
                  axes=None,
                  dtype=None,
                  object_type: Optional[ObjectType] = None,
-                 is_spatial=False,
+                 optional=False,
+                 default=None,
+
                  name=None):
         self._dtype = dtype if dtype is not None else None
         self._shape_tuple = None
         self.object_type = object_type
-
+        self.optional = optional
+        self.default = default
         self._name = name
         if shape is not None:
-            if isinstance(shape,TensorShape) :
-                self.ndim =shape.ndims
-                self._shape_tuple =tuple(shape.dims)
-                self.shape =shape
+            if isinstance(shape, TensorShape):
+                self.ndim = shape.ndims
+                self._shape_tuple = tuple(shape.dims)
+                self.shape = shape
             elif isinstance(shape, (list, tuple)) and all([isinstance(item, numbers.Number) for item in shape]):
                 self.ndim = len(shape)
-                self._shape_tuple = (None,)+tuple(shape)
+                self._shape_tuple = (None,) + tuple(shape)
                 self.shape = TensorShape(shape)
-            elif not is_tensor(shape) and  isinstance(shape,numbers.Number) :
+            elif not is_tensor(shape) and isinstance(shape, numbers.Number):
                 self.ndim = 0
-                self.shape = TensorShape([None,shape])
-                self._shape_tuple = (None,shape)
+                self.shape = TensorShape([None, shape])
+                self._shape_tuple = (None, shape)
             elif is_tensor(shape) and 'int' in str(shape.dtype):
                 self.ndim = len(shape)
 
@@ -185,7 +196,7 @@ class TensorSpec(object):
             else:
                 print(shape)
                 self.ndim = len(shape)
-                shape=to_list(to_numpy(shape))
+                shape = to_list(to_numpy(shape))
                 self._shape_tuple = (None,) + tuple(shape)
                 self.shape = TensorShape(self._shape_tuple)
         else:
@@ -210,25 +221,28 @@ class TensorSpec(object):
     def __setattr__(self, name, value):
         object.__setattr__(self, name, value)
         if name in ['shape']:
-            self.ndim = self.shape.ndims
-            self._shape_tuple = tuple(self.shape.dims)
+            if value is not None and value != TensorShape([None]) and value != TensorShape([0]):
+                self.ndim = self.shape.ndims
+                self._shape_tuple = tuple(self.shape.dims)
+
     def copy(self):
         return copy.deepcopy(self)
 
-
-
     @classmethod
-    def tensor_to_spec(cls, t:Tensor, object_type:ObjectType=None,need_exclude_batch_axis=True, is_singleton=False, name=None):
-        if isinstance(t,numbers.Number):
-            return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=True), dtype=dtype.int64, object_type=object_type, name=name)
+    def tensor_to_spec(cls, t: Tensor, object_type: ObjectType = None, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=None):
+        t = to_tensor(t)
 
-        return cls(shape=tensor_to_shape(t,need_exclude_batch_axis=need_exclude_batch_axis,is_singleton=is_singleton),dtype=t.dtype,object_type=object_type,name=name)
-
+        return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=is_singleton), dtype=t.dtype, object_type=object_type, optional=optional,
+                   name=name)
 
     @property
     def dtype(self):
         """Returns the `dtype` of elements in the tensor."""
         return self._dtype
+
+    @dtype.setter
+    def dtype(self, value):
+        return value
 
     @property
     def name(self):
@@ -237,10 +251,11 @@ class TensorSpec(object):
 
     @property
     def is_spatial(self):
-         if self.object_type is not None:
-            if 'mask' in self.object_type.value or 'bbox' in self.object_type.value or 'rgb' in self.object_type.value or self.object_type == ObjectType.gray or self.object_type == ObjectType.landmarks:
+        if self.object_type is not None:
+            if 'mask' in self.object_type.value or 'bbox' in self.object_type.value or 'rgb' in self.object_type.value or self.object_type == ObjectType.gray or self.object_type\
+                    == ObjectType.landmarks:
                 return True
-         return False
+        return False
 
     def is_compatible_with(self, inputs):  # pylint:disable=useless-super-delegation
         """Returns True if spec_or_tensor is compatible with this TensorSpec.
@@ -510,7 +525,7 @@ def assert_spec_compatibility(input_spec: TensorSpec, other_spec: TensorSpec):
     # Check shape.
     if input_spec.shape is not None:
         shape = other_spec._shape_tuple
-        is_compatible=TensorShape(input_spec.shape).is_compatible_with(TensorShape(other_spec._shape_tuple))
+        is_compatible = TensorShape(input_spec.shape).is_compatible_with(TensorShape(other_spec._shape_tuple))
         if is_compatible:
             return is_compatible
         if shape is not None:
@@ -556,31 +571,46 @@ def get_signature(fn, name=None):
 
 
     """
+    base_fn = fn
+    base_signature = base_fn._signature if hasattr(fn, '_signature') else None
+    if hasattr(fn, 'forward'):
+        base_fn = fn.forward
 
     signature = Signature()
-    func_code = fn.__code__
 
-    annotations = fn.__annotations__
-    sig = inspect.signature(fn)
+    sig = inspect.signature(base_fn)
     paras = list(sig.parameters.items())
 
+    returns = sig.return_annotation
     if sig.return_annotation is not inspect._empty:
-        returns = sig.return_annotation.split(',')
-        for r in returns:
-            signature.outputs[r] = None
+        if isinstance(returns, str):
+            signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
+        else:
+            for i in range(len(returns)):
+                signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))
+    else:
+        signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
 
-    for p in paras:
-        if p[0] not in ['kwargs', 'self', 'args'] and p[1].default is inspect._empty:
-            if p[0]=='x' and fn.__name__=='forward':
-                signature.inputs['input'] = None
-            else:
-                signature.inputs[p[0]] = None
+    for k, v in paras:
+        if k not in ['kwargs', 'self', 'args']:
+            annotation = v.annotation
+            _default = v.default if v.default != inspect.Parameter.empty else None
+            _optional = _default is not None
+            _dtype = type(_default) if _default is not None else annotation if not is_instance(annotation, str) else None
+            _ndim = 0 if _dtype in [int, float, bool, str, numbers.Number, numbers.Integral] else None
+            _shape = TensorShape([0]) if _dtype in [int, float, bool, str, numbers.Number, numbers.Integral] else None
+            if annotation is Tensor:
+                _dtype = dtype.float32
+                _shape = TensorShape([None])
+                _ndim = None
+            signature.inputs[k] = TensorSpec(shape=_shape, ndim=_ndim, dtype=_dtype, optional=_optional, default=_default, name=k)
 
     if name is not None:
         signature.name = name
     else:
-        signature.name = func_code.co_name
-
+        signature.name = name if name is not None else fn.__class__.__name__ if is_instance(fn, 'Layer') else fn.__class__.__qualname__
+    # if hasattr(base_fn,'__code__'):
+    #     signature.__code__ = base_fn.__code__
     return signature
 
 
