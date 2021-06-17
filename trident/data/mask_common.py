@@ -28,7 +28,7 @@ else:
 
 from trident.backend.common import get_backend
 from trident.data.label_common import check_is_onehot,get_onehot
-
+from trident.misc.visualization_utils import generate_palette
 
 __all__ = ['mask2trimap','color2label','label2color','mask_backend_adaptive']
 
@@ -137,7 +137,13 @@ def color2label(color_label,palette):
 
 
 def label2color(label_mask,palette):
-    num_classes=len(palette)
+    items=np.unique(label_mask,return_index=True)
+    num_classes = len(items)
+    if num_classes==2:
+        palette=[[0,0,0],[255,255,255]]
+    if palette is None:
+        palette=generate_palette(num_classes)
+
     color_label= np.zeros((*label_mask.shape,3)).astype(np.int64)
     if isinstance(palette,list) and len(palette[0])==3:
         pass
@@ -146,7 +152,6 @@ def label2color(label_mask,palette):
 
     for i in range(num_classes):
         color_label[label_mask==i]=palette[i]
-
     return color_label
 
 
