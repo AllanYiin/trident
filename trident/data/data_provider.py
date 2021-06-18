@@ -277,20 +277,34 @@ class ImageDataProvider(object):
             self.testdata.label.class_names = self._class_names
 
     def preview_images(self, key=None, is_concate=True):
-        if not isinstance(self.traindata.data, ImageDataset):
+        image_ds= [ds.symbol for ds in self.traindata.get_datasets() if isinstance(ds, ImageDataset) and ds.object_type!=ObjectType.image_path]
+        if len(image_ds)==0:
+            print(red_color('This data_provider not have any ImageDataset in it.'))
             return None
         else:
-            if key is None and isinstance(self.traindata.data, ImageDataset):
+            if key is None:
+                orig_mode=self.mode
+                self.mode='dict'
                 data = self.next()
-                if isinstance(data, OrderedDict):
-                    data = data.value_list
-                data = enforce_singleton(data)
-                data = self.reverse_image_transform(data)
-                if is_concate:
-                    data = np.concatenate([img for img in data], axis=-1 if data[0].ndim == 2 or (data[0].ndim == 3 and data[0].shape[0] in [1, 3, 4]) else -2)
-                    return array2image(data)
+                self.mode = orig_mode
+                return_images=OrderedDict()
+                for k,v in data.items():
+                    if k.name in image_ds:
+                        batch_imgs = v
+                        batch_imgs = self.reverse_image_transform(batch_imgs)
+
+                        batch_imgs = np.concatenate([img for img in batch_imgs], axis=-1 if batch_imgs[0].ndim == 2 or (batch_imgs[0].ndim == 3 and batch_imgs[0].shape[0] in [1, 3, 4]) else -2)
+                        return_images[k.name]= batch_imgs
+                if is_in_ipython():
+                    for k,v in return_images.items():
+                        print(blue_color(k),flush=True)
+                        from IPython import display
+                        display.display(array2image(v))
+
                 else:
-                    return [array2image(img) for img in data]
+                    return return_images
+
+
             elif isinstance(key, slice):
                 start = key.start if key.start is not None else 0
                 stop = key.stop
