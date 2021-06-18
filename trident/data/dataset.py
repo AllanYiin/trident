@@ -281,7 +281,9 @@ class ImageDataset(Dataset):
 
     def __getitem__(self, index: int):
         img = self.items[index]  # self.pop(index)
-        if isinstance(img, str):
+        if isinstance(img, str) and self.object_type==ObjectType.image_path:
+            return img
+        else:
             img = file2array(img)
 
         if not isinstance(img, np.ndarray):
@@ -312,6 +314,8 @@ class ImageDataset(Dataset):
         return img
 
     def data_transform(self, img_data):
+        if self.object_type==ObjectType.image_path:
+            return img_data
         if len(self.transform_funcs) == 0:
             return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
@@ -809,10 +813,12 @@ class RandomNoiseDataset(Dataset):
 
 class TextSequenceDataset(Dataset):
     def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, storage_unit='section',section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
-                 object_type=ObjectType.corpus, symbol=None, **kwargs):
+                 include_segment_ids=False,include_mask_ids=False,object_type=ObjectType.corpus, symbol=None, **kwargs):
         super().__init__(None,symbol=symbol, object_type=object_type, **kwargs)
         self.sequence_length = sequence_length
         self.sequence_start_at = sequence_start_at
+        self.length_index = OrderedDict()
+        self.vocabs_frequency = OrderedDict()
         self.transform_funcs = []
         if len(section_delimiter) == 2:
             self.section_delimiter = section_delimiter
@@ -829,6 +835,7 @@ class TextSequenceDataset(Dataset):
         self.sequence_offset = sequence_offset
         self.dtype = np.float32 if self.is_onehot else np.int64
 
+
         self.is_paired_process = False
 
 
@@ -836,6 +843,7 @@ class TextSequenceDataset(Dataset):
         if hasattr(corpus, "__iter__"):
             self.items.extend(corpus)
             if self.vocabs is None:
+
                 chars = sorted(list(set( ''.join(corpus ))))
                 chars.insert(0, '[CLS]')
                 chars.insert(1, '[SEP]')
@@ -846,6 +854,10 @@ class TextSequenceDataset(Dataset):
                 self.vocabs = chars
                 self.text2index = dict((c, i) for i, c in enumerate(chars))
                 self.index2text = dict((i, c) for i, c in enumerate(chars))
+                self.vocabs_frequency=OrderedDict((c, 1) for i, c in enumerate(chars))
+                for ch in list(''.join(corpus)):
+                    self.vocabs_frequency[ch] += 1
+
             else:
                 new_chars = sorted(list(set(''.join(corpus))))
                 new_chars=[ch for ch in new_chars if ch not in self.vocabs]
@@ -854,6 +866,11 @@ class TextSequenceDataset(Dataset):
                     self.vocabs.append(ch)
                     self.text2index[ch]=len(self.vocabs)-1
                     self.index2text[len(self.vocabs)-1]=ch
+                    self.vocabs_frequency[ch]=1
+
+                for ch in list(''.join(corpus)):
+                    self.vocabs_frequency[ch] += 1
+
             self.length_index=OrderedDict()
             total_len=0
             for i in range(len(self.items)):
@@ -883,7 +900,6 @@ class TextSequenceDataset(Dataset):
     def __getitem__(self, index: int):
         sequencetext = None
         if isinstance(self.sequence_offset, int):
-
             if self.sequence_start_at == 'random':
                 for k,v in self.length_index.item_list:
                     if v>index:
@@ -917,16 +933,9 @@ class TextSequenceDataset(Dataset):
                 sectiontext.insert(0, '[CLS]')
                 sectiontext.append('[SEP]')
                 sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length,len(sectiontext))]
+
         return sequencetext
 
-        if self.is_paired_process == False and len(self.transform_funcs) == 0:
-            return text_backend_adaption(arr)
-        elif not self.is_paired_process:
-            return self.text_transform(arr)
-        elif self.is_paired_process:
-            return arr
-
-        return None
 
     def data_transform(self, text_data):
         if len(self.transform_funcs) == 0:
@@ -937,7 +946,9 @@ class TextSequenceDataset(Dataset):
         #text_data = text_backend_adaption(text_data)
 
         arr = None
-        if self.is_onehot:
+        if isinstance(text_data,np.ndarray):
+            return text_data
+        elif self.is_onehot:
             arr = np.zeros((self.sequence_length, len(self.text2index)))
             for i in range(self.sequence_length):
                 if i < len(text_data):
@@ -996,14 +1007,14 @@ class TextSequenceDataset(Dataset):
 
 
 class Iterator(object):
-    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, batch_size=8, mode='tuple', is_shuffe=True, buffer_size=None, workers=2, **kwargs):
+    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, batch_size=8, mode='tuple', is_shuffle=True, buffer_size=None, workers=2, **kwargs):
         self.is_paired_process = False
         self._data = None
         self._label = None
         self._unpair = None
         self.paired_process_symbols = []
 
-        self.is_shuffe = is_shuffe
+        self.is_shuffle = is_shuffle
 
 
 
@@ -1051,18 +1062,21 @@ class Iterator(object):
 
         for k in range(len(datasets)):
             ds = datasets[k]
+            dataitem = ds[k]
             if isinstance(ds,TextSequenceDataset):
                 ds.element_spec = TensorSpec(shape=TensorShape([None,ds.sequence_length]), dtype=dtype.long,object_type=ds.object_type, name=ds.symbol)
+            elif isinstance(dataitem, str):
+                ds.element_spec = TensorSpec(shape=TensorShape([None]),dtype=str,object_type=ds.object_type, name=ds.symbol)
             else:
                 if len(ds) > 0:
-                    dataitem = ds[k]
+
                     ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
                     self.data_template[ds.element_spec] = None
 
         self._batch_size = batch_size
         self.paired_transform_funcs = []
 
-        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         if buffer_size is None:
             buffer_size = 8 * batch_size
@@ -1088,7 +1102,7 @@ class Iterator(object):
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
 
-        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1105,7 +1119,7 @@ class Iterator(object):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
-        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1118,7 +1132,7 @@ class Iterator(object):
         self._unpair = value
 
 
-        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffe,  drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffle,  drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1136,7 +1150,7 @@ class Iterator(object):
     @batch_size.setter
     def batch_size(self, value):
         self._batch_size = value
-        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 8 * value
@@ -1156,7 +1170,7 @@ class Iterator(object):
                 spec = ds.element_spec
                 self.data_template[spec] = None
                 self._signature.outputs[ds.symbol] = spec
-            self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
+            self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
             self._sample_iter = iter(self.batch_sampler)
             return self._signature
 
@@ -1206,7 +1220,7 @@ class Iterator(object):
         for ds, result,value in zip(datasets, results.key_list,results.value_list):
             spec = TensorSpec.tensor_to_spec(value, object_type=ds.object_type,need_exclude_batch_axis=True,is_singleton=True, name=ds.symbol)
             self._signature.outputs[ds.symbol] = spec
-        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         return self._signature
 
@@ -1344,7 +1358,7 @@ class MetricIterator(Iterator):
 
         self._batch_size = batch_size
         self.paired_transform_funcs = []
-        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffe, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 10
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)

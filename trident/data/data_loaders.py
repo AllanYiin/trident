@@ -2,6 +2,10 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+import glob
+import gzip
+import subprocess
+import random
 import string
 import codecs
 import pickle
@@ -83,30 +87,20 @@ def load_mnist(dataset_name='mnist', **kwargs):
         base = 'http://fashion-mnist.s3-website.eu-central-1.amazonaws.com/'
 
     dirname = os.path.join(_trident_dir, dataset_name)
-    if not os.path.exists(dirname):
-        try:
-            os.makedirs(dirname)
-        except OSError:
-            # Except permission denied and potential race conditions
-            # in multi-threaded environments.
-            pass
+    make_dir_if_need(dirname)
 
     """Load MNIST data from `path`"""
     trainData = None
     testData = None
     for kind in ['train', 'test']:
-        labels_file = '{0}-labels-idx1-ubyte.gz'.format(
-            't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'test' else kind)
-        images_file = '{0}-images-idx3-ubyte.gz'.format(
-            't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'test' else kind)
+        labels_file = '{0}-labels-idx1-ubyte.gz'.format(  't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'test' else kind)
+        images_file = '{0}-images-idx3-ubyte.gz'.format(  't10k' if dataset_name in ('mnist', 'fashion-mnist') and kind == 'test' else kind)
         # if dataset_name == 'emnist' :
         #     labels_file='emnist-balanced-'+labels_file
         #     images_file = 'emnist-balanced-' + images_file
 
-        is_data_download = download_file(base + labels_file, dirname, labels_file,
-                                         dataset_name + '_labels_{0}'.format(kind))
-        is_label_download = download_file(base + images_file, dirname, images_file,
-                                          dataset_name + '_images_{0}'.format(kind))
+        is_data_download = download_file(base + labels_file, dirname, labels_file,  dataset_name + '_labels_{0}'.format(kind))
+        is_label_download = download_file(base + images_file, dirname, images_file, dataset_name + '_images_{0}'.format(kind))
         if is_data_download and is_label_download:
             labels_path = os.path.join(dirname, labels_file)
             images_path = os.path.join(dirname, images_file)
@@ -408,14 +402,14 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
             labelsdata = LabelDataset(labels,object_type=ObjectType.classification_label)
             labelsdata.binding_class_names(class_names)
 
-            traindata = Iterator(data=imagedata, label=labelsdata)
+            traindata = Iterator(data=imagedata, label=labelsdata,is_shuffle=shuffle)
             dataset = DataProvider(dataset_name, traindata=traindata)
             dataset.binding_class_names(class_names)
 
         else:
             imgs = list_images(base_folder)
             imagedata = ImageDataset(imgs, object_type=ObjectType.rgb)
-            traindata = Iterator(data=imagedata)
+            traindata = Iterator(data=imagedata,is_shuffle=shuffle)
             dataset = DataProvider(dataset_name, traindata=traindata)
         return dataset
     else:
@@ -966,64 +960,70 @@ def load_examples_data(dataset_name):
         download_file_from_google_drive('1yzRzXpLuhSUxnixqCgpbdTk16ajnTEWF', dirname, 'chinese.tar')
         tar_file_path = os.path.join(dirname, 'chinese.tar')
         extract_archive(tar_file_path, dirname, archive_format='tar')
-        as_train = remove_nonprintable(to_half(codecs.open(os.path.join(dirname, 'as_training.utf8'), encoding='utf-8-sig').read().strip().replace('  ','|').replace('\u3000' ,'|'))).splitlines()
 
-        cityu_train =remove_nonprintable(to_half(codecs.open(os.path.join(dirname, 'cityu_training.utf8'), encoding='utf-8-sig').read().strip().replace('  ','|').replace('\u3000' ,'|'))).splitlines()
-        #as_test = codecs.open(os.path.join(dirname, 'as_test.utf8'), encoding='utf-8-sig').read()
+        as_train = remove_nonprintable(to_half(codecs.open(os.path.join(dirname, 'as_training.utf8'), encoding='utf-8-sig').read().strip().replace('\u3000' ,'|'))).splitlines()
+        cityu_train =remove_nonprintable(to_half(codecs.open(os.path.join(dirname, 'cityu_training.utf8'), encoding='utf-8-sig').read().strip().replace(' ','|'))).splitlines()
 
-        #cityu_test = codecs.open(os.path.join(dirname, 'cityu_testing.utf8'), encoding='utf-8-sig').read()
-
-
-        #as_test = as_test.replace('\u3000', '|').replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
-        #cityu_test = cityu_test.replace(' ', '|')  # 把分詞分隔號置換為'|'，否則會被視為空白被處理掉
-
-        data = as_train  + cityu_train  # 把兩個語料合併
-        #test_data=as_test + '\r\n' + cityu_test  # 把兩個語料合併
+        as_test = remove_nonprintable(to_half(codecs.open(os.path.join(dirname, 'as_testing_gold.utf8'), encoding='utf-8-sig').read().strip().replace('\u3000', '|'))).splitlines()
+        cityu_test = remove_nonprintable(to_half(codecs.open(os.path.join(dirname, 'cityu_test_gold.utf8'), encoding='utf-8-sig').read().strip().replace(' ', '|'))).splitlines()
 
 
+        data = as_train  + cityu_train # 把兩個語料合併
+        test_data=as_test + cityu_test # 把兩個語料合併
 
-        raw_data_train = [row.strip('\n').strip('\r').replace("\x08", '').replace("\x80", '') for row in data]  # 移除分行字元
+
+        raw_data_train = [row.strip('\n').strip('\r') for row in data]  # 移除分行字元
+        raw_data_test = [row.strip('\n').strip('\r') for row in test_data]  # 移除分行字元
 
         process_data_train=[]
         process_seg_label_train = []
         process_simplifided_label_train = []
         process_traditional_label_train = []
-        print('generate labels')
+
         tmp_data_train = []
         tmp_seg_label_train = []
         tmp_simplifided_label_train = []
         tmp_pronunce_label_train = []
-        for row in tqdm(raw_data_train):
+        for k in tqdm(range(len(raw_data_train))):
+            row=raw_data_train[k]
+            if row.startswith('∥'):
+                row=row[1:]
             words=row.replace('||','|').split('|')
             for k  in range(len(words)):
-                word=words[k]
+
+                word = words[k]
 
                 for i in range(len(word)):
                     tmp_data_train.append(word[i])
                     #tmp_simplifided_label_train.append(to_half(to_sc(word[i])))
                     #轉換為BMES
-                    if len(word)==1 and i==0: #S 自己就是一個單詞
-                        tmp_seg_label_train.append('S')
-                    elif i==0: #B 是一個詞的開始
+
+                    if i==0 and len(word)>1: #B 是一個詞的開始
                         tmp_seg_label_train.append('B')
-                    elif i==len(word)-1:  #E 是一個詞的結束
+                    elif i==len(word)-1 and len(word)>=2 and tmp_seg_label_train[-1] in ['B','M']:   #E 是一個詞的結束
                         tmp_seg_label_train.append('E')
-                    else: #M 是一個詞的中間
+                    elif len(word)==1 and i==0: #S 自己就是一個單詞
+                        tmp_seg_label_train.append('S')
+                    elif len(word)>=3 and tmp_seg_label_train[-1] in ['B','M']:  #M 是一個詞的中間
                         tmp_seg_label_train.append('M')
 
-                if k<len(words) and len(word)>0 and (is_alphabet(word) or is_punctuation(word)):
-                    if k==len(words)-1 and word=="。":
-                        pass
-                    else:
-                        tmp_data_train.append(' ')
-                        tmp_seg_label_train.append('S')
+                if len(tmp_seg_label_train)>0 and tmp_seg_label_train[-1] in ['E','S']:
+                    if len(word) > 1 and (is_alphabet(word) or is_punctuation(word)) and k+1<len(words):
+                        if word in [ '。','﹖']:
+                            pass
 
-            if words[-1]=="。":
+                        elif random.random() < 0.6 or is_alphabet(word):
+                                tmp_data_train.append(' ')
+                                tmp_seg_label_train.append('S')
+
+            if (k+1<len(raw_data_train) and not raw_data_train[k+1].startswith( '」')) and words[-1] in [ '。','﹖']:
                 #process_traditional_label_train.append(tmp_data_train)
 
-                tmp_data_train=''.join(tmp_data_train)
+                tmp_data_train=to_half(''.join(tmp_data_train))
                 tmp_seg_label_train = ''.join(tmp_seg_label_train)
-                tmp_simplifided_label_train =to_half(to_sc(tmp_data_train))
+                # if len(tmp_data_train)!=len(tmp_seg_label_train):
+                #     print('')
+                tmp_simplifided_label_train =to_sc(tmp_data_train)
 
                 process_data_train.append(tmp_data_train)
                 process_seg_label_train.append(tmp_seg_label_train)
@@ -1039,38 +1039,117 @@ def load_examples_data(dataset_name):
         corpus=process_data_train
         seg_corpus=process_seg_label_train
         simplifided_corpus =process_simplifided_label_train
-        data=TextSequenceDataset(corpus=corpus,sequence_length=128,sequence_start_at='section_start',object_type=ObjectType.corpus,symbol='input')
-        seg_label = TextSequenceDataset(corpus=seg_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='seg_label')
-        simplifided_label = TextSequenceDataset(corpus=simplifided_corpus,sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='simplified_label')
-        traditional_label = TextSequenceDataset(corpus= copy.deepcopy(corpus), sequence_length=128, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='traditional_label')
 
-        chars = list(sorted(set(list( ''.join(corpus) +bpmf_phonetic+'\n\r\t'+  ''.join(simplifided_corpus)))))
+        process_data_test = []
+        process_seg_label_test = []
+        process_simplifided_label_test = []
+        process_traditional_label_test = []
+        print('generate test labels')
+        tmp_data_test = []
+        tmp_seg_label_test = []
+        tmp_simplifided_label_test = []
+        tmp_pronunce_label_test = []
+        for k in tqdm(range(len(raw_data_test))):
+            row=raw_data_test[k]
+            if row.startswith('∥'):
+                row=row[1:]
+            words = row.replace('||', '|').split('|')
+            for k in range(len(words)):
+
+                word = words[k]
+
+                for i in range(len(word)):
+                    tmp_data_test.append(word[i])
+                    # tmp_simplifided_label_test.append(to_half(to_sc(word[i])))
+                    # 轉換為BMES
+
+                    if i == 0 and len(word) > 1:  # B 是一個詞的開始
+                        tmp_seg_label_test.append('B')
+                    elif i == len(word) - 1 and len(word) >= 2 and tmp_seg_label_test[-1] in ['B', 'M']:  # E 是一個詞的結束
+                        tmp_seg_label_test.append('E')
+                    elif len(word) == 1 and i == 0:  # S 自己就是一個單詞
+                        tmp_seg_label_test.append('S')
+                    elif len(word) >= 3 and tmp_seg_label_test[-1] in ['B', 'M']:  # M 是一個詞的中間
+                        tmp_seg_label_test.append('M')
+
+                if len(tmp_seg_label_test) > 0 and tmp_seg_label_test[-1] in ['E', 'S'] and k+1<len(words):
+                    if len(word) > 1 and (is_alphabet(word) or is_punctuation(word)):
+                        if word in  ['。', '﹖']:
+                            pass
+                        elif random.random() < 0.6 or is_alphabet(word):
+                            tmp_data_test.append(' ')
+                            tmp_seg_label_test.append('S')
+
+            if (k + 1 < len(raw_data_test) and not raw_data_test[k + 1].startswith('」')) and words[-1] in ['。', '﹖']:
+                # process_traditional_label_test.append(tmp_data_test)
+
+                tmp_data_test = to_half(''.join(tmp_data_test))
+                tmp_seg_label_test = ''.join(tmp_seg_label_test)
+                # if len(tmp_data_test)!=len(tmp_seg_label_test):
+                #     print('')
+                tmp_simplifided_label_test = to_sc(tmp_data_test)
+
+                process_data_test.append(tmp_data_test)
+                process_seg_label_test.append(tmp_seg_label_test)
+                process_simplifided_label_test.append(tmp_simplifided_label_test)
+                tmp_data_test = []
+                tmp_seg_label_test = []
+                tmp_simplifided_label_test = []
+                tmp_pronunce_label_test = []
+            # else:
+            #     tmp_data_test.append('\n')
+            #     tmp_simplifided_label_test.append('\n')
+            #     tmp_seg_label_test.append('\n')
+        test_corpus = process_data_test
+        test_seg_corpus = process_seg_label_test
+        test_simplifided_corpus = process_simplifided_label_test
+
+
+        data=TextSequenceDataset(corpus=corpus,sequence_length=64,sequence_start_at='section_start',object_type=ObjectType.corpus,symbol='input')
+        seg_label = TextSequenceDataset(corpus=seg_corpus,sequence_length=64, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='seg_label')
+        simplifided_label = TextSequenceDataset(corpus=simplifided_corpus,sequence_length=64, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='simplified_label')
+        traditional_label = TextSequenceDataset(corpus= copy.deepcopy(corpus), sequence_length=64, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='traditional_label')
+
+        data_test=TextSequenceDataset(corpus=test_corpus,sequence_length=64,sequence_start_at='section_start',object_type=ObjectType.corpus,symbol='input')
+        seg_test_label = TextSequenceDataset(corpus=test_seg_corpus,sequence_length=64, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='seg_label')
+        simplifided_test_label = TextSequenceDataset(corpus=test_simplifided_corpus,sequence_length=64, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='simplified_label')
+        traditional_test_label = TextSequenceDataset(corpus= copy.deepcopy(test_corpus), sequence_length=64, sequence_start_at='section_start', object_type=ObjectType.sequence_label,symbol='traditional_label')
+
+
+        chars = list(sorted(set(list( ''.join(corpus) +bpmf_phonetic+'\n\r\t∥'+  ''.join(simplifided_corpus)+''.join(test_data)))))
         chars.insert(0, '[CLS]')
         chars.insert(1, '[SEP]')
         chars.insert(2, '[UNK]')
         chars.insert(3, '[PAD]')
         chars.insert(4, '[MASK]')
 
-        data.vocabs =simplifided_label.vocabs =  chars
-        data.text2index =simplifided_label.text2index =  dict((c, i) for i, c in enumerate(chars))
-        data.index2text =simplifided_label.index2text  =  dict((i, c) for i, c in enumerate(chars))
-        traditional_label = copy.deepcopy(data)
-        traditional_label.object_type = ObjectType.sequence_label
-        traditional_label.symbol = 'traditional_label'
+        data.vocabs  =data_test.vocabs=simplifided_label.vocabs=simplifided_test_label.vocabs =  chars
+        data.text2index=data_test.text2index  =simplifided_label.text2index=simplifided_test_label.text2index =  dict((c, i) for i, c in enumerate(chars))
+        data.index2text  =data_test.index2text  =simplifided_label.index2text=simplifided_test_label.index2text=  dict((i, c) for i, c in enumerate(chars))
+        traditional_label =  copy.deepcopy(data)
+        traditional_test_label = copy.deepcopy(data_test)
+        traditional_label.object_type =traditional_test_label.object_type = ObjectType.sequence_label
+        traditional_label.symbol =traditional_test_label.symbol = 'traditional_label'
 
         mask_label = copy.deepcopy(data)
-        mask_label.object_type = ObjectType.corpus
-        mask_label.symbol = 'mask_label'
+        mask_test_label = copy.deepcopy(data_test)
+        #mask_label.object_type =mask_test_label.object_type= ObjectType.corpus
+        mask_label.symbol = mask_test_label.symbol = 'mask_label'
 
 
 
         nextword=copy.deepcopy(data)
-        nextword.object_type=ObjectType.sequence_label
-        nextword.symbol='nextword_label'
-        nextword.sequence_offset=1
+        nextword_test = copy.deepcopy(data_test)
+        nextword.object_type=nextword_test.object_type=ObjectType.sequence_label
+        nextword.symbol=nextword_test.symbol='nextword_label'
+        nextword.sequence_offset=nextword_test.sequence_offset=1
 
         label=ZipDataset(seg_label,nextword,simplifided_label,traditional_label,mask_label)
-        provider=TextSequenceDataProvider(traindata=Iterator(data=data,label=label,sample_filter=lambda x:x[0][30]!=3))
+        label_test = ZipDataset(seg_test_label, nextword_test, simplifided_test_label, traditional_test_label, mask_test_label)
+        provider=TextSequenceDataProvider(
+            traindata=Iterator(data=data,label=label),
+            testdata=Iterator(data=data_test,label=label_test))
         return provider
+    #,sample_filter=lambda x:x[0][-1]==3
     else:
         return None

@@ -26,6 +26,7 @@ class ObjectType(Enum):
     gray = 'gray_image'
     rgb = 'rgb_image'
     rgba = 'rgba_image'
+    image_path='image_path'
     label_mask = 'label_mask'
     color_mask = 'color_mask'
     binary_mask = 'binary_mask'
@@ -166,8 +167,7 @@ class TensorSpec(object):
                  object_type: Optional[ObjectType] = None,
                  optional=False,
                  default=None,
-
-                 name=None):
+                 name=None,**kwargs):
         self._dtype = dtype if dtype is not None else None
         self._shape_tuple = None
         self.object_type = object_type
@@ -585,6 +585,8 @@ def get_signature(fn, name=None):
     if sig.return_annotation is not inspect._empty:
         if isinstance(returns, str):
             signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
+        elif returns is Tensor:
+            pass
         else:
             for i in range(len(returns)):
                 signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))

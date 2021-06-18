@@ -190,7 +190,10 @@ class BatchSampler(Sampler):
                         for i in range(len(unzip_batch_data)):
                             if check_same_size(*unzip_batch_data[i]):
                                 try:
-                                    returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i] ])
+                                    if all([isinstance(s,str) for s in unzip_batch_data[i]]):
+                                        returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]],dtype=np.string_)
+                                    else:
+                                        returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i] ])
                                 except Exception as e:
                                     print([array.shape for array in unzip_batch_data[i] ])
                             else:

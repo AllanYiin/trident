@@ -6,6 +6,7 @@ import copy
 import inspect
 import itertools
 import locale
+import numbers
 import os
 import random
 import string
@@ -318,12 +319,16 @@ class ImageDataProvider(object):
     def label_statistics(self):
         if isinstance(self.traindata.label, LabelDataset):
             unique, counts = np.unique(np.array(self.traindata.label.items), return_counts=True)
-            max_len = builtins.max([get_string_actual_length(item) for item in self.class_names[self.__default_language__]]) + 5
+            class_names_mapping=self.class_names[list(self.class_names.keys())[0]]
+
+            unique=[class_names_mapping[s] if s  in class_names_mapping  else class_names_mapping[int(s)] if  isinstance(class_names_mapping,list) else str(s)  for s in unique]
+            max_len = get_string_actual_length(unique)+ 5
             for i in range(len(unique)):
-                class_names = ''.join([' '] * max_len) if self.class_names is None or len(self.class_names) == 0 else self.index2label(unique[i]) + ''.join(
-                    [' '] * (max_len - get_string_actual_length(self.index2label(unique[i]))))
+                s=unique[i]
+                current_name=class_names_mapping[str(unique[i])] if not isinstance(s,numbers.Integral) and isinstance(class_names_mapping,dict) and unique[i] in class_names_mapping else class_names_mapping[int(s)] if isinstance(s,numbers.Integral) and isinstance(class_names_mapping,list) and isinstance(s,numbers.Integral)< len(class_names_mapping) else  str(unique[i])
+                #class_name = ''.join([' '] * max_len) if class_names_mapping is None or len(class_names_mapping) == 0 else self.index2label(unique[i]) + ''.join([' '] * (max_len - get_string_actual_length(self.index2label(unique[i]))))
                 bar = ['█'] * int(builtins.round(50 * counts[i] / float(len(self.traindata.label.items))))
-                print('{0:<10} {1} {2:<50} {3:,} ({4:.3%})'.format(unique[i], class_names, ''.join(bar), counts[i], counts[i] / float(len(self.traindata.label.items))))
+                print('{0:<10} {1} {2:<50} {3:,} ({4:.3%})'.format(s, current_name, ''.join(bar), counts[i], counts[i] / float(len(self.traindata.label.items))))
 
     def _next_index(self):
         return self.__next__()
@@ -402,10 +407,16 @@ class ImageDataProvider(object):
             self._lab2idx = {v: k for k, v in enumerate(self.class_names[lang])}
             self._idx2lab = {k: v for k, v in enumerate(self.class_names[lang])}
 
-    def index2label(self, idx: int):
+    def index2label(self, idx:( int,str)):
+        if isinstance(idx,str) and idx.isnumeric():
+            idx=int(idx)
         if self._idx2lab is None or len(self._idx2lab.items()) == 0:
             raise ValueError('You dont have proper mapping class names')
-        elif idx not in self._idx2lab:
+        elif isinstance(self._idx2lab,dict) and idx in self._idx2lab  :
+            return self._idx2lab[idx]
+        elif isinstance(self._idx2lab,list) and idx<len(self._idx2lab)  :
+            return self._idx2lab[idx]
+        elif idx not in self._idx2lab :
             raise ValueError('Index :{0} is not exist in class names'.format(idx))
         else:
             return self._idx2lab[idx]
