@@ -30,7 +30,7 @@ def is_in_colab():
         return False
 IS_IN_COLAB = is_in_colab()
 
-def is_in_kaggle_kernal():
+def is_in_kaggle_kernel():
     if 'kaggle' in os.environ['PYTHONPATH']:
         return True
     else:
