@@ -110,12 +110,16 @@ class Model(model.ModelBase):
         self.accumulate_grads_inteval = 1
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
+        if hasattr(output, '_signature'):
+            output._signature = None
         if isinstance(input_shape, numbers.Integral):
             input_shape = TensorShape([None] + [input_shape])
         elif isinstance(input_shape, (tuple, list)) and isinstance(input_shape[-1], numbers.Integral):
             input_shape = TensorShape([None] + list(input_shape))
 
-        if isinstance(output, (np.ndarray, torch.Tensor)):
+        if output is None:
+            raise ValueError('There is at least one output')
+        elif isinstance(output, (np.ndarray, torch.Tensor)):
             self._model = to_tensor(output, requires_grad=True)
             self._model._signature = Signature()
             self._model._signature.outputs['output'] = TensorSpec.tensor_to_spec(self._model)
@@ -130,8 +134,8 @@ class Model(model.ModelBase):
                 if not isinstance(inputs, dict):
                     for i in range(len(inputs)):
                         inp = to_tensor(inputs[i])
-                        output._signature.inputs['input{0}'.format(i)] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False, optional=False,
-                                                                                                   name='input{0}'.format(i))
+                        output._signature.inputs['input_{0}'.format(i)] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False, optional=False,
+                                                                                                   name='input_{0}'.format(i))
                 else:
                     for k, v in inputs.items():
                         inp = to_tensor(v)
@@ -143,8 +147,12 @@ class Model(model.ModelBase):
                 inputs = (inputs,)
             if input_shape is not None and not isinstance(input_shape, (tuple, list, dict)):
                 input_shape = (input_shape,)
-
-            output._signature = get_signature(output, output.__class__.__name__)
+            if isinstance(output,Combine):
+                output._signature =Signature(name=output.__class__.__name__)
+                for i in range(len(inputs)):
+                    output._signature.inputs['x_{0}'.format(i)]=TensorSpec(TensorShape([None]))
+            else:
+                output._signature = get_signature(output, output.__class__.__name__)
             if inputs is not None and len(output._signature.inputs) >= len(inputs) > 0:
                 if not isinstance(inputs, dict):
                     for i in range(len(inputs)):
@@ -167,7 +175,7 @@ class Model(model.ModelBase):
                                     available_items.remove(sk)
                                     break
 
-            if input_shape is not None and len(output._signature.inputs) >= len(input_shape):
+            elif input_shape is not None and len(output._signature.inputs) >= len(input_shape):
                 if not isinstance(input_shape, dict):
                     for i in range(len(input_shape)):
                         k = output._signature.inputs.key_list[i]
@@ -192,13 +200,6 @@ class Model(model.ModelBase):
                                     available_items.remove(sk)
                                     break
 
-            # input_shape = unpack_singleton(input_shape)
-            #
-
-        if output is None:
-            raise ValueError('There is at least one output')
-
-        elif isinstance(output, (Layer, nn.Module)):
             # update notes
             output.is_root = True
             output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules()) if isinstance(mod, Layer)])
@@ -222,7 +223,7 @@ class Model(model.ModelBase):
             else:
 
                 # output.input_shape = input_shape
-                dummay_input = [to_tensor(shp.get_dummy_tensor()).to(get_device()) for shp in input_shape]
+                dummay_input = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) for spec in output._signature.inputs.value_list]
                 # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                 output.to(get_device())
                 output.eval()
@@ -241,7 +242,7 @@ class Model(model.ModelBase):
 
             elif isinstance(out, (list, tuple)):
                 for i in range(len(out)):
-                    output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
+                    output.signature.outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
 
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (nn.Module)) for m in output]):
             output_list = []
@@ -260,8 +261,8 @@ class Model(model.ModelBase):
             self._model = model
             self.name = model.name
             for i in range(len(output_list)):
-                self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='output_{0}'.format(i))
-                self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='target_{0}'.format(i))
+                output.signature.outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='output_{0}'.format(i))
+
 
         elif isinstance(output, (np.ndarray, torch.Tensor)):
             pass
@@ -541,8 +542,8 @@ class Model(model.ModelBase):
                 pass
             else:
                 kwargs.pop(k)
-        if len(kwargs)>0:
-            self._metrics[alias] = partial(metric,**kwargs)
+        if len(kwargs) > 0:
+            self._metrics[alias] = partial(metric, **kwargs)
         self._metrics[alias].signature = args
         print(self._metrics[alias].signature)
         self._metrics[alias].__name__ = alias
@@ -662,8 +663,6 @@ class Model(model.ModelBase):
     def adjust_learning_rate(self, lr):
         self.optimizer.param_groups[0]['lr'] = lr
         self.training_context['current_lr'] = lr
-
-
 
     def do_on_epoch_start(self):
         super().do_on_epoch_start()
@@ -815,7 +814,7 @@ class Model(model.ModelBase):
         # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed['input'] if arg=='x' and 'input' in data_feed else data_feed[arg] for arg in self._model.signature.inputs.key_list]
+            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
                 train_data[item] = to_tensor(train_data[item], device=get_device())
                 if item in input_list and 'float' in str(train_data[item].dtype):
@@ -927,7 +926,7 @@ class Model(model.ModelBase):
 
             self.weights_history.append(weight_dict)
 
-    def save_model(self, save_path=None,**kwargs):
+    def save_model(self, save_path=None, **kwargs):
         is_abnormal = False
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
@@ -962,9 +961,9 @@ class Model(model.ModelBase):
                 device = get_device()
                 self._model.eval()
                 self._model.cpu()
-                tempfd, temppath = tempfile.mkstemp(prefix=filename,suffix=ext)
+                tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
                 _, tempfile_name, tempext = split_path(temppath)
-                move_path=os.path.join(folder,tempfile_name+tempext)
+                move_path = os.path.join(folder, tempfile_name + tempext)
                 try:
                     torch.save({
                         'state_dict': self._model.state_dict(),
@@ -974,11 +973,10 @@ class Model(model.ModelBase):
                         'signature': self._model.signature
                     }, temppath)
                     os.close(tempfd)
-                    shutil.move(temppath,move_path)
+                    shutil.move(temppath, move_path)
                     if os.path.exists(save_path):
                         os.remove(save_path)
-                    os.rename(move_path,save_path)
-
+                    os.rename(move_path, save_path)
 
                 except:
                     if not os.path.exists(save_path):
@@ -986,12 +984,9 @@ class Model(model.ModelBase):
                             os.rename(move_path, save_path)
                         elif os.path.exists(temppath):
                             shutil.move(temppath, save_path)
-                    if os.path.exists(temppath):
-                        os.remove(temppath)
 
-
-                save_path=save_path.replace( '.pth.tar', '.pth')
-                tempfd2, temppath2 = tempfile.mkstemp(prefix=filename,suffix= '.pth')
+                save_path = save_path.replace('.pth.tar', '.pth')
+                tempfd2, temppath2 = tempfile.mkstemp(prefix=filename, suffix='.pth')
                 _, tempfile2_name, tempext2 = split_path(temppath2)
                 move_path2 = os.path.join(folder, tempfile2_name + tempext2)
                 try:
@@ -1002,16 +997,12 @@ class Model(model.ModelBase):
                         os.unlink(save_path)
                     os.rename(move_path2, save_path)
 
-
                 except:
                     if not os.path.exists(save_path):
                         if os.path.exists(move_path2):
                             os.rename(move_path2, save_path)
                         elif os.path.exists(temppath2):
                             shutil.move(temppath2, save_path)
-                    if os.path.exists(temppath2):
-                        os.remove(temppath2)
-                        os.close(tempfd2)
 
                 self._model.to(get_device())
                 self._model.train()
@@ -1030,12 +1021,24 @@ class Model(model.ModelBase):
             save_path = os.path.join(folder, filename + ext)
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
-            numpy_model = to_numpy(self._model)
+            tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
+            _, tempfile_name, tempext = split_path(temppath)
+            move_path = os.path.join(folder, tempfile_name + tempext)
+            try:
+                numpy_model = to_numpy(self._model)
+                np.save(temppath, numpy_model)
+                os.close(tempfd)
+                shutil.move(temppath, move_path)
+                if os.path.exists(save_path):
+                    os.remove(save_path)
+                os.rename(move_path, save_path)
+            except:
+                if not os.path.exists(save_path):
+                    if os.path.exists(move_path):
+                        os.rename(move_path, save_path)
+                    elif os.path.exists(temppath):
+                        shutil.move(temppath, save_path)
 
-            if os.path.exists(save_path) and os.path.exists(save_path + '_'):
-                os.replace(save_path, save_path + '_')
-            elif os.path.exists(save_path):
-                os.rename(save_path, save_path + '_')
             np.save(save_path, numpy_model)
 
             sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
@@ -1045,7 +1048,7 @@ class Model(model.ModelBase):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_end(self.training_context)
 
-    def save_onnx(self, save_path=None, dynamic_axes=None,**kwargs):
+    def save_onnx(self, save_path=None, dynamic_axes=None, **kwargs):
         if isinstance(self._model, nn.Module):
 
             import_or_install('torch.onnx')
@@ -1104,8 +1107,6 @@ class Model(model.ModelBase):
                 if os.path.exists(temppath):
                     os.remove(temppath)
 
-
-
             import onnx
             from onnx import shape_inference
             onnx.save(shape_inference.infer_shapes(onnx.load(save_path.replace('.onnx_', '.onnx'))), save_path.replace('.onnx_', '.onnx'))
@@ -1115,7 +1116,7 @@ class Model(model.ModelBase):
         else:
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
-    def load_model(self, file_path,**kwargs):
+    def load_model(self, file_path, **kwargs):
         print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
@@ -1400,10 +1401,7 @@ class MuiltiNetwork(Model):
 
         elif name in ['_model']:
             object.__setattr__(self, '_model', value)
-            if value is not None and value.signature is None and hasattr(value, '_built') and value._built == True:
-                value.signature = Signature()
-                value.signature.inputs['input'] = TensorSpec(shape=value.input_shape, name='input')
-                value.signature.outputs['output'] = TensorSpec(shape=value.output_shape, name='output')
+
 
         else:
 
@@ -1511,12 +1509,10 @@ class MuiltiNetwork(Model):
             self._networks[k].unfreeze_model_scheduling(frequency, unit, slice_from, slice_to, module_name)
         return self
 
-    def save_model(self, save_path=None,**kwargs):
+    def save_model(self, save_path=None, **kwargs):
         for k in self._networks.keys():
             self._networks[k].save_model(self._networks[k].training_context['save_path'], )
         return self
-
-
 
     def do_on_epoch_start(self):
         self.training_context['time_epoch_progress'] = 0
@@ -1695,8 +1691,8 @@ class ImageClassificationModel(Model):
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
@@ -1961,7 +1957,7 @@ class LanguageModel(Model):
         self.vocabs = None
         self.preprocess_flow = []
 
-    def save_model(self, save_path=None):
+    def save_model(self, save_path=None, **kwargs):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
@@ -2033,7 +2029,7 @@ class LanguageModel(Model):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_end(self.training_context)
 
-    def save_onnx(self, save_path, dynamic_axes=None):
+    def save_onnx(self, save_path, dynamic_axes=None, **kwargs):
         if isinstance(self._model, nn.Module):
 
             import_or_install('torch.onnx')
@@ -2077,7 +2073,7 @@ class LanguageModel(Model):
         else:
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
-    def load_model(self, file_path):
+    def load_model(self, file_path, **kwargs):
         print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
