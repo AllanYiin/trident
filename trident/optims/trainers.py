@@ -30,7 +30,7 @@ from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
-from trident.backend.tensorspec import TensorSpec, assert_spec_compatibility
+from trident.backend.tensorspec import TensorSpec, assert_spec_compatibility, get_signature
 from trident.loggers.history import HistoryBase
 
 __all__ = ['TrainingPlan', 'GanTrainingPlan']
@@ -206,22 +206,22 @@ class TrainingPlan(object):
         training_item.training_context['training_name'] = self.training_names[n]
         self.training_items[n].start_epoch = start_epoch
         # backward compatibility
-        for k, v in training_item.inputs.items():
-            if isinstance(v, tuple) and all([isinstance(item, numbers.Integral) for item in v]):
-                training_item.inputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
-                training_item.signature.inputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
-            elif isinstance(v, TensorSpec):
-                training_item.signature.inputs[k] = v
-
-        for k, v in training_item.outputs.items():
-            if isinstance(v, tuple) and all([isinstance(item, numbers.Integral) for item in v]):
-                training_item.outputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
-                training_item.signature.outputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
-            elif isinstance(v, TensorSpec):
-                training_item.signature.outputs[k] = v
-        if isinstance(training_item.model, Layer) and training_item.signature != training_item.model.signature:
-            training_item.model.signature = None
-            training_item.signature = training_item.model.signature
+        # for k, v in training_item.signature.inputs.items():
+        #     if isinstance(v, tuple) and all([isinstance(item, numbers.Integral) for item in v]):
+        #         training_item.inputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
+        #         training_item.signature.inputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
+        #     elif isinstance(v, TensorSpec):
+        #         training_item.signature.inputs[k] = v
+        #
+        # for k, v in training_item.signature.outputs.items():
+        #     if isinstance(v, tuple) and all([isinstance(item, numbers.Integral) for item in v]):
+        #         training_item.outputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
+        #         training_item.signature.outputs[k] = TensorSpec(shape=to_tensor(v), name=training_item.name)
+        #     elif isinstance(v, TensorSpec):
+        #         training_item.signature.outputs[k] = v
+        # if isinstance(training_item.model, Layer) and training_item.signature != training_item.model.signature:
+        #     training_item.model.signature = None
+        #     training_item.signature = training_item.model.signature
         return self
 
     def with_data_loader(self, data_loader, **kwargs):
@@ -232,37 +232,9 @@ class TrainingPlan(object):
         self.num_epochs = num_epochs
         return self
 
-    @deprecated('0.7.0', 'with_batch_size')
-    def within_minibatch_size(self, minibatch_size: int):
-        self._batch_size = minibatch_size
-        return self
 
     def with_batch_size(self, batch_size: int):
         self._batch_size = batch_size
-        return self
-
-    @deprecated('0.7.0', 'with_tensorboard')
-    def within_tensorboard(self):
-        make_dir_if_need(os.path.join(working_directory, 'Logs'))
-        # check weather have tensorboard
-        if get_backend() == 'pytorch':
-            try:
-                from trident.loggers.pytorch_tensorboard import SummaryWriter
-                ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
-
-            except Exception as e:
-                print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
-                print(e)
-                PrintException()
-        elif get_backend() == 'tensorflow':
-            try:
-                from trident.loggers.tensorflow_tensorboard import SummaryWriter
-                ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
-
-            except Exception as e:
-                print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
-                print(e)
-                PrintException()
         return self
 
     def with_tensorboard(self):
@@ -315,7 +287,7 @@ class TrainingPlan(object):
 
     def print_gradients_scheduling(self, frequency: int, unit='batch'):
 
-        pg = PrintGradientsCallback(frequency=frequency,unit=unit,)
+        pg = PrintGradientsCallback(frequency=frequency, unit=unit, )
         pg.is_shared = False
         self.callbacks.append(pg)
         return self
@@ -338,7 +310,7 @@ class TrainingPlan(object):
         if unit not in ['batch', 'epoch']:
             raise ValueError('unit should be batch or epoch')
 
-        tile = TileImageCallback(frequency=frequency,unit=unit,
+        tile = TileImageCallback(frequency=frequency, unit=unit,
                                  save_path=save_path, name_prefix=name_prefix, include_input=include_input,
                                  include_output=include_output, include_target=include_target,
                                  include_mask=include_mask, imshow=imshow)
@@ -362,7 +334,7 @@ class TrainingPlan(object):
                 except Exception as e:
                     PrintException()
                     raise ValueError('save_path:{0} is not valid path'.format(folder))
-        plot = PlotLossMetricsCallback(frequency=frequency,unit=unit,
+        plot = PlotLossMetricsCallback(frequency=frequency, unit=unit,
                                        save_path=save_path, name_prefix=name_prefix.format(get_time_suffix()),
                                        clean_ipython_output_frequency=clean_ipython_output_frequency, imshow=imshow)
         self.callbacks.append(plot)
@@ -386,6 +358,8 @@ class TrainingPlan(object):
             existing_data_feed = None
             if 'data_feed' in trainingitem.training_context:
                 existing_data_feed = trainingitem.training_context['data_feed']
+            if not hasattr(trainingitem._model, '_signature') or trainingitem._model._signature is None:
+                trainingitem._model._signature = get_signature(trainingitem._model)
 
             data_feed = OrderedDict()
             # datasets = data_provider.traindata.get_datasets()
@@ -403,12 +377,16 @@ class TrainingPlan(object):
                 for inp in v.signature.inputs.key_list:
                     data_feed[inp] = None
 
-            if ('x' in data_feed or 'input' in data_feed) and 'input' in available_items:
-                if 'x' in data_feed:
+            if 'x' in data_feed:
+                if len(data_symbols) == 1 and data_symbols[0] in available_items:
+                    data_feed['x'] = data_symbols[0]
+                    available_items.remove(data_symbols[0])
+
+                if 'x' in available_items:
+                    data_feed['x'] = 'x'
+                    available_items.remove('x')
+                elif 'input' in available_items:
                     data_feed['x'] = 'input'
-                    available_items.remove('input')
-                elif 'input' in data_feed:
-                    data_feed['input'] = 'input'
                     available_items.remove('input')
 
             if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
@@ -445,9 +423,22 @@ class TrainingPlan(object):
             print('data_feed for {0} :'.format(trainingitem.name))
             print(json.dumps(data_feed, indent=4, sort_keys=True))
 
+    def do_on_training_start(self):
+        for callback in self.callbacks:
+            callback.on_training_start(self.__dict__)
+        for item in self.training_items.value_list:
+            item.train()
+
+    def do_on_training_end(self):
+        for callback in self.callbacks:
+            callback.on_training_end(self.__dict__)
+        for item in self.training_items.value_list:
+            item.save_model()
+            item.eval()
 
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
+
         data_provider = self._dataloaders.value_list[0]
         data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'
@@ -502,6 +493,7 @@ class TrainingPlan(object):
 
             if len(data_provider._batch_transform_funcs) > 0:
                 data_provider.traindata.batch_sampler._batch_transform_funcs = data_provider._batch_transform_funcs
+            self.do_on_training_start()
             for epoch in range(self.num_epochs):
                 try:
                     for mbs, return_data in enumerate(data_provider):
@@ -538,7 +530,7 @@ class TrainingPlan(object):
                                 need_out_sample_evaluation = True
 
                             iter_testdata = None
-                            if isinstance(data_provider, (DataProvider,TextSequenceDataProvider)) and data_provider.testdata is not None and need_out_sample_evaluation:
+                            if isinstance(data_provider, (DataProvider, TextSequenceDataProvider)) and data_provider.testdata is not None and need_out_sample_evaluation:
                                 return_test = data_provider.next_test()
                                 if return_test is not None:
                                     iter_testdata = OrderedDict()
@@ -557,28 +549,31 @@ class TrainingPlan(object):
                                 trainitem.training_context['data_template'] = data_provider.traindata.data_template
                                 trainitem.training_context['collect_data_inteval'] = collect_data_inteval
                                 trainitem.training_context['model_name'] = trainitem_name
-                                if epoch < int(trainitem.start_epoch):
+                                start_epoch = 0 if not hasattr(trainitem, 'start_epoch') else trainitem.start_epoch
+                                if epoch < start_epoch:
                                     trainitem.training_context['stop_update'] = 1
-
-                                num_batches=len(data_provider.batch_sampler) if only_steps == False else max_batches
-                                current_batch=mbs if only_steps == False else self.steps
-                                current_epoch=epoch if only_steps == False else 0
-                                if current_batch ==0:
-                                    if current_epoch==0:
-                                        trainitem.do_on_training_start()
+                                num_epoch = self.num_epochs if only_steps == False else 1
+                                num_batches = len(data_provider.batch_sampler) if only_steps == False else max_batches
+                                current_batch = mbs if only_steps == False else self.steps
+                                current_epoch = epoch if only_steps == False else 0
+                                if current_batch == 0:
                                     trainitem.do_on_epoch_start()
+                                trainitem.steps = self.steps
+                                trainitem.current_epoch = current_epoch
+                                trainitem.current_batch = current_batch
                                 trainitem.train_model(train_data, test_data,
-                                                      epoch if only_steps == False else 0,
-                                                      mbs if only_steps == False else self.steps,
-                                                      self.num_epochs if only_steps == False else 1,
+                                                      current_epoch,
+                                                      current_batch,
+                                                      num_epoch,
                                                       num_batches,
                                                       done=None,
-                                                      is_collect_data=mbs == 0 or mbs % collect_data_inteval == 0,
+                                                      is_collect_data=current_batch == 0 or current_batch % collect_data_inteval == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
-                                                      accumulate_grads=(trainitem.training_context['steps']+1) % trainitem.accumulation_steps != 0, is_out_sample_evaluation=need_out_sample_evaluation)
-                                if current_batch==num_batches-1:
+                                                      accumulate_grads=(trainitem.training_context['steps'] + 1) % trainitem.accumulation_steps != 0,
+                                                      is_out_sample_evaluation=need_out_sample_evaluation)
+                                if current_batch == num_batches - 1:
                                     trainitem.do_on_epoch_end()
                             self.steps += 1
 
@@ -596,7 +591,7 @@ class TrainingPlan(object):
                                             compare_dict[k] = OrderedDict()
                                         compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
                                 for k, v in compare_dict.items():
-                                    self.summary_writer.add_scalars(k, v, step)
+                                    ctx.summary_writer.add_scalars(k, v, step)
 
                             if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
@@ -617,7 +612,7 @@ class TrainingPlan(object):
                             if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
-                                    trainitem.save_model(trainitem.training_context['save_path'])
+                                    trainitem.save_model(trainitem.training_context['save_path'], )
                                     if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
                                         trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
                                         ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
@@ -625,7 +620,7 @@ class TrainingPlan(object):
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
                                     try:
-                                        trainitem.save_model(trainitem.training_context['save_path'])
+                                        trainitem.save_model(trainitem.training_context['save_path'], )
                                     except Exception as e:
                                         print(e)
                                 data_provider.mode = 'tuple'
@@ -638,36 +633,36 @@ class TrainingPlan(object):
                 except StopIteration:
                     for k, trainitem in self.training_items.items():
                         trainitem.do_on_epoch_end()
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.save_model(trainitem.training_context['save_path'], )
 
                 except ValueError as ve:
                     print(ve)
                     PrintException()
                     for k, trainitem in self.training_items.items():
-                        trainitem.do_on_training_end()
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.do_on_excution_exception()
+
                 except Exception as e:
                     print(e)
                     PrintException()
                     for k, trainitem in self.training_items.items():
-                        trainitem.do_on_training_end()
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.do_on_excution_exception()
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.save_model(trainitem.training_context['save_path'], )
+            self.do_on_training_end()
             data_provider.mode = 'tuple'
 
 
         except KeyboardInterrupt:
             for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'])
+                trainitem.save_model(trainitem.training_context['save_path'], )
             data_provider.mode = 'tuple'
         except Exception as e:
             print(e)
             PrintException()
             for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'])
+                trainitem.save_model(trainitem.training_context['save_path'], )
             data_provider.mode = 'tuple'
 
     def resume(self):
@@ -1276,7 +1271,7 @@ class GanTrainingPlan(TrainingPlan):
                                             compare_dict[k] = OrderedDict()
                                         compare_dict[k][k + "/" + trainitem_name] = v[-1][1]
                                 for k, v in compare_dict.items():
-                                    self.summary_writer.add_scalars(k, v, step)
+                                    ctx.summary_writer.add_scalars(k, v, step)
 
                             if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
@@ -1294,7 +1289,7 @@ class GanTrainingPlan(TrainingPlan):
                             if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
-                                    trainitem.save_model(trainitem.training_context['save_path'])
+                                    trainitem.save_model(trainitem.training_context['save_path'], )
                                     if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
                                         trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
                                         ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
@@ -1302,7 +1297,7 @@ class GanTrainingPlan(TrainingPlan):
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
                                     try:
-                                        trainitem.save_model(trainitem.training_context['save_path'])
+                                        trainitem.save_model(trainitem.training_context['save_path'], )
                                     except Exception as e:
                                         print(e)
                                 data_provider.mode = 'tuple'
@@ -1315,36 +1310,35 @@ class GanTrainingPlan(TrainingPlan):
                 except StopIteration:
                     for k, trainitem in self.training_items.items():
                         trainitem.do_on_epoch_end()
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.save_model(trainitem.training_context['save_path'], )
 
                 except ValueError as ve:
                     print(ve)
                     PrintException()
                     for k, trainitem in self.training_items.items():
-                        trainitem.do_on_training_end()
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.do_on_excution_exception()
                 except Exception as e:
                     print(e)
                     PrintException()
                     for k, trainitem in self.training_items.items():
-                        trainitem.do_on_training_end()
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.do_on_excution_exception()
+
                 if self.save_model_frequency > 0 and self.save_model_unit == 'epoch' and (
                         epoch + 1) % self.save_model_frequency == 0:
                     for k, trainitem in self.training_items.items():
-                        trainitem.save_model(trainitem.training_context['save_path'])
+                        trainitem.save_model(trainitem.training_context['save_path'], )
             data_provider.mode = 'tuple'
 
 
         except KeyboardInterrupt:
             for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'])
+                trainitem.save_model(trainitem.training_context['save_path'], )
             data_provider.mode = 'tuple'
         except Exception as e:
             print(e)
             PrintException()
             for k, trainitem in self.training_items.items():
-                trainitem.save_model(trainitem.training_context['save_path'])
+                trainitem.save_model(trainitem.training_context['save_path'], )
             data_provider.mode = 'tuple'
 
 
