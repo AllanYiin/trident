@@ -1704,9 +1704,9 @@ class Ranger(Optimizer):
 
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
             beta1, beta2 = group['betas']
-
+            state['step'] += 1.0
             if self.gradient_centralization in ['all', 'gcc']:
-                if grad.ndim > 3:
+                if grad.ndim > 1:
                     grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim)),keepdims=True))
 
 
@@ -1714,7 +1714,7 @@ class Ranger(Optimizer):
             exp_avg_sq=beta2 * exp_avg_sq + (1.0 - beta2) * (grad**2)
 
 
-            state['step'] += 1.0
+
             buffered = self.radam_buffer[int(state['step'] % 10)]
 
             if state["step"] == buffered[0]:
@@ -1741,22 +1741,32 @@ class Ranger(Optimizer):
                     step_size = 1.0 / (1 - beta1 ** state["step"])
                 buffered[2] = step_size
 
-            if group['weight_decay'] != 0:
-                p_data = p_data - p.value() * group['weight_decay'] * group['lr']
+
 
             if N_sma >= 5:
                 denom = sqrt(exp_avg_sq) + group["eps"]
-                p_data +=  (exp_avg / denom)*(-step_size * group['lr'])
+                G_grad = exp_avg / denom
+                #p_data +=  (exp_avg / denom)*(-step_size * group['lr'])
             else:
-                p_data +=  exp_avg*-step_size * group['lr']
+                #p_data +=  exp_avg*-step_size * group['lr']
+                G_grad = exp_avg
 
+            if group['weight_decay'] != 0:
+                # p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
+                G_grad+=p_data*group['weight_decay']
 
+            if self.gradient_centralization in ['all', 'gc']:
+                if G_grad.ndim > 3:
+                    G_grad+=(-G_grad.reduce_mean(axis=list(range(1, G_grad.ndim)),keepdims=True))
 
             if any_abnormal_number(p_data):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
                 p_data = where(is_abnormal_number(p_data), p.value().detach(), p_data)
 
+
+            p_data+=G_grad*(-step_size * group['lr'])
             p.assign(p_data, use_locking=False)
+
             state['exp_avg'] =exp_avg
             state['exp_avg_sq'] = exp_avg_sq
 
