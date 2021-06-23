@@ -187,7 +187,7 @@ def InceptionAux(num_classes=1000,name=None):
     )
 
 
-def InceptionV3(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 224, 224), classes=1000, **kwargs):
+def InceptionV3(include_top=True, pretrained=True,freeze_features=True, input_shape=(3, 224, 224), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -205,7 +205,7 @@ def InceptionV3(include_top=True, pretrained=True,freeze_features=False, input_s
     #     recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
     #     effb0.model = recovery_model
     # else:
-    #     effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=False)
+    #     effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=True)
     #
     # effb0.model .input_shape = input_shape
     # effb0.model .to(get_device())

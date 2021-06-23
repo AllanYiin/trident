@@ -228,7 +228,7 @@ class Word2Vec(Embedding):
         return OrderedDict(zip(words, probs))
 
 
-def ChineseWord2Vec(pretrained=True, freeze_features=False, **kwargs):
+def ChineseWord2Vec(pretrained=True, freeze_features=True, **kwargs):
     if pretrained==True:
         return Word2Vec.load()
     else:
