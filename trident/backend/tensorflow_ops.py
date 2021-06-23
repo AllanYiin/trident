@@ -19,14 +19,14 @@ from tensorflow.python.eager import context
 from tensorflow.python.ops import array_ops
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
-
+from tensorflow.python.framework.ops  import composite_tensor
 from tensorflow.python.ops import math_ops
 
 from trident.backend.common import dtype as Dtype
 
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
 
-__all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor','to_scalar', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -42,6 +42,7 @@ __all__ = ['Tensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy'
 
 ctx=get_session()
 Tensor=tf.Tensor
+CompositeTensor=composite_tensor.CompositeTensor
 FLOAT32MAX=np.finfo(float).max
 FLOAT32MIN=np.finfo(float).min
 
@@ -161,7 +162,7 @@ def is_tensor(x):
 
     if isinstance(x,EagerTensor):
         return True
-    elif x.__class__.__name__ == 'EagerTensor':
+    elif hasattr(x,'__class__') and hasattr(x.__class__,'__name__') and x.__class__.__name__ == 'EagerTensor':
         return True
     elif isinstance(x, Tensor):
         return True
@@ -354,6 +355,33 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     # if dtype is not None :
     #     x = cast(x, dtype)
     # return x
+
+def to_scalar(x):
+    if x is None:
+        return None
+    elif is_tensor(x):
+        x=squeeze(x)
+        if ndim(x)==0:
+            return to_numpy(x).item()
+        elif ndim(x)==1:
+            return to_numpy(x)[-1].item()
+        else:
+            return to_numpy(x).mean().item()
+    elif isinstance(x,np.ndarray):
+        x=np.squeeze(x)
+        if len(x.shape)==0:
+            return x.item()
+        elif len(x.shape)==1:
+            return x[-1].item()
+        else:
+            return x.mean().item()
+    elif isinstance(x,numbers.Number):
+        return x
+    elif isinstance(x,(list,tuple)) and len(x)>0:
+        return to_scalar(x[-1])
+    else:
+       return None
+
 
 def copy(x:Tensor):
     return tf.identity(x)
@@ -588,7 +616,7 @@ def is_nan(x):
         x = x.value()
     if is_tensor(x):
         return tf.math.is_nan(x)
-    elif 'Layer' in x.__class__.__name__:
+    elif hasattr(x,'__class__') and hasattr(x.__class__,'__name__') and 'Layer' in x.__class__.__name__:
         return [tf.math.is_inf(para.value()) for para in x.weights]
     elif isinstance(x, np.ndarray):
         return np.isnan(x)
@@ -601,7 +629,7 @@ def is_inf(x):
         x = x.value()
     if is_tensor(x):
         return tf.math.is_inf(x)
-    elif 'Layer' in x.__class__.__name__:
+    elif hasattr(x,'__class__') and hasattr(x.__class__,'__name__') and 'Layer' in x.__class__.__name__:
         return [tf.math.is_inf(para.value())for para in x.weights]
     elif isinstance(x, np.ndarray):
         return np.isinf(x)
@@ -3741,7 +3769,7 @@ def random_choice(x: Tensor,n:int=1):
     idxes = np.arange(len(x))
     np.random.shuffle(idxes)
     idx = idxes[:n]
-    return unpack_singleton(x[idx])
+    return x[idx]
 
 
 
