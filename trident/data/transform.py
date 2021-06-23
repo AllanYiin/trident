@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections import Iterable
-from typing import Sequence, Tuple, Dict, Union, Optional
+from typing import Sequence, Tuple, Dict, Union, Optional, Callable, Any
 import collections
 import  numpy as np
 import cv2
@@ -118,7 +118,11 @@ class VisionTransform(Transform):
         if apply_func is None:
             return input
         else:
-            return apply_func(input,spec)
+
+            img_data=apply_func(input,spec)
+            if apply_func.__qualname__ == '_apply_image':
+                img_data=self.check_pixel_range(img_data)
+            return img_data
 
 
     def _get_apply(self, key):
@@ -137,6 +141,18 @@ class VisionTransform(Transform):
             return getattr(self, "_apply_{}".format('labels'), None)
         return None
 
+    def check_pixel_range(self,image):
+        max_value=image.copy().max()
+        min_value=image.copy().min()
+        if max_value>255 or min_value<0:
+            raise ValueError('{0} over bundary max:{1} :{2}'.format(self.__class__.__name__,max_value,min_value))
+        elif max_value-min_value<1:
+            raise  ValueError('{0} almost monotone max:{1} :{2}'.format(self.__class__.__name__,max_value,min_value))
+        elif np.greater(image.copy(),127.5).astype(np.float32).mean()>0.95:
+            raise  ValueError('{0} almost white max:{1} :{2}'.format(self.__class__.__name__,max_value,min_value))
+        elif np.less(image.copy(),127.5).astype(np.float32).mean()>0.95:
+            raise  ValueError('{0} almost black max:{1} :{2}'.format(self.__class__.__name__,max_value,min_value))
+        return image
 
 
     def _apply_image(self, image,spec:TensorSpec):
@@ -205,19 +221,35 @@ class TextTransform(Transform):
         _apply_*() methods, otherwise ``NotImplementedError`` will be raised.
     """
 
-    def __init__( name=None):
+    def __init__(self, name=None):
         super().__init__(name=name)
+        self._text_info = None
+
+    def _precalculate(self, textdata, **kwargs):
+        pass
+
+
 
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
         r"""Apply transform on batch input data."""
         if not isinstance(inputs,OrderedDict) :
+            self._text_info = None
             if spec is None and self.is_spatial==True:
-                self._shape_info =None
-                spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.rgb)
+                spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.corpus)
+            self._precalculate(inputs)
             return self.apply(inputs, spec)
         else:
             results=OrderedDict()
-            self._shape_info = None
+            self._text_info = None
+            is_precalculate=False
+            for k,v in inputs.items():
+                if k.object_type is None:
+                    k.object_type=object_type_inference(v)
+                if isinstance(k,TensorSpec) and k.object_type==ObjectType.corpus:
+                    self._precalculate(v)
+                    is_precalculate=True
+            if not is_precalculate:
+                self._precalculate(inputs.value_list[0])
             for spec, data in inputs.items():
                 results[spec]=self.apply(data, spec)
             return results
@@ -254,6 +286,7 @@ class TextTransform(Transform):
 
     def _apply_sequence_mask(self, mask,spec:TensorSpec):
         raise NotImplementedError
+
     def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
         spec=kwargs.get('spec')
         return self.apply_batch(inputs,spec)
