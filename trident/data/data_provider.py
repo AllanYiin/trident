@@ -35,10 +35,12 @@ from trident.data.image_common import *
 from trident.data.label_common import *
 from trident.data.samplers import *
 from trident.data.dataset import *
+from trident import context
 
-_session = get_session()
+ctx = context._context()
 _trident_dir = get_trident_dir()
-_locale = locale.getdefaultlocale()[0].lower()
+
+
 
 __all__ = ['ImageDataProvider', 'DataProvider', 'TextSequenceDataProvider']
 
@@ -66,12 +68,12 @@ class ImageDataProvider(object):
             raise ValueError("Valid mode should be tuple or dict ")
 
         self._batch_size = batch_size
-        self.__default_language__ = 'en-us'
+        self.__default_language__ =ctx.locale
         if len(self._class_names) > 0:
-            if _locale in self._class_names:
-                self.__default_language__ = _locale
+            if ctx.locale in self._class_names:
+                self.__default_language__ = ctx.locale
             for k in self._class_names.keys():
-                if _locale.split('-')[0] in k:
+                if ctx.locale.split('-')[0] in k:
                     self.__default_language__ = k
                     break
 
@@ -401,7 +403,7 @@ class ImageDataProvider(object):
     def binding_class_names(self, class_names=None, language=None):
         if class_names is not None and hasattr(class_names, '__len__'):
             if language is None:
-                language = 'en-us'
+                language = ctx.locale
             self.class_names[language] = list(class_names)
             print('Mapping class_names  in {0}   success, total {1} class names added.'.format(language, len(class_names)))
             self.__default_language__ = language
@@ -487,10 +489,10 @@ class TextSequenceDataProvider(object):
         self._batch_size = batch_size
         self.__default_language__ = 'en-us'
         if len(self._class_names) > 0:
-            if _locale in self._class_names:
-                self.__default_language__ = _locale
+            if ctx.locale in self._class_names:
+                self.__default_language__ = ctx.locale
             for k in self._class_names.keys():
-                if _locale.split('-')[0] in k:
+                if ctx.locale.split('-')[0] in k:
                     self.__default_language__ = k
                     break
 
