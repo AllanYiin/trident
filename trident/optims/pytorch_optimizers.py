@@ -15,7 +15,7 @@ from trident.backend.common import get_class, snake2camel
 from trident.backend.pytorch_ops import *
 
 __all__ = ['Adam', 'SGD', 'LBFGS', 'Adadelta', 'Adagrad', 'RMSprop', 'RAdam', 'PlainRAdam', 'AdamW', 'Lookahead',
-           'Ranger', 'RangerLars', 'AdaBelief', 'RangerBelief', 'DiffGrad', 'Lamb', 'get_optimizer']
+           'Ranger', 'RangerLars', 'AdaBelief', 'RangerAdaBelief', 'DiffGrad', 'Lamb', 'get_optimizer']
 
 
 class Optimizer(optimizer.Optimizer):
@@ -711,8 +711,10 @@ class RAdam(Optimizer):
 
         """
         loss = None
+
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
@@ -803,8 +805,10 @@ class PlainRAdam(Optimizer):
 
         """
         loss = None
+
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
         for group in self.param_groups:
 
@@ -903,8 +907,10 @@ class AdamW(Optimizer):
 
         """
         loss = None
+
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
         for group in self.param_groups:
 
@@ -992,7 +998,11 @@ class Lookahead(Optimizer):
             closure (callable): call for get loss backward
 
         """
-        loss = self.optimizer.step(closure, )
+        loss = None
+
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
         for group in self.param_groups:
             if group["counter"] == 0:
                 self.update(group)
@@ -1025,7 +1035,7 @@ class Ranger(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-7,
+    def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
                  weight_decay=0, gradient_centralization=None):
         self.gradient_centralization = gradient_centralization
         # parameter checks
@@ -1047,7 +1057,7 @@ class Ranger(Optimizer):
         # prep defaults and init torch.optim base
         defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas,
                         N_sma_threshhold=N_sma_threshhold, eps=eps,
-                        weight_decay=weight_decay)
+                        weight_decay=weight_decay, gradient_centralization=gradient_centralization)
         super().__init__(params, defaults)
 
         # adjustable threshold
@@ -1094,38 +1104,49 @@ class Ranger(Optimizer):
         """
         loss = None
 
-        if closure is not None:
-            loss = closure()
 
-        # Evaluate averages and grad, update param tensors
+        if closure is not None:
+            with torch.enable_grad():
+                loss = closure()
+
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
                 grad = p.grad.data
 
                 if grad.is_sparse:
                     raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
-                p_data = p.data
+                # p_data = p.data
+                p_data_fp32 = p.data.float()
 
                 state = self.state[p]  # get state dict for this param
 
                 if len(state) == 0:  # if first time to run...init dictionary with our desired entries
                     state['step'] = 0.0
-                    state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
-                    state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
+                    state['exp_avg'] = torch.zeros_like(p_data_fp32)
+                    state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)
 
                     # look ahead weight storage now in state dict
-                    state['slow_buffer'] = torch.empty_like(p.data)
-                    state['slow_buffer'].copy_(p.data)
+                    state['slow_buffer'] = torch.empty_like(p_data_fp32)
+                    state['slow_buffer'].copy_(p_data_fp32)
                 else:
-                    state['exp_avg'] = state['exp_avg'].type_as(p_data)
-                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
+                    state['exp_avg'] = state['exp_avg'].type_as(p_data_fp32)
+                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data_fp32)
 
                 # begin computations
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
+                state['step'] += 1.0
+
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
@@ -1134,8 +1155,8 @@ class Ranger(Optimizer):
 
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
-                state['step'] += 1.0
                 buffered = self.radam_buffer[int(state['step'] % 10)]
+
                 if state['step'] == buffered[0]:
                     N_sma, step_size = buffered[1], buffered[2]
                 else:
@@ -1144,43 +1165,48 @@ class Ranger(Optimizer):
                     N_sma_max = 2 / (1 - beta2) - 1
                     N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
                     buffered[1] = N_sma
-
-                    # more conservative since it's an approximated value
-                    if N_sma >= self.N_sma_threshhold:
-                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                    if N_sma > self.N_sma_threshhold:
+                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (
+                                N_sma - 2) / N_sma * N_sma_max / (N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     else:
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
 
+
+                if N_sma > self.N_sma_threshhold:
+                    denom = exp_avg_sq.sqrt().add_(group['eps'])
+                    #p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
+                    G_grad = exp_avg / denom
+                else:
+                    #p_data_fp32.add_(exp_avg, alpha=-step_size * group['lr'])
+                    G_grad = exp_avg
+
                 if group['weight_decay'] != 0:
-                    grad = grad.add(p, alpha=group['weight_decay'])
+                    #p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
+                    G_grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
                 if self.gradient_centralization in ['all', 'gc']:
                     if len(list(grad.size())) > 1:
-                        grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
+                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
 
-                if N_sma > 5:
-                    denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    p_data.addcdiv_(exp_avg, denom, value=-step_size * group['lr'])
-                else:
-                    p_data.add_(exp_avg, alpha=-step_size * group['lr'])
-
-                if any_abnormal_number(p_data):
+                if any_abnormal_number(p_data_fp32):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                    p_data = where(is_abnormal_number(p_data), p.data, p_data)
+                    p_data = where(is_abnormal_number(p_data_fp32), p.data, p_data_fp32)
 
-                p.data.copy_(p_data)
-
+                p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
+                p.data.copy_(p_data_fp32)
                 # integrated look ahead...
                 # we do it at the param level instead of group level
                 if state['step'] % group['k'] == 0:
-                    slow_p = state['slow_buffer']  # get access to slow param tensor
-                    slow_p.add_(p.data - slow_p, alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                    # get access to slow param tensor
+                    slow_p = state['slow_buffer']
+                    # (fast weights - slow weights) * alpha
+                    slow_p.add_(p.data - slow_p,alpha=self.alpha)
                     if any_abnormal_number(slow_p):
                         sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                         slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
-                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+                    # copy interpolated weights to RAdam param tensor
+                    p.data.copy_(slow_p)
 
         return loss
 
@@ -1241,111 +1267,118 @@ class RangerLars(Optimizer):
         """
         loss = None
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
-            for group in self.param_groups:
-                for p in group['params']:
-                    if p.grad is None or not p.requires_grad:
-                        continue
-                    grad = p.grad.data.float()
+        for group in self.param_groups:
+            for p in group['params']:
+                if p.grad is None or not p.requires_grad:
+                    continue
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+                grad = p.grad.data.float()
 
-                    if grad.is_sparse:
-                        raise RuntimeError('Ranger optimizer does not support sparse gradients')
+                if grad.is_sparse:
+                    raise RuntimeError('Ranger optimizer does not support sparse gradients')
 
-                    p_data = p.data.float()
+                p_data = p.data.float()
 
-                    state = self.state[p]  # get state dict for this param
+                state = self.state[p]  # get state dict for this param
 
-                    if len(state) == 0:  # if first time to run...init dictionary with our desired entries
-                        state['step'] = 0
-                        state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
-                        state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
+                if len(state) == 0:  # if first time to run...init dictionary with our desired entries
+                    state['step'] = 0
+                    state['exp_avg'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
+                    state['exp_avg_sq'] = torch.zeros_like(p_data, memory_format=torch.preserve_format)
 
-                        # look ahead weight storage now in state dict
-                        state['slow_buffer'] = torch.empty_like(p.data)
-                        state['slow_buffer'].copy_(p.data)
+                    # look ahead weight storage now in state dict
+                    state['slow_buffer'] = torch.empty_like(p.data)
+                    state['slow_buffer'].copy_(p.data)
+                else:
+                    state['exp_avg'] = state['exp_avg'].type_as(p_data)
+                    state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
+
+                # begin computations
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+                beta1, beta2 = group['betas']
+                if self.gradient_centralization in ['all', 'gcc']:
+                    if len(list(grad.size())) > 3:
+                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+
+                exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+
+                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+                # grad=_filter_grads(grad,self.gradient_centralization)
+
+                state['step'] += 1
+                buffered = self.radam_buffer[int(state['step'] % 10)]
+                if state['step'] == buffered[0]:
+                    N_sma, step_size = buffered[1], buffered[2]
+                else:
+                    buffered[0] = state['step']
+                    beta2_t = beta2 ** state['step']
+                    N_sma_max = 2 / (1 - beta2) - 1
+                    N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                    buffered[1] = N_sma
+
+                    # more conservative since it's an approximated value
+                    if N_sma >= self.N_sma_threshhold:
+                        step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
+                                N_sma_max - 2)) / (1 - beta1 ** state['step'])
                     else:
-                        state['exp_avg'] = state['exp_avg'].type_as(p_data)
-                        state['exp_avg_sq'] = state['exp_avg_sq'].type_as(p_data)
+                        step_size = 1.0 / (1 - beta1 ** state['step'])
+                    buffered[2] = step_size
 
-                    # begin computations
-                    exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-                    beta1, beta2 = group['betas']
-                    if self.gradient_centralization in ['all', 'gcc']:
-                        if len(list(grad.size())) > 3:
-                            grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                update = zeros_like(p_data)
+                if N_sma >= 5:
+                    denom = exp_avg_sq.sqrt().add_(group['eps'])
+                    update.addcdiv_(exp_avg, denom, value=step_size)
+                else:
+                    update.add_(exp_avg, alpha=step_size)
 
-                    exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                # if group['weight_decay'] != 0:
+                #     update.add_(group['weight_decay'], p_data)
+                if group['weight_decay'] != 0:
+                    grad = grad.add(p, alpha=group['weight_decay'])
 
-                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+                if self.gradient_centralization in ['all', 'gc']:
+                    if len(list(grad.size())) > 1:
+                        grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
 
-                    # grad=_filter_grads(grad,self.gradient_centralization)
+                radam_norm = update.pow(2.0).sum().sqrt()
+                weight_norm = p.data.pow(2.0).sum().sqrt()
+                if weight_norm == 0 or radam_norm == 0:
+                    trust_ratio = 1.0
+                else:
+                    trust_ratio = weight_norm / radam_norm
 
-                    state['step'] += 1
-                    buffered = self.radam_buffer[int(state['step'] % 10)]
-                    if state['step'] == buffered[0]:
-                        N_sma, step_size = buffered[1], buffered[2]
-                    else:
-                        buffered[0] = state['step']
-                        beta2_t = beta2 ** state['step']
-                        N_sma_max = 2 / (1 - beta2) - 1
-                        N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
-                        buffered[1] = N_sma
+                trust_ratio = clip(to_tensor(trust_ratio), 0.0, 10.0)
 
-                        # more conservative since it's an approximated value
-                        if N_sma >= self.N_sma_threshhold:
-                            step_size = math.sqrt((1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
-                                    N_sma_max - 2)) / (1 - beta1 ** state['step'])
-                        else:
-                            step_size = 1.0 / (1 - beta1 ** state['step'])
-                        buffered[2] = step_size
+                state['weight_norm'] = weight_norm
+                state['adam_norm'] = radam_norm
+                state['trust_ratio'] = trust_ratio
 
-                    update = zeros_like(p_data)
-                    if N_sma >= 5:
-                        denom = exp_avg_sq.sqrt().add_(group['eps'])
-                        update.addcdiv_(exp_avg, denom, value=step_size)
-                    else:
-                        update.add_(exp_avg, alpha=step_size)
+                p_data.add_(-update * trust_ratio * group['lr'])
 
-                    # if group['weight_decay'] != 0:
-                    #     update.add_(group['weight_decay'], p_data)
-                    if group['weight_decay'] != 0:
-                        grad = grad.add(p, alpha=group['weight_decay'])
+                if any_abnormal_number(p_data):
+                    sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
+                p_data.copy_(where(is_abnormal_number(p_data), p.data, p_data))
 
-                    if self.gradient_centralization in ['all', 'gc']:
-                        if len(list(grad.size())) > 1:
-                            grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
+                p.data.copy_(p_data)
 
-                    radam_norm = update.pow(2.0).sum().sqrt()
-                    weight_norm = p.data.pow(2.0).sum().sqrt()
-                    if weight_norm == 0 or radam_norm == 0:
-                        trust_ratio = 1.0
-                    else:
-                        trust_ratio = weight_norm / radam_norm
-
-                    trust_ratio = clip(to_tensor(trust_ratio), 0.0, 10.0)
-
-                    state['weight_norm'] = weight_norm
-                    state['adam_norm'] = radam_norm
-                    state['trust_ratio'] = trust_ratio
-
-                    p_data.add_(-update * trust_ratio * group['lr'])
-
-                    if any_abnormal_number(p_data):
-                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                    p_data.copy_(where(is_abnormal_number(p_data), p.data, p_data))
-
-                    p.data.copy_(p_data)
-
-                    # integrated look ahead...
-                    # we do it at the param level instead of group level
-                    if state['step'] % group['k'] == 0:
-                        slow_p = state['slow_buffer']  # get access to slow param tensor
-                        slow_p.add_(p.data - slow_p, alpha=self.alpha)  # (fast weights - slow weights) * alpha
-                        if any_abnormal_number(slow_p):
-                            sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                        slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
-                        p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
+                # integrated look ahead...
+                # we do it at the param level instead of group level
+                if state['step'] % group['k'] == 0:
+                    slow_p = state['slow_buffer']  # get access to slow param tensor
+                    slow_p.add_(p.data - slow_p, alpha=self.alpha)  # (fast weights - slow weights) * alpha
+                    if any_abnormal_number(slow_p):
+                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
+                    slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
+                    p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
 
         return loss
 
@@ -1430,8 +1463,8 @@ class LARS(Optimizer):
         """
         loss = None
         if closure is not None:
-            loss = closure()
-
+            with torch.enable_grad():
+                loss = closure()
         if epoch is None:
             epoch = self.epoch
             self.epoch += 1
@@ -1938,6 +1971,7 @@ class RangerAdaBelief(Optimizer):
                     if len(list(G_grad.size())) > 1:
                         G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
 
+
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
 
                 p.data.copy_(p_data_fp32)
@@ -2006,12 +2040,19 @@ class DiffGrad(Optimizer):
         """
         loss = None
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('diffGrad does not support sparse gradients, please consider SparseAdam instead')
@@ -2030,6 +2071,7 @@ class DiffGrad(Optimizer):
 
                 exp_avg, exp_avg_sq, previous_grad = state['exp_avg'], state['exp_avg_sq'], state['previous_grad']
                 beta1, beta2 = group['betas']
+
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
@@ -2039,7 +2081,8 @@ class DiffGrad(Optimizer):
                 bias_correction2 = 1 - beta2 ** state['step']
 
                 if group['weight_decay'] != 0:
-                    grad.add_(group['weight_decay'], p.data)
+                    grad.add_(p.data,alpha=group['weight_decay'])
+
 
                 if self.gradient_centralization in ['all', 'gc']:
                     if len(list(grad.size())) > 1:
@@ -2055,7 +2098,6 @@ class DiffGrad(Optimizer):
 
                 diff = abs(previous_grad - grad)
                 dfc = 1. / (1. + torch.exp(-diff))
-                state['previous_grad'] = grad  # used in paper but has the bug that previous grad is overwritten with grad and diff becomes always zero. Fixed in the next line.
 
                 # update momentum with dfc
                 exp_avg1 = exp_avg * dfc
@@ -2063,6 +2105,7 @@ class DiffGrad(Optimizer):
                 step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
 
                 p.data.add_(true_divide(exp_avg1, denom), alpha=-step_size)
+                state[ 'previous_grad'] = grad.copy().detach()  # used in paper but has the bug that previous grad is overwritten with grad and diff becomes always zero. Fixed in the next line.
 
         return loss
 
@@ -2107,12 +2150,19 @@ class Lamb(Optimizer):
         """
         loss = None
         if closure is not None:
-            loss = closure()
+            with torch.enable_grad():
+                loss = closure()
 
         for group in self.param_groups:
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Lamb does not support sparse gradients, consider SparseAdam instad.')
