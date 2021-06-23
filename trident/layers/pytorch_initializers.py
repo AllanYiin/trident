@@ -13,7 +13,7 @@ from torch.nn import init
 __all__ = ['uniform','normal','fill_ones','fill_zeros','kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
 
 from trident.backend.common import get_function, camel2snake
-
+from trident.backend.pytorch_ops import ndim,int_shape
 
 def uniform(tensor, a=0., b=1.):
     # type: (Tensor, float, float) -> Tensor
@@ -267,12 +267,27 @@ def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad==True and 'bias' not in name:
-                init.trunc_normal_(weight,mean=0., std=1., a=-2., b=2)
+                init.trunc_normal_(weight,mean=mean, std=std, a=a, b=b)
 
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad:
-            init.trunc_normal_(tensor,mean=0., std=1., a=-2., b=2)
+            init.trunc_normal_(tensor,mean=mean, std=std, a=a, b=b)
 
+
+def orthogonal(tensor, gain=1):
+    if isinstance(tensor,nn.Module):
+        for name,weight in tensor.named_parameters():
+            if ndim(weight)>=2:
+                if weight.requires_grad==True and 'bias' not in name:
+                    init.orthogonal_(weight,gain=gain)
+
+    elif isinstance(tensor, nn.Parameter):
+        if tensor.requires_grad and ndim(tensor)>=2:
+            init.orthogonal_(tensor,gain=gain)
+      
+    elif isinstance(tensor, list):
+        for p in tensor:
+            orthogonal(p)
 
 
 def get_initializer(initializer,**kwargs):
