@@ -17,7 +17,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from trident.data.transform import Transform
@@ -53,10 +52,12 @@ _trident_dir = _session.trident_dir
 
 dirname = os.path.join(_trident_dir, 'models')
 
-anchors1 = to_tensor(np.array([12, 16, 19, 36, 40, 28]).reshape(-1, 2),requires_grad=False)
-anchors2 = to_tensor(np.array([36, 75, 76, 55, 72, 146]).reshape(-1, 2),requires_grad=False)
-anchors3 = to_tensor(np.array([142, 110, 192, 243, 459, 401]).reshape(-1, 2),requires_grad=False)
-anchors=(anchors1,anchors2,anchors3)
+def generate_anchors(grid_size):
+    anchors1 = to_tensor(np.array([12, 16, 19, 36, 40, 28]).reshape(-1, 2),requires_grad=False)
+    anchors2 = to_tensor(np.array([36, 75, 76, 55, 72, 146]).reshape(-1, 2),requires_grad=False)
+    anchors3 = to_tensor(np.array([142, 110, 192, 243, 459, 401]).reshape(-1, 2),requires_grad=False)
+    anchors=(anchors1,anchors2,anchors3)
+    return  anchors1 if grid_size==76 else anchors2 if grid_size==38 else anchors3 if grid_size==19 else None
 
 
 
@@ -111,10 +112,10 @@ def resblock_body(num_filters, num_blocks, all_narrow=True,keep_output=False,nam
         )
 
 
-def yolo4_body(num_classes=80,image_size=608,anchors=anchors):
-    anchors1=anchors[0]
-    anchors2 = anchors[1]
-    anchors3 = anchors[2]
+def yolo4_body(anchors=None,num_classes=80,image_size=608):
+    anchors1=generate_anchors(76) if anchors is None else anchors[0]
+    anchors2 = generate_anchors(38) if anchors is None else anchors[1]
+    anchors3 = generate_anchors(19) if anchors is None else anchors[2]
     num_anchors=len(anchors1)
     """Create YOLO_V4 model CNN body in Pytorch."""
     return Sequential(
@@ -212,9 +213,10 @@ def yolo4_body(num_classes=80,image_size=608,anchors=anchors):
 class YoloLayer(Layer):
     """Detection layer"""
 
-    def __init__(self, anchors, num_classes,grid_size, img_dim=608,small_item_enhance=False):
+    def __init__(self, anchors=None, num_classes=80,grid_size=76, img_dim=608,small_item_enhance=False):
         super(YoloLayer, self).__init__()
-
+        if anchors is None:
+            anchors=generate_anchors(grid_size)
         self.register_buffer('anchors', to_tensor(anchors, requires_grad=False).to(get_device()))
         self.small_item_enhance = small_item_enhance
         self.num_anchors = len(anchors)
@@ -525,7 +527,7 @@ class YoloDetectionModel(ImageDetectionModel):
 
 
 def YoLoV4(pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
             input_shape=(3, 608, 608),
              classes=80,
              **kwargs):

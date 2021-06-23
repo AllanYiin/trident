@@ -14,7 +14,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 
 from trident.layers.pytorch_activations import get_activation, Identity
@@ -35,7 +35,7 @@ _epsilon = _session.epsilon
 
 def _ntuple(n):
     def parse(x):
-        if isinstance(x, container_abcs.Iterable):
+        if isinstance(x, abc.Iterable):
             return x
         return tuple(repeat(x, n))
 
@@ -777,7 +777,7 @@ class Classifier1d(Layer):
 class ShortCut2d(Layer):
     """ShortCut2d Layer """
 
-    def __init__(self, *args, axis=1, branch_from=None, branch_from_uuid=None, activation=None, mode='add', name=None, keep_output=False,
+    def __init__(self, *args, axis=1, branch_from=None, branch_from_uuid=None, activation=None, mode='add',dropout_rate=0, name=None, keep_output=False,
                  **kwargs):
         """
 
@@ -797,6 +797,7 @@ class ShortCut2d(Layer):
         self.has_identity = False
         self.mode = mode
         self.axis = axis
+        self.dropout_rate=dropout_rate
         self.branch_from = branch_from
         self.branch_from_uuid = branch_from_uuid
         if self.branch_from or self.branch_from_uuid:
@@ -903,6 +904,8 @@ class ShortCut2d(Layer):
             print('Layer {0} relative name:{1} concate fails. The input shapes:{2} '.format(self.name, self.relative_name, [int_shape(item) for item in concate_list]))
         if self.activation is not None:
             x = self.activation(x)
+        if hasattr(self,'dropout_rate') and self.dropout_rate>0:
+            x=torch.dropout(x,self.dropout_rate,self.training)
         return x
 
     def extra_repr(self):
@@ -920,7 +923,7 @@ class ShortCut2d(Layer):
 class ShortCut(Layer):
     """ShortCut2d Layer """
 
-    def __init__(self, *args, axis=1, branch_from=None, activation=None, mode='add', name=None, keep_output=False,
+    def __init__(self, *args, axis=1, branch_from=None, activation=None, mode='add',dropout_rate=0, name=None, keep_output=False,
                  **kwargs):
         """
 
@@ -947,7 +950,7 @@ class ShortCut(Layer):
         self.axis = axis
         self.branch_from = branch_from
         self.branch_from_uuid = None
-
+        self.dropout_rate=dropout_rate
         self.keep_output = keep_output
 
         for i in range(len(args)):
@@ -1044,6 +1047,8 @@ class ShortCut(Layer):
             x = current
         if self.activation is not None:
             x = self.activation(x)
+        if hasattr(self, 'dropout_rate') and self.dropout_rate > 0:
+            x = torch.dropout(x, self.dropout_rate, self.training)
         return x
 
     def extra_repr(self):
@@ -1205,6 +1210,42 @@ class SqueezeExcite(Layer):
 
         x = s * x
         return x
+
+class Siamese(Layer):
+    def __init__(self, *arg, cardinality=2,similarity_fn=None,norm='l2',name='siamese'):
+        super(Siamese, self).__init__(name=name)
+        arg=unpack_singleton(arg)
+        self.network = arg
+        self.cardinality=cardinality
+        if similarity_fn is None:
+            self.similarity_fn=nn.functional.cosine_similarity
+        self.norm=get_normalization(norm)
+
+    def forward(self, *x, **kwargs):
+        n_inputs=len(x)
+        x=unpack_singleton(x)
+        if len(x)==2 and self.cardinality==3:
+            x=(x[0],x[0],x[1])
+        elif len(x)==1 and self.cardinality>1:
+            x = (x[0])*self.cardinality
+
+        if len(x)!=self.cardinality:
+            raise  RuntimeError('Numbers of input({0}) are not matching to cardinality({1})'.format(len(x),self.cardinality))
+        results=[]
+        for k in range(self.cardinality):
+            inp=x[k]
+            inp=self.network(inp)
+            if self.norm is not None:
+                inp=self.norm(inp)
+            results.append(inp)
+        if self.cardinality==2:
+            return self.similarity_fn(*results)
+        elif self.cardinality==3:
+            return self.similarity_fn(results[1],results[0]),self.similarity_fn(results[2],results[0])
+
+
+
+
 
 
 

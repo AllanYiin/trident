@@ -19,7 +19,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from matplotlib.collections import PolyCollection
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from trident.backend.opencv_backend import image2array
@@ -122,7 +122,7 @@ def o_net():
 
 def Pnet(pretrained=True,
              input_shape=(3,12,12),
-             freeze_features=False,
+             freeze_features=True,
              **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)

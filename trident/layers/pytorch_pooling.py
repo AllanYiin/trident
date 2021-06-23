@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F  # import torch functions
 import torch.utils.hooks as hooks
 from torch._jit_internal import List
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import Module
 from torch.nn import init
 from torch.nn.parameter import Parameter
@@ -35,7 +35,7 @@ _epsilon = _session.epsilon
 
 def _ntuple(n):
     def parse(x):
-        if isinstance(x, container_abcs.Iterable):
+        if isinstance(x, abc.Iterable):
             return x
         return tuple(repeat(x, n))
 
