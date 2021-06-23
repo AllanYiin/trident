@@ -13,6 +13,8 @@ import sys
 import time
 import uuid
 import json
+from typing import Callable, Any
+
 import numpy as np
 from trident.backend.common import to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
     snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need
@@ -28,6 +30,10 @@ elif _backend == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 
 __all__ = ['Loss']
+
+
+
+
 
 class Loss(object):
   """Loss base class.
@@ -87,20 +93,31 @@ class Loss(object):
       result = self.forward(output, target, **kwargs)
       return result
 
+  def _forward_unimplemented(self, *input: Any) -> None:
+      r"""Defines the computation performed at every call.
 
+      Should be overridden by all subclasses.
 
-  def forward(self, output: Tensor, target: Tensor,**kwargs):
-    """Invokes the `Loss` instance.
-    Args:
-       output: The predicted values. shape = `[batch_size, d0, .. dN]`
-      target: Ground truth values. shape = `[batch_size, d0, .. dN]`, except
-        sparse loss functions such as sparse categorical crossentropy where
-        shape = `[batch_size, d0, .. dN-1]`
-
-    Returns:
-      Loss values with the shape `[batch_size, d0, .. dN-1]`.
-    """
-    NotImplementedError('Must be implemented in subclasses.')
+      .. note::
+          Although the recipe for forward pass needs to be defined within
+          this function, one should call the :class:`Module` instance afterwards
+          instead of this since the former takes care of running the
+          registered hooks while the latter silently ignores them.
+      """
+      raise NotImplementedError
+  forward: Callable[..., Any] = _forward_unimplemented
+  # def forward(self, output: Tensor, target: Tensor,**kwargs):
+  #   """Invokes the `Loss` instance.
+  #   Args:
+  #      output: The predicted values. shape = `[batch_size, d0, .. dN]`
+  #     target: Ground truth values. shape = `[batch_size, d0, .. dN]`, except
+  #       sparse loss functions such as sparse categorical crossentropy where
+  #       shape = `[batch_size, d0, .. dN-1]`
+  #
+  #   Returns:
+  #     Loss values with the shape `[batch_size, d0, .. dN-1]`.
+  #   """
+  #   NotImplementedError('Must be implemented in subclasses.')
 
   def _get_reduction(self, loss):
       reduction_axis=list(range(ndim(loss)))
