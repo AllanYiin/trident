@@ -94,25 +94,27 @@ def randomize_with_validate(valid_range=None,no_change_value=None,**kwargs):
         return Wrapper
     return randomize_wrapper
 
+def randomize(keep_ratio=0.2,**kwargs):
+    def randomize_wrapper(cls):
+        class Wrapper:
+            def __init__(self, **kwargs):
+                self.kwargs=kwargs
+                self.wrap = cls()
+                self.keep_ratio=keep_ratio
+                self.rn=0
+            def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],spec:TensorSpec=None,**kwargs):
+                keep_ratio=kwargs.get('keep_ratio',self.keep_ratio)
+                if self.rn  > keep_ratio:
+                    return self.wrap(inputs,spec=spec,**kwargs)
+                else:
+                    return inputs
 
-def randomize(cls):
-    class Wrapper:
-        def __init__(self, **kwargs):
-            self.kwargs=kwargs
-            self.wrap = cls()
-            self.rn=0
-        def __call__(self,inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],spec:TensorSpec=None,**kwargs):
-            if self.rn % 5 > 0:
-                return self.wrap(inputs,spec=spec,**kwargs)
-            else:
-                return inputs
+            def set_random(self):
+                self.rn = random.random()
 
-        def set_random(self):
-            self.rn = random.randint(0, 10)
-
-    Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
-    Wrapper.__doc__ = cls.__doc__
-    return Wrapper
+        Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
+        Wrapper.__doc__ = cls.__doc__
+        return Wrapper
 
 
 
@@ -1141,7 +1143,7 @@ class Blur(VisionTransform):
         else:
             self.ksize = int(self.ksize)
         blur = cv2.GaussianBlur(image, (int(self.ksize), int(self.ksize)),cv2.BORDER_DEFAULT)
-        return blur.clip(0, 255).astype(np.float32)
+        return np.clip(blur.clip(0, 255).astype(np.float32),0,255)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -1160,7 +1162,7 @@ class InvertColor(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
-            return 255 - image
+            return np.clip(255 - image,0,255)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -1190,7 +1192,7 @@ class GrayScale(VisionTransform):
         elif image.ndim == 2 and self.keepdims:
             return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
         else:
-            return image
+            return np.clip(image,0,255)
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -1212,7 +1214,7 @@ class ToRGB(VisionTransform):
         if image.ndim == 3:
             pass
         elif image.ndim == 2:
-            image=cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+            image=np.clip(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB),0,255)
         return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
@@ -1515,12 +1517,39 @@ class CLAHE(VisionTransform):
         return super().apply(input,spec)
 
     def _apply_image(self, image,spec:TensorSpec):
+        image=image.astype(np.uint8)
         lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
         lab_planes = cv2.split(lab)
         clahe = cv2.createCLAHE(clipLimit=self.clipLimit, tileGridSize=(self.gridsize, self.gridsize))
         lab_planes[0] = clahe.apply(lab_planes[0])
         lab = cv2.merge(lab_planes)
-        return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+        return np.clip(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB),0,255).astype(np.float32)
+
+    def _apply_coords(self, coords,spec:TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask,spec:TensorSpec):
+        return mask
+
+
+class AutoLeveling(VisionTransform):
+
+    def __init__(self, name='autoleveling',**kwargs):
+        super().__init__(name)
+
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        return super().apply(input,spec)
+
+    def _apply_image(self, image,spec:TensorSpec):
+        minv = np.percentile(image, 5)
+        maxv = np.percentile(image, 95)
+        if maxv - minv < 40:
+            minv = image.min()
+            maxv = image.max()
+        image = np.clip((image - minv) * (255.0 / (maxv - minv)), 0, 255)
+        return image.astype(np.float32)
+
 
     def _apply_coords(self, coords,spec:TensorSpec):
         return coords
@@ -1542,7 +1571,7 @@ class SaltPepperNoise(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, prob=0.005,keep_prob=0.5, name='saltpepper', **kwargs):
+    def __init__(self, prob=0.05,keep_prob=0.5, name='saltpepper', **kwargs):
         super().__init__(name)
         self.prob=prob
         self.keep_prob=keep_prob
@@ -1555,10 +1584,10 @@ class SaltPepperNoise(VisionTransform):
         rr=random.random()
         if rr>self.keep_prob:
             imgtype = image.dtype
-            rnd = np.random.rand(image.shape[0], image.shape[1])
+            rnd =np.random.uniform(0,1,size=(image.shape[0],image.shape[1]))
             #noisy = image.copy()
-            image[rnd < self.prob / 2] = 0.0
-            image[rnd > 1 - self.prob / 2] = 255.0
+            image[rnd < self.prob] = 0.0
+            image[rnd > 1 - self.prob] = 255.0
             return clip(image,0,255).astype(np.float32)
         else:
             return image
