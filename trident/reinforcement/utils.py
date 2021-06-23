@@ -1,15 +1,32 @@
-from numbers import Number
-from typing import Optional, Union, Any
-
-import numpy as np
+import gc
+import numbers
+import sys
 from collections import namedtuple
+from numbers import Number
+from typing import Optional, Union, Any, Tuple
+import builtins
+import numpy as np
 
-from trident.backend.common import get_backend
+from trident.backend.common import get_backend, OrderedDict,to_list
 
+__all__ = ['ReplayBuffer', 'Rollout', 'ActionStrategy','ObservationType']
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
+
+
+class ActionStrategy:
+    OnPolicy = 'OnPolicy'
+    OffPolicy = 'OffPolicy'
+    Offline = 'Offline'
+
+
+class ObservationType:
+    Box = 'Box'
+    Image = 'Image'
+    Tuple = 'Tuple'
+
 
 Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
 
@@ -17,7 +34,7 @@ Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'
 class ReplayBuffer(object):
     """ A buffer to hold previously-generated states. """
 
-    def __init__(self, capacity,**kwargs):
+    def __init__(self, capacity, **kwargs):
         """
 
         Args:
@@ -29,32 +46,20 @@ class ReplayBuffer(object):
 
     def push(self, *args):
         """Saves a transition."""
-        args = [to_numpy(arg) for arg in args]
+        args = [tuple([to_numpy(a) for a in arg]) if isinstance(arg, tuple) else to_numpy(arg) for arg in args]
 
         if len(self.memory) < self.capacity:
             self.memory.append(Transition(*args))
         else:
             self.memory[self.position] = Transition(*args)
-
-        def push(self, *args):
-            """儲存transition."""
-            args = [to_numpy(arg) for arg in args]
-
-            if len(self.memory) < self.capacity:
-                self.memory.append(Transition(*args))
-            else:
-                self.memory[self.position] = Transition(*args)
-
-            # 只覆蓋近期數據
         self.position = int(0.5 * self.capacity + (self.position + 1) % (0.5 * self.capacity))
-
 
     def sample(self, batch_size):
         """Query the memory to construct batch"""
 
         transitions = random_choice(self.memory, batch_size)  # list of named tuple  [(x1,y1),(x2,y2),(x3,y3)]
 
-        #list of named tuple to tuple of list [(x1,y1),(x2,y2),(x3,y3)]==>([x1,x2,x3],[y1,y2,y3])
+        # list of named tuple to tuple of list [(x1,y1),(x2,y2),(x3,y3)]==>([x1,x2,x3],[y1,y2,y3])
         items = list(zip(*transitions))
 
         return Transition(*items)
@@ -92,13 +97,13 @@ class SegmentTree:
         return self._size
 
     def __getitem__(
-        self, index: Union[int, np.ndarray]
+            self, index: Union[int, np.ndarray]
     ) -> Union[float, np.ndarray]:
         """Return self[index]."""
         return self._value[index + self._bound]
 
     def __setitem__(
-        self, index: Union[int, np.ndarray], value: Union[float, np.ndarray]
+            self, index: Union[int, np.ndarray], value: Union[float, np.ndarray]
     ) -> None:
         """Update values in segment tree.
 
@@ -146,42 +151,8 @@ class SegmentTree:
         index = _get_prefix_sum_idx(value, self._bound, self._value)
         return index.item() if single else index
 
-    def _compile(self) -> None:
-        f64 = np.array([0, 1], dtype=np.float64)
-        f32 = np.array([0, 1], dtype=np.float32)
-        i64 = np.array([0, 1], dtype=np.int64)
-        _setitem(f64, i64, f64)
-        _setitem(f64, i64, f32)
-        _reduce(f64, 0, 1)
-        _get_prefix_sum_idx(f64, 1, f64)
-        _get_prefix_sum_idx(f32, 1, f64)
-
-
-def _setitem(tree: np.ndarray, index: np.ndarray, value: np.ndarray) -> None:
-    """Numba version, 4x faster: 0.1 -> 0.024."""
-    tree[index] = value
-    while index[0] > 1:
-        index //= 2
-        tree[index] = tree[index * 2] + tree[index * 2 + 1]
-
-
-
-def _reduce(tree: np.ndarray, start: int, end: int) -> float:
-    """Numba version, 2x faster: 0.009 -> 0.005."""
-    # nodes in (start, end) should be aggregated
-    result = 0.0
-    while end - start > 1:  # (start, end) interval is not empty
-        if start % 2 == 0:
-            result += tree[start + 1]
-        start //= 2
-        if end % 2 == 1:
-            result += tree[end - 1]
-        end //= 2
-    return result
-
-
 def _get_prefix_sum_idx(
-    value: np.ndarray, bound: int, sums: np.ndarray
+        value: np.ndarray, bound: int, sums: np.ndarray
 ) -> np.ndarray:
     """Numba version (v0.51), 5x speed up with size=100000 and bsz=64.
 
@@ -197,6 +168,179 @@ def _get_prefix_sum_idx(
         index += direct
     index -= bound
     return index
+
+
+def _compile(self) -> None:
+    f64 = np.array([0, 1], dtype=np.float64)
+    f32 = np.array([0, 1], dtype=np.float32)
+    i64 = np.array([0, 1], dtype=np.int64)
+    _setitem(f64, i64, f64)
+    _setitem(f64, i64, f32)
+    _reduce(f64, 0, 1)
+    _get_prefix_sum_idx(f64, 1, f64)
+    _get_prefix_sum_idx(f32, 1, f64)
+
+def _setitem(tree: np.ndarray, index: np.ndarray, value: np.ndarray) -> None:
+    """Numba version, 4x faster: 0.1 -> 0.024."""
+    tree[index] = value
+    while index[0] > 1:
+        index //= 2
+        tree[index] = tree[index * 2] + tree[index * 2 + 1]
+
+def _reduce(tree: np.ndarray, start: int, end: int) -> float:
+    """Numba version, 2x faster: 0.009 -> 0.005."""
+    # nodes in (start, end) should be aggregated
+    result = 0.0
+    while end - start > 1:  # (start, end) interval is not empty
+        if start % 2 == 0:
+            result += tree[start + 1]
+        start //= 2
+        if end % 2 == 1:
+            result += tree[end - 1]
+        end //= 2
+    return result
+
+
+
+class Rollout(OrderedDict):
+    def __init__(self,enable=True, name='', *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.name=name
+        self.enable=enable
+        self.only_cpu=kwargs.get('only_cpu',False)
+
+    def __getattr__(self, name):
+        if name in super().key_list:
+            return super().__getitem__(name)
+        elif name in self.__dict__:
+            return self.__dict__[name]
+        else:
+            return None
+
+
+    def __setattr__(self, name: str, value) -> None:
+        if name in super().key_list:
+            super().__setitem__(name,value)
+        elif name in self.__dict__:
+            self.__dict__[name]=value
+        else:
+            self.__dict__[name] = value
+
+
+
+    def regist(self,data_name:str):
+
+        if self.enable and data_name not in self:
+            self[data_name]=[]
+
+    def collect(self, data_name: str, value: (float,np.ndarray, Tensor)):
+        if self.enable:
+            if data_name not in self:
+                self.regist(data_name)
+            if self.only_cpu:
+                if is_tensor(value) and ndim(value)==0:
+                    value=to_numpy(value)[0]
+                else:
+                    value = to_numpy(value)
+            self[data_name].append(value)
+
+    def reset(self):
+        if self.enable:
+            for k,v in self.items():
+                v.clear()
+            gc.collect()
+
+    def get(self,data_name):
+
+        if self.enable and data_name in self and len(self[data_name]) > 0:
+            return self[data_name]
+        else:
+            return []
+
+    def get_last(self,data_name):
+        if self.enable and data_name in self and len(self[data_name])>0:
+            return self[data_name][-1]
+        else:
+            return None
+
+    def get_reverse(self,data_name):
+        if self.enable and data_name in self and len(self[data_name])>0:
+            return self[data_name][::-1]
+        else:
+            return []
+
+    def get_normalized(self,data_name):
+
+        if self.enable and data_name in self and len(self[data_name])>3:
+            try:
+                if is_tensor(self[data_name][0]):
+                    merge=concate(self[data_name],axis=0)
+                    merge_mean,merge_std=moments(merge,axis=0)
+                    merge=(merge-merge_mean)/merge_std
+                    return to_list(merge)
+                elif isinstance(self[data_name][0],np.ndarray):
+                    merge=np.concatenate(self[data_name],axis=0)
+                    merge=(merge-merge.mean())/merge.std()
+                    return to_list(merge)
+                elif isinstance(self[data_name][0],numbers.Number):
+                    merge = np.array(self[data_name])
+                    merge=(merge-merge.mean())/merge.std()
+                    return to_list(merge)
+            except:
+                return self[data_name]
+        elif self.enable:
+            return self[data_name]
+        else:
+            return []
+
+    def get_running_mean(self, data_name):
+
+        if self.enable and data_name in self and len(self[data_name]) > 3:
+            try:
+                if isinstance(self[data_name][0], numbers.Number):
+                    total_mean=builtins.sum(self[data_name])/float(builtins.max(len(self[data_name]),1))
+                    result=[]
+                    running_sum=0
+                    for i in range(len(self[data_name])):
+                        running_sum+=self[data_name][i]
+                        result.append((running_sum/(i+1))-total_mean)
+                 
+                    return result
+                else:
+                    raise ValueError('Only numeric data is supporte')
+            except:
+                return self[data_name]
+        elif self.enable:
+            return self[data_name]
+        else:
+            return []
+
+    def get_samples(self, batch_size=8):
+        if self.enable:
+            can_sample=len(list(set([len(v) for v in self.value_list])))==1
+            indexs=random_choice(list(range(len(self.value_list[0]))),builtins.min(batch_size,len(self.value_list[0])))
+            return_data=OrderedDict()
+            if can_sample:
+                for k,v in self.items():
+                    return_data[k]=[v[idx] for idx in indexs]
+                return return_data
+            else:
+                raise ValueError('get_sample need all collection have same length.')
+        else:
+            return OrderedDict()
+
+        
+
+    def __len__(self):
+        if len(self.value_list)==0:
+            return 0
+        return builtins.max([len(v) for v in self.value_list])
+
+
+
+
+
+
 
 
 # class PrioritizedReplayBuffer(ReplayBuffer):
