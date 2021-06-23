@@ -76,6 +76,8 @@ class Model(ModelBase):
         self.accumulate_grads_inteval = 1
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
+        if hasattr(output, '_signature'):
+            output._signature = None
         if isinstance(input_shape, numbers.Integral):
             input_shape = TensorShape([None] + [input_shape])
         elif isinstance(input_shape, (tuple, list)) and isinstance(input_shape[-1], numbers.Integral):
@@ -246,38 +248,6 @@ class Model(ModelBase):
         self.training_context['save_path'] = self.save_path
 
     @property
-    def inputs(self):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            return self._model._signature.inputs
-        else:
-            return None
-
-    @inputs.setter
-    def inputs(self, value):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            self._model._signature.inputs = value
-
-    @property
-    def outputs(self):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            return self._model._signature.outputs
-        else:
-            return None
-
-    @outputs.setter
-    def outputs(self, value):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            self._model._signature.outputs = value
-
-    @property
     def device(self):
         return get_device()
 
@@ -381,11 +351,11 @@ class Model(ModelBase):
 
         data_ds = NumpyDataset(data=train_x, symbol="input")
         label_ds = LabelDataset(labels=train_y, symbol="target")
-        dataprovider = DataProvider(traindata=Iterator(data=data_ds, label=label_ds, minibatch_size=batch_size, is_shuffe=shuffle, buffer_size=max_queue_size, workers=workers))
+        dataprovider = DataProvider(traindata=Iterator(data=data_ds, label=label_ds, minibatch_size=batch_size, is_shuffle=shuffle, buffer_size=max_queue_size, workers=workers))
         if validation_split > 0:
             data_test_ds = NumpyDataset(data=train_x, symbol="input")
             label_test_ds = LabelDataset(labels=train_y, symbol="target")
-            dataprovider.testdata = Iterator(data=data_test_ds, label=label_test_ds, minibatch_size=validation_batch_size, is_shuffe=shuffle, buffer_size=max_queue_size,
+            dataprovider.testdata = Iterator(data=data_test_ds, label=label_test_ds, minibatch_size=validation_batch_size, is_shuffle=shuffle, buffer_size=max_queue_size,
                                              workers=workers)
 
         plan = TrainingPlan() \
@@ -618,8 +588,6 @@ class Model(ModelBase):
         else:
             raise ValueError('There is no optimizer yet.')
 
-
-
     def do_on_epoch_start(self):
         super().do_on_epoch_start()
         if self.training_context['steps'] == 0:
@@ -664,7 +632,6 @@ class Model(ModelBase):
             if 'total_losses' not in temp:
                 temp['total_losses'] = to_numpy(self.training_context['current_loss']).mean()
             print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
-
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -765,7 +732,7 @@ class Model(ModelBase):
         # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed['input'] if arg=='x' and 'input' in data_feed else data_feed[arg] for arg in self._model.signature.inputs.key_list]
+            input_list = [data_feed['input'] if arg == 'x' and 'input' in data_feed else data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
                 train_data[item] = to_tensor(train_data[item], device=get_device())
                 if item in input_list and 'float' in str(train_data[item].dtype):
@@ -792,7 +759,7 @@ class Model(ModelBase):
             # double check!!!
             self._model.train()
         if log_gradients:
-            self.log_gradient(self.optimizer.grads_and_vars)
+            self.log_gradient(self.training_context['grads_and_vars'])
         # vars=self.training_context['vars']
         # cal_grads=self.training_context['grads']
         #
@@ -819,31 +786,6 @@ class Model(ModelBase):
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
         self.training_context['losses'].collect('total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
-
-    # def do_calculate_metrics(self):
-    #     # ON_EVALUATION_START
-    #     self.do_on_metrics_evaluation_start()
-    #     for callback in self.training_context['callbacks']:
-    #         callback.on_metrics_evaluation_start(self.training_context)
-    #
-    #     for k, v in self._metrics.items():
-    #         print_only = not (getattr(v, 'print_only') if hasattr(v, 'print_only') else False)
-    #         if not print_only:
-    #             self.training_context['metrics'].regist(k)
-    #         self.training_context['tmp_metrics'].regist(k)
-    #
-    #         this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[
-    #                                                                                                                                      'stop_update'] < 1 else to_tensor(0)
-    #         self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
-    #
-    #         if self.training_context['is_out_sample_evaluation'] == True and self.test_data is not None and len(self.test_data) > 0:
-    #             this_out_metric = try_map_args_and_call(v, self.test_data, self.training_context['data_feed'], self.is_autocast_enabled)
-    #             self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
-    #
-    #     # ON_EVALUATION_END
-    #     self.do_on_metrics_evaluation_end()
-    #     for callback in self.training_context['callbacks']:
-    #         callback.on_metrics_evaluation_end(self.training_context)
 
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
@@ -893,7 +835,7 @@ class Model(ModelBase):
             save_path = sanitize_path(save_path)
             device = get_device()
             self._model.eval()
-            tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix= '.pth.tar')
+            tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix='.pth.tar')
             _, tempfile_name, tempext = split_path(temppath)
             move_path = os.path.join(folder, tempfile_name + tempext)
             try:
@@ -917,7 +859,6 @@ class Model(ModelBase):
                         os.rename(move_path, save_path)
                     elif os.path.exists(temppath):
                         shutil.move(temppath, save_path)
-
 
             save_path = save_path.replace('.pth.tar', '.pth')
             tempfd2, temppath2 = tempfile.mkstemp(prefix=filename, suffix='.pth')
@@ -1116,19 +1057,14 @@ class Model(ModelBase):
                             print(e)
                             PrintException()
 
-
                     self.do_calculate_losses()
                     self.do_calculate_regularizations()
-
-
 
                 vars = grad_tape.watched_variables()
                 grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
                 # grads = tuple([where(is_nan(grad), zeros_like(grad), grad) for grad in grads])
 
                 self.training_context['grads_and_vars'] = zip(grads, vars);
-                self.optimizer.grads_and_vars = zip(grads, vars)
-
 
                 # self.optimizer.step(zip(grads,vars))
                 self.do_gradient_update(log_gradients and is_collect_data)
@@ -1141,7 +1077,6 @@ class Model(ModelBase):
                         self.log_weight(weghts=self._model.weights)
                     elif is_tensor(self._model):
                         self.log_weight(weghts=self._model)
-
 
                 if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and self.training_context['stop_update'] < 1:
                     if self.output_fn is not None and callable(self.output_fn):
@@ -1189,8 +1124,8 @@ class Model(ModelBase):
 
     def summary(self):
         if self._model.built:
-            if not hasattr(self._model,'_signature') or self._model._signature  is None or self._model._signature.inputs is None:
-                self._model._signature=get_signature(self._model, self._model._name)
+            if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None:
+                self._model._signature = get_signature(self._model, self._model._name)
             summary(self._model, [item for item in self._model._signature.inputs.value_list])
             return self
         else:
@@ -1401,10 +1336,7 @@ class MuiltiNetwork(Model):
 
         elif name in ['_model']:
             object.__setattr__(self, '_model', value)
-            if value is not None and value.signature is None and hasattr(value, '_built') and value._built == True:
-                value.signature = Signature()
-                value.signature.inputs['input'] = TensorSpec(shape=value.input_shape, name='input')
-                value.signature.outputs['output'] = TensorSpec(shape=value.output_shape, name='output')
+
 
         else:
 
@@ -1517,8 +1449,6 @@ class MuiltiNetwork(Model):
             self._networks[k].save_model(self._networks[k].training_context['save_path'], )
         return self
 
-
-
     def do_on_epoch_start(self):
         self.training_context['time_epoch_progress'] = 0
         self.training_context['time_batch_progress'] = 0
@@ -1626,8 +1556,8 @@ class ImageClassificationModel(Model):
         self._class_names = []
         self._idx2lab = {}
         self._lab2idx = {}
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1695,8 +1625,8 @@ class ImageClassificationModel(Model):
 class ImageRegressionModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
@@ -1732,8 +1662,8 @@ class ImageDetectionModel(Model):
         super(ImageDetectionModel, self).__init__(inputs, input_shape, output)
         object.__setattr__(self, 'detection_threshold', 0.5)
         object.__setattr__(self, 'nms_threshold', 0.3)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
@@ -1809,8 +1739,8 @@ class ImageSegmentationModel(Model):
     def infer_single_image(self, img):
         if isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
+            if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+                self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1841,8 +1771,8 @@ class ImageSegmentationModel(Model):
 class ImageGenerationModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1860,8 +1790,8 @@ class ImageGenerationModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
+            if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+                self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
             img = image2array(img)
             if img.shape[-1] == 4:
                 img = img[:, :, :3]
@@ -1885,8 +1815,8 @@ class FaceLandmarkModel(Model):
     def __init__(self, inputs=None, input_shape=None, output=None):
         super(FaceLandmarkModel, self).__init__(inputs, input_shape, output)
 
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1895,8 +1825,8 @@ class FaceLandmarkModel(Model):
     def infer_single_image(self, img):
         if self._model.built:
             self._model.eval()
-            if self._model.input_spec.object_type is None:
-                self._model.input_spec.object_type = ObjectType.rgb
+            if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+                self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
             img = image2array(img)
             img_shp = img.shape
 
@@ -1930,8 +1860,8 @@ class FaceRecognitionModel(Model):
         super(FaceRecognitionModel, self).__init__(inputs, input_shape, output)
 
         self.preprocess_flow = []
-        if self._model.input_spec.object_type is None:
-            self._model.input_spec.object_type = ObjectType.rgb
+        if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
+            self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
         if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
@@ -1967,7 +1897,7 @@ class LanguageModel(Model):
         self.vocabs = None
         self.preprocess_flow = []
 
-    def save_model(self, save_path=None):
+    def save_model(self, save_path=None, **kwargs):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
@@ -2038,10 +1968,10 @@ class LanguageModel(Model):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_end(self.training_context)
 
-    def save_onnx(self, save_path=None):
+    def save_onnx(self, save_path=None, **kwargs):
         pass
 
-    def save_weights(self, file_path):
+    def save_weights(self, file_path, **kwargs):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
@@ -2063,7 +1993,7 @@ class LanguageModel(Model):
 
         self._model.train()
 
-    def load_model(self, file_path):
+    def load_model(self, file_path, **kwargs):
         print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
