@@ -51,14 +51,7 @@ class HistoryBase(OrderedDict):
         if data_name not in self:
             self.regist(data_name)
 
-        if value is  None:
-            pass
-        elif isinstance(value,(list,tuple)):
-            value=builtins.sum(value)/len(value)
-        elif isinstance(value,np.ndarray):
-            value = to_tensor(value).mean()
-        elif is_tensor(value):
-            value = to_numpy(value).mean()
+        value=to_scalar(value)
         is_redundant_skip=False
         if self.prevent_redundant:
             if  (step, value) in self[data_name]:
