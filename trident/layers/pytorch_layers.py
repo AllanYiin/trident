@@ -1,39 +1,29 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 import builtins
-import copy
 import inspect
 import math
 import numbers
-from collections import OrderedDict
-from functools import partial, wraps, update_wrapper
-from itertools import islice
 from itertools import repeat
 from typing import Optional
 
 import numpy as np
 import torch
-from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F  # import torch functions
-import torch.utils.hooks as hooks
-
-from torch._jit_internal import List
-from torch._six import container_abcs
-from torch.nn import Module
+from torch import Tensor
+from collections import abc
 from torch.nn import init
-from trident.optims.pytorch_constraints import get_constraint
-
-from trident.optims.pytorch_regularizers import get_reg
+from trident.backend import dtype
 from trident.backend.common import *
 from trident.backend.common import TensorShape
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import get_activation
-from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_initializers import *
-from trident.backend import dtype
+from trident.layers.pytorch_normalizations import get_normalization
 
 __all__ = ['Dense', 'Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot', 'Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
@@ -47,7 +37,7 @@ _epsilon = _session.epsilon
 
 def _ntuple(n):
     def parse(x):
-        if isinstance(x, container_abcs.Iterable):
+        if isinstance(x, abc.Iterable):
             return x
         return tuple(repeat(x, n))
 
@@ -129,7 +119,7 @@ class Dense(Layer):
                 self.bias = Parameter(torch.Tensor(self.num_filters))
                 init.zeros_(self.bias)  # self._parameters['bias']=self.bias
 
-            self.to(self.device)
+            self.to(get_device())
             self._built = True
 
     def forward(self, x, **kwargs):
@@ -504,6 +494,9 @@ class SoftMax(Layer):
 
 class Scale(Layer):
     """The Scale layer implements a per-tensor, per-channel, or per-element affine transformation and/or exponentiation by constant values.
+
+          output=(input∗scale+shift)power
+
          Examples:
                 >>> x = to_tensor(ones((2,4,2,2)))
                 >>> layer1=Scale(scale=2,shift=0.5,power=1,mode='uniform')
@@ -519,12 +512,10 @@ class Scale(Layer):
     def __init__(self, scale: (float, Tensor) = 1.0, shift: (float, Tensor) = 0.0, power: (float, Tensor) = 1.0, mode='uniform', keep_output: bool = False,
                  name: Optional[str] = None):
         super(Scale, self).__init__(keep_output=keep_output, name=name)
-        self._scale = to_tensor(scale).float()
-        self._shift = to_tensor(shift).float()
-        self._power = to_tensor(power).float()
+        self._scale = scale
+        self._shift = shift
+        self._power = power
 
-        if mode == 'uniform' and (numel(self._scale) != 1.0 or numel(self._shift) != 1.0 or numel(self._power) != 1):
-            raise ValueError('Scale/ Shift/ Power should float, 0d Tensor or One element Tensor whem mode=uniform')
         if mode in ['uniform', 'constant', 'channel', 'elementwise']:
             self.mode = mode
         else:
@@ -536,37 +527,39 @@ class Scale(Layer):
                 if name in d:
                     del d[name]
 
-        if self._built == False:
+        if not self._built:
+
+            self.input_filters = input_shape[self.filter_index]
             if self.mode == 'uniform':
-                self.scale = Parameter(ones((1)).to(self.get_root().device) * self._scale, trainable=True)
-                self.shift = Parameter(ones((1)).to(self.get_root().device) * self._shift, trainable=True)
-                self.power = Parameter(ones((1)).to(self.get_root().device) * self._power, trainable=True)
+                self.register_parameter('weight_scale', Parameter(ones(1, dtype=dtype.float32)))
+                self.register_parameter('weight_shift', Parameter(zeros(1, dtype=dtype.float32)))
+                self.register_parameter('weight_power', Parameter(ones(1, dtype=dtype.float32)))
+
             elif self.mode == 'constant':
-                self.scale = ones((1)).to(self.get_root().device) * self._scale
-                self.shift = ones((1)).to(self.get_root().device) * self._shift
-                self.power = ones((1)).to(self.get_root().device) * self._power
+                self.register_buffer('weight_scale', ones(1, dtype=dtype.float32))
+                self.register_buffer('weight_shift', zeros(1, dtype=dtype.float32))
+                self.register_buffer('weight_power', ones(1, dtype=dtype.float32))
             elif self.mode == 'channel':
-                new_shape = [1, ] * (input_shape.rank)
-                new_shape[self.filter_index] = self.input_filters
-                new_shape = tuple(new_shape[1:])
-                self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
-                self.shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
-                self.power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
+
+                self.register_buffer('weight_scale', Parameter(ones(self.input_filters, dtype=dtype.float32)))
+                self.register_buffer('weight_shift', Parameter(zeros(self.input_filters, dtype=dtype.float32)))
+                self.register_buffer('weight_power', Parameter(ones(self.input_filters, dtype=dtype.float32)))
             elif self.mode == 'elementwise':
                 new_shape = input_shape.dims[1:]
-                self.scale = Parameter(ones(new_shape).to(self.get_root().device) * self._scale, trainable=True)
-                self.shift = Parameter(ones(new_shape).to(self.get_root().device) * self._shift, trainable=True)
-                self.power = Parameter(ones(new_shape).to(self.get_root().device) * self._power, trainable=True)
-            remove_from('_scale', self.__dict__, self._buffers)
-            remove_from('_shift', self.__dict__, self._buffers)
-            remove_from('_power', self.__dict__, self._buffers)
-            self._built = True
+                self.register_parameter('weight_scale', Parameter(ones(new_shape, dtype=dtype.float32)))
+                self.register_parameter('weight_shift', Parameter(zeros(new_shape, dtype=dtype.float32)))
+                self.register_parameter('weight_power', Parameter(ones(new_shape, dtype=dtype.float32)))
+        self.weight_scale.data.fill_(1.00)
+        self.weight_shift.data.fill_(0.00)
+        self.weight_power.data.fill_(1.00)
+        self._built = True
 
     def forward(self, x, **kwargs) -> torch.Tensor:
-        self.scale = self.scale.to(x.device)
-        self.shift = self.shift.to(x.device)
-        self.power = self.power.to(x.device)
-        x = pow(x * self.scale + self.shift, self.power)
+        # scale,shift,power=split(self.weight,3,axis=0)
+
+        x = x.multiply(self.weight_scale)
+        x = x.add(self.weight_shift)
+        x = torch.sign(x) * torch.pow(torch.abs(x), self.weight_power)
         return x
 
 
@@ -1084,6 +1077,20 @@ class Conv2d(_ConvNd):
             x = self.activation(x)
         return x
 
+
+# class SequenceConv2d(Conv2d):
+#     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None, use_bias=False, dilation=1, groups=1,
+#     name=None,
+#                  depth_multiplier=None, keep_output=False, **kwargs):
+#         super().__init__(kernel_size, num_filters, strides, auto_pad, padding, padding_mode, activation, use_bias, dilation, groups, name, depth_multiplier, keep_output,
+#         **kwargs)
+#         self.
+#     def forward(self, x, **kwargs):
+#
+#         x = self.conv2d_forward(x)
+#         if self.activation is not None:
+#             x = self.activation(x)
+#         return x
 
 class Conv3d(_ConvNd):
     def __init__(self, kernel_size, num_filters=None, strides=1, auto_pad=True, padding=None, padding_mode='zero', activation=None,
@@ -2041,7 +2048,7 @@ class GcdConv2d(_ConvNd):
 
         x = F.conv3d(x, self.weight, self.bias, self.actual_strides, _triple(0), self.actual_dilation, 1)
 
-        if self.is_shuffle == True:
+        if self.is_shuffle:
             x = x.transpose_(2, 1)
         x = x.view(x.size(0), x.size(1) * x.size(2), x.size(3), x.size(4))
         if self.self_norm == True:
@@ -2313,13 +2320,6 @@ class Dropout(Layer):
     def extra_repr(self):
         return 'p={}, inplace={}'.format(self.dropout_rate, self.inplace)
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        super(Dropout, self)._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
-        self.eval()
-
 
 class AlphaDropout(Layer):
     """
@@ -2392,9 +2392,9 @@ class SingleImageLayer(Layer):
         self.rank = 2
         if isinstance(image, (np.ndarray, torch.Tensor)):
             self.origin_image = to_tensor(image, requires_grad=True).squeeze()
-            self.input_shape = int_shape(self.origin_image)[1:]
+            self.input_shape = int_shape(self.origin_image)
             self.weight = Parameter(self.origin_image.clone(), requires_grad=True)
-            self.input_filters = int_shape(self.origin_image)[1]
+            self.input_filters = int_shape(self.origin_image)[0]
             self._built = True
 
     def forward(self):
