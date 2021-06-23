@@ -230,9 +230,13 @@ class TensorSpec(object):
 
     @classmethod
     def tensor_to_spec(cls, t: Tensor, object_type: ObjectType = None, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=None):
-        t = to_tensor(t)
-
-        return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=is_singleton), dtype=t.dtype, object_type=object_type, optional=optional,
+        if isinstance(t,str):
+            return cls(shape=TensorShape([None]), dtype=str, object_type=object_type,
+                       optional=optional,
+                       name=name)
+        else:
+            t = to_tensor(t)
+            return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=is_singleton), dtype=t.dtype, object_type=object_type, optional=optional,
                    name=name)
 
     @property
