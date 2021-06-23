@@ -63,7 +63,7 @@ def _set_device(device='cpu'):
     except Exception as e:
         print(e)
 
-__all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','to_scalar','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -354,6 +354,34 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         else:
             return x
 
+def to_scalar(x):
+    if x is None:
+        return None
+    elif is_tensor(x):
+        x=x.squeeze()
+        if ndim(x)==0:
+            return x.item()
+        elif ndim(x)==1:
+            return x[-1].item()
+        else:
+            return x.mean().item()
+    elif isinstance(x,np.ndarray):
+        x=np.squeeze(x)
+        if len(x.shape)==0:
+            return x.item()
+        elif len(x.shape)==1:
+            return x[-1].item()
+        else:
+            return x.mean().item()
+    elif isinstance(x,numbers.Number):
+        return x
+    elif isinstance(x,(list,tuple)) and len(x)>0:
+        return to_scalar(x[-1])
+    else:
+       return None
+
+
+
 def copy(x: Tensor):
     return x.clone()
 
@@ -419,6 +447,8 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
 
     """
     if isinstance(x,numbers.Number) or (is_tensor(x) and ndim(x)==0):
+        return TensorShape([None])
+    elif isinstance(x, str) or (isinstance(x,list) and len(x)>0 and isinstance(x[0], str)):
         return TensorShape([None])
     if need_exclude_batch_axis and is_singleton==False:
         shp=list(int_shape(x))
@@ -2718,7 +2748,9 @@ def softmax(x, axis=1):
              [0.8808, 0.9820]]])
 
     """
-    return x.exp().true_divide(x.exp().reduce_sum(axis=axis,keepdims=True).clamp(min=epsilon()))
+    denom=reduce_sum(x.exp(), axis=axis, keepdims=True)
+    nume=x.exp()
+    return where(denom==0,zeros_like(denom),true_divide(nume,denom))
 
 
 @numpy_compatible
@@ -3598,7 +3630,8 @@ def gram_matrix(x: Tensor):
 
     # we 'normalize' the values of the gram matrix
     # by dividing by the number of element in each feature maps.
-    return true_divide(G,a*b*c*d)
+
+    return G
 
 ############################
 ## random
@@ -3653,9 +3686,9 @@ def random_choice(x: Tensor,n:int=1):
     np.random.shuffle(idxes)
     if is_tensor(x):
         idx = to_tensor(idxes)[:n].long()
-        return  unpack_singleton(x[idx])
+        return  x[idx]
     elif isinstance(x,(list,tuple)):
-        return unpack_singleton([x[idx] for idx in idxes[:n]])
+        return [ x[idx] for idx in idxes[:n]]
 
 
 
@@ -3745,16 +3778,13 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=None, seed=None):
         dtype = str2dtype(dtype)
     else:
         dtype=x.dtype
-    if is_abnormal_number(std):
-        std=1
-    if is_abnormal_number(mean):
-        mean=0
+
     if is_tensor(std):
         std=std.item()
     if is_tensor(mean):
         mean=mean.item()
 
-    return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=dtype)
+    return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=dtype).to(_get_device())
 
 
 

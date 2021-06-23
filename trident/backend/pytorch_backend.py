@@ -14,7 +14,7 @@ import os
 import shutil
 import sys
 import uuid
-from collections import defaultdict
+from collections import defaultdict,abc
 from types import MethodType
 from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Mapping, TypeVar
 from functools import partial
@@ -30,8 +30,9 @@ import torch.nn as nn
 import torch.onnx
 import torch.utils.hooks as hooks
 from torch.utils.hooks import RemovableHandle
-from torch._six import container_abcs
+
 from torch.nn.parameter import Parameter
+from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
     PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec, dtype
 from trident.backend.tensorspec import *
@@ -671,14 +672,63 @@ class Layer(nn.Module):
             print(value)
             self.to(value)
 
-    def cuda(self, device=None):
-        return self._apply(lambda t: t.cuda())
+    def cuda(self, device: Optional[Union[int, torch.device]] = None):
+        r"""Moves all model parameters and buffers to the GPU.
 
-    def cpu(self):
+        This also makes associated parameters and buffers different objects. So
+        it should be called before constructing optimizer if the module will
+        live on GPU while being optimized.
+
+        Args:
+            device (int, optional): if specified, all parameters will be
+                copied to that device
+
+        Returns:
+            Module: self
+        """
+        return self._apply(lambda t: t.cuda(device))
+
+
+    def xpu(self ,device: Optional[Union[int, torch.device]] = None) :
+        r"""Moves all model parameters and buffers to the XPU.
+
+        This also makes associated parameters and buffers different objects. So
+        it should be called before constructing optimizer if the module will
+        live on XPU while being optimized.
+
+        Arguments:
+            device (int, optional): if specified, all parameters will be
+                copied to that device
+
+        Returns:
+            Module: self
+        """
+        return self._apply(lambda t: t.xpu(device))
+
+    def cpu(self) :
+        r"""Moves all model parameters and buffers to the CPU.
+
+        Returns:
+            Module: self
+        """
         return self._apply(lambda t: t.cpu())
 
-    def gpu(self, device=None):
-        return self._apply(lambda t: t.cuda())
+
+    def gpu(self, device: Optional[Union[int, torch.device]] = None):
+        r"""Moves all model parameters and buffers to the GPU.
+
+            This also makes associated parameters and buffers different objects. So
+            it should be called before constructing optimizer if the module will
+            live on GPU while being optimized.
+
+            Args:
+                device (int, optional): if specified, all parameters will be
+                    copied to that device
+
+            Returns:
+                Module: self
+            """
+        return self._apply(lambda t: t.cuda(device))
 
     def to(self, *args, **kwargs):
         r"""Moves and/or casts the parameters and buffers.
@@ -757,7 +807,7 @@ class Layer(nn.Module):
             if not dtype.is_floating_point:
                 raise TypeError('nn.Module.to only accepts floating point '
                                 'dtypes, but got desired dtype={}'.format(dtype))
-        if device is not None and self.get_root()._device != device.type:
+        if device is not None :
             self.get_root()._device = device.type
 
         def convert(t):
@@ -1444,7 +1494,7 @@ class ModuleList(Layer):
         Args:
             modules (iterable): iterable of modules to append
         """
-        if not isinstance(modules, container_abcs.Iterable):
+        if not isinstance(modules, abc.Iterable):
             raise TypeError("ModuleList.extend should be called with an "
                             "iterable, but got " + type(modules).__name__)
         offset = len(self)
@@ -1570,7 +1620,7 @@ class ModuleDict(Layer):
             modules (iterable): a mapping (dictionary) from string to :class:`~torch.nn.Module`,
                 or an iterable of key-value pairs of type (string, :class:`~torch.nn.Module`)
         """
-        if not isinstance(modules, container_abcs.Iterable):
+        if not isinstance(modules, abc.Iterable):
             raise TypeError("ModuleDict.update should be called with an "
                             "iterable of key/value pairs, but got " +
                             type(modules).__name__)
@@ -1578,12 +1628,12 @@ class ModuleDict(Layer):
         if isinstance(modules, (OrderedDict, ModuleDict)):
             for key, module in modules.items():
                 self[key] = module
-        elif isinstance(modules, container_abcs.Mapping):
+        elif isinstance(modules, abc.Mapping):
             for key, module in sorted(modules.items()):
                 self[key] = module
         else:
             for j, m in enumerate(modules):
-                if not isinstance(m, container_abcs.Iterable):
+                if not isinstance(m, abc.Iterable):
                     raise TypeError("ModuleDict update sequence element "
                                     "#" + str(j) + " should be Iterable; is" +
                                     type(m).__name__)
