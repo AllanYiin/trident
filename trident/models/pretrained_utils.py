@@ -86,6 +86,9 @@ def _make_recovery_model_include_top(recovery_model:Layer,default_shape=None,inp
             idx -= 1
 
 
+    dims =list(default_shape)
+    dims.insert(0, None)
+    new_tensorshape =TensorShape(dims)
     if size_change:
         dims = list(input_shape)
         dims.insert(0, None)
@@ -93,12 +96,13 @@ def _make_recovery_model_include_top(recovery_model:Layer,default_shape=None,inp
         for module in recovery_model.modules():
             module._input_shape=None
             module._output_shape = None
-        recovery_model.to(get_device())
-        out=recovery_model(to_tensor(new_tensorshape.get_dummy_tensor(),device=get_device()))
+    recovery_model.to(get_device())
+    out = recovery_model(to_tensor(new_tensorshape.get_dummy_tensor(), device=get_device()))
 
-        if isinstance(recovery_model.signature, Signature):
-            recovery_model.signature.inputs.value_list[0].shape = TensorShape(dims)
-            recovery_model.signature.inputs.value_list[0].object_type=ObjectType.rgb
+    if isinstance(recovery_model.signature, Signature):
+        recovery_model.signature.inputs.value_list[0].shape = TensorShape(dims)
+        recovery_model.signature.inputs.value_list[0].object_type=ObjectType.rgb
+    recovery_model.to(get_device())
     return recovery_model
 
 
