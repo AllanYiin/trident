@@ -17,7 +17,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from trident.models.pretrained_utils import _make_recovery_model_include_top
 from trident.data.vision_transforms import Resize,Normalize
@@ -114,7 +114,7 @@ def SEResNet_IR(include_top=True,num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_
 
 def SEResNet_IR_50_512(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=(3,112,112),
              classes=1000,
              **kwargs):
@@ -123,7 +123,7 @@ def SEResNet_IR_50_512(include_top=True,
     else:
         input_shape=(3, 112, 112)
     seresnet = SEResNet_IR(include_top=include_top,num_layers=50,Bottleneck=BottleNeck_IR_SE,drop_ratio=0.4,feature_dim=512,input_shape=input_shape)
-    if pretrained == True:
+    if pretrained:
         download_model_from_google_drive('1aLYbFvtvsV2gQ16D_vwzrKdbCgij7IoZ', dirname, 'arcface_se_50_512.pth')
         recovery_model = load(os.path.join(dirname, 'arcface_se_50_512.pth'))
         recovery_model = fix_layer(recovery_model)
@@ -131,7 +131,7 @@ def SEResNet_IR_50_512(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
         seresnet.model = recovery_model
     else:
-        seresnet.model = _make_recovery_model_include_top(seresnet.model, include_top=include_top, classes=classes, freeze_features=False)
+        seresnet.model = _make_recovery_model_include_top(seresnet.model, include_top=include_top, classes=classes, freeze_features=True)
     seresnet.model.input_shape = input_shape
     seresnet.model.to(_device)
     return seresnet

@@ -180,8 +180,9 @@ def EfficientNet(width_coefficient,
             efficientnet.add_module('block{}{}'.format(i + 1, chr(j + 97)),efficient_block(expand_ratio=args['expand_ratio'] , filters_in=round_filters(args['filters_in']), filters_out=round_filters(args['filters_out']), kernel_size=args['kernel_size'] , strides=args['strides'] , zero_pad=0, se_ratio=args['se_ratio'] ,drop_connect_rate=drop_connect_rate * b / blocks, name='block{}{}_'.format(i + 1, chr(j + 97)))),
             b += 1
     efficientnet.add_module('top_conv', Conv2d_Block((1, 1), round_filters(1280), strides=1, use_bias=False, auto_pad=True,  padding_mode='zero', normalization='batch', activation='swish', name='top_conv'))
-    efficientnet.add_module('avg_pool',GlobalAvgPool2d(name='avg_pool'))
+
     if include_top:
+        efficientnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         if dropout_rate > 0:
             efficientnet.add_module('top_dropout',Dropout(dropout_rate,name='top_dropout'))
         efficientnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
@@ -201,7 +202,7 @@ def EfficientNet(width_coefficient,
 
 def EfficientNetB0(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(224,224,3),
              classes=1000,
              **kwargs):
@@ -219,7 +220,7 @@ def EfficientNetB0(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb0.model = recovery_model
         else:
-            effb0.model = _make_recovery_model_include_top(effb0.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb0.model = _make_recovery_model_include_top(effb0.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb0.model.input_shape = input_shape
         effb0.model.name='efficientnet-b0'
@@ -228,7 +229,7 @@ def EfficientNetB0(include_top=True,
 
 def EfficientNetB1(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(240,240,3),
              classes=1000,
              **kwargs):
@@ -246,7 +247,7 @@ def EfficientNetB1(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb1.model = recovery_model
         else:
-            effb1.model = _make_recovery_model_include_top(effb1.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb1.model = _make_recovery_model_include_top(effb1.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb1.model.input_shape = input_shape
         effb1.model.name = 'efficientnet-b1'
@@ -255,7 +256,7 @@ def EfficientNetB1(include_top=True,
 
 def EfficientNetB2(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(260,260,3),
              classes=1000,
              **kwargs):
@@ -273,7 +274,7 @@ def EfficientNetB2(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb2.model = recovery_model
         else:
-            effb2.model = _make_recovery_model_include_top(effb2.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb2.model = _make_recovery_model_include_top(effb2.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb2.model.input_shape = input_shape
         effb2.model.name = 'efficientnet-b2'
@@ -282,7 +283,7 @@ def EfficientNetB2(include_top=True,
 
 def EfficientNetB3(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=(300,300,3),
              classes=1000,
              **kwargs):
@@ -300,7 +301,7 @@ def EfficientNetB3(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb3.model = recovery_model
         else:
-            effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb3.model.input_shape = input_shape
         effb3.model.name = 'efficientnet-b3'
@@ -309,7 +310,7 @@ def EfficientNetB3(include_top=True,
 
 def EfficientNetB4(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(380,380,3),
              classes=1000,
              **kwargs):
@@ -327,7 +328,7 @@ def EfficientNetB4(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb4.model = recovery_model
         else:
-            effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb4.model.input_shape = input_shape
         effb4.model.name = 'efficientnet-b4'
@@ -336,7 +337,7 @@ def EfficientNetB4(include_top=True,
 
 def EfficientNetB5(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=(456,456,3),
              classes=1000,
              **kwargs):
@@ -367,7 +368,7 @@ def EfficientNetB5(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb5.model = recovery_model
         else:
-            effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb5.model.input_shape = input_shape
         effb5.model.name = 'efficientnet-b5'
@@ -377,7 +378,7 @@ def EfficientNetB5(include_top=True,
 
 def EfficientNetB6(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(528,528,3),
              classes=1000,
              **kwargs):
@@ -395,7 +396,7 @@ def EfficientNetB6(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb6.model = recovery_model
         else:
-            effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb6.model.input_shape = input_shape
         effb6.model.name = 'efficientnet-b6'
@@ -405,7 +406,7 @@ def EfficientNetB6(include_top=True,
 
 def EfficientNetB7(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=(600,600,3),
              classes=1000,
              **kwargs):
@@ -423,7 +424,7 @@ def EfficientNetB7(include_top=True,
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
             effb7.model = recovery_model
         else:
-            effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
+            effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=True)
 
         effb7.model.input_shape = input_shape
         effb7.model.name = 'efficientnet-b7'

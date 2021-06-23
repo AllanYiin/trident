@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from trident.data.vision_transforms import Resize,Normalize
@@ -201,8 +201,9 @@ def EfficientNet(width_coefficient, depth_coefficient, input_shape, dropout_rate
                             Conv2d_Block((1, 1), round_filters(1280), strides=1, use_bias=False, auto_pad=True,
                                          padding_mode='zero', normalization='batch', activation='swish',
                                          name='top_conv'))
-    efficientnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
+
     if include_top:
+        efficientnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         if dropout_rate > 0:
             efficientnet.add_module('top_dropout', Dropout(dropout_rate, name='top_dropout'))
         efficientnet.add_module('fc', Dense(num_classes, activation=None, name='fc'))
@@ -222,7 +223,7 @@ def EfficientNet(width_coefficient, depth_coefficient, input_shape, dropout_rate
     return model
 
 
-def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 224, 224), classes=1000, **kwargs):
+def EfficientNetB0(include_top=True, pretrained=True,freeze_features=True, input_shape=(3, 224, 224), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -235,14 +236,14 @@ def EfficientNetB0(include_top=True, pretrained=True,freeze_features=False, inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb0.model = recovery_model
     else:
-        effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb0.model = _make_recovery_model_include_top( effb0.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb0.model .input_shape = input_shape
     effb0.model .to(get_device())
     return effb0
 
 
-def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 240, 240), classes=1000, **kwargs):
+def EfficientNetB1(include_top=True, pretrained=True, freeze_features=True,input_shape=(3, 240, 240), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -254,14 +255,14 @@ def EfficientNetB1(include_top=True, pretrained=True, freeze_features=False,inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb1.model = recovery_model
     else:
-        effb1.model = _make_recovery_model_include_top( effb1.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb1.model = _make_recovery_model_include_top( effb1.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb1.model .input_shape = input_shape
     effb1.model .to(get_device())
     return effb1
 
 
-def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 260, 260), classes=1000, **kwargs):
+def EfficientNetB2(include_top=True, pretrained=True, freeze_features=True,input_shape=(3, 260, 260), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -273,14 +274,14 @@ def EfficientNetB2(include_top=True, pretrained=True, freeze_features=False,inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb2.model = recovery_model
     else:
-        effb2.model = _make_recovery_model_include_top( effb2.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb2.model = _make_recovery_model_include_top( effb2.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb2.model .input_shape = input_shape
     effb2.model .to(get_device())
     return effb2
 
 
-def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, input_shape=(3, 300, 300), classes=1000, **kwargs):
+def EfficientNetB3(include_top=True, pretrained=True,freeze_features=True, input_shape=(3, 300, 300), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -292,14 +293,14 @@ def EfficientNetB3(include_top=True, pretrained=True,freeze_features=False, inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb3.model = recovery_model
     else:
-        effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb3.model = _make_recovery_model_include_top(effb3.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb3.model.input_shape = input_shape
     effb3.model.to(get_device())
     return effb3
 
 
-def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 380, 380), classes=1000, **kwargs):
+def EfficientNetB4(include_top=True, pretrained=True, freeze_features=True,input_shape=(3, 380, 380), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -311,14 +312,14 @@ def EfficientNetB4(include_top=True, pretrained=True, freeze_features=False,inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb4.model = recovery_model
     else:
-        effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb4.model = _make_recovery_model_include_top(effb4.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb4.model.input_shape = input_shape
     effb4.model.to(get_device())
     return effb4
 
 
-def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 456, 456), classes=1000, **kwargs):
+def EfficientNetB5(include_top=True, pretrained=True, freeze_features=True,input_shape=(3, 456, 456), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -330,14 +331,14 @@ def EfficientNetB5(include_top=True, pretrained=True, freeze_features=False,inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb5.model = recovery_model
     else:
-        effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb5.model = _make_recovery_model_include_top(effb5.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb5.model.input_shape = input_shape
     effb5.model.to(get_device())
     return effb5
 
 
-def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 528, 528), classes=1000, **kwargs):
+def EfficientNetB6(include_top=True, pretrained=True, freeze_features=True,input_shape=(3, 528, 528), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -349,7 +350,7 @@ def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb6.model = recovery_model
     else:
-        effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb6.model = _make_recovery_model_include_top(effb6.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb6.model.input_shape = input_shape
     effb6.model.to(get_device())
@@ -357,7 +358,7 @@ def EfficientNetB6(include_top=True, pretrained=True, freeze_features=False,inpu
 
 
 
-def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,input_shape=(3, 600, 600), classes=1000, **kwargs):
+def EfficientNetB7(include_top=True, pretrained=True, freeze_features=True,input_shape=(3, 600, 600), classes=1000, **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
     else:
@@ -369,7 +370,7 @@ def EfficientNetB7(include_top=True, pretrained=True, freeze_features=False,inpu
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         effb7.model = recovery_model
     else:
-        effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=False)
+        effb7.model = _make_recovery_model_include_top(effb7.model, include_top=include_top, classes=classes, freeze_features=True)
 
     effb7.model.input_shape = input_shape
     effb7.model.to(get_device())

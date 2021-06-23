@@ -181,8 +181,9 @@ def DenseNet(blocks,
     densenet.add_module('denseblock4', DenseBlock(blocks[3], growth_rate=growth_rate))
     densenet.add_module('classifier_norm',BatchNorm2d(name='classifier_norm'))
     densenet.add_module('classifier_relu', Relu(name='classifier_relu'))
-    densenet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
+
     if include_top:
+        densenet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         densenet.add_module('classifier', Dense(num_classes, activation=None, name='classifier'))
         densenet.add_module('softmax', SoftMax( name='softmax'))
     densenet.name = name
@@ -235,11 +236,8 @@ def DenseNetFcn(blocks=(4, 5, 7, 10, 12),
              num_classes=num_classes,
              name=name,
              **kwargs))
-    model.signature = Signature(name='DenseNetFcn')
-    if is_tensor(model._input_shape):
-        model.signature.inputs['input']=TensorSpec(shape=model._input_shape,name='input')
-    if is_tensor(model._output_shape):
-        model.signature.outputs['output']=TensorSpec(shape=model._output_shape,name='output')
+
+
 
     model.preprocess_flow = [Resize((input_shape[2], input_shape[1]), keep_aspect=True), Normalize(0, 255),
                              Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
@@ -299,7 +297,7 @@ class _DenseNetFcn2(Layer):
 def DenseNet121(include_top=True,
              pretrained=True,
              input_shape=(224,224,3),
-             freeze_features=False,
+             freeze_features=True,
              classes=1000,
              **kwargs):
     """
@@ -340,7 +338,7 @@ def DenseNet121(include_top=True,
             densenet121.model = recovery_model
 
         else:
-            densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=False)
+            densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=True)
             densenet121.model.input_shape = input_shape
         return densenet121
 
@@ -407,7 +405,7 @@ def DenseNet161(include_top=True,
 def DenseNet169(include_top=True,
              pretrained=True,
              input_shape=(224,224,3),
-             freeze_features=False,
+             freeze_features=True,
              classes=1000,
              **kwargs):
     """
@@ -447,7 +445,7 @@ def DenseNet169(include_top=True,
             densenet169.model = recovery_model
 
         else:
-            densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=False)
+            densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=True)
             densenet169.model.input_shape = input_shape
         return densenet169
 
@@ -456,7 +454,7 @@ def DenseNet169(include_top=True,
 def DenseNet201(include_top=True,
              pretrained=True,
              input_shape=(224,224,3),
-             freeze_features=False,
+             freeze_features=True,
              classes=1000,
              **kwargs):
     """
@@ -496,6 +494,6 @@ def DenseNet201(include_top=True,
             densenet201.model = recovery_model
 
         else:
-            densenet201.model = _make_recovery_model_include_top(densenet201.model, include_top=include_top, classes=classes, freeze_features=False)
+            densenet201.model = _make_recovery_model_include_top(densenet201.model, include_top=include_top, classes=classes, freeze_features=True)
             densenet201.model.input_shape = input_shape
         return densenet201

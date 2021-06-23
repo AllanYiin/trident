@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from torch.nn.parameter import Parameter
 
@@ -105,8 +105,9 @@ def MobileNet( input_shape=(3, 224, 224), classes=1000, use_bias=False, width_mu
             input_filters = output_filters
     features.append(Conv2d_Block((1,1), last_filters,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6'))
     mobilenet.add_module('features',Sequential(*features,name='features'))
-    mobilenet.add_module('gap',GlobalAvgPool2d())
+
     if include_top:
+        mobilenet.add_module('gap', GlobalAvgPool2d())
         mobilenet.add_module('drop', Dropout(0.2))
         mobilenet.add_module('fc',Dense((classes),activation=None))
         mobilenet.add_module('softmax', SoftMax(name='softmax'))
@@ -126,7 +127,7 @@ def MobileNet( input_shape=(3, 224, 224), classes=1000, use_bias=False, width_mu
 
 def MobileNetV2(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -143,7 +144,7 @@ def MobileNetV2(include_top=True,
         mob.model = recovery_model
 
     else:
-        mob.model = _make_recovery_model_include_top(mob.model, include_top=include_top, classes=classes, freeze_features=False)
+        mob.model = _make_recovery_model_include_top(mob.model, include_top=include_top, classes=classes, freeze_features=True)
 
         mob.model.input_shape = input_shape
         mob.model.to(_device)

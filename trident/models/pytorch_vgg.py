@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from trident.models.pretrained_utils import _make_recovery_model_include_top
@@ -107,7 +107,7 @@ def make_vgg_layers(cfg, num_classes=1000,input_shape=(3,224,224),include_top=Tr
 #vgg11 =make_vgg_layers(cfgs['A'], 1000)
 def VGG11(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -126,7 +126,7 @@ def VGG11(include_top=True,
         vgg11.model = recovery_model
 
     else:
-        vgg11.model = _make_recovery_model_include_top(vgg11.model, include_top=include_top, classes=classes, freeze_features=False)
+        vgg11.model = _make_recovery_model_include_top(vgg11.model, include_top=include_top, classes=classes, freeze_features=True)
 
         vgg11.model.input_shape = input_shape
         vgg11.model.to(_device)
@@ -139,7 +139,7 @@ def VGG11(include_top=True,
 #vgg13 =make_vgg_layers(cfgs['B'],  1000)
 def VGG13(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -156,7 +156,7 @@ def VGG13(include_top=True,
         vgg13.model = recovery_model
 
     else:
-        vgg13.model = _make_recovery_model_include_top(vgg13.model, include_top=include_top, classes=classes, freeze_features=False)
+        vgg13.model = _make_recovery_model_include_top(vgg13.model, include_top=include_top, classes=classes, freeze_features=True)
 
     vgg13.model.input_shape = input_shape
     vgg13.model.to(_device)
@@ -166,7 +166,7 @@ def VGG13(include_top=True,
 #vgg16 =make_vgg_layers(cfgs['D'],  1000)
 def VGG16(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -185,7 +185,7 @@ def VGG16(include_top=True,
         vgg16.model = recovery_model
 
     else:
-        vgg16.model = _make_recovery_model_include_top(vgg16.model, include_top=include_top, classes=classes, freeze_features=False)
+        vgg16.model = _make_recovery_model_include_top(vgg16.model, include_top=include_top, classes=classes, freeze_features=True)
 
         vgg16.model.input_shape = input_shape
         vgg16.model.to(_device)
@@ -194,7 +194,7 @@ def VGG16(include_top=True,
 #vgg19 =make_vgg_layers(cfgs['E'], 1000)
 def VGG19(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -213,7 +213,7 @@ def VGG19(include_top=True,
         vgg19.model = recovery_model
 
     else:
-        vgg19.model = _make_recovery_model_include_top(vgg19.model, include_top=include_top, classes=classes, freeze_features=False)
+        vgg19.model = _make_recovery_model_include_top(vgg19.model, include_top=include_top, classes=classes, freeze_features=True)
 
         vgg19.model.input_shape = input_shape
         vgg19.model.to(_device)

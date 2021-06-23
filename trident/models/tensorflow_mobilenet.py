@@ -100,13 +100,14 @@ def MobileNet( input_shape=(224, 224,3), classes=1000, use_bias=False, width_mul
             input_filters = output_filters
     features.append(Conv2d_Block((1,1), last_filters,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu6',name='last_layer'))
     mobilenet.add_module('features',Sequential(*features,name='features'))
-    mobilenet.add_module('gap',GlobalAvgPool2d())
+
     if include_top:
+        mobilenet.add_module('gap', GlobalAvgPool2d())
         mobilenet.add_module('drop', Dropout(0.2))
         mobilenet.add_module('fc',Dense((classes),activation=None))
         mobilenet.add_module('softmax', SoftMax(name='softmax'))
     model = ImageClassificationModel(input_shape=input_shape, output=mobilenet)
-    model.signature=get_signature(model.model.forward)
+
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',
               encoding='utf-8-sig') as f:
         labels = [l.rstrip() for l in f]

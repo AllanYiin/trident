@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from trident.models.pretrained_utils import _make_recovery_model_include_top
@@ -136,8 +136,8 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
     resnet.add_module('layer2',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='layer2' )))
     resnet.add_module('layer3',(_make_layer(block, 256, layers[2], strides=2, dilate=None,use_bias=use_bias,layer_name='layer3' )))
     resnet.add_module('layer4' ,(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='layer4' )))
-    resnet.add_module('avg_pool',GlobalAvgPool2d(name='avg_pool'))
     if include_top:
+        resnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         resnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
         resnet.add_module('softmax', SoftMax(name='softmax'))
     resnet.name=model_name
@@ -201,6 +201,7 @@ def resnet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
     resnet.add_module('layer2',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='layer2' )))
     resnet.add_module('layer3',(_make_layer(block, 256, layers[2], strides=2, dilate=None,use_bias=use_bias,layer_name='layer3' )))
     resnet.add_module('layer4' ,(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='layer4' )))
+
     if include_top:
         resnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         resnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
@@ -216,7 +217,7 @@ def resnet18(include_top=True,
 
 def ResNet18(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -233,7 +234,7 @@ def ResNet18(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet18.model = recovery_model
     else:
-        resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=False)
+        resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=True)
 
     resnet18.model.input_shape = input_shape
     resnet18.model.to(_device)
@@ -241,7 +242,7 @@ def ResNet18(include_top=True,
 
 def ResNet50(include_top=True,
              pretrained=True,
-             freeze_features=False,
+             freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -258,7 +259,7 @@ def ResNet50(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet50.model = recovery_model
     else:
-        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=False)
+        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=True)
 
     resnet50.model.input_shape = input_shape
     resnet50.model.to(_device)
@@ -267,7 +268,7 @@ def ResNet50(include_top=True,
 
 def ResNet101(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -283,7 +284,7 @@ def ResNet101(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet101.model = recovery_model
     else:
-        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=False)
+        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=True)
 
     resnet101.model.input_shape = input_shape
     resnet101.model.to(_device)
@@ -292,7 +293,7 @@ def ResNet101(include_top=True,
 
 def ResNet152(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=None,
              classes=1000,
              **kwargs):
@@ -308,7 +309,7 @@ def ResNet152(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet152.model = recovery_model
     else:
-        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=False)
+        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=True)
 
     resnet152.model.input_shape = input_shape
     resnet152.model.to(_device)

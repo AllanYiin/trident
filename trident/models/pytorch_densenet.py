@@ -16,7 +16,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import container_abcs
+from collections import abc
 from torch.nn import init
 from torch.nn.parameter import Parameter
 from trident.models.pretrained_utils import _make_recovery_model_include_top
@@ -298,7 +298,7 @@ class _DenseNetFcn2(Layer):
 
 def DenseNet121(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -337,7 +337,7 @@ def DenseNet121(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet121.model = recovery_model
     else:
-        densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=False)
+        densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=True)
 
     densenet121.model.input_shape = input_shape
     densenet121.model.to(_device)
@@ -346,7 +346,7 @@ def DenseNet121(include_top=True,
 
 def DenseNet161(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -385,7 +385,7 @@ def DenseNet161(include_top=True,
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet161.model = recovery_model
     else:
-        densenet161.model = _make_recovery_model_include_top(densenet161.model, include_top=include_top, classes=classes, freeze_features=False)
+        densenet161.model = _make_recovery_model_include_top(densenet161.model, include_top=include_top, classes=classes, freeze_features=True)
 
     densenet161.model.input_shape = input_shape
     densenet161.model.to(_device)
@@ -396,7 +396,7 @@ def DenseNet161(include_top=True,
 
 def DenseNet169(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -434,7 +434,7 @@ def DenseNet169(include_top=True,
         densenet169 = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet169.model = recovery_model
     else:
-        densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=False)
+        densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=True)
         densenet169.model.input_shape = input_shape
         densenet169.model.to(_device)
     return densenet169
@@ -443,7 +443,7 @@ def DenseNet169(include_top=True,
 
 def DenseNet201(include_top=True,
              pretrained=True,
-            freeze_features=False,
+            freeze_features=True,
              input_shape=(3,224,224),
              classes=1000,
              **kwargs):
@@ -482,7 +482,7 @@ def DenseNet201(include_top=True,
         densenet201.model = recovery_model
 
     else:
-        densenet201.model = _make_recovery_model_include_top(densenet201.model, include_top=include_top, classes=classes, freeze_features=False)
+        densenet201.model = _make_recovery_model_include_top(densenet201.model, include_top=include_top, classes=classes, freeze_features=True)
         densenet201.model.input_shape = input_shape
     densenet201.model.to(_device)
     return densenet201
