@@ -208,15 +208,34 @@ class ZipDataset(Dataset):
     def __init__(self, *datasets, **kwargs):
         """See `Dataset.zip()` for details."""
         super().__init__(datasets, **kwargs)
-        if not all(len(datasets[0]) == len(ds) for ds in datasets):
-            raise ValueError("lengths of input datasets are inconsistent")
         self.symbol = tuple([ds.symbol for ds in datasets])
 
     def __getitem__(self, index: int) -> Tuple:
-        return tuple(ds[index] for ds in self.items)
+        return tuple([ds[index%len(ds)] for ds in self.items])
+
+    def __getattr__(self, name):
+        if name in self.__dict__:
+            return self.__dict__[name]
+        if name.endswith('transform_funcs'):
+            if 'items' in self.__dict__:
+                items = self.__dict__['items']
+                ds=items[0]
+                if name in ds.__dict__:
+                    return ds.__dict__[name]
+        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
+
+    def __setattr__(self, name: str, value) -> None:
+        if name.endswith('transform_funcs'):
+            if 'items' in self.__dict__:
+                items = self.__dict__['items']
+                for ds in items:
+                    if hasattr(ds, name):
+                        setattr(ds,name,value)
+        else:
+            object.__setattr__(self, name, value)
 
     def __len__(self) -> int:
-        return len(self.items[0])
+        return len(self.items)
 
 
 class NumpyDataset(Dataset):
@@ -361,6 +380,8 @@ class ImageDataset(Dataset):
             return img_data
         else:
             return img_data
+
+
 
 
 class MaskDataset(Dataset):
@@ -1062,14 +1083,13 @@ class Iterator(object):
 
         for k in range(len(datasets)):
             ds = datasets[k]
-            dataitem = ds[k]
             if isinstance(ds,TextSequenceDataset):
                 ds.element_spec = TensorSpec(shape=TensorShape([None,ds.sequence_length]), dtype=dtype.long,object_type=ds.object_type, name=ds.symbol)
-            elif isinstance(dataitem, str):
+            elif ds.object_type==ObjectType.image_path:
                 ds.element_spec = TensorSpec(shape=TensorShape([None]),dtype=str,object_type=ds.object_type, name=ds.symbol)
             else:
                 if len(ds) > 0:
-
+                    dataitem = ds[k]
                     ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
                     self.data_template[ds.element_spec] = None
 
@@ -1114,9 +1134,9 @@ class Iterator(object):
     def label(self, value):
         self._label = value
 
-        if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(
-                self._label) == len(self._data):
+        if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len( self._label) == len(self._data):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
+
         else:
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = False
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
