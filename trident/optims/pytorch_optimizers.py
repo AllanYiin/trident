@@ -64,6 +64,30 @@ class Optimizer(optimizer.Optimizer):
         """
         return self.param_groups['params']
 
+    @parameters.setter
+    def parameters(self,value):
+        """
+
+        Returns: the weights need to train
+
+        """
+        if isinstance(value, torch.Tensor):
+            raise TypeError("params argument given to the optimizer should be "
+                            "an iterable of Tensors or dicts, but got " +
+                            torch.typename(value))
+        if not hasattr(self,'param_groups') or self.param_groups is None or len(self.param_groups)==0:
+            self.param_groups=[]
+
+            param_groups = list(value)
+            if len(param_groups) == 0:
+                raise ValueError("optimizer got an empty parameter list")
+            if not isinstance(param_groups[0], dict):
+                param_groups = [{'params': param_groups}]
+                for param_group in param_groups:
+                    self.add_param_group(param_group)
+        else:
+            self.param_groups[0]['params']=value
+
     @property
     def lr(self):
         """str: The getter method of the 'learning rate' property."""
@@ -155,6 +179,13 @@ class Adam(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
+
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
@@ -211,7 +242,9 @@ class Adam(Optimizer):
                         G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
 
                 p.data.add_(G_grad, alpha=-step_size)
-
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
@@ -264,7 +297,7 @@ class SGD(optim.SGD):
     """
 
     def __init__(self, params, lr=1e-3, momentum=0, dampening=0,
-                 weight_decay=0, nesterov=False):
+                 weight_decay=0, nesterov=False,**kwargs):
         super().__init__(params, lr=lr, momentum=momentum, dampening=dampening, weight_decay=weight_decay, nesterov=nesterov)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -353,7 +386,7 @@ class LBFGS(lbfgs.LBFGS):
                  tolerance_grad=1e-7,
                  tolerance_change=1e-9,
                  history_size=100,
-                 line_search_fn=None):
+                 line_search_fn=None,**kwargs):
         super().__init__(params, lr=lr, max_iter=max_iter, max_eval=max_eval, tolerance_grad=tolerance_grad, tolerance_change=tolerance_change, history_size=history_size,
                          line_search_fn=line_search_fn)
 
@@ -424,7 +457,7 @@ class Adadelta(adadelta.Adadelta):
     __ https://arxiv.org/abs/1212.5701
     """
 
-    def __init__(self, params, lr=1.0, rho=0.9, eps=1e-7, weight_decay=0):
+    def __init__(self, params, lr=1.0, rho=0.9, eps=1e-7, weight_decay=0,**kwargs):
         super().__init__(params, lr=lr, rho=rho, eps=eps, weight_decay=weight_decay)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -494,7 +527,7 @@ class Adagrad(adagrad.Adagrad):
          Optimization: http://jmlr.org/papers/v12/duchi11a.html
      """
 
-    def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-7):
+    def __init__(self, params, lr=1e-2, lr_decay=0, weight_decay=0, initial_accumulator_value=0, eps=1e-7,**kwargs):
         super().__init__(params, lr=lr, lr_decay=lr_decay, eps=eps, weight_decay=weight_decay, initial_accumulator_value=initial_accumulator_value)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -574,7 +607,7 @@ class RMSprop(rmsprop.RMSprop):
 
     """
 
-    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-7, weight_decay=0, momentum=0, centered=False, gradient_centralization=None):
+    def __init__(self, params, lr=1e-2, alpha=0.99, eps=1e-7, weight_decay=0, momentum=0, centered=False, gradient_centralization=None,**kwargs):
         super().__init__(params, lr=lr, alpha=alpha, eps=eps, weight_decay=weight_decay, momentum=momentum, centered=centered)
 
     def adjust_learning_rate(self, new_lr, verbose=True):
@@ -665,7 +698,7 @@ class RAdam(Optimizer):
         """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, N_sma_threshhold=5,
-                 degenerated_to_sgd=True, gradient_centralization=None):
+                 degenerated_to_sgd=True, gradient_centralization=None,**kwargs):
         """Construct a new RAdam optimizer.
         Args:
             params: trainable parameters from model
@@ -719,6 +752,13 @@ class RAdam(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
                 grad = p.grad.data.float()
                 if grad.is_sparse:
                     raise RuntimeError('RAdam does not support sparse gradients')
@@ -774,11 +814,15 @@ class RAdam(Optimizer):
                     p_data.add_(exp_avg, alpha=-step_size * group['lr'])
                 p.data.copy_(p_data)
 
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
+
         return loss
 
 
 class PlainRAdam(Optimizer):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, degenerated_to_sgd=True, gradient_centralization=None,**kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -815,6 +859,14 @@ class PlainRAdam(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
+
                 grad = p.grad.data.float()
                 if grad.is_sparse:
                     raise RuntimeError('RAdam does not support sparse gradients')
@@ -859,6 +911,9 @@ class PlainRAdam(Optimizer):
                     p_data.add_(grad, alpha=-step_size)
                     p.data.copy_(p_data)
 
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
@@ -882,7 +937,7 @@ class AdamW(Optimizer):
 
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, warmup=0, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, warmup=0, gradient_centralization=None,**kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -917,6 +972,12 @@ class AdamW(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
                 grad = p.grad.data.float()
                 if grad.is_sparse:
                     raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
@@ -959,11 +1020,16 @@ class AdamW(Optimizer):
 
                 p.data.copy_(p_data)
 
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
+
+
         return loss
 
 
 class Lookahead(Optimizer):
-    def __init__(self, optimizer, params, defaults, k=5, alpha=0.5, gradient_centralization=None):
+    def __init__(self, optimizer, params, defaults, k=5, alpha=0.5, gradient_centralization=None,**kwargs):
         super().__init__(params, defaults)
         self.optimizer = optimizer
         self.k = k
@@ -1036,7 +1102,7 @@ class Ranger(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, alpha=0.5, k=6, N_sma_threshhold=5, betas=(.95, 0.999), eps=1e-5,
-                 weight_decay=0, gradient_centralization=None):
+                 weight_decay=0, gradient_centralization=None,**kwargs):
         self.gradient_centralization = gradient_centralization
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
@@ -1145,17 +1211,22 @@ class Ranger(Optimizer):
                 # begin computations
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
-                state['step'] += 1.0
+
 
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+
+                state['step'] += 1.0
 
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
 
                 exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
 
                 buffered = self.radam_buffer[int(state['step'] % 10)]
+
+
+
 
                 if state['step'] == buffered[0]:
                     N_sma, step_size = buffered[1], buffered[2]
@@ -1172,41 +1243,40 @@ class Ranger(Optimizer):
                         step_size = 1.0 / (1 - beta1 ** state['step'])
                     buffered[2] = step_size
 
-
                 if N_sma > self.N_sma_threshhold:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    #p_data_fp32.addcdiv_(-step_size * group['lr'], exp_avg, denom)
                     G_grad = exp_avg / denom
                 else:
-                    #p_data_fp32.add_(exp_avg, alpha=-step_size * group['lr'])
                     G_grad = exp_avg
 
                 if group['weight_decay'] != 0:
-                    #p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
                     G_grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
                 if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(grad.size())) > 1:
-                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
+                    if len(list(G_grad.size())) > 1:
+                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
 
                 if any_abnormal_number(p_data_fp32):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                    p_data = where(is_abnormal_number(p_data_fp32), p.data, p_data_fp32)
+                    p_data_fp32 = where(is_abnormal_number(p_data_fp32),p.data.float(), p_data_fp32)
 
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
                 p.data.copy_(p_data_fp32)
-                # integrated look ahead...
-                # we do it at the param level instead of group level
+
                 if state['step'] % group['k'] == 0:
                     # get access to slow param tensor
                     slow_p = state['slow_buffer']
                     # (fast weights - slow weights) * alpha
-                    slow_p.add_(p.data - slow_p,alpha=self.alpha)
+                    slow_p.add_(p.data - slow_p, alpha=self.alpha)
+                    # copy interpolated weights to RAdam param tensor
                     if any_abnormal_number(slow_p):
                         sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                        slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
-                    # copy interpolated weights to RAdam param tensor
+                        slow_p = where(is_abnormal_number(slow_p), p.data.float(), slow_p)
                     p.data.copy_(slow_p)
+
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
 
         return loss
 
@@ -1216,7 +1286,7 @@ class RangerLars(Optimizer):
     https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer/blob/master/ranger/ranger.py
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6, N_sma_threshhold=5, eps=1e-7, weight_decay=0, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), alpha=0.5, k=6, N_sma_threshhold=5, eps=1e-7, weight_decay=0, gradient_centralization=None,**kwargs):
         # parameter checks
         if not 0.0 <= alpha <= 1.0:
             raise ValueError('Invalid slow update rate: {alpha}')
@@ -1380,6 +1450,9 @@ class RangerLars(Optimizer):
                     slow_p = where(is_abnormal_number(slow_p), p.data, slow_p)
                     p.data.copy_(slow_p)  # copy interpolated weights to RAdam param tensor
 
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
@@ -1399,7 +1472,7 @@ class LARS(Optimizer):
             exclude_from_weight_decay=None,
             exclude_from_layer_adaptation=None,
             classic_momentum=True,
-            eeta=0.001):
+            eeta=0.001,**kwargs):
         """Constructs a LARSOptimizer.
         Args:
         lr: A `float` for learning rate.
@@ -1547,9 +1620,7 @@ class LARS(Optimizer):
 
 
 class AdaBelief(Optimizer):
-    r"""Implements AdaBelief algorithm. Modified from Adam in PyTorch
-
-    https://github.com/juntang-zhuang/Adabelief-Optimizer
+    """Implements AdaBelief algorithm. Modified from Adam in PyTorch
     Arguments:
         params (iterable): iterable of parameters to optimize or dicts defining
             parameter groups
@@ -1575,14 +1646,13 @@ class AdaBelief(Optimizer):
             update similar to RAdam
         degenerated_to_sgd (boolean, optional) (default:True) If set as True, then perform SGD update
             when variance of gradient is high
-        print_change_log (boolean, optional) (default: True) If set as True, print the modifcation to
-            default hyper-parameters
+
     reference: AdaBelief Optimizer, adapting stepsizes by the belief in observed gradients, NeurIPS 2020
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.95, 0.999), eps=1e-16,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-16,
                  weight_decay=0, amsgrad=False, weight_decouple=True, fixed_decay=False, rectify=True,
-                 degenerated_to_sgd=True, print_change_log=True, **kwargs):
+                 degenerated_to_sgd=True, gradient_centralization=None,**kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -1591,8 +1661,6 @@ class AdaBelief(Optimizer):
             raise ValueError("Invalid beta parameter at index 0: {}".format(betas[0]))
         if not 0.0 <= betas[1] < 1.0:
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
-        if not 0.0 <= weight_decay:
-            raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
 
         self.degenerated_to_sgd = degenerated_to_sgd
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
@@ -1608,14 +1676,7 @@ class AdaBelief(Optimizer):
         self.weight_decouple = weight_decouple
         self.rectify = rectify
         self.fixed_decay = fixed_decay
-        if self.weight_decouple:
-            print('Weight decoupling enabled in AdaBelief')
-            if self.fixed_decay:
-                print('Weight decay fixed')
-        if self.rectify:
-            print('Rectification enabled in AdaBelief')
-        if amsgrad:
-            print('AMSGrad enabled in AdaBelief')
+        self.gradient_centralization=gradient_centralization
 
     def __setstate__(self, state):
         super(AdaBelief, self).__setstate__(state)
@@ -1623,12 +1684,11 @@ class AdaBelief(Optimizer):
             group.setdefault('amsgrad', False)
 
     def reset(self):
-        version_higher = (torch.__version__ >= "1.5.0")
         for group in self.param_groups:
             for p in group['params']:
                 state = self.state[p]
                 amsgrad = group['amsgrad']
-
+                version_higher = (torch.__version__ >= "1.5.0")
                 # State initialization
                 state['step'] = 0
                 # Exponential moving average of gradient values
@@ -1636,12 +1696,12 @@ class AdaBelief(Optimizer):
                     if version_higher else torch.zeros_like(p.data)
 
                 # Exponential moving average of squared gradient values
-                state['exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                state['exp_avg_sq'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
                     if version_higher else torch.zeros_like(p.data)
 
                 if amsgrad:
                     # Maintains max of all exp. moving avg. of sq. grad. values
-                    state['max_exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
+                    state['max_exp_avg_sq'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
                         if version_higher else torch.zeros_like(p.data)
 
     @torch.no_grad()
@@ -1673,6 +1733,7 @@ class AdaBelief(Optimizer):
                 if grad.is_sparse:
                     raise RuntimeError(
                         'AdaBelief does not support sparse gradients, please consider SparseAdam instead')
+                p_data_fp32 = p.data.float()
                 amsgrad = group['amsgrad']
 
                 state = self.state[p]
@@ -1683,28 +1744,29 @@ class AdaBelief(Optimizer):
                 if len(state) == 0:
                     state['step'] = 0
                     # Exponential moving average of gradient values
-                    state['exp_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
-                        if version_higher else torch.zeros_like(p.data)
+                    state['exp_avg'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) if version_higher else torch.zeros_like(p.data)
                     # Exponential moving average of squared gradient values
-                    state['exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
-                        if version_higher else torch.zeros_like(p.data)
+                    state['exp_avg_sq'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)  if version_higher else torch.zeros_like(p.data)
                     if amsgrad:
                         # Maintains max of all exp. moving avg. of sq. grad. values
-                        state['max_exp_avg_var'] = torch.zeros_like(p.data, memory_format=torch.preserve_format) \
-                            if version_higher else torch.zeros_like(p.data)
+                        state['max_exp_avg_sq'] = torch.zeros_like(p.data, memory_format=torch.preserve_format)  if version_higher else torch.zeros_like(p.data)
 
                 # perform weight decay, check if decoupled weight decay
                 if self.weight_decouple:
                     if not self.fixed_decay:
-                        p.data.mul_(1.0 - group['lr'] * group['weight_decay'])
+                        p_data_fp32.mul_(1.0 - group['lr'] * group['weight_decay'])
                     else:
-                        p.data.mul_(1.0 - group['weight_decay'])
+                        p_data_fp32.mul_(1.0 - group['weight_decay'])
                 else:
                     if group['weight_decay'] != 0:
-                        grad.add_(p.data, alpha=group['weight_decay'])
+                        grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
                 # get current state variable
-                exp_avg, exp_avg_var = state['exp_avg'], state['exp_avg_var']
+                exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
+
+                if self.gradient_centralization in ['all', 'gcc']:
+                    if len(list(grad.size())) > 3:
+                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
 
                 state['step'] += 1
                 bias_correction1 = 1 - beta1 ** state['step']
@@ -1713,23 +1775,23 @@ class AdaBelief(Optimizer):
                 # Update first and second moment running average
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
                 grad_residual = grad - exp_avg
-                exp_avg_var.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1 - beta2)
+                exp_avg_sq.mul_(beta2).addcmul_(grad_residual, grad_residual, value=1 - beta2)
 
                 if amsgrad:
-                    max_exp_avg_var = state['max_exp_avg_var']
+                    max_exp_avg_sq = state['max_exp_avg_sq']
                     # Maintains the maximum of all 2nd moment running avg. till now
-                    torch.max(max_exp_avg_var, exp_avg_var.add_(group['eps']), out=max_exp_avg_var)
+                    torch.max(max_exp_avg_sq, exp_avg_sq.add_(group['eps']), out=max_exp_avg_sq)
 
                     # Use the max. for normalizing running avg. of gradient
-                    denom = (max_exp_avg_var.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
+                    denom = (max_exp_avg_sq.sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
                 else:
-                    denom = (exp_avg_var.add_(group['eps']).sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
+                    denom = (exp_avg_sq.add_(group['eps']).sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
 
                 # update
                 if not self.rectify:
                     # Default update
                     step_size = group['lr'] / bias_correction1
-                    p.data.addcdiv_(exp_avg, denom, value=-step_size)
+                    p_data_fp32.addcdiv_(exp_avg, denom, value=-step_size)
 
                 else:  # Rectified update, forked from RAdam
                     buffered = group['buffer'][int(state['step'] % 10)]
@@ -1753,11 +1815,25 @@ class AdaBelief(Optimizer):
                             step_size = -1
                         buffered[2] = step_size
 
-                    if N_sma >= 5:
-                        denom = exp_avg_var.sqrt().add_(group['eps'])
-                        p.data.addcdiv_(exp_avg, denom, value=-step_size * group['lr'])
-                    elif step_size > 0:
-                        p.data.add_(exp_avg, alpha=-step_size * group['lr'])
+
+
+                    if N_sma > 5:
+                        denom = exp_avg_sq.sqrt().add_(group['eps'])
+                        G_grad = exp_avg / denom
+                    else:
+                        G_grad = exp_avg
+
+
+                    if self.gradient_centralization in ['all', 'gc']:
+                        if len(list(G_grad.size())) > 1:
+                            G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
+
+                    if any_abnormal_number(p_data_fp32):
+                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
+                        p_data_fp32 = where(is_abnormal_number(p_data_fp32), p.data.float(), p_data_fp32)
+
+                    p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
+                    p.data.copy_(p_data_fp32)
 
                 if half_precision:
                     p.data = p.data.half()
@@ -1803,7 +1879,7 @@ class RangerAdaBelief(Optimizer):
                  alpha=0.5, k=6, N_sma_threshhold=5,  # Ranger options
                  betas=(.95, 0.999), eps=1e-5, weight_decay=0,  # Adam options
                  # Gradient centralization on or off, applied to conv layers only or conv + fc layers
-                 use_gc=True, gc_conv_only=False, gc_loc=True, adabelief=True, weight_decouple=True, **kwargs):
+                 adabelief=True, weight_decouple=True,gradient_centralization=None, **kwargs):
 
         if not 0.0 <= alpha <= 1.0:
             raise ValueError(f'Invalid slow update rate: {alpha}')
@@ -1836,9 +1912,7 @@ class RangerAdaBelief(Optimizer):
         self.radam_buffer = [[None, None, None] for ind in range(10)]
 
         # gc on or off
-        self.gc_loc = gc_loc
-        self.use_gc = use_gc
-        self.gc_conv_only = gc_conv_only
+        self.gradient_centralization=gradient_centralization
         # level of gradient centralization
         # self.gc_gradient_threshold = 3 if gc_conv_only else 1
 
@@ -2014,7 +2088,7 @@ class DiffGrad(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2053,6 +2127,7 @@ class DiffGrad(Optimizer):
                     half_precision = True
                     p.data = p.data.float()
                     p.grad = p.grad.float()
+                p_data_fp32=p.data.float()
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('diffGrad does not support sparse gradients, please consider SparseAdam instead')
@@ -2063,30 +2138,23 @@ class DiffGrad(Optimizer):
                 if len(state) == 0:
                     state['step'] = 0
                     # Exponential moving average of gradient values
-                    state['exp_avg'] = torch.zeros_like(p.data)
+                    state['exp_avg'] = torch.zeros_like(p_data_fp32)
                     # Exponential moving average of squared gradient values
-                    state['exp_avg_sq'] = torch.zeros_like(p.data)
+                    state['exp_avg_sq'] = torch.zeros_like(p_data_fp32)
                     # Previous gradient
-                    state['previous_grad'] = torch.zeros_like(p.data)
+                    state['previous_grad'] = torch.zeros_like(p_data_fp32)
 
                 exp_avg, exp_avg_sq, previous_grad = state['exp_avg'], state['exp_avg_sq'], state['previous_grad']
                 beta1, beta2 = group['betas']
 
+
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
-
                 state['step'] += 1
-                bias_correction1 = 1 - beta1 ** state['step']
-                bias_correction2 = 1 - beta2 ** state['step']
 
                 if group['weight_decay'] != 0:
-                    grad.add_(p.data,alpha=group['weight_decay'])
-
-
-                if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(grad.size())) > 1:
-                        grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
+                    grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
                 # Decay the first and second moment running average coefficient
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
@@ -2094,10 +2162,14 @@ class DiffGrad(Optimizer):
 
                 denom = exp_avg_sq.sqrt().add_(group['eps'])
 
-                # compute diffgrad coefficient (dfc)
+                bias_correction1 = 1 - beta1 ** state['step']
+                bias_correction2 = 1 - beta2 ** state['step']
 
+                # compute diffgrad coefficient (dfc)
                 diff = abs(previous_grad - grad)
                 dfc = 1. / (1. + torch.exp(-diff))
+                # state['previous_grad'] = grad %used in paper but has the bug that previous grad is overwritten with grad and diff becomes always zero. Fixed in the next line.
+                state['previous_grad'] = grad.clone()
 
                 # update momentum with dfc
                 exp_avg1 = exp_avg * dfc
@@ -2105,8 +2177,10 @@ class DiffGrad(Optimizer):
                 step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
 
                 p.data.add_(true_divide(exp_avg1, denom), alpha=-step_size)
-                state[ 'previous_grad'] = grad.copy().detach()  # used in paper but has the bug that previous grad is overwritten with grad and diff becomes always zero. Fixed in the next line.
 
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
@@ -2128,7 +2202,7 @@ class Lamb(Optimizer):
         https://arxiv.org/abs/1904.00962
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0, adam=False, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0, adam=False, gradient_centralization=None,**kwargs):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2163,6 +2237,7 @@ class Lamb(Optimizer):
                     half_precision = True
                     p.data = p.data.float()
                     p.grad = p.grad.float()
+
                 grad = p.grad.data
                 if grad.is_sparse:
                     raise RuntimeError('Lamb does not support sparse gradients, consider SparseAdam instad.')
@@ -2216,6 +2291,9 @@ class Lamb(Optimizer):
 
                 p.data.add_(adam_step, alpha=-step_size * trust_ratio)
 
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
