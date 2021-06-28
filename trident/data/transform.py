@@ -1,3 +1,4 @@
+import numbers
 from abc import ABC, abstractmethod
 from collections import Iterable
 from typing import Sequence, Tuple, Dict, Union, Optional, Callable, Any
@@ -87,8 +88,9 @@ class VisionTransform(Transform):
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
         r"""Apply transform on batch input data."""
         if not isinstance(inputs,OrderedDict) :
-            if spec is None and self.is_spatial==True:
+            if self.is_spatial==True:
                 self._shape_info =None
+            if spec is None :
                 spec = TensorSpec(shape=tensor_to_shape(inputs,need_exclude_batch_axis=True,is_singleton=True), object_type=ObjectType.rgb)
             return self.apply(inputs, spec)
         else:
@@ -162,20 +164,27 @@ class VisionTransform(Transform):
         raise NotImplementedError
 
     def _apply_boxes(self, boxes,spec:TensorSpec):
+        if isinstance( self.output_size,numbers.Number):
+            self.output_size=( self.output_size, self.output_size)
         eh, ew = self.output_size
-        class_info = boxes[:, 4:]
-        boxes= boxes[:, :4]
-        idxs = np.array([(0, 1), (2, 1), (0, 3), (2, 3)]).flatten()
-        coords = np.asarray(boxes).reshape(-1, 4)[:, idxs].reshape(-1, 2)
-        coords = self._apply_coords(coords,spec).reshape((-1, 4, 2))
-        minxy = coords.min(axis=1)
-        maxxy = coords.max(axis=1)
-        trans_boxes = np.concatenate((minxy, maxxy), axis=1)
-        trans_boxes[:, 0::2] =clip(trans_boxes[:, 0::2] , 0, ew)
-        trans_boxes[:, 1::2] = clip(trans_boxes[:, 1::2],0, eh)
-        if class_info.shape[-1]>0:
-            trans_boxes = np.concatenate((trans_boxes, class_info), axis=1)
-        return trans_boxes
+        if ndim(boxes)==0:
+            return boxes
+        else:
+            if ndim(boxes) == 1:
+                boxes=np.expand_dims(boxes,0)
+            class_info = boxes[:, 4:]
+            boxes= boxes[:, :4]
+            idxs = np.array([(0, 1), (2, 1), (0, 3), (2, 3)]).flatten()
+            coords = np.asarray(boxes).reshape(-1, 4)[:, idxs].reshape(-1, 2)
+            coords = self._apply_coords(coords,spec).reshape((-1, 4, 2))
+            minxy = coords.min(axis=1)
+            maxxy = coords.max(axis=1)
+            trans_boxes = np.concatenate((minxy, maxxy), axis=1)
+            trans_boxes[:, 0::2] =clip(trans_boxes[:, 0::2] , 0, ew)
+            trans_boxes[:, 1::2] = clip(trans_boxes[:, 1::2],0, eh)
+            if class_info.shape[-1]>0:
+                trans_boxes = np.concatenate((trans_boxes, class_info), axis=1)
+            return trans_boxes
 
     def _apply_mask(self, mask,spec:TensorSpec):
         raise NotImplementedError
