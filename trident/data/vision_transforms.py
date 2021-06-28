@@ -591,7 +591,8 @@ class RandomTransformAffine(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15, interpolation=cv2.INTER_AREA, name='transform_affine', **kwargs):
+    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15, border_mode='random_color', interpolation=cv2.INTER_AREA,
+                 keep_ratio=0.5, name='transform_affine', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = None
@@ -601,24 +602,39 @@ class RandomTransformAffine(VisionTransform):
         self.shear_range = shear_range
         self.interpolation = interpolation
         self.random_flip = random_flip
+        if border_mode not in ['random_color', 'replicate', 'zero', 'reflect', 'wrap']:
+            print('Only {0} are valid items'.format(['random_color', 'replicate', 'zero', 'reflect', 'wrap']))
+            self.border_mode = 'random_color'
+        else:
+            self.border_mode = border_mode
+        self.keep_ratio = keep_ratio
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
         image = unpack_singleton(image)
-        H,W,C=int_shape(image)
+        H, W, C = int_shape(image)
         self.output_size = (H, W)
-
 
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        mat_img, height, width, is_flip = self._shape_info
+        mat_img, height, width, is_flip, rr = self._shape_info
 
-        if self.rn % 5 > 0:
+        if rr > self.keep_ratio:
             image = np.clip(image.astype(np.float32), 0, 255)[:, :, :3]
-            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=cv2.BORDER_CONSTANT,
-                                   borderValue=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)))  # , borderMode=cv2.BORDER_REPLICATE
+            _borderMode = cv2.BORDER_CONSTANT
+            _borderValue = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            if self.border_mode == 'replicate':
+                _borderMode = cv2.BORDER_REPLICATE
+            elif self.border_mode == 'reflect':
+                _borderMode = cv2.BORDER_REFLECT
+            elif self.border_mode == 'wrap':
+                _borderMode = cv2.BORDER_WRAP
+            elif self.border_mode == 'zero':
+                _borderValue = 0
+
+            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode, borderValue=_borderValue)  # , borderMode=cv2.BORDER_REPLICATE
             if is_flip:
                 return image[:, ::-1]
             else:
@@ -627,8 +643,8 @@ class RandomTransformAffine(VisionTransform):
             return image
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        mat_img, height, width, is_flip = self._shape_info
-        if self.rn % 5 > 0:
+        mat_img, height, width, is_flip, rr = self._shape_info
+        if rr > self.keep_ratio:
             #
             coords = coords.transpose([1, 0])
             coords = np.insert(coords, 2, 1, axis=0)
@@ -644,8 +660,8 @@ class RandomTransformAffine(VisionTransform):
 
     def _apply_mask(self, mask, spec: TensorSpec):
         mask = unpack_singleton(mask)
-        mat_img, height, width, is_flip = self._shape_info
-        if self.rn % 5 > 0:
+        mat_img, height, width, is_flip, rr = self._shape_info
+        if rr > self.keep_ratio:
             mask = cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))  # , borderMode=cv2.BORDER_REPLICATE
             if is_flip:
                 return mask[:, ::-1]
@@ -725,8 +741,10 @@ class RandomTransformAffine(VisionTransform):
         # Apply center translation: C * RSS^-1 * C^-1 * T^-1
         matrix[2] += center[0]
         matrix[5] += center[1]
+
+        rr_flip = np.random.random()
         rr = np.random.random()
-        return np.array(matrix).reshape((2, 3)), h, w, rr < self.random_flip
+        return np.array(matrix).reshape((2, 3)), h, w, rr_flip < self.random_flip, rr
 
 
 RandomTransform = RandomTransformAffine
@@ -743,7 +761,7 @@ class RandomMultiScaleImage(VisionTransform):
         self.scale_range = scale_range
         self.interpolation = interpolation
         self.idx = 0
-        self.tmp_fun=None
+        self.tmp_fun = None
         self.resize_funs = [Resize(output_size, True, align_corner=True, interpolation=interpolation),
                             Resize(output_size, True, align_corner=False, interpolation=interpolation),
                             Resize(output_size, False, interpolation=interpolation),
@@ -760,11 +778,12 @@ class RandomMultiScaleImage(VisionTransform):
     def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], **kwargs):
         self._shape_info = self._get_shape()
         idx = self._shape_info
-        self.tmp_fun=copy.deepcopy(self.resize_funs[idx])
+        self.tmp_fun = copy.deepcopy(self.resize_funs[idx])
         spec = kwargs.get('spec')
         return self.tmp_fun.apply_batch(inputs, spec)
-    def _get_shape(self,image=None):
-        idx=random.choice(range(len(self.resize_funs)))
+
+    def _get_shape(self, image=None):
+        idx = random.choice(range(len(self.resize_funs)))
         return idx
 
 
