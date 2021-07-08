@@ -110,7 +110,7 @@ class BatchSampler(Sampler):
         [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
     """
 
-    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=False, sample_filter=None):
+    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=True, sample_filter=None):
         super().__init__(data_source)
         if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size <= 0:
             raise ValueError("batch_size should be a positive integeral value, "
@@ -179,6 +179,7 @@ class BatchSampler(Sampler):
         batch_data = []
         for idx in self.sampler:
             try:
+
                 _return_data = self.data_source[idx]
                 # filter sample
                 if self.sample_filter is None or self.sample_filter(_return_data.value_list):
@@ -206,10 +207,31 @@ class BatchSampler(Sampler):
                             yield returnData
                         batch_data = []
             except Exception as e:
+                print('index:{0} get fail.'.format(idx))
                 print(e)
 
+        if len(batch_data) > 0 and not self.drop_last:
+            returnData = copy.deepcopy(self.data_source.data_template)
+            unzip_batch_data = list(zip(*batch_data))
+            for i in range(len(unzip_batch_data)):
+                if check_same_size(*unzip_batch_data[i]):
+                    try:
+                        if all([isinstance(s, str) for s in unzip_batch_data[i]]):
+                            returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]], dtype=np.string_)
+                        else:
+                            returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]])
+                    except Exception as e:
+                        print([array.shape for array in unzip_batch_data[i]])
+                else:
+                    print([array.shape for array in unzip_batch_data[i]])
+                    batch_data = []
+            returnData = self.batch_transform(returnData)
+            if self.data_source.mode == 'tuple':
+                yield tuple(returnData.value_list)
+            elif self.data_source.mode == 'dict':
+                yield returnData
 
-
+            batch_data = []
         self.reset()
         # raise StopIteration
 
