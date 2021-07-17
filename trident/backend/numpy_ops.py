@@ -32,6 +32,19 @@ from trident.backend.common import *
 #
 
 
+DTYPE_MAPPING = {
+    np.bool: dtype.bool,
+    np.int8: dtype.int8,
+    np.int16: dtype.int16,
+    np.int32: dtype.int32,
+    np.int64: dtype.int64,
+    np.uint8: dtype.uint8,
+    np.float16: dtype.float16,
+    np.float32: dtype.float32,
+    np.float64: dtype.float64,
+    np.cfloat: dtype.cfloat
+}
+
 
 ############################
 ## tensor attribute
@@ -1420,7 +1433,7 @@ def reduce_max(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr, idx = np.max(x,axis=a, keepdims=keepdims)
+            arr= np.max(x,axis=a, keepdims=keepdims)
             x = arr
         return x
 
@@ -1480,7 +1493,7 @@ def reduce_min(x:np.ndarray, axis=None, keepdims=False, **kwargs):
         axis = sorted(axis)
         axis.reverse()
         for a in axis:
-            arr, idx = np.min(x,axis=a, keepdims=keepdims)
+            arr= np.min(x,axis=a, keepdims=keepdims)
             x = arr
         return x
 
