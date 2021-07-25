@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import time
 import inspect
 import sys
 import torch
@@ -18,6 +18,7 @@ from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList
 from trident.backend.pytorch_ops import *
+from trident.backend.pillow_backend import image2array, array2image
 from trident.data.bbox_common import xywh2xyxy, xyxy2xywh, bbox_giou, bbox_giou_numpy
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
@@ -30,6 +31,7 @@ from trident.optims.pytorch_trainer import *
 from trident.optims.pytorch_losses import *
 from trident.data.transform import *
 from trident.data.vision_transforms import Resize, Normalize
+from trident.misc.visualization_utils import generate_palette, plot_bbox
 
 image_size = [640, 480]
 cfg = {'min_sizes': [[10, 16, 24], [32, 48], [64, 96], [128, 192, 256]], 'steps': [8, 16, 32, 64],
@@ -526,7 +528,7 @@ class IouLoss(nn.Module):
 
 
 class Ssd(Layer):
-    def __init__(self, backbond, base_filters=16, num_classes=5, num_regressors=14,variance=(0.1, 0.2), name='tiny_mobile_rfbnet', **kwargs):
+    def __init__(self, backbond, base_filters=16, num_classes=5, num_regressors=14, variance=(0.1, 0.2), name='tiny_mobile_rfbnet', **kwargs):
         """
 
         Parameters
@@ -705,10 +707,12 @@ class SsdDetectionModel(ImageDetectionModel):
         super(SsdDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
         self.palette = OrderedDict()
+        with open('coco_classes.txt', 'r',
+                  encoding='utf-8-sig') as f:
+            self.class_names = [l.rstrip() for l in f]
 
-        object.__setattr__(self, 'detection_threshold',  0.5)
-        object.__setattr__(self, 'nms_threshold', 0.3)
-
+        object.__setattr__(self, 'detection_threshold', 0.2)
+        object.__setattr__(self, 'nms_threshold', 0.1)
 
     def area_of(self, left_top, right_bottom):
         """Compute the areas of rectangles given two corners.
@@ -859,7 +863,7 @@ class SsdDetectionModel(ImageDetectionModel):
                             rescale_scale = func.scale
                     else:
                         print(func)
-
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
                 img = image_backend_adaption(img)
                 inp = to_tensor(np.expand_dims(img, 0)).to(
                     torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -868,13 +872,18 @@ class SsdDetectionModel(ImageDetectionModel):
                 confidence, boxes = self._model(inp)
                 boxes = boxes[0]
                 confidence = confidence[0]
-                probs, label = confidence.data.max(-1)
+                if len(self.palette) == 0:
+                    self.palette = generate_palette(confidence.shape[-1])
 
+                probs = 1 - confidence[:, 0]
+                label = argmax(confidence[:, 1:], -1) + 1
+
+                # mask = label > 0
+                # probs = probs[mask]
+                # label = label[mask]
+                # boxes = boxes[mask, :]
+                print(probs.max())
                 mask = probs > self.detection_threshold
-                probs = probs[mask]
-                label = label[mask]
-                boxes = boxes[mask, :]
-                mask = label > 0
                 probs = probs[mask]
                 label = label[mask]
                 boxes = boxes[mask, :]
@@ -899,20 +908,23 @@ class SsdDetectionModel(ImageDetectionModel):
             raise ValueError('the model is not built yet.')
 
     def infer_then_draw_single_image(self, img, scale=1):
+        start_time = time.time()
         rgb_image, boxes, labels, probs = self.infer_single_image(img, scale)
-        bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
         if boxes is not None and len(boxes) > 0:
             boxes = np.round(boxes).astype(np.int32)
             if boxes.ndim == 1:
                 boxes = np.expand_dims(boxes, 0)
             if labels.ndim == 0:
                 labels = np.expand_dims(labels, 0)
+            print(img, time.time() - start_time)
+            pillow_img = array2image(rgb_image.copy())
             for m in range(len(boxes)):
                 this_box = boxes[m]
                 this_label = labels[m]
-                cv2.rectangle(bgr_image, (this_box[0], this_box[1]), (this_box[2], this_box[3]),
-                              self.palette[this_label],
-                              1 if bgr_image.shape[1] < 480 else 2 if bgr_image.shape[1] < 640 else 3)
-        rgb_image = cv2.cvtColor(bgr_image, cv2.COLOR_RGB2BGR)
-        return rgb_image
+                thiscolor = tuple([int(c) for c in self.palette[int(this_label) - 1][:3]])
+                print(img, self.class_names[int(this_label) - 1], this_box, probs[m])
+                pillow_img = plot_bbox(this_box, pillow_img, thiscolor, self.class_names[int(this_label) - 1], line_thickness=2)
+            rgb_image = np.array(pillow_img.copy())
+
+        return rgb_image, boxes, labels, probs
 
