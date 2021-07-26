@@ -23,6 +23,7 @@ from typing import List, TypeVar, Tuple, Union, Optional, Generic, Iterable, Ite
 import cv2
 import numpy as np
 from skimage import color
+from trident.backend.numpy_ops import DTYPE_MAPPING
 
 from trident.backend.opencv_backend import file2array
 from trident.data.vision_transforms import Unnormalize
@@ -248,6 +249,17 @@ class NumpyDataset(Dataset):
     def __getitem__(self, index: int) -> Tuple:
         return None if self.items is None else self.items[index]
 
+    def data_transform(self, img_data):
+
+        if isinstance(img_data, np.ndarray):
+            for fc in self.transform_funcs:
+                if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
+                    img_data = fc(img_data, spec=self.element_spec)
+
+            return img_data
+        else:
+            return img_data
+
     def __len__(self) -> int:
         return None if self.items is None else len(self.items)
 
@@ -274,22 +286,31 @@ class StreamDataset(Dataset):
 
 
 class ArrayDataset(Dataset):
-    def __init__(self, arrays):
+    def __init__(self, arrays, symbol='array'):
         r"""
         ArrayDataset is a dataset for numpy array data, one or more numpy arrays
          are needed to initiate the dataset. And the dimensions represented sample number
          are expected to be the same.
         """
-        super().__init__()
-        if not all(len(arrays) == len(array) for array in arrays):
-            raise ValueError("lengths of input arrays are inconsistent")
-        self.arrays = arrays
+        super().__init__(arrays)
+        self.symbol = symbol
 
-    def __getitem__(self, index: int) -> Tuple:
-        return self.arrays[index]
+    def __getitem__(self, index: int):
+        return self.items[index]
 
     def __len__(self) -> int:
-        return len(self.arrays)
+        return len(self.items)
+
+    def data_transform(self, img_data):
+
+        if isinstance(img_data, np.ndarray):
+            for fc in self.transform_funcs:
+                if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
+                    img_data = fc(img_data, spec=self.element_spec)
+
+            return img_data
+        else:
+            return img_data
 
 
 class ImageDataset(Dataset):
@@ -301,6 +322,8 @@ class ImageDataset(Dataset):
     def __getitem__(self, index: int):
         img = self.items[index]  # self.pop(index)
         if isinstance(img, str) and self.object_type==ObjectType.image_path:
+            return img
+        elif isinstance(img, np.ndarray) and self.object_type!=ObjectType.image_path:
             return img
         else:
             img = file2array(img)
@@ -1091,7 +1114,7 @@ class Iterator(object):
                 if len(ds) > 0:
                     dataitem = ds[k]
                     ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
-                    self.data_template[ds.element_spec] = None
+            self.data_template[ds.element_spec] = None
 
         self._batch_size = batch_size
         self.paired_transform_funcs = []
@@ -1106,6 +1129,7 @@ class Iterator(object):
         if inspect.isfunction(sample_filter) or callable(sample_filter):
             self.sample_filter = sample_filter
             self.batch_sampler.sample_filter = self.sample_filter
+
 
     @property
     def data(self):
@@ -1234,16 +1258,29 @@ class Iterator(object):
 
     def update_signature(self):
         datasets = self.get_datasets()
-        results=self[0]
+        results = self[0]
+        self.data_template.clear()
         self._signature = Signature(name='data_provider')
 
-        for ds, result,value in zip(datasets, results.key_list,results.value_list):
-            spec = TensorSpec.tensor_to_spec(value, object_type=ds.object_type,need_exclude_batch_axis=True,is_singleton=True, name=ds.symbol)
-            self._signature.outputs[ds.symbol] = spec
+        for ds, result, value in zip(datasets, results.key_list, results.value_list):
+            spec = copy.deepcopy(ds._element_spec)
+            if spec.name == ds.symbol:
+                if isinstance(value,np.ndarray):
+                    dtype=DTYPE_MAPPING[value.dtype.type]
+                elif isinstance(value,numbers.Integral):
+                    dtype=numbers.Integral
+                elif isinstance(value,numbers.Real):
+                    dtype=numbers.Real
+                spec.shape = tensor_to_shape(to_tensor(value), need_exclude_batch_axis=True, is_singleton=True)
+                spec.object_type = ds.object_type
+                spec.dtype = dtype
+
+                ds._element_spec = spec
+                self.data_template[spec] = None
+                self._signature.outputs[ds.symbol] = spec
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         return self._signature
-
 
 
     def print_statistics(self):
@@ -1263,14 +1300,11 @@ class Iterator(object):
             label = self.label.__getitem__(index % len(self.label)) if self.label is not None and len(self.label) > 0 else None
 
             unpair = self.unpair.__getitem__(index % len(self.unpair)) if self.unpair is not None and len(self.unpair) > 0 else None
-
-
-
             results = iteration_tools.flatten((data, label, unpair), iterable_types=(tuple))
             results = tuple([item for item in results if item is not None])
+            if len(returnData) > 0 and len(returnData) != len(self.get_datasets()):
+                raise ValueError("Flattened data should have same length as datasets")
 
-            if  len(returnData) >0 and  len(returnData) != len(results):
-                raise ValueError("Flattened data sh")
 
             for n  in range(len(self.get_datasets())):
                 ds=self.get_datasets()[n]
@@ -1290,6 +1324,7 @@ class Iterator(object):
                 threads[i].start()
             for i in range(len(returnData)):
                 threads[i].join()
+
 
             if self.signature is None or len(self.signature) == 0:
                 self.signature = Signature(name='data_provider')
