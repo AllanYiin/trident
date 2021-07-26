@@ -711,7 +711,7 @@ def get_activation(fn_name,only_layer=False):
                 except Exception:
                     activation_fn = get_class(fn_name, fn_modules)
                     return activation_fn()
-        elif getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
+        elif isinstance(fn_name,(nn.Module,Layer)) or  getattr(fn_name, '__module__', None) == 'trident.layers.pytorch_activations':
             if inspect.isfunction(fn_name):
                 return partial(fn_name)
             elif inspect.isclass(fn_name) and  fn_name.__class__.__name__=="type":
