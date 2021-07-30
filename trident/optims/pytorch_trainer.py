@@ -39,7 +39,7 @@ from trident.backend.pytorch_ops import *
 from trident.backend import model
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
-
+from trident.callbacks import UnfreezeModelCallback,LambdaCallback
 from trident.backend.opencv_backend import array2image, image2array
 
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
@@ -135,7 +135,7 @@ class Model(model.ModelBase):
                     for i in range(len(inputs)):
                         inp = to_tensor(inputs[i])
                         output._signature.inputs['input_{0}'.format(i)] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False, optional=False,
-                                                                                                   name='input_{0}'.format(i))
+                                                                                                    name='input_{0}'.format(i))
                 else:
                     for k, v in inputs.items():
                         inp = to_tensor(v)
@@ -147,13 +147,13 @@ class Model(model.ModelBase):
                 inputs = (inputs,)
             if input_shape is not None and not isinstance(input_shape, (tuple, list, dict)):
                 input_shape = (input_shape,)
-            if isinstance(output,Combine):
-                output._signature =Signature(name=output.__class__.__name__)
+            if isinstance(output, Combine):
+                output._signature = Signature(name=output.__class__.__name__)
                 for i in range(len(inputs)):
-                    output._signature.inputs['x_{0}'.format(i)]=TensorSpec(TensorShape([None]))
+                    output._signature.inputs['x_{0}'.format(i)] = TensorSpec(TensorShape([None]))
             else:
                 output._signature = get_signature(output, output.__class__.__name__)
-            if inputs is not None and len(output._signature.inputs) >= len(inputs) > 0:
+            if inputs is not None and len(output.signature.inputs) >= len(inputs) > 0:
                 if not isinstance(inputs, dict):
                     for i in range(len(inputs)):
                         k = output._signature.inputs.key_list[i]
@@ -161,7 +161,7 @@ class Model(model.ModelBase):
                         output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False,
                                                                                 optional=output._signature.inputs[k].optional, name=k)
                 else:
-                    available_items = output._signature.inputs.key_list.copy()
+                    available_items = output.signature.inputs.key_list.copy()
                     for k, v in inputs.items():
                         if k in output._signature.inputs.key_list:
                             output._signature.inputs[k] = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True, is_singleton=False,
@@ -175,7 +175,7 @@ class Model(model.ModelBase):
                                     available_items.remove(sk)
                                     break
 
-            elif input_shape is not None and len(output._signature.inputs) >= len(input_shape):
+            elif input_shape is not None and len(output.signature.inputs) >= len(input_shape):
                 if not isinstance(input_shape, dict):
                     for i in range(len(input_shape)):
                         k = output._signature.inputs.key_list[i]
@@ -188,7 +188,7 @@ class Model(model.ModelBase):
 
 
                 else:
-                    available_items = output._signature.inputs.key_list.copy()
+                    available_items = output.signature.inputs.key_list.copy()
                     for k, v in input_shape.items():
                         if k in output._signature.inputs.key_list:
                             output._signature.inputs[k].shape = TensorShape([None] + v)
@@ -223,7 +223,7 @@ class Model(model.ModelBase):
             else:
 
                 # output.input_shape = input_shape
-                dummay_input = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) for spec in output._signature.inputs.value_list]
+                dummay_input = [to_tensor(shape.get_dummy_tensor()).to(get_device()) for shape in input_shape]
                 # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                 output.to(get_device())
                 output.eval()
@@ -279,38 +279,6 @@ class Model(model.ModelBase):
         else:
             self.save_path = sanitize_path(make_dir_if_need(self.save_path))
         self.training_context['save_path'] = self.save_path
-
-    @property
-    def inputs(self):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            return self._model._signature.inputs
-        else:
-            return None
-
-    @inputs.setter
-    def inputs(self, value):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            self._model._signature.inputs = value
-
-    @property
-    def outputs(self):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            return self._model._signature.outputs
-        else:
-            return None
-
-    @outputs.setter
-    def outputs(self, value):
-        if self._model is not None and callable(self._model):
-            if hasattr(self._model, '_signature'):
-                self._model._signature = get_signature(self._model)
-            self._model._signature.outputs = value
 
     @property
     def device(self):
@@ -816,12 +784,18 @@ class Model(model.ModelBase):
             data_feed = self.training_context['data_feed']
             input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-                train_data[item] = to_tensor(train_data[item], device=get_device())
+                if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[item].dtype.kind in {'U', 'S'}:
+                    train_data[item] =[s.decode() for s in train_data[item]]
+                else:
+                    train_data[item] = to_tensor(train_data[item], device=get_device())
                 if item in input_list and 'float' in str(train_data[item].dtype):
                     train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    test_data[item] = to_tensor(test_data[item], device=get_device())  # .cpu()
+                    if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[item].dtype.kind in {'U', 'S'}:
+                        test_data[item] = [s.decode() for s in test_data[item]]
+                    else:
+                        test_data[item] = to_tensor(test_data[item], device=get_device())
 
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
@@ -993,6 +967,7 @@ class Model(model.ModelBase):
                     save(self._model, temppath2)
                     os.close(tempfd2)
                     shutil.move(temppath2, move_path2)
+
                     if os.path.exists(save_path):
                         os.unlink(save_path)
                     os.rename(move_path2, save_path)
@@ -1054,28 +1029,28 @@ class Model(model.ModelBase):
             import_or_install('torch.onnx')
             self._model.eval()
 
-            dummy_input = (to_tensor(self.signature.inputs.value_list[0].shape.get_dummy_tensor()))
+            dummy_input =tuple([to_tensor(spec.shape.get_dummy_tensor())  for spec in self.signature.inputs.value_list])
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
 
-            ext = '.onnx_'
+            ext = '.onnx'
             save_path = os.path.join(folder, filename + ext)
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
 
             outputs = self._model(dummy_input)
-            if dynamic_axes is None:
-                # dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
-                #                 self.outputs.key_list[0]: [0]}
-                dynamic_axes = {self.inputs.key_list[0]: {0: 'batch'}, self.outputs.key_list[0]: {0: 'batch'}}
+            # if dynamic_axes is None:
+            #     # dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
+            #     #                 self.outputs.key_list[0]: [0]}
+            #     dynamic_axes = {self.inputs.key_list[0]: {0: 'batch'}, self.outputs.key_list[0]: {0: 'batch'}}
 
-            # dynamic_axes = {}
-            #
-            # for inp in self.inputs.key_list:
-            #     dynamic_axes[inp] = [0]
-            # for out in self.outputs.key_list:
-            #     dynamic_axes[out] = [0]
+            dynamic_axes = {}
+
+            for inp in self.inputs.key_list:
+                dynamic_axes[inp] = [0]
+            for out in self.outputs.key_list:
+                dynamic_axes[out] = [0]
             tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix='.onnx')
             _, tempfile_name, tempext = split_path(temppath)
             move_path = os.path.join(folder, tempfile_name + tempext)
@@ -1089,7 +1064,7 @@ class Model(model.ModelBase):
                                           opset_version=11,  # the ONNX version to export the model to
                                           do_constant_folding=False,  # whether to execute constant folding for optimization
                                           input_names=self.signature.inputs.key_list,  # the model's input names
-                                          keep_initializers_as_inputs=True,
+                                          keep_initializers_as_inputs=False,
                                           output_names=self.signature.outputs.key_list,  # the model's output names
                                           dynamic_axes=dynamic_axes)
                 os.close(tempfd)
@@ -1109,8 +1084,7 @@ class Model(model.ModelBase):
 
             import onnx
             from onnx import shape_inference
-            onnx.save(shape_inference.infer_shapes(onnx.load(save_path.replace('.onnx_', '.onnx'))), save_path.replace('.onnx_', '.onnx'))
-            os.remove(save_path)
+            onnx.save(shape_inference.infer_shapes(onnx.load(save_path)), save_path)
             for callback in self.training_context['callbacks']:
                 callback.on_model_saving_end(self.training_context)
         else:
@@ -1512,6 +1486,15 @@ class MuiltiNetwork(Model):
     def save_model(self, save_path=None, **kwargs):
         for k in self._networks.keys():
             self._networks[k].save_model(self._networks[k].training_context['save_path'], )
+        return self
+
+    def train(self):
+        for k in self._networks.keys():
+            self._networks[k].train()
+        return self
+    def eval(self):
+        for k in self._networks.keys():
+            self._networks[k].eval()
         return self
 
     def do_on_epoch_start(self):

@@ -23,7 +23,7 @@ from trident.backend.common import *
 from trident.backend.model import ModelBase
 from trident.backend import model
 from trident.backend.opencv_backend import array2image, image2array
-from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, DTYPE_MAPPING
+from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call,DTYPE_MAPPING
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_ops import is_tensor
 from trident.backend.tensorflow_serialization import save, load_pthtar
@@ -734,12 +734,19 @@ class Model(ModelBase):
             data_feed = self.training_context['data_feed']
             input_list = [data_feed['input'] if arg == 'x' and 'input' in data_feed else data_feed[arg] for arg in self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-                train_data[item] = to_tensor(train_data[item], device=get_device())
+                if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[item].dtype.kind in {'U', 'S'}:
+                    train_data[item] =[s.decode() for s in train_data[item]]
+                else:
+                    train_data[item] = to_tensor(train_data[item], device=get_device())
+
                 if item in input_list and 'float' in str(train_data[item].dtype):
                     train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    test_data[item] = to_tensor(test_data[item], device=get_device())  # .cpu()
+                    if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[item].dtype.kind in {'U', 'S'}:
+                        test_data[item] = [s.decode() for s in test_data[item]]
+                    else:
+                        test_data[item] = to_tensor(test_data[item], device=get_device())
 
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
@@ -751,8 +758,49 @@ class Model(ModelBase):
         self.training_context['test_data'] = test_data
         return train_data, test_data
 
+    def do_calculate_forward(self, is_training=True):
+        data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(self.training_context['test_data']) == 0 else \
+            self.training_context['test_data']
+        data_feed = self.training_context['data_feed']
+        model = self.training_context['current_model']
+        if is_tensor(model):
+            data['output'] = self._model
+            if is_training and self.use_output_as_loss:
+                this_loss = data['output'].sum()
+                self.training_context['losses'].collect(model.signature.outputs.key_list[0], self.training_context['steps'], this_loss)
+                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+        else:
+            if not is_training:
+                model.eval()
+            else:
+                model.train()
+
+            signature = model.signature
+
+            output = try_map_args_and_call(model, data, data_feed, self.is_autocast_enabled)
+            if isinstance(output, (list, tuple)):
+                for i in range(len(output)):
+                    data[signature.outputs.key_list[i]] = output[i]
+            elif isinstance(output, (OrderedDict)):
+                for k, v in output.items():
+                    data[k] = v
+
+            else:
+                data[self.signature.outputs.key_list[0]] = output
+                if is_training and self.use_output_as_loss:
+                    this_loss = output.sum()
+                    self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                    self.training_context['losses'].collect(signature.outputs.key_list[0], self.training_context['steps'], to_scalar(this_loss.copy()))
+
+    def do_calculate_losses(self):
+      pass
+
     def get_current_loss(self):
         return self.training_context['current_loss']
+
+    def do_calculate_regularizations(self):
+        # regularizer
+        pass
 
     def do_gradient_update(self, log_gradients=False):
         if isinstance(self._model, (Layer, tf.Module)):
@@ -1046,6 +1094,8 @@ class Model(ModelBase):
                     self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
 
                 with tf.GradientTape() as grad_tape:
+                    #grad_tape.watch(self._model.trainable_variables)
+
                     if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
                         try:
                             if self.output_fn is not None and callable(self.output_fn):
@@ -1057,8 +1107,62 @@ class Model(ModelBase):
                             print(e)
                             PrintException()
 
-                    self.do_calculate_losses()
-                    self.do_calculate_regularizations()
+                    self.do_on_loss_calculation_start()
+                    # confirm singleton
+                    # output=unpack_singleton(output)
+
+                    # losss
+                    for k, v in self._losses.items():
+                        if not hasattr(v, 'start_epoch') or (hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
+
+                            try:
+                                loss_weight = to_tensor(1.0)
+                                if k in self.loss_weights:
+                                    loss_weight = self.loss_weights[k]
+                                loss_weight = to_tensor(loss_weight, 'float32')
+                                this_loss = loss_weight * try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                                                                self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
+
+                                if isinstance(this_loss, tuple):
+                                    overall_loss = to_tensor(0.0, requires_grad=True)
+                                    for i in range(len(this_loss)):
+                                        if any_abnormal_number(this_loss[i]):
+                                            sys.stderr.write(
+                                                'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
+                                        else:
+                                            # a leaf Variable that requires grad connotused in an in-place operation.
+                                            overall_loss = overall_loss + this_loss[i]
+                                    self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
+
+                                    if self.training_context['is_collect_data']:
+                                        self.training_context['losses'].collect(k, self.training_context['steps'], overall_loss)
+
+                                else:
+                                    if any_abnormal_number(this_loss):
+                                        sys.stderr.write(
+                                            'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
+                                    else:
+                                        # a leaf Variable that requires grad connotused in an in-place operation.
+                                        self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                                    if self.training_context['is_collect_data']:
+                                        self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
+                            except Exception as e:
+                                print(e)
+                                PrintException()
+
+                    self.do_on_loss_calculation_end()
+                    for k, v in self._regs.items():
+                        this_loss = to_tensor(0.0, requires_grad=True)
+                        if 'model' in v.signature.inputs:
+                            this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
+                        elif 'output' in v.signature.inputs:
+                            this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[ 'stop_update'] < 1 else  to_tensor(0.0)
+                        if not any_abnormal_number(this_loss):
+                            # a leaf Variable that requires grad connotused in an in-place operation.
+                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss  # self.training_context[
+                        # 'current_loss'] + this_loss
+                        if self.training_context['is_collect_data']:
+                            self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
                 vars = grad_tape.watched_variables()
                 grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
