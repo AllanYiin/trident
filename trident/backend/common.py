@@ -12,11 +12,13 @@ import math
 import numbers
 import operator
 import os
+from time import sleep
 import platform
 import re
 import shlex
 import string
 import struct
+import webbrowser
 import subprocess
 import sys
 import time
@@ -24,7 +26,7 @@ import traceback
 import types
 from enum import Enum
 from pydoc import locate
-from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType,Dict
+from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Dict
 
 import numpy as np
 
@@ -39,7 +41,7 @@ __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabl
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode', 'adaptive_format', 'num_cpus',
            'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'get_gpu_memory_map', 'dtype', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
-           'gray_color', 'yellow_color']
+           'gray_color', 'yellow_color','open_browser','launchTensorBoard','launchMLFlow']
 
 # In some cases, these basic types are shadowed by corresponding
 # top-level values.  The underscore variants let us refer to these
@@ -47,7 +49,8 @@ __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabl
 # workarounds is necessary
 import six
 from trident import context
-
+import warnings
+warnings.simplefilter("ignore")
 _int = builtins.int
 _float = builtins.float
 _bool = builtins.bool
@@ -288,47 +291,48 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
     is_current_num_integer = math.modf(num)[0] == 0
     digitpart_list = [math.modf(v)[0] for v in prev_value] if isinstance(prev_value, Iterable) else []
     is_all_history_integer = all([math.modf(v)[0] == 0 for v in prev_value]) if isinstance(prev_value, Iterable) \
-        else math.modf(num)[0] == 0 if isinstance(prev_value, numbers.Number) else  False
-    
+        else math.modf(num)[0] == 0 if isinstance(prev_value, numbers.Number) else False
 
     if isinstance(num, numbers.Integral) or is_current_num_integer and is_all_history_integer:
         if not isinstance(num, numbers.Integral):
             num = int(num)
         return '{0:,}'.format(num)
-    elif isinstance(prev_value, Iterable) and len(prev_value)>1:
-        if all([1.2>=s>=0.001 or -0.001>=s>=-1.2 or s==0  for s in prev_value]):
+    elif isinstance(prev_value, Iterable) and len(prev_value) > 1:
+        if all([1.2 >= s >= 0.001 or -0.001 >= s >= -1.2 or s == 0 for s in prev_value]):
             return '{0:.3%}'.format(num)
         elif len(prev_value) > 0:
             digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean())
-            if  digit>4:
-                return '{0:{1}}'.format(num,  '.3e')
-            elif digit < 2:
+            if digit > 6:
+                return '{0:{1}}'.format(num, '.3e')
+            elif digit < 4:
                 return '{0:{1}}'.format(num, '.3f')
+            elif digit <= 5:
+                return '{0:{1}}'.format(num, '.4f')
             else:
-                return '{0:.{1}%}'.format(num,digit)
-    elif name is not None and len(name)>=3 and any([name.lower() in  s.lower() for s in percentage_name ]):
+                return '{0:.{1}%}'.format(num, digit)
+    elif name is not None and len(name) >= 3 and any([name.lower() in s.lower() for s in percentage_name]):
         return '{0:.3%}'.format(num)
-    elif name is not None and len(name)>=3 and (name.endswith('s')):
+    elif name is not None and len(name) >= 3 and (name.endswith('s')):
         return '{0:{1}}'.format(num, '.3f')
     else:
-        format_string = '.3f'
+        format_string = ',.3'
         if value_type == 'metric':
-            if math.modf(num)[0] ==0:
+            if math.modf(num)[0] == 0:
                 num = int(num)
                 return '{0:,}'.format(num)
             elif 1.2 >= num >= 0.001 or -0.001 >= num >= -1.2 or num == 0:
                 return '{0:.3%}'.format(num)
-            elif num>1.2 or num<-1.2:
+            elif num > 4.2 or num < -4.2:
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:{1}}'.format(num, '.3e')
-        elif value_type != 'loss' :
-            if  1000 >= num >= 0.001 or -0.001 >= num >= -1000 or num == 0:
+        elif value_type != 'loss':
+            if 1000 >= num >= 0.001 or -0.001 >= num >= -1000 or num == 0:
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:{1}}'.format(num, '.3e')
 
-    return '{0:{1}}'.format(num, format_string)
+        return '{0:{1}}'.format(num, format_string)
 
 
 def get_string_actual_length(input_string: str):
@@ -357,7 +361,7 @@ def PrintException():
 
     """
     exc_type, exc_obj, tb = sys.exc_info()
-
+    traceback.print_exception(*sys.exc_info())
     f = tb.tb_frame
     lineno = tb.tb_lineno
     filename = f.f_code.co_filename
@@ -486,7 +490,8 @@ class dtype:
         complex128 = np.complex128
         cfloat = np.complex64
 
-
+    def __repr__(self):
+        return 'dtype'
 
 
 # class Device(object):
@@ -635,7 +640,7 @@ class TensorShape(object):
     def numel(self):
         """Returns the total number of elements, or none for incomplete shapes."""
         if self.is_fully_defined():
-            return functools.reduce(operator.mul, self.to_list(), 1)
+            return functools.reduce(operator.mul, self.tolist(), 1)
         else:
             return None
 
@@ -813,8 +818,7 @@ class Signature(object):
         super().__init__()
         self.name = name
         self.inputs = OrderedDict() if inputs is None else inputs
-        self.outputs = OrderedDict()  if outputs is None else outputs
-
+        self.outputs = OrderedDict() if outputs is None else outputs
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -827,9 +831,10 @@ class Signature(object):
         """
 
         return {
-            "inputs":  json.dumps([x.to_dict() for x in self.inputs.value_list]) if self.inputs is not None else None,
+            "inputs": json.dumps([x.to_dict() for x in self.inputs.value_list]) if self.inputs is not None else None,
             "outputs": json.dumps([x.to_dict() for x in self.outputs.value_list]) if self.outputs is not None else None,
         }
+
     # @classmethod
     # def get_signature(cls, fn:callable):
     #
@@ -850,13 +855,15 @@ class Signature(object):
         if completeness == 2:
             return False
         else:
-            True
+            return True
 
     def _get_kvsting(self, k, v):
         if v is None:
             return '{0}'.format(k)
         elif isinstance(v, (list, tuple)):
             return '{0}: Tensor[{1}]'.format(k, v)
+        elif v.__class__.__name__ == "TensorSpec" and (v.dtype is int or v.dtype is float or v.dtype is str or v.dtype is bool):
+            return '{0}: {1} '.format(k, v.dtype.__name__) + ('={0}'.format(v.default) if v.optional else '')
         elif v.__class__.__name__ == "TensorSpec" and v.object_type is None:
             return '{0}: Tensor[{1}] '.format(k, v._shape_tuple)
         elif v.__class__.__name__ == "TensorSpec":
@@ -1797,18 +1804,33 @@ def format_arg_spec(v, is_output=False):
     return s + str(v._type)
 
 
-
-
-
-def is_instance(instance,check_class):
+def is_instance(instance, check_class):
     if not inspect.isclass(instance) and inspect.isclass(check_class):
-        mro_list=[b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
-        return  check_class.__module__ + '.' + check_class.__qualname__ in mro_list
-    elif not inspect.isclass(instance) and isinstance(check_class,str):
+        mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
+        return check_class.__module__ + '.' + check_class.__qualname__ in mro_list
+    elif  isinstance(check_class, str):
         mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
         mro_list2 = [b.__qualname__ for b in instance.__class__.__mro__]
         return check_class in mro_list or check_class in mro_list2
     else:
         if not inspect.isclass(check_class):
-            print(red_color('Input check_class should a class, but {0}'))
+            print(red_color('Input check_class {0} should a class, but {1}'.format(check_class,type(check_class))))
         return False
+
+
+def open_browser(url,delay=0):
+    sleep(delay)
+    webbrowser.open_new(url)
+
+def launchTensorBoard():
+    make_dir_if_need(os.path.join(_SESSION.working_directory, 'Logs'))
+    print('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),_SESSION.tensorboard_port))
+    os.system('tensorboard --logdir {0} --port {1}'.format(os.path.join(_SESSION.working_directory, 'Logs'),_SESSION.tensorboard_port))
+    return
+
+
+def launchMLFlow():
+    make_dir_if_need(os.path.join(_SESSION.working_directory, 'Logs'))
+    print('mlflow ui')
+    os.system('mlflow ui')
+    return
