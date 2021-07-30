@@ -9,6 +9,7 @@ import warnings
 import time
 import numpy as np
 import torch
+from trident.data.dataset import MaskDataset, ZipDataset
 
 from trident import context
 import numbers
@@ -16,7 +17,6 @@ from trident.backend.common import *
 from trident.backend.load_backend import *
 from trident.backend.pillow_backend import image2array
 from trident.callbacks.callback_base import CallbackBase
-from trident.data.dataset import MaskDataset, ImageDataset, ZipDataset
 from trident.data.image_common import image_backend_adaption
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
@@ -91,14 +91,22 @@ class TileImageCallback(VisualizationCallbackBase):
         data = training_context['train_data']
         model = training_context['current_model']
         dataprovider = enforce_singleton(ctx.get_data_provider())
+
         if self.include_input:
-            input = to_numpy(data[data_feed['input']])
+            input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
         if 'tensor' in model.__class__.__name__.lower():
             output = to_numpy(model.clone())
         elif isinstance(model, Layer):
-            output = to_numpy(data[data_feed['output']].copy())
+            output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]].copy())
         if self.include_target:
-            target = to_numpy(data[data_feed['target']].copy())
+            candidate=[k  for k in data_feed.keys() if 'target' in k ]
+            if len(candidate)==1:
+                target = to_numpy(data[data_feed[candidate[0]]].copy())
+            elif dataprovider.traindata.label is not None and not  isinstance(dataprovider.traindata.label ,ZipDataset):
+                target = to_numpy(data[data_feed[dataprovider.traindata.label.symbol]].copy())
+            elif dataprovider.traindata.label is not None and isinstance(dataprovider.traindata.label, ZipDataset):
+                target = to_numpy(data[data_feed[dataprovider.traindata.label.items[0].symbol]].copy())
+
         if self.include_mask:
             if isinstance(dataprovider.traindata.label, MaskDataset):
                 mask = to_numpy(data[dataprovider.traindata.label.symbol])
