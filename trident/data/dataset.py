@@ -1,46 +1,36 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-from abc import ABC, abstractmethod
-import warnings
+
+import builtins
 import collections
 import copy
-import hashlib
-import numbers
 import inspect
 import itertools
-import builtins
-import os
-import pickle
+import numbers
 import random
-import string
 import sys
 import threading
 import time
-from enum import Enum, unique
-from typing import List, TypeVar, Tuple, Union, Optional, Generic, Iterable, Iterator, Sequence, Dict
+from abc import ABC, abstractmethod
+from typing import TypeVar, Tuple, Optional, Iterator, Dict
 
 import cv2
 import numpy as np
-from skimage import color
-from trident.backend.numpy_ops import DTYPE_MAPPING
-
-from trident.backend.opencv_backend import file2array
-from trident.data.vision_transforms import Unnormalize
-
-from trident.data.transform import Transform
-
-from trident.data.bbox_common import xywh2xyxy, xyxy2xywh
-from trident.data.image_common import gray_scale, image2array, mask2array, image_backend_adaption, reverse_image_backend_adaption, \
-    unnormalize, array2image, GetImageMode
 
 from trident.backend import iteration_tools
+from trident.backend.common import *
+from trident.backend.numpy_ops import DTYPE_MAPPING
+from trident.backend.opencv_backend import file2array
+from trident.backend.tensorspec import TensorSpec
+from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, \
+    array2image
 from trident.data.label_common import label_backend_adaptive
 from trident.data.mask_common import mask_backend_adaptive, color2label
-from trident.data.text_common import text_backend_adaption, reverse_text_backend_adaption
 from trident.data.samplers import *
-from trident.backend.common import *
-from trident.backend.tensorspec import TensorSpec, assert_input_compatibility
+from trident.data.text_common import reverse_text_backend_adaption
+from trident.data.transform import Transform
+from trident.data.vision_transforms import Unnormalize
 
 try:
     import Queue
@@ -48,12 +38,11 @@ except ImportError:
     import queue as Queue
 
 if get_backend() == 'pytorch':
-    from trident.backend.pytorch_backend import to_numpy, to_tensor, ObjectType
-    from trident.backend.pytorch_ops import int_shape, str2dtype, tensor_to_shape, expand_dims, cast
-    import torch
+    from trident.backend.pytorch_backend import to_tensor, ObjectType
+    from trident.backend.pytorch_ops import tensor_to_shape, expand_dims, cast
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_backend import to_numpy, to_tensor, ObjectType
-    from trident.backend.tensorflow_ops import int_shape, str2dtype, tensor_to_shape, expand_dims, cast
+    from trident.backend.tensorflow_backend import to_tensor, ObjectType
+    from trident.backend.tensorflow_ops import tensor_to_shape, expand_dims, cast
 
 __all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
            'NumpyDataset', 'RandomNoiseDataset']
@@ -95,10 +84,9 @@ class DatasetBase(ABC):
 class Dataset(DatasetBase):
     def __init__(self, args, symbol=None, object_type: Optional[ObjectType] = None, **kwargs):
         super().__init__()
-        if args is None:
-            self.items = []
-        else:
-            self.items = args
+        self.items = []
+        if args is not None and hasattr(args, '__iter__'):
+            self.items.extend(args)
         self._element_spec = None
 
         if symbol == None:
@@ -115,6 +103,8 @@ class Dataset(DatasetBase):
         self.transform_funcs = []
 
     def __getitem__(self, index: int) -> Tuple:
+        if index >= len(self.items):
+            index = index % len(self.items)
         return self.items[index]
 
     def __setattr__(self, name: str, value) -> None:
@@ -212,7 +202,7 @@ class ZipDataset(Dataset):
         self.symbol = tuple([ds.symbol for ds in datasets])
 
     def __getitem__(self, index: int) -> Tuple:
-        return tuple([ds[index%len(ds)] for ds in self.items])
+        return tuple([ds[index] for ds in self.items])
 
     def __getattr__(self, name):
         if name in self.__dict__:
@@ -247,6 +237,8 @@ class NumpyDataset(Dataset):
                                             object_type=self.object_type)
 
     def __getitem__(self, index: int) -> Tuple:
+        if index >= len(self.items):
+            index = index % len(self.items)
         return None if self.items is None else self.items[index]
 
     def data_transform(self, img_data):
@@ -279,6 +271,8 @@ class StreamDataset(Dataset):
         pass
 
     def __getitem__(self):
+        if index >= len(self.items):
+            index = index % len(self.items)
         raise AssertionError("can not get item from StreamDataset by index")
 
     def __len__(self):
@@ -296,6 +290,8 @@ class ArrayDataset(Dataset):
         self.symbol = symbol
 
     def __getitem__(self, index: int):
+        if index >= len(self.items):
+            index = index % len(self.items)
         return self.items[index]
 
     def __len__(self) -> int:
@@ -320,7 +316,10 @@ class ImageDataset(Dataset):
         self.is_paired_process = False
 
     def __getitem__(self, index: int):
+        if index>=len(self.items):
+            index=index%len(self.items)
         img = self.items[index]  # self.pop(index)
+
         if isinstance(img, str) and self.object_type==ObjectType.image_path:
             return img
         elif isinstance(img, np.ndarray) and self.object_type!=ObjectType.image_path:
@@ -428,6 +427,8 @@ class MaskDataset(Dataset):
         self._element_spec = TensorSpec(shape=TensorShape(self[0]), name=self.symbol, object_type=self.object_type, is_spatial=True)
 
     def __getitem__(self, index: int):
+        if index >= len(self.items):
+            index = index % len(self.items)
         mask = self.items[index]  # self.pop(index)
 
         if isinstance(mask, str):
@@ -532,6 +533,8 @@ class LabelDataset(Dataset):
             self._idx2lab = dict(zip(range(len(self.class_names[language])), self.class_names[language]))
 
     def __getitem__(self, index: int):
+        if index >= len(self.items):
+            index = index % len(self.items)
         label = self.items[index]
         return label
 
@@ -579,7 +582,8 @@ class BboxDataset(Dataset):
             self._current_idx = -1
 
     def __getitem__(self, index: int):
-        self._current_idx = index
+        if index >= len(self.items):
+            index = index % len(self.items)
         bboxes = self.items[index].astype(np.float32)
         if self.object_type == ObjectType.relative_bbox and (self.image_size is None):
             raise RuntimeError('You need provide image size information for calculate relative_bbox. ')
@@ -619,14 +623,8 @@ class LandmarkDataset(Dataset):
         self.transform_funcs = []
 
     def __getitem__(self, index: int):
-        # if (landmarks > 1).any() or (self.image_size is None):
-        #     return np.array(landmarks).astype(np.float32)
-        # # elif (landmarks > 1).any():
-        # #     height, width = self.image_size
-        # #     landmarks[:, 0] = landmarks[:, 0] / width
-        # #     landmarks[:, 1] = landmarks[:, 1] / height
-        # #     return np.array(landmarks).astype(np.float32)
-        # else:
+        if index >= len(self.items):
+            index = index % len(self.items)
         return self.items[index]
 
     def landmark_transform(self, *landmarks):
@@ -1296,12 +1294,13 @@ class Iterator(object):
 
             returnData =OrderedDict()# copy.deepcopy(self.data_template)
 
-            data = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
-            label = self.label.__getitem__(index % len(self.label)) if self.label is not None and len(self.label) > 0 else None
+            data = self.data.__getitem__(index) if self.data is not None and len(self.data) > 0 else None
+            label = self.label.__getitem__(index) if self.label is not None and len(self.label) > 0 else None
 
-            unpair = self.unpair.__getitem__(index % len(self.unpair)) if self.unpair is not None and len(self.unpair) > 0 else None
+            unpair = self.unpair.__getitem__(index) if self.unpair is not None and len(self.unpair) > 0 else None
             results = iteration_tools.flatten((data, label, unpair), iterable_types=(tuple))
             results = tuple([item for item in results if item is not None])
+
             if len(returnData) > 0 and len(returnData) != len(self.get_datasets()):
                 raise ValueError("Flattened data should have same length as datasets")
 
@@ -1314,6 +1313,9 @@ class Iterator(object):
             if len(self.paired_process_symbols) > 0:
                 returnData = self.paired_transform(returnData)
 
+            # for i in range(len(returnData)):
+            #     ds = self.get_datasets()[i]
+            #     returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
             def process_data_transform(i):
                 ds = self.get_datasets()[i]
                 returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
