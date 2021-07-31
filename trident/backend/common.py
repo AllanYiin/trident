@@ -302,7 +302,7 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
             return '{0:.3%}'.format(num)
         elif len(prev_value) > 0:
             digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean())
-            if digit > 6:
+            if digit > 8:
                 return '{0:{1}}'.format(num, '.3e')
             elif digit < 4:
                 return '{0:{1}}'.format(num, '.3f')
@@ -320,14 +320,14 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
             if math.modf(num)[0] == 0:
                 num = int(num)
                 return '{0:,}'.format(num)
-            elif 1.2 >= num >= 0.001 or -0.001 >= num >= -1.2 or num == 0:
+            elif 1.5 >= num >= 0.001 or -0.001 >= num >= -1.5 or num == 0:
                 return '{0:.3%}'.format(num)
-            elif num > 4.2 or num < -4.2:
+            elif 10000>num  or num >= -10000:
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:{1}}'.format(num, '.3e')
         elif value_type != 'loss':
-            if 1000 >= num >= 0.001 or -0.001 >= num >= -1000 or num == 0:
+            if 10000 >= num >= 0.001 or -0.001 >= num >= -10000 or num == 0:
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:{1}}'.format(num, '.3e')
