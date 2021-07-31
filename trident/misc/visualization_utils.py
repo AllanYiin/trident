@@ -6,7 +6,7 @@ import builtins
 import sys
 
 
-
+from trident.backend.common import if_none
 from trident.backend.opencv_backend import array2image
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 import math
@@ -116,12 +116,12 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
             fontcolor = (0, 0, 0)
         if label and get_plateform() == 'windows':
             font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
-        tf = max(tl - 1, 1)  # font thickness
-        t_size = draw.textsize(label, font=font)
-        c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
-        offset = font.getoffset(label)
-        draw.rectangle((c1, c2), fill=color,width=2)
-        draw.text((c1[0], c1[1] - 2- offset[1] ), u'{0}'.format(label), fill=fontcolor, font=font)
+            tf = max(tl - 1, 1)  # font thickness
+            t_size = draw.textsize(label, font=font)
+            c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+            offset = font.getoffset(label)
+            draw.rectangle((c1, c2), fill=color,width=2)
+            draw.text((c1[0], c1[1] - 2- offset[1] ), u'{0}'.format(label), fill=fontcolor, font=font)
     except Exception as e:
         print('image_size', img_shape,box)
         print(e)
@@ -143,13 +143,16 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
     suffix = get_time_suffix()
     if len(imgs) == 1 and distinct_row == 1:
         img = array2image(imgs[0][0])
-        filename = save_path.format(suffix)
-        img.save(filename)
-        plt.imshow(img)
+        if save_path is not None:
+            filename = save_path.format(suffix)
+            img.save(filename)
+
         if imshow:
+            plt.imshow(img)
             if is_in_ipython():
                 plt.axis("off")
                 plt.ioff()
+
                 display.display(plt.gcf())
             else:
                 plt.axis("off")
@@ -171,8 +174,11 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
             img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
             plt.imshow(img, interpolation="nearest", animated=True)
             plt.axis("off")
-        filename = save_path.format(suffix)
-        plt.savefig(filename, bbox_inches='tight')
+        if save_path is not None:
+            filename = save_path.format(suffix)
+            plt.savefig(filename, bbox_inches='tight')
+            if ctx.enable_mlflow:
+                ctx.mlflow_logger.add_image(filename)
         if imshow:
             # plSize = fig.get_size_inches()
             # fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
@@ -234,13 +240,16 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
         first_axis_limit = []
         second_axis_limit = []
         if metrics.__class__.__name__ == 'HistoryBase':
-            metrics_need_plot = metrics_names[0]
+            metrics_need_plot = metrics_names
+            if 'epoch' in metrics_need_plot:
+                metrics_need_plot.remove('epoch')
             for n in range(len(metrics)):
                 k, v = list(metrics.items())[n]
+
+                legend_label = legend[n] if legend is not None else None
+
                 if k in metrics_need_plot:
-                    legend_label = k
-                    if legend is not None and len(legend) == len(metrics):
-                        legend_label = legend[n]
+                    legend_label = if_none(legend_label, k)
 
                     steps, values = metrics.get_series(k)
                     values_np = np.array(values)
@@ -274,10 +283,12 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                             first_axis_keys.append(k)
 
             metric_ax1.legend( loc="lower right")
-            metric_ax1.set_ylim(first_axis_limit[0], first_axis_limit[1])
-            if len(second_axis_keys) > 0:
-                metric_ax2.legend()
-                metric_ax2.set_ylim(second_axis_limit[0], second_axis_limit[1])
+            if not any([n!=n for n in first_axis_limit]):
+                if len(first_axis_limit)>=2and   first_axis_limit[0]!=first_axis_limit[1]:
+                    metric_ax1.set_ylim(first_axis_limit[0], first_axis_limit[1])
+                if len(second_axis_keys) > 0:
+                    metric_ax2.legend()
+                    metric_ax2.set_ylim(second_axis_limit[0], second_axis_limit[1])
             #plt.legend(loc='upper left')
 
         elif isinstance(metrics, list):
@@ -347,17 +358,17 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
             #plt.legend(legend_list,loc='upper left')
 
         metric_ax1.set_title('model metrics', fontsize=14, fontweight='bold')
-        metric_ax1.set_ylabel(','.join(first_axis_keys))
+
         metric_ax1.set_xlabel(calculate_base)
-        if len(second_axis_keys) > 0:
-            metric_ax2.set_ylabel(','.join(second_axis_keys))
-            #metric_ax2.cla()
+
 
         if max_iteration is not None:
             metric_ax1.set_xlim(0, max_iteration)
 
     if save_path is not None:
         plt.savefig(save_path, bbox_inches='tight')
+        if ctx.enable_mlflow:
+            ctx.mlflow_logger.add_image(save_path)
     plt.tight_layout()
     if imshow:
         if is_in_ipython():
@@ -377,6 +388,45 @@ def polygon_under_graph(xlist, ylist):
     """
     return [(xlist[0], 0.), *zip(xlist, ylist), (xlist[-1], 0.)]
 
+
+def make_histogram(values, bins, max_bins=None):
+    """Convert values into a histogram proto using logic from histogram.cc."""
+    if values.size == 0:
+        raise ValueError('The input has no element.')
+    values = values.reshape(-1)
+    counts, limits = np.histogram(values, bins=bins)
+    num_bins = len(counts)
+    if max_bins is not None and num_bins > max_bins:
+        subsampling = num_bins // max_bins
+        subsampling_remainder = num_bins % subsampling
+        if subsampling_remainder != 0:
+            counts = np.pad(counts, pad_width=[[0, subsampling - subsampling_remainder]],
+                            mode="constant", constant_values=0)
+        counts = counts.reshape(-1, subsampling).sum(axis=-1)
+        new_limits = np.empty((counts.size + 1,), limits.dtype)
+        new_limits[:-1] = limits[:-1:subsampling]
+        new_limits[-1] = limits[-1]
+        limits = new_limits
+
+    # Find the first and the last bin defining the support of the histogram:
+    cum_counts = np.cumsum(np.greater(counts, 0, dtype=np.int32))
+    start, end = np.searchsorted(cum_counts, [0, cum_counts[-1] - 1], side="right")
+    start = int(start)
+    end = int(end) + 1
+    del cum_counts
+
+    # TensorBoard only includes the right bin limits. To still have the leftmost limit
+    # included, we include an empty bin left.
+    # If start == 0, we need to add an empty one left, otherwise we can just include the bin left to the
+    # first nonzero-count bin:
+    counts = counts[start - 1:end] if start > 0 else np.concatenate([[0], counts[:end]])
+    limits = limits[start:end + 1]
+
+    if counts.size == 0 or limits.size == 0:
+        raise ValueError('The histogram is empty, please file a bug report.')
+
+    sum_sq = values.dot(values)
+    return limits.tolist(),counts.tolist()
 
 default_bins = []
 default_bins.extend(np.arange(-0.02, 0.02, 0.002).tolist())
@@ -539,7 +589,7 @@ def plot_centerloss(plt, feat, labels, num_class=10, title='', enable_tensorboar
     return fig
 
 
-def plot_confusion_matrix(cm, class_names, figsize=(16, 16), normalize=False, title="Confusion matrix", fname=None,
+def plot_confusion_matrix(cm, class_names, figsize=(16, 8), normalize=False, title="Confusion matrix", fname=None,
                           noshow=False, enable_tensorboard=False, **kwargs):
     """Render the confusion matrix and return matplotlib's figure with it.
     Normalization can be applied by setting `normalize=True`.

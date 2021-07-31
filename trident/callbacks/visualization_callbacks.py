@@ -58,6 +58,8 @@ class VisualizationCallbackBase(CallbackBase):
             save_path = 'results'
         self.save_path = make_dir_if_need(save_path)
         self.imshow = imshow
+        if imshow is None and self.is_in_ipython:
+            self.imshow = True
 
     pass
 
@@ -71,6 +73,7 @@ class TileImageCallback(VisualizationCallbackBase):
         self.is_in_colab = is_in_colab()
         self.tile_image_name_prefix = name_prefix
         self.reverse_image_transform = reverse_image_transform
+
         self.row = row
 
         self.include_input = include_input
@@ -91,6 +94,10 @@ class TileImageCallback(VisualizationCallbackBase):
         data = training_context['train_data']
         model = training_context['current_model']
         dataprovider = enforce_singleton(ctx.get_data_provider())
+        if self.reverse_image_transform is None:
+            if len(ctx.get_data_provider()) == 1:
+                self.reverse_image_transform = dataprovider.reverse_image_transform
+                self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
 
         if self.include_input:
             input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
@@ -99,10 +106,10 @@ class TileImageCallback(VisualizationCallbackBase):
         elif isinstance(model, Layer):
             output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]].copy())
         if self.include_target:
-            candidate=[k  for k in data_feed.keys() if 'target' in k ]
-            if len(candidate)==1:
+            candidate = [k for k in data_feed.keys() if 'target' in k]
+            if len(candidate) == 1:
                 target = to_numpy(data[data_feed[candidate[0]]].copy())
-            elif dataprovider.traindata.label is not None and not  isinstance(dataprovider.traindata.label ,ZipDataset):
+            elif dataprovider.traindata.label is not None and not isinstance(dataprovider.traindata.label, ZipDataset):
                 target = to_numpy(data[data_feed[dataprovider.traindata.label.symbol]].copy())
             elif dataprovider.traindata.label is not None and isinstance(dataprovider.traindata.label, ZipDataset):
                 target = to_numpy(data[data_feed[dataprovider.traindata.label.items[0].symbol]].copy())
@@ -115,8 +122,8 @@ class TileImageCallback(VisualizationCallbackBase):
                     if isinstance(ds, MaskDataset):
                         mask = to_numpy(data[ds.symbol])
 
-        reverse_image_transform = dataprovider.reverse_image_transform
-        reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
+        reverse_image_transform = self.reverse_image_transform
+        reverse_image_transform_funcs = self.reverse_image_transform_funcs
         if self.include_input and input is not None:
             if len(reverse_image_transform_funcs) > 1:
                 input_arr = []
@@ -184,7 +191,7 @@ class TileImageCallback(VisualizationCallbackBase):
             self.plot_tile_image(training_context)
 
     def on_epoch_end(self, training_context):
-        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] + 1) % self.frequency == 0):
+        if self.frequency > 0 and (self.unit == 'epoch' and (training_context['current_epoch'] + 1) % self.frequency == 0):
             self.plot_tile_image(training_context)
 
 
@@ -467,11 +474,26 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                 if ctx.enable_tensorboard and ctx.summary_writer is not None:
                     ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
                 plt.close()
-                # if self.tile_image_unit == 'epoch' and (epoch + 1) % self.tile_image_frequency == 0:  #     epoch_loss_history = [trainitem.epoch_loss_history for k,
-                # trainitem in self.training_items.items()]  #     epoch_metric_history = [trainitem.epoch_metric_history for k, trainitem in self.training_items.items()]  #  #
-                # loss_metric_curve(epoch_loss_history, epoch_metric_history, legend=self.training_names.value_list,  #                       calculate_base='epoch',
-                # max_iteration=self.num_epochs,  #                       save_path=os.path.join(self.tile_image_save_path, 'loss_metric_curve.png'),  #
-                # imshow=True)
+            elif self.unit  == 'epoch' and (training_context['epochs']  + 1) % self.frequency == 0:
+                if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
+                    display.clear_output(wait=True)
+                    self.counter = 0
+                self.loss_history_list = []
+                self.metric_history_list = []
+                plotable_metric_names = OrderedDict()
+                for i in range(len(self.training_items.value_list)):
+                    trainitem = self.training_items.value_list[i]
+                    self.loss_history_list.append(trainitem.epoch_loss_history)
+                    plotable_metric_names[i] = [k for k, v in trainitem._metrics.item_list if v.print_only == False]
+                    self.metric_history_list.append(trainitem.epoch_metric_history)
+                self.counter += 1
+                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list, metrics_names=plotable_metric_names,
+                                        legend=training_context['training_names'].value_list, calculate_base='epoch',
+                                        max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
+                                        imshow=self.imshow)
+                if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                    ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
+                plt.close()
 
     # def on_batch_end(self, training_context):
     #     if self.is_inplace:
