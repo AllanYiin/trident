@@ -2162,7 +2162,7 @@ def softmax(x, axis=1):
 
     """
 
-    return np.true_divide(np.exp(x) ,np.clip(np.sum(np.exp(x),axis=axis),a_min=epsilon()))
+    return np.true_divide(np.exp(x) ,np.clip(np.sum(np.exp(x),axis=axis,keepdims=True),a_min=epsilon(),a_max=np.inf))
 
 
 
@@ -2707,10 +2707,14 @@ def make_onehot(label, num_classes, axis=-1):
              [0., 0., 0., 0.]]])
 
     """
+    shp=label.shape
+    flatten_label=label.reshape(-1)
+    result=np.eye(num_classes)
+    result=result[flatten_label.astype(np.int64)]
+    if axis!=-1 and axis!=ndim(label)-1:
+        result=np.swapaxes(axis,-1)
 
-
-    onehot=np.put(label, num_classes, 1)
-    return onehot
+    return result
 
 
 def arange(*args, dtype=np.int32):
