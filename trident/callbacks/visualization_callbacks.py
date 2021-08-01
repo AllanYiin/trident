@@ -474,7 +474,7 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
                 if ctx.enable_tensorboard and ctx.summary_writer is not None:
                     ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
                 plt.close()
-            elif self.unit  == 'epoch' and (training_context['epochs']  + 1) % self.frequency == 0:
+            elif self.unit  == 'epoch' and (training_context['epochs']  + 1) % self.frequency == 0 and  self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch'] :
                 if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
                     display.clear_output(wait=True)
                     self.counter = 0

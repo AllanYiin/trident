@@ -13,7 +13,7 @@ import time
 import uuid
 from functools import partial
 import builtins
-
+import threading
 import numpy as np
 
 from trident import context
@@ -24,7 +24,7 @@ from trident.callbacks.lr_schedulers import AdjustLRCallback, StepLR
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset, RandomNoiseDataset, ImageDataset
 from trident.backend.common import get_backend, to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need,open_browser,launchTensorBoard,launchMLFlow
 from trident.backend.model import ModelBase, progress_bar
 from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
@@ -68,6 +68,7 @@ class TrainingPlan(object):
         self.num_epochs = 1
         self._batch_size = 1
         self.steps = 0
+        self.epochs = 0
         self.warmup = 0
         self.default_collect_data_inteval = 1
         self.print_progress_frequency = 10
@@ -260,6 +261,12 @@ class TrainingPlan(object):
                 PrintException()
         return self
 
+    def with_mlflow(self):
+        from trident.loggers.mlflow_logger import MLFlowLogger
+        ctx.try_enable_mlflow(MLFlowLogger())
+
+        return self
+
     def out_sample_evaluation_scheduling(self, frequency: int, unit='batch', on_epoch_end=True):
         self.out_sample_evaluation_on_epoch_end = on_epoch_end
         self.out_sample_evaluation_frequency = frequency
@@ -389,6 +396,7 @@ class TrainingPlan(object):
                     data_feed['x'] = 'input'
                     available_items.remove('input')
 
+
             if len(trainingitem.signature.inputs) == len(data_symbols) == 1:
                 # if trainingitem.signature.inputs.value_list[0].shape.is_compatible_with(data_provider.traindata.data.element_spec.shape):
                 data_feed[trainingitem.signature.inputs.key_list[0]] = data_provider.traindata.data.symbol
@@ -407,6 +415,11 @@ class TrainingPlan(object):
                 if out in available_items:  # output=putput
                     data_feed[out] = out
                     available_items.remove(out)
+
+            if 'target' in data_feed:
+                if len(label_symbols) == 1 and label_symbols[0] in available_items:
+                    data_feed['target'] = label_symbols[0]
+                    available_items.remove(label_symbols[0])
 
             for key in data_feed.keys():
                 if data_feed[key] == None and key in available_items:
@@ -457,12 +470,16 @@ class TrainingPlan(object):
                         item.training_context['training_name'] = item_name
                         item.training_context['summary_writer'] = ctx.summary_writer
 
-                make_dir_if_need(os.path.join(working_directory, 'Logs'))
-
-                sys.stdout.writelines(
-                    ['Please execute the command to initial tensorboard:  tensorboard --logdir={0}  --port 6006 \n\r'.format(os.path.join(working_directory, 'Logs'))])
-                sys.stdout.writelines(['Tensorboard is initialized. You can access tensorboard at http://localhost:6006/   \n\r'])
-
+                t1 = threading.Thread(target=launchTensorBoard, args=([]))
+                t1.setDaemon(True)
+                t1.start()
+                open_browser('http://{0}:{1}/'.format(ctx.tensorboard_server, ctx.tensorboard_port), 5)
+            if ctx.enable_mlflow:
+                t1 = threading.Thread(target=launchMLFlow, args=([]))
+                t1.setDaemon(True)
+                t1.start()
+                ctx.mlflow_logger.start_run()
+                open_browser('http://{0}:{1}/'.format(ctx.mlflow_server, ctx.mlflow_port), 5)
             if not is_resume or only_steps == True:
                 max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
                 for item in self.training_items.values():
@@ -495,6 +512,7 @@ class TrainingPlan(object):
                 data_provider.traindata.batch_sampler._batch_transform_funcs = data_provider._batch_transform_funcs
             self.do_on_training_start()
             for epoch in range(self.num_epochs):
+                self.epochs=epoch
                 try:
                     for mbs, return_data in enumerate(data_provider):
 
@@ -613,10 +631,10 @@ class TrainingPlan(object):
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'], )
-                                    if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
-                                        trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
-                                        trainitem.training_context['upload_onnx'] = True
+                                    # if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or trainitem.training_context['upload_onnx'] == False):
+                                    #     trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                    #     ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'));
+                                    #     trainitem.training_context['upload_onnx'] = True
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
                                     try:
