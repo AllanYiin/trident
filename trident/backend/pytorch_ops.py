@@ -6,6 +6,7 @@ import collections
 import numbers
 import builtins
 import math
+import os
 import random
 from distutils.version import Version, LooseVersion
 from collections import Sized, Iterable
@@ -32,6 +33,13 @@ version1_7 = LooseVersion(vstring='1.7.0')
 
 def is_gpu_available():
     return torch.cuda.is_available()
+
+
+def is_tpu_available():
+    if 'XRT_TPU_CONFIG' in os.environ:
+        return True
+    return
+
 
 def _get_device():
     """get current device
@@ -331,6 +339,8 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
                 if dtype is None:
                     dtype = Dtype.int64
                 x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
+            elif len(x)==1:
+                x=unpack_singleton(x)
             else:
                 if dtype is None:
                     dtype = Dtype.float32
@@ -453,7 +463,7 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
     if need_exclude_batch_axis and is_singleton==False:
         shp=list(int_shape(x))
         if len(shp)==0:
-            print('')
+            pass
         shp[0]=None
         return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton==True:
@@ -609,6 +619,8 @@ def is_nan(x):
         return [torch.isnan(para) for para in x.parameters()]
     elif isinstance(x, np.ndarray):
         return np.isnan(x)
+    elif isinstance(x, numbers.Number):
+        return math.isnan(x)
     else:
         raise NotImplementedError
 
@@ -628,10 +640,12 @@ def is_inf(x):
         return [torch.isinf(para) for para in x.parameters()]
     elif isinstance(x, np.ndarray):
         return np.isinf(x)
+    elif isinstance(x, numbers.Number):
+        return math.isinf(x)
     else:
         raise NotImplementedError
 
-@numpy_compatible
+
 def is_abnormal_number(x):
     """
 
@@ -643,7 +657,7 @@ def is_abnormal_number(x):
     """
     return is_nan(x) |is_inf(x)
 
-@numpy_compatible
+
 def any_nan(x):
     """
 
@@ -662,6 +676,8 @@ def any_nan(x):
         return False
     elif isinstance(x, np.ndarray):
         return np.isnan(x).any()
+    elif isinstance(x, numbers.Number):
+        return math.isnan(x)
     else:
         raise NotImplementedError
 
@@ -684,6 +700,8 @@ def any_inf(x):
         return False
     elif isinstance(x, np.ndarray):
         return np.isinf(x).any()
+    elif isinstance(x, numbers.Number):
+        return math.isinf(x)
     else:
         raise NotImplementedError
 

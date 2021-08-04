@@ -620,6 +620,8 @@ def is_nan(x):
         return [tf.math.is_inf(para.value()) for para in x.weights]
     elif isinstance(x, np.ndarray):
         return np.isnan(x)
+    elif isinstance(x, numbers.Number):
+        return math.isnan(x)
     else:
         raise NotImplementedError
 
@@ -633,6 +635,8 @@ def is_inf(x):
         return [tf.math.is_inf(para.value())for para in x.weights]
     elif isinstance(x, np.ndarray):
         return np.isinf(x)
+    elif isinstance(x, numbers.Number):
+        return math.isinf(x)
     else:
         raise NotImplementedError
 
@@ -656,6 +660,8 @@ def any_nan(x):
         return False
     elif isinstance(x, np.ndarray):
         return np.isnan(x).any()
+    elif isinstance(x, numbers.Number):
+        return math.isnan(x)
     else:
         raise NotImplementedError
 
@@ -675,6 +681,8 @@ def any_inf(x):
         return False
     elif isinstance(x, np.ndarray):
         return np.isinf(x).any()
+    elif isinstance(x, numbers.Number):
+        return math.isinf(x)
     else:
         raise NotImplementedError
 
