@@ -354,9 +354,9 @@ def reset_name(module: tf.Module, prefix_dict=None):
 
     if not hasattr(module, '_uid_prefixs') or prefix_dict is not None:
         module._uid_prefixs = prefix_dict
-    if not hasattr(module, '_default_name'):
-        module._default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
-    prefix, seq = module._default_name.rsplit('_', 1)  # if '_' in module._default_name else
+    if not hasattr(module, 'default_name'):
+        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
+    prefix, seq = module.default_name.rsplit('_', 1)  # if '_' in module.default_name else
     seq = int(seq)
     module.default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
     if module._name is None:
@@ -595,7 +595,7 @@ class Layer(tf.Module):
         self.relative_name = ''
         reset_name(self, self._uid_prefixs)
 
-        super(Layer, self).__init__(name=self._default_name)
+        super(Layer, self).__init__(name=self.default_name)
         self.batch_index = 0
         self.filter_index = -1
         self.in_sequence = kwargs.get('in_sequence', False)
@@ -1225,47 +1225,46 @@ class Layer(tf.Module):
         Returns:
 
         """
-        if self.is_root:
-            arg_spec = get_args_spec(self.forward)
-            inspect_args = [arg for arg in list(arg_spec.args) if arg not in ['self', 'kwargs']]
-            if isinstance(arg_spec.varargs, str):
-                inspect_args.append(arg_spec.varargs)
-            inspect_args=unpack_singleton(inspect_args)
 
-            if self._signature is None or len(self._signature) == 0 or len(self._signature.inputs) == 0:
-                self._signature = Signature(name=self.name)
+        arg_spec = get_args_spec(self.forward)
+        inspect_args = [arg for arg in list(arg_spec.args) if arg not in ['self', 'kwargs']]
+        if isinstance(arg_spec.varargs, str):
+            inspect_args.append(arg_spec.varargs)
+        inspect_args=unpack_singleton(inspect_args)
+
+        if self._signature is None or len(self._signature) == 0 or len(self._signature.inputs) == 0:
+            self._signature = Signature(name=self.name)
 
 
-                if self._input_shape is not None:
-                    if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args,str):
-                        self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape), name=inspect_args)
+            if self._input_shape is not None:
+                if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args,str):
+                    self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape), name=inspect_args)
 
-                    elif isinstance(self._input_shape, tuple):
-                        for i in range(len(self._input_shape)):
-                            self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
-                else:
-                    for arg in inspect_args:
-                        self._signature.inputs[arg] = TensorSpec(shape=None)
+                elif isinstance(self._input_shape, tuple):
+                    for i in range(len(self._input_shape)):
+                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
+            else:
+                for arg in inspect_args:
+                    self._signature.inputs[arg] = TensorSpec(shape=None)
 
-                if self._output_shape is not None:
-                    if isinstance(self._output_shape, TensorShape):
-                        self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
-                    elif isinstance(self._output_shape, tuple):
-                        for i in range(len(self._output_shape)):
-                            self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
-                else:
-                    self._signature.outputs["output"] =TensorSpec(shape=None)
-            if isinstance(inspect_args,str) and len(self._signature.inputs)==1 and self._signature.inputs.key_list[0] !=inspect_args:
-                self._signature.inputs[inspect_args]=self._signature.inputs.value_list[0]
-                self._signature.inputs.pop(self._signature.inputs.key_list[0] )
-            elif isinstance(inspect_args,list) and len(self._signature.inputs)==len(inspect_args):
-                for  k1,k2 in zip(inspect_args,self._signature.inputs.key_list.copy()):
-                    if k1!=k2:
-                        self._signature.inputs[k1]=self._signature.inputs[k2]
-                        self._signature.inputs.pop(k2)
-            return self._signature
-        else:
-            return None
+            if self._output_shape is not None:
+                if isinstance(self._output_shape, TensorShape):
+                    self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
+                elif isinstance(self._output_shape, tuple):
+                    for i in range(len(self._output_shape)):
+                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
+            else:
+                self._signature.outputs["output"] =TensorSpec(shape=None)
+        if isinstance(inspect_args,str) and len(self._signature.inputs)==1 and self._signature.inputs.key_list[0] !=inspect_args:
+            self._signature.inputs[inspect_args]=self._signature.inputs.value_list[0]
+            self._signature.inputs.pop(self._signature.inputs.key_list[0] )
+        elif isinstance(inspect_args,list) and len(self._signature.inputs)==len(inspect_args):
+            for  k1,k2 in zip(inspect_args,self._signature.inputs.key_list.copy()):
+                if k1!=k2:
+                    self._signature.inputs[k1]=self._signature.inputs[k2]
+                    self._signature.inputs.pop(k2)
+        return self._signature
+
 
     @signature.setter
     def signature(self, value):
@@ -2733,7 +2732,8 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
     model.eval()
 
     # batch_size of 2 for batchnorm
-    x = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) for spec in input_specs]
+    x = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) if spec.optional == False else spec.default for spec in model._signature.inputs.value_list]
+
     # p    rint(type(x[0]))
 
     # create properties
@@ -2811,7 +2811,7 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs]).sum()
+    total_input_size =  np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional==False ]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
@@ -3132,9 +3132,9 @@ def fix_layer(layer: Layer):
         if not hasattr(module, '_uid_prefixs'):
             module._uid_prefixs = layer.get_root()._uid_prefixs
 
-        if not hasattr(module, '_default_name') or (module._default_name is None or len(module._default_name) == 0):
+        if not hasattr(module, 'default_name') or (module.default_name is None or len(module.default_name) == 0):
             module_prefix = module.__class__.__name__
-            module._default_name = camel2snake(module_prefix) + '_' + str(get_global_uid(camel2snake(module_prefix)))
+            module.default_name = camel2snake(module_prefix) + '_' + str(get_global_uid(camel2snake(module_prefix)))
 
         if not hasattr(module, '_name'):
             module._name = None
