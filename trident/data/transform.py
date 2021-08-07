@@ -128,7 +128,7 @@ class VisionTransform(Transform):
 
 
     def _get_apply(self, key):
-        if 'image' in key or  'rgb' in key or  'gray' in key :
+        if ('image' in key or  'rgb' in key or  'gray' in key) and key!='image_path' :
             return getattr(self, "_apply_{}".format('image'), None)
         elif 'bbox' in key:
             return getattr(self, "_apply_{}".format('boxes'), None)
@@ -172,25 +172,25 @@ class VisionTransform(Transform):
         else:
             if ndim(boxes) == 1:
                 boxes=np.expand_dims(boxes,0)
-
+            B=boxes.shape[0]
             location= boxes[:, :4]
-            class_info = boxes[:, 4] if boxes.shape[-1]>4 else None
-            ketpoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
+            class_info = boxes[:, 4:5] if boxes.shape[-1]>4 else None
+            keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
             idxs = np.array([(0, 1), (2, 1), (0, 3), (2, 3)]).flatten()
-            coords = np.asarray(location).reshape(-1, 4)[:, idxs].reshape(-1, 2)
-            coords = self._apply_coords(coords,spec).reshape((-1, 4, 2))
-            minxy = coords.min(axis=1)
-            maxxy = coords.max(axis=1)
-            if ketpoints is not None:
-                coords_ketpoints = np.asarray(ketpoints).reshape(-1, 2)
-                ketpoints = self._apply_coords(coords_ketpoints, spec).reshape((-1, ketpoints.shape[-1]//2,2))
+            location = np.asarray(location).reshape(-1, 4)[:, idxs].reshape(-1, 2)
+            location = self._apply_coords(location,spec).reshape((-1, 4, 2))
+            minxy = location.min(axis=1)
+            maxxy = location.max(axis=1)
+            if keypoints is not None:
+                coords_keypoints = np.asarray(keypoints).reshape(-1, 2)
+                keypoints = self._apply_keypoints(coords_keypoints, spec).reshape((-1, keypoints.shape[-1]))
 
 
             trans_boxes = np.concatenate((minxy, maxxy), axis=1)
             trans_boxes[:, 0::2] =clip(trans_boxes[:, 0::2] , 0, ew)
             trans_boxes[:, 1::2] = clip(trans_boxes[:, 1::2],0, eh)
-            if class_info.shape[-1]>0:
-                trans_boxes = np.concatenate((trans_boxes, class_info,coords_ketpoints), axis=1)
+            if class_info is not None  and class_info.shape[-1]>0:
+                trans_boxes = np.concatenate((trans_boxes, class_info,keypoints), axis=1)
             return trans_boxes
 
     def _apply_mask(self, mask,spec:TensorSpec):

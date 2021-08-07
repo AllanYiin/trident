@@ -22,10 +22,10 @@ from trident.data.transform import VisionTransform
 
 __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 'RandomRescaleCrop', 'RandomCenterCrop', 'RandomMultiScaleImage', 'RandomTransform', 'RandomTransformAffine',
            'AdjustBrightness', 'AdjustContrast', 'AdjustSaturation', 'AddNoise', 'AdjustHue', 'RandomAdjustHue', 'RandomAdjustBrightness', 'RandomAdjustContrast',
-           'RandomAdjustSaturation',
+           'RandomAdjustSaturation','AutoLevel',
            'Normalize', 'Unnormalize', 'CLAHE', 'Lighting', 'HorizontalFlip', 'RandomMirror', 'AdjustGamma', 'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
            'RandomInvertColor', 'GrayScale', 'RandomGrayScale',
-           'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic']
+           'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic','DetectionMixup']
 
 
 def randomize_with_validate(valid_range=None, no_change_value=None, **kwargs):
@@ -264,7 +264,10 @@ class ShortestEdgeResize(VisionTransform):
         h, w, th, tw, eh, ew, offsetx, offsety = self._shape_info
         if h == eh and w == ew:
             return mask
+        mask_dtype = mask.dtype
+        mask = mask.astype(np.float32)
         mask = cv2.resize(mask, (tw, th), cv2.INTER_NEAREST)
+        mask = mask.astype(mask_dtype)
         if ndim(mask) == 2:
             return mask.copy()[offsety:offsety + eh, offsetx:offsetx + ew]
         elif ndim(mask) == 3:
@@ -319,7 +322,12 @@ class Rescale(VisionTransform):
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        return cv2.resize(mask, self.output_size, cv2.INTER_NEAREST)
+        h, w, _ = mask.shape
+        mask_dtype = mask.dtype
+        mask = mask.astype(np.float32)
+        mask = cv2.resize(mask,self.output_size , cv2.INTER_NEAREST)
+        mask = mask.astype(mask_dtype)
+        return mask
 
 
 class RandomRescaleCrop(VisionTransform):
@@ -591,8 +599,7 @@ class RandomTransformAffine(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15, border_mode='random_color', interpolation=cv2.INTER_AREA,
-                 keep_ratio=0.5, name='transform_affine', **kwargs):
+    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15,border_mode='random_color', interpolation=cv2.INTER_AREA,keep_ratio=0.5, name='transform_affine', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = None
@@ -602,39 +609,40 @@ class RandomTransformAffine(VisionTransform):
         self.shear_range = shear_range
         self.interpolation = interpolation
         self.random_flip = random_flip
-        if border_mode not in ['random_color', 'replicate', 'zero', 'reflect', 'wrap']:
-            print('Only {0} are valid items'.format(['random_color', 'replicate', 'zero', 'reflect', 'wrap']))
-            self.border_mode = 'random_color'
+        if border_mode not in ['random_color','replicate','zero','reflect','wrap']:
+            print('Only {0} are valid items'.format(['random_color','replicate','zero','reflect','wrap']))
+            self.border_mode ='random_color'
         else:
-            self.border_mode = border_mode
-        self.keep_ratio = keep_ratio
+            self.border_mode=border_mode
+        self.keep_ratio=keep_ratio
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
         image = unpack_singleton(image)
-        H, W, C = int_shape(image)
+        H,W,C=int_shape(image)
         self.output_size = (H, W)
+
 
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        mat_img, height, width, is_flip, rr = self._shape_info
+        mat_img, height, width, is_flip ,rr= self._shape_info
 
-        if rr > self.keep_ratio:
+        if rr>self.keep_ratio:
             image = np.clip(image.astype(np.float32), 0, 255)[:, :, :3]
-            _borderMode = cv2.BORDER_CONSTANT
+            _borderMode=cv2.BORDER_CONSTANT
             _borderValue = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-            if self.border_mode == 'replicate':
-                _borderMode = cv2.BORDER_REPLICATE
-            elif self.border_mode == 'reflect':
-                _borderMode = cv2.BORDER_REFLECT
-            elif self.border_mode == 'wrap':
-                _borderMode = cv2.BORDER_WRAP
-            elif self.border_mode == 'zero':
-                _borderValue = 0
+            if self.border_mode=='replicate':
+                _borderMode=cv2.BORDER_REPLICATE
+            elif self.border_mode=='reflect':
+                _borderMode=cv2.BORDER_REFLECT
+            elif self.border_mode=='wrap':
+                _borderMode=cv2.BORDER_WRAP
+            elif self.border_mode=='zero':
+                _borderValue=(0,0,0)
 
-            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode, borderValue=_borderValue)  # , borderMode=cv2.BORDER_REPLICATE
+            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue )  # , borderMode=cv2.BORDER_REPLICATE
             if is_flip:
                 return image[:, ::-1]
             else:
@@ -643,8 +651,8 @@ class RandomTransformAffine(VisionTransform):
             return image
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        mat_img, height, width, is_flip, rr = self._shape_info
-        if rr > self.keep_ratio:
+        mat_img, height, width, is_flip,rr = self._shape_info
+        if rr>self.keep_ratio:
             #
             coords = coords.transpose([1, 0])
             coords = np.insert(coords, 2, 1, axis=0)
@@ -660,9 +668,13 @@ class RandomTransformAffine(VisionTransform):
 
     def _apply_mask(self, mask, spec: TensorSpec):
         mask = unpack_singleton(mask)
-        mat_img, height, width, is_flip, rr = self._shape_info
-        if rr > self.keep_ratio:
+        mat_img, height, width, is_flip,rr = self._shape_info
+        if rr>self.keep_ratio:
+            mask_dtype = mask.dtype
+            mask = mask.astype(np.float32)
+
             mask = cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))  # , borderMode=cv2.BORDER_REPLICATE
+            mask = mask.astype(mask_dtype)
             if is_flip:
                 return mask[:, ::-1]
             else:
@@ -684,8 +696,8 @@ class RandomTransformAffine(VisionTransform):
         if self.shift_range is not None:
             if isinstance(self.shift_range, numbers.Number):
                 self.shift_range = (-1 * self.shift_range, self.shift_range)
-            max_dx = self.shift_range[0] * image.shape[0]
-            max_dy = self.shift_range[1] * image.shape[1]
+            max_dx = self.shift_range[0] * image.shape[1]
+            max_dy = self.shift_range[1] * image.shape[0]
             translations = (np.round(random.uniform(-max_dx, max_dx)),
                             np.round(random.uniform(-max_dy, max_dy)))
         else:
@@ -709,8 +721,8 @@ class RandomTransformAffine(VisionTransform):
         else:
             shear = 0.0
 
-        self.output_size = image.shape[0]
-        center = (image.shape[0] * 0.5 + 0.5, image.shape[1] * 0.5 + 0.5)
+
+        center = (image.shape[1] * 0.5 + 0.5, image.shape[0] * 0.5 + 0.5)
 
         angle = math.radians(angle)
         # if isinstance(shear, (tuple, list)) and len(shear) == 2:
@@ -742,9 +754,9 @@ class RandomTransformAffine(VisionTransform):
         matrix[2] += center[0]
         matrix[5] += center[1]
 
-        rr_flip = np.random.random()
-        rr = np.random.random()
-        return np.array(matrix).reshape((2, 3)), h, w, rr_flip < self.random_flip, rr
+        rr_flip= np.random.random()
+        rr= np.random.random()
+        return np.array(matrix).reshape((2, 3)), h, w, rr_flip < self.random_flip,rr
 
 
 RandomTransform = RandomTransformAffine
@@ -761,7 +773,7 @@ class RandomMultiScaleImage(VisionTransform):
         self.scale_range = scale_range
         self.interpolation = interpolation
         self.idx = 0
-        self.tmp_fun = None
+        self.tmp_fun=None
         self.resize_funs = [Resize(output_size, True, align_corner=True, interpolation=interpolation),
                             Resize(output_size, True, align_corner=False, interpolation=interpolation),
                             Resize(output_size, False, interpolation=interpolation),
@@ -778,12 +790,11 @@ class RandomMultiScaleImage(VisionTransform):
     def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], **kwargs):
         self._shape_info = self._get_shape()
         idx = self._shape_info
-        self.tmp_fun = copy.deepcopy(self.resize_funs[idx])
+        self.tmp_fun=copy.deepcopy(self.resize_funs[idx])
         spec = kwargs.get('spec')
         return self.tmp_fun.apply_batch(inputs, spec)
-
-    def _get_shape(self, image=None):
-        idx = random.choice(range(len(self.resize_funs)))
+    def _get_shape(self,image=None):
+        idx=random.choice(range(len(self.resize_funs)))
         return idx
 
 
@@ -1018,8 +1029,12 @@ class AdjustContrast(VisionTransform):
         if self.value == 0:
             return image
         image = image.astype(np.float32)
-        mean = round(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).mean())
-        image = (1 - self.value) * mean + self.value * image
+        mean_value=-1
+        if ndim(image)==2 or (ndim(image)==3 and image.shape[-1]==1):
+            mean_value=image.mean()
+        else:
+            mean_value = round(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).mean())
+        image = (1 - self.value) * mean_value + self.value * image
         return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords, spec: TensorSpec):
@@ -1561,7 +1576,7 @@ class CLAHE(VisionTransform):
         return mask
 
 
-class AutoLeveling(VisionTransform):
+class AutoLevel(VisionTransform):
 
     def __init__(self, name='autoleveling', **kwargs):
         super().__init__(name)
@@ -1572,9 +1587,12 @@ class AutoLeveling(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         minv = np.percentile(image, 5)
         maxv = np.percentile(image, 95)
-        if maxv - minv < 40:
+        if minv == maxv:
+            return image
+        elif maxv - minv < 40:
             minv = image.min()
             maxv = image.max()
+
         image = np.clip((image - minv) * (255.0 / (maxv - minv)), 0, 255)
         return image.astype(np.float32)
 
@@ -1695,6 +1713,98 @@ class RandomErasing(VisionTransform):
         return mask
 
 
+class DetectionMixup(VisionTransform):
+    """Perform gamma correction on an image.
+        Also known as Power Law Transform. Intensities in RGB mode are adjusted
+        based on the following equation:
+        I_out = 255 * gain * ((I_in / 255) ** gamma)
+        See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+    Args:
+        gamma (float): Non negative real number. gamma larger than 1 make the
+            shadows darker, while gamma smaller than 1 make dark regions
+            lighter.
+        gain (float): The constant multiplier.
+    """
+
+    def __init__(self, output_size=None, keep_prob=0.8, name='detection_mixup', **kwargs):
+        super().__init__(name)
+        self.alpha=1
+        self.output_size = output_size
+        self.keep_prob = keep_prob
+        self.memory_cache=[]
+
+
+
+    def _apply_image(self, image, spec: TensorSpec):
+        image = unpack_singleton(image)
+
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
+        keep, other_idx, lam = self._shape_info
+        if keep:
+            return image
+        height, width = self.output_size
+        background = np.zeros((height, width, 3))
+        p1 = self.memory_cache[other_idx][spec].copy()
+        p1 = p1[:builtins.min(height, p1.shape[0]), :builtins.min(width, p1.shape[1]):]
+        background[:p1.shape[0], :p1.shape[1], :] = p1
+        mixed_x = lam * image + (1 - lam) * background
+
+        return clip(mixed_x, 0, 255).astype(np.float32)
+
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+
+        return coords
+
+    def _apply_boxes(self, boxes, spec: TensorSpec):
+        keep, other_idx, lam = self._shape_info
+        if keep:
+            return boxes
+        height, width = self.output_size
+        box1 = self.memory_cache[other_idx][spec].copy()
+        B = boxes.shape[0]
+        location = boxes[:, :4]
+        class_info = boxes[:, 4:5] if boxes.shape[-1] > 4 else None
+        keypoints = boxes[:, 5:] if boxes.shape[-1] > 5 else None
+
+        location1 = box1[:, :4].reshape((box1.shape[0], 2, 2))
+        class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
+        keypoints1 = box1[:, 5:].reshape((box1.shape[0], -1, 2)) if box1.shape[-1] > 5 else None
+
+        location1[:, :, 0] = np.clip(location1[:, :, 0], 0, width)
+        keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0], 0, width)
+        location1[:, :, 1] = np.clip(location1[:, :, 1], 0, height)
+        keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1], 0, height)
+        box1 = np.concatenate([location1.reshape((B, -1)), class_info1, keypoints1.reshape((B, -1))], axis=-1)
+
+        trans_boxes = np.concatenate([boxes, box1], axis=0)
+        return trans_boxes
+
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+         return mask
+
+
+    def _get_shape(self, image):
+        if self.output_size is None:
+            self.output_size=image.shape[:2]
+        rr = random.random()
+        keep=rr<self.keep_prob or len(self.memory_cache[:-1])<=3
+        other_idxes=None
+        other_idx=None
+        lam =0
+        if not keep:
+            other_idxes = list(range(len(self.memory_cache[:-1])))
+            random.shuffle(other_idxes)
+            other_idx =other_idxes[0]
+
+            height, width = self.output_size
+            lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.3), 0.7)
+
+
+        return keep,other_idx,lam
+
 class ImageMosaic(VisionTransform):
     """Perform gamma correction on an image.
         Also known as Power Law Transform. Intensities in RGB mode are adjusted
@@ -1708,147 +1818,266 @@ class ImageMosaic(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, output_size, keep_prob=0.7, name='image_mosaic', **kwargs):
+    def __init__(self, output_size=None, keep_prob=0.7, name='image_mosaic', **kwargs):
         super().__init__(name)
         self.output_size = output_size
         self.keep_prob = keep_prob
+        self.memory_cache=[]
 
-    def apply_batch(self, inputs: Sequence[Tuple], spec: Optional[TensorSpec] = None):
-        r"""Apply transform on batch input data."""
-        if not isinstance(inputs, OrderedDict):
-            if spec is None and self.is_spatial == True:
-                self._shape_info = None
-                spec = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True, is_singleton=True), object_type=ObjectType.rgb)
-            return self.apply(inputs, spec)
-        else:
-            results = OrderedDict()
-            imgs = None
-            boxes = None
-            masks = None
-            imgs = inputs.value_list[0]
-
-            if int_shape(imgs)[0] <= 4:
-                return inputs
-            else:
-                for i in range(len(inputs.values())):
-                    k, v = inputs.item_list[i]
-                    results[k] = []
-                    if i == 0:
-                        imgs = v
-                    elif isinstance(k, TensorSpec) and 'box' in str(k.object_type).lower():
-                        boxes = v
-                    elif isinstance(k, TensorSpec) and 'mask' in str(k.object_type).lower():
-                        masks = v
-                if get_backend() == 'pytorch':
-                    imgs = imgs.transpose([0, 2, 3, 1])
-
-                for i in range(int_shape(imgs)[0]):
-                    rr = random.random()
-                    if rr > self.keep_prob:
-
-                        img = imgs[i]
-
-                        other_idxes = list(range(int_shape(imgs)[0]))
-                        other_idxes.remove(i)
-                        random.shuffle(other_idxes)
-                        other_idxes = other_idxes[:3]
-
-                        height, width = self.output_size
-                        rs = np.random.uniform(0.5, 1.5, [2])  # random shift
-                        center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
-
-                        # crop each image
-                        p1 = imgs[other_idxes[0]].copy()[:center[0], center[1]:width, :]
-                        p2 = imgs[other_idxes[1]].copy()[center[0]:height, :center[1], :]
-                        p3 = imgs[other_idxes[2]].copy()[center[0]:height, center[1]:width, :]
-
-                        base_img = img.copy()
-                        base_img[:center[0], center[1]:width, :] = p1
-                        base_img[center[0]:height, :center[1], :] = p2
-                        base_img[center[0]:height, center[1]:width, :] = p3
-
-                        results[results.key_list[0]].append(base_img)
-
-                        if masks is not None and masks[i].any():
-                            msk = masks[i]
-                            mp1 = masks[other_idxes[0]].copy()[:center[0], center[1]:width]
-                            mp2 = masks[other_idxes[1]].copy()[center[0]:height, :center[1]]
-                            mp3 = masks[other_idxes[2]].copy()[center[0]:height, center[1]:width]
-
-                            base_msk = msk.copy()
-                            base_msk[:center[0], center[1]:width] = mp1
-                            base_msk[center[0]:height, :center[1]] = mp2
-                            base_msk[center[0]:height, center[1]:width] = mp3
-
-                            mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
-                            if mask_key:
-                                results[mask_key[0]].append(base_msk)
-
-                        mosaic_bboxes = []
-                        if boxes is not None and boxes[i].any():
-                            box = boxes[i]
-                            box1 = boxes[other_idxes[0]]
-                            box2 = boxes[other_idxes[1]]
-                            box3 = boxes[other_idxes[2]]
-                            box_list = []
-                            if box.any():
-                                box[:, 0][box[:, 0] > center[1]] = center[1]
-                                box[:, 2][box[:, 2] > center[1]] = center[1]
-                                box[:, 1][box[:, 1] > center[0]] = center[0]
-                                box[:, 3][box[:, 3] > center[0]] = center[0]
-                                box_list.append(box)
-                            if box1.any():
-                                box1[:, 0][box1[:, 0] < center[1]] = center[1]
-                                box1[:, 2][box1[:, 2] < center[1]] = center[1]
-                                box1[:, 1][box1[:, 1] > center[0]] = center[0]
-                                box1[:, 3][box1[:, 3] > center[0]] = center[0]
-                                box_list.append(box1)
-
-                            if box2.any():
-                                box2[:, 0][box2[:, 0] > center[1]] = center[1]
-                                box2[:, 2][box2[:, 2] > center[1]] = center[1]
-                                box2[:, 1][box2[:, 1] < center[0]] = center[0]
-                                box2[:, 3][box2[:, 3] < center[0]] = center[0]
-                                box_list.append(box2)
-
-                            if box3.any():
-                                box3[:, 0][box3[:, 0] < center[1]] = center[1]
-                                box3[:, 2][box3[:, 2] < center[1]] = center[1]
-                                box3[:, 1][box3[:, 1] < center[0]] = center[0]
-                                box3[:, 3][box3[:, 3] < center[0]] = center[0]
-                                box_list.append(box3)
-
-                            if len(box_list) > 0:
-                                mosaic_bboxes = np.concatenate(box_list)
-                                # remove no area bbox
-                                keep_x = mosaic_bboxes[:, 2] - mosaic_bboxes[:, 0] > 16
-                                keep_y = mosaic_bboxes[:, 3] - mosaic_bboxes[:, 1] > 16
-                                keep_mask = np.logical_and(keep_x, keep_y)
-                                mosaic_bboxes = mosaic_bboxes[keep_mask]
-                            else:
-                                mosaic_bboxes = list()
-                        box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
-                        if box_key:
-                            results[box_key[0]].append(mosaic_bboxes)
-                    else:
-                        results[results.key_list[0]].append(imgs[i])
-                        mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
-                        if mask_key:
-                            results[mask_key[0]].append(masks[i])
-                        box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
-                        if box_key:
-                            results[box_key[0]].append(boxes[i])
-
-            for i in range(len(results)):
-                if i == 0:
-                    result_imgs = np.stack(results.value_list[i], 0)
-                    if get_backend() == 'pytorch':
-                        result_imgs = result_imgs.transpose([0, 3, 1, 2])
-
-                    results[results.key_list[0]] = result_imgs
-                elif not 'box' in str(results.key_list[i].object_type).lower():
-                    results[results.key_list[i]] = np.array(results.value_list[i])
-            return results
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        image = unpack_singleton(image)
+
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
+        keep,other_idxes,center,img1_offsetx,img1_offsety,img2_offsetx,img2_offsety,img3_offsetx,img3_offsety = self._shape_info
+        if keep:
+            return image
+        height,width=self.output_size
+        p1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety+center[0], img1_offsetx:img1_offsetx+width-center[1], :]
+        p2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety+height-center[0], img2_offsetx:img2_offsetx+center[1], :]
+        p3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety+height-center[0], img3_offsetx:img3_offsetx+width-center[1], :]
+
+        base_img = image.copy()
+        base_img[:p1.shape[0], center[1]:center[1]+p1.shape[1], :] = p1
+        base_img[center[0]:center[0]+p2.shape[0], :p2.shape[1], :] = p2
+        base_img[center[0]:center[0]+p3.shape[0], center[1]:center[1]+p3.shape[1] :] = p3
+
+        return clip(image, 0, 255).astype(np.float32)
+
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_boxes(self, boxes,spec:TensorSpec):
+        keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety = self._shape_info
+        if keep:
+            return boxes
+        height, width = self.output_size
+        box1 = self.memory_cache[other_idxes[0]][spec].copy()
+        B=boxes.shape[0]
+        location= boxes[:, :4]
+        class_info = boxes[:, 4:5] if boxes.shape[-1]>4 else None
+        keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
+
+        location1 = box1[:, :4].reshape((box1.shape[-1],2,2))
+        class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
+        keypoints1 = box1[:, 5:].reshape((box1.shape[-1],-1,2)) if box1.shape[-1] > 5 else None
+
+        location1[:,:,0]=np.clip(location1[:,:,0],0,width)
+        keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0], 0, width)
+        location1[:, :, 1] = np.clip(location1[:, :, 1], 0, height)
+        keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1], 0, height)
+        box1=np.concatenate([location1.reshape((B,-1)),class_info1,keypoints1.reshape((B,-1))],axis=-1)
+
+        trans_boxes=np.concatenate([boxes,box1],axis=0)
+        return trans_boxes
+
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        keep, other_idxes, center,img1_offsetx,img1_offsety,img2_offsetx,img2_offsety,img3_offsetx,img3_offsety = self._shape_info
+        height, width = self.output_size
+        if keep:
+            return mask
+        mp1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety+center[0], img1_offsetx:img1_offsetx+width-center[1], :]
+        mp2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety+height-center[0], img2_offsetx:img2_offsetx+center[1], :]
+        mp3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety+height-center[0], img3_offsetx:img3_offsetx+width-center[1], :]
+
+        base_msk = mask.copy()
+        base_msk[:mp1.shape[0], center[1]:center[1] + mp1.shape[1], :] = mp1
+        base_msk[center[0]:center[0] + mp2.shape[0], :mp2.shape[1], :] = mp2
+        base_msk[center[0]:center[0] + mp3.shape[0], center[1]:center[1] + mp3.shape[1]:] = mp3
+        return base_msk
+
+
+    def _get_shape(self, image):
+        if self.output_size is None:
+            self.output_size=image.shape[:2]
+        rr = random.random()
+        keep=rr<self.keep_prob or len(self.memory_cache[:-1])<=3
+        other_idxes=None
+        center=None
+        if not keep:
+            other_idxes = list(range(len(self.memory_cache[:-1])))
+            random.shuffle(other_idxes)
+            other_idxes = other_idxes[:3]
+
+            height, width = self.output_size
+            rs = np.random.uniform(0.5, 1.5, [2])  # random shift
+            center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
+
+            img1 = self.memory_cache[other_idxes[0]].value_list[0]
+            img1_offsetx=img1.shape[1] if img1.shape[1]-1<(width-center[1]) else np.random.choice(np.arange(0,img1.shape[1]-(width-center[1]),1))
+            img1_offsety = img1.shape[0] if img1.shape[0] - 1 < center[0] else np.random.choice(np.arange(0, img1.shape[0] - center[0], 1))
+
+            img2 = self.memory_cache[other_idxes[1]].value_list[0]
+            img2_offsetx = img2.shape[1] if img2.shape[1] - 1 < center[1] else np.random.choice(np.arange(0, img2.shape[1] - center[1], 1))
+            img2_offsety = img2.shape[0] if img2.shape[0] - 1 < (height-center[0])else np.random.choice(np.arange(0, img2.shape[0] - (height-center[0]), 1))
+
+
+            img3 = self.memory_cache[other_idxes[2]].value_list[0]
+            img3_offsetx = img3.shape[1] if img3.shape[1] - 1 < (width - center[1]) else np.random.choice(np.arange(0, img3.shape[1] - (width - center[1]), 1))
+            img3_offsety = img3.shape[0] if img3.shape[0] - 1 < (height-center[0]) else np.random.choice(np.arange(0, img3.shape[0] - (height-center[0]), 1))
+
+        return (keep,other_idxes,center,img1_offsetx,img1_offsety,img2_offsetx,img2_offsety,img3_offsetx,img3_offsety)
+
+# class ImageMosaic1(VisionTransform):
+#     """Perform gamma correction on an image.
+#         Also known as Power Law Transform. Intensities in RGB mode are adjusted
+#         based on the following equation:
+#         I_out = 255 * gain * ((I_in / 255) ** gamma)
+#         See https://en.wikipedia.org/wiki/Gamma_correction for more details.
+#     Args:
+#         gamma (float): Non negative real number. gamma larger than 1 make the
+#             shadows darker, while gamma smaller than 1 make dark regions
+#             lighter.
+#         gain (float): The constant multiplier.
+#     """
+#
+#     def __init__(self, output_size=None, keep_prob=0.7, name='image_mosaic', **kwargs):
+#         super().__init__(name)
+#         self.output_size = output_size
+#         self.keep_prob = keep_prob
+#
+#     def apply_batch(self, inputs: Sequence[Tuple], spec: Optional[TensorSpec] = None):
+#         r"""Apply transform on batch input data."""
+#         if not isinstance(inputs, OrderedDict):
+#             if spec is None and self.is_spatial == True:
+#                 self._shape_info = None
+#                 spec = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True, is_singleton=True), object_type=ObjectType.rgb)
+#             return self.apply(inputs, spec)
+#         else:
+#             results = OrderedDict()
+#             imgs = None
+#             boxes = None
+#             masks = None
+#             imgs = inputs.value_list[0]
+#
+#             if int_shape(imgs)[0] <= 4:
+#                 return inputs
+#             else:
+#                 for i in range(len(inputs.values())):
+#                     k, v = inputs.item_list[i]
+#                     results[k] = []
+#                     if i == 0:
+#                         imgs = v
+#                     elif isinstance(k, TensorSpec) and 'box' in str(k.object_type).lower():
+#                         boxes = v
+#                     elif isinstance(k, TensorSpec) and 'mask' in str(k.object_type).lower():
+#                         masks = v
+#                 if get_backend() == 'pytorch':
+#                     imgs = imgs.transpose([0, 2, 3, 1])
+#
+#                 for i in range(int_shape(imgs)[0]):
+#                     rr = random.random()
+#                     if rr > self.keep_prob:
+#
+#                         img = imgs[i]
+#
+#                         other_idxes = list(range(int_shape(imgs)[0]))
+#                         other_idxes.remove(i)
+#                         random.shuffle(other_idxes)
+#                         other_idxes = other_idxes[:3]
+#
+#                         height, width = self.output_size
+#                         rs = np.random.uniform(0.5, 1.5, [2])  # random shift
+#                         center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
+#
+#                         # crop each image
+#                         p1 = imgs[other_idxes[0]].copy()[:center[0], center[1]:width, :]
+#                         p2 = imgs[other_idxes[1]].copy()[center[0]:height, :center[1], :]
+#                         p3 = imgs[other_idxes[2]].copy()[center[0]:height, center[1]:width, :]
+#
+#                         base_img = img.copy()
+#                         base_img[:center[0], center[1]:width, :] = p1
+#                         base_img[center[0]:height, :center[1], :] = p2
+#                         base_img[center[0]:height, center[1]:width, :] = p3
+#
+#                         results[results.key_list[0]].append(base_img)
+#
+#                         if masks is not None and masks[i].any():
+#                             msk = masks[i]
+#                             mp1 = masks[other_idxes[0]].copy()[:center[0], center[1]:width]
+#                             mp2 = masks[other_idxes[1]].copy()[center[0]:height, :center[1]]
+#                             mp3 = masks[other_idxes[2]].copy()[center[0]:height, center[1]:width]
+#
+#                             base_msk = msk.copy()
+#                             base_msk[:center[0], center[1]:width] = mp1
+#                             base_msk[center[0]:height, :center[1]] = mp2
+#                             base_msk[center[0]:height, center[1]:width] = mp3
+#
+#                             mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
+#                             if mask_key:
+#                                 results[mask_key[0]].append(base_msk)
+#
+#                         mosaic_bboxes = []
+#                         if boxes is not None and boxes[i].any():
+#                             box = boxes[i]
+#                             box1 = boxes[other_idxes[0]]
+#                             box2 = boxes[other_idxes[1]]
+#                             box3 = boxes[other_idxes[2]]
+#                             box_list = []
+#                             if box.any():
+#                                 box[:, 0][box[:, 0] > center[1]] = center[1]
+#                                 box[:, 2][box[:, 2] > center[1]] = center[1]
+#                                 box[:, 1][box[:, 1] > center[0]] = center[0]
+#                                 box[:, 3][box[:, 3] > center[0]] = center[0]
+#                                 box_list.append(box)
+#                             if box1.any():
+#                                 box1[:, 0][box1[:, 0] < center[1]] = center[1]
+#                                 box1[:, 2][box1[:, 2] < center[1]] = center[1]
+#                                 box1[:, 1][box1[:, 1] > center[0]] = center[0]
+#                                 box1[:, 3][box1[:, 3] > center[0]] = center[0]
+#                                 box_list.append(box1)
+#
+#                             if box2.any():
+#                                 box2[:, 0][box2[:, 0] > center[1]] = center[1]
+#                                 box2[:, 2][box2[:, 2] > center[1]] = center[1]
+#                                 box2[:, 1][box2[:, 1] < center[0]] = center[0]
+#                                 box2[:, 3][box2[:, 3] < center[0]] = center[0]
+#                                 box_list.append(box2)
+#
+#                             if box3.any():
+#                                 box3[:, 0][box3[:, 0] < center[1]] = center[1]
+#                                 box3[:, 2][box3[:, 2] < center[1]] = center[1]
+#                                 box3[:, 1][box3[:, 1] < center[0]] = center[0]
+#                                 box3[:, 3][box3[:, 3] < center[0]] = center[0]
+#                                 box_list.append(box3)
+#
+#                             if len(box_list) > 0:
+#                                 mosaic_bboxes = np.concatenate(box_list)
+#                                 # remove no area bbox
+#                                 keep_x = mosaic_bboxes[:, 2] - mosaic_bboxes[:, 0] > 16
+#                                 keep_y = mosaic_bboxes[:, 3] - mosaic_bboxes[:, 1] > 16
+#                                 keep_mask = np.logical_and(keep_x, keep_y)
+#                                 mosaic_bboxes = mosaic_bboxes[keep_mask]
+#                             else:
+#                                 mosaic_bboxes = list()
+#                         box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
+#                         if box_key:
+#                             results[box_key[0]].append(mosaic_bboxes)
+#                     else:
+#                         results[results.key_list[0]].append(imgs[i])
+#                         mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
+#                         if mask_key:
+#                             results[mask_key[0]].append(masks[i])
+#                         box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
+#                         if box_key:
+#                             results[box_key[0]].append(boxes[i])
+#
+#             for i in range(len(results)):
+#                 if i == 0:
+#                     result_imgs = np.stack(results.value_list[i], 0)
+#                     if get_backend() == 'pytorch':
+#                         result_imgs = result_imgs.transpose([0, 3, 1, 2])
+#
+#                     results[results.key_list[0]] = result_imgs
+#                 elif not 'box' in str(results.key_list[i].object_type).lower():
+#                     results[results.key_list[i]] = np.array(results.value_list[i])
+#             return results
+#
+#     def apply(self, input: Tuple, spec: TensorSpec):
+#         return super().apply(input, spec)
