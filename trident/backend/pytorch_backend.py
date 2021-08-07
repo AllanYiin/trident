@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-
+import copy
 import builtins
 import functools
 import gc
@@ -14,7 +14,7 @@ import os
 import shutil
 import sys
 import uuid
-from collections import defaultdict,abc
+from collections import defaultdict, abc
 from types import MethodType
 from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Mapping, TypeVar
 from functools import partial
@@ -94,6 +94,7 @@ def get_device():
     """
     if ctx.device is None:
         set_device("cuda" if torch.cuda.is_available() else "cpu")
+
     return get_session().device
 
 
@@ -168,9 +169,9 @@ def reset_name(module: nn.Module, prefix_dict=None):
 
     if not hasattr(module, '_uid_prefixs') or prefix_dict is not None:
         module._uid_prefixs = prefix_dict
-    if not hasattr(module, '_default_name'):
-        module._default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
-    prefix, seq = module._default_name.rsplit('_', 1)  # if '_' in module._default_name else
+    if not hasattr(module, 'default_name'):
+        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
+    prefix, seq = module.default_name.rsplit('_', 1)  # if '_' in module.default_name else
     seq = int(seq)
     module.default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
     module.__name__ = module._name if hasattr(module, '_name') else module.default_name
@@ -456,7 +457,6 @@ class Layer(nn.Module):
     def name(self, value):
         self._name = value
         self.__name__ = value
-        self.signature = None
 
     @property
     def nodes(self):
@@ -489,7 +489,7 @@ class Layer(nn.Module):
         if not isinstance(module, (nn.Module, Layer)) and module is not None:
             raise TypeError("{} is not a Module subclass".format(
                 torch.typename(module)))
-        if  isinstance(module, (Combine)) and module is not None:
+        if isinstance(module, (Combine)) and module is not None:
             raise TypeError("{} cannot be added".format(
                 torch.typename(module)))
         elif not isinstance(name, torch._six.string_classes):
@@ -688,8 +688,7 @@ class Layer(nn.Module):
         """
         return self._apply(lambda t: t.cuda(device))
 
-
-    def xpu(self ,device: Optional[Union[int, torch.device]] = None) :
+    def xpu(self, device: Optional[Union[int, torch.device]] = None):
         r"""Moves all model parameters and buffers to the XPU.
 
         This also makes associated parameters and buffers different objects. So
@@ -705,14 +704,13 @@ class Layer(nn.Module):
         """
         return self._apply(lambda t: t.xpu(device))
 
-    def cpu(self) :
+    def cpu(self):
         r"""Moves all model parameters and buffers to the CPU.
 
         Returns:
             Module: self
         """
         return self._apply(lambda t: t.cpu())
-
 
     def gpu(self, device: Optional[Union[int, torch.device]] = None):
         r"""Moves all model parameters and buffers to the GPU.
@@ -807,7 +805,7 @@ class Layer(nn.Module):
             if not dtype.is_floating_point:
                 raise TypeError('nn.Module.to only accepts floating point '
                                 'dtypes, but got desired dtype={}'.format(dtype))
-        if device is not None :
+        if device is not None:
             self.get_root()._device = device.type
 
         def convert(t):
@@ -852,8 +850,8 @@ class Layer(nn.Module):
 
     @property
     def input_spec(self):
-        if self.is_root and self.signature is not None:
-            return unpack_singleton(self.signature.inputs.value_list)
+        if self.is_root and self._signature is not None:
+            return unpack_singleton(self._signature.inputs.value_list)
 
     @property
     def output_shape(self):
@@ -896,46 +894,44 @@ class Layer(nn.Module):
         Returns:
 
         """
-        if self.is_root:
-            arg_spec = get_args_spec(self.forward)
-            inspect_args = [arg for arg in list(arg_spec.args) if arg not in ['self', 'kwargs']]
-            if isinstance(arg_spec.varargs, str):
-                inspect_args.append(arg_spec.varargs)
-            inspect_args = unpack_singleton(inspect_args)
 
-            if self._signature is None or len(self._signature) == 0 or len(self._signature.inputs) == 0:
-                self._signature = Signature(name=self.name)
+        arg_spec = get_args_spec(self.forward)
+        inspect_args = [arg for arg in list(arg_spec.args) if arg not in ['self', 'kwargs']]
+        if isinstance(arg_spec.varargs, str):
+            inspect_args.append(arg_spec.varargs)
+        inspect_args = unpack_singleton(inspect_args)
 
-                if self._input_shape is not None:
-                    if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args, str):
-                        self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape), name=inspect_args)
+        if self._signature is None or len(self._signature) == 0 or len(self._signature.inputs) == 0:
+            self._signature = Signature(name=self.name)
 
-                    elif isinstance(self._input_shape, tuple):
-                        for i in range(len(self._input_shape)):
-                            self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
-                else:
-                    for arg in inspect_args:
-                        self._signature.inputs[arg] = TensorSpec(shape=None)
+            if self._input_shape is not None:
+                if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args, str):
+                    self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape), name=inspect_args)
 
-                if self._output_shape is not None:
-                    if isinstance(self._output_shape, TensorShape):
-                        self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
-                    elif isinstance(self._output_shape, tuple):
-                        for i in range(len(self._output_shape)):
-                            self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
-                else:
-                    self._signature.outputs["output"] = TensorSpec(shape=None)
-            if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[0] != inspect_args:
-                self._signature.inputs[inspect_args] = self._signature.inputs.value_list[0]
-                self._signature.inputs.pop(self._signature.inputs.key_list[0])
-            elif isinstance(inspect_args, list) and len(self._signature.inputs) == len(inspect_args):
-                for k1, k2 in zip(inspect_args, self._signature.inputs.key_list.copy()):
-                    if k1 != k2:
-                        self._signature.inputs[k1] = self._signature.inputs[k2]
-                        self._signature.inputs.pop(k2)
-            return self._signature
-        else:
-            return None
+                elif isinstance(self._input_shape, tuple):
+                    for i in range(len(self._input_shape)):
+                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
+            else:
+                for arg in inspect_args:
+                    self._signature.inputs[arg] = TensorSpec(shape=None)
+
+            if self._output_shape is not None:
+                if isinstance(self._output_shape, TensorShape):
+                    self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
+                elif isinstance(self._output_shape, tuple):
+                    for i in range(len(self._output_shape)):
+                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
+            else:
+                self._signature.outputs["output"] = TensorSpec(shape=None)
+        if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[0] != inspect_args:
+            self._signature.inputs[inspect_args] = self._signature.inputs.value_list[0]
+            self._signature.inputs.pop(self._signature.inputs.key_list[0])
+        elif isinstance(inspect_args, list) and len(self._signature.inputs) == len(inspect_args):
+            for k1, k2 in zip(inspect_args, self._signature.inputs.key_list.copy()):
+                if k1 != k2:
+                    self._signature.inputs[k1] = self._signature.inputs[k2]
+                    self._signature.inputs.pop(k2)
+        return self._signature
 
     @signature.setter
     def signature(self, value):
@@ -972,7 +968,7 @@ class Layer(nn.Module):
         return self.clone()
 
     def save_onnx(self, file_path=''):
-        input_shape = self.signature.inputs.value_list[0].shape.dims
+        input_shape = self._signature.inputs.value_list[0].shape.dims
         input_shape[0] = 1
         self.eval()
         x = cast(torch.randn(*input_shape, requires_grad=False), self.input_spec.dtype)
@@ -1041,16 +1037,17 @@ class Layer(nn.Module):
                 self.input_shape = shp
                 if self.is_root:
                     if self._signature is None:
-                        self._signature=get_signature(self)
-                    if self._signature is not None and len(self.signature.inputs)>0:
-                        self._signature.inputs[self._signature.inputs.key_list[0]].shape=tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
+                        self._signature = get_signature(self)
+                    if self._signature is not None and len(self._signature.inputs) > 0:
+                        self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
                 del inp
             elif isinstance(inp, (tuple, list)):
                 if isinstance(inp[0], numbers.Number):
                     self.input_shape = TensorShape(list(inp))
                 else:
-                    shp =[ tensor_to_shape(i, need_exclude_batch_axis=True,is_singleton=False) for i in inp]
-                    self.build(*shp)
+                    out = self.forward(*inp)
+                    # shp =[ tensor_to_shape(i, need_exclude_batch_axis=True,is_singleton=False) for i in inp]
+                    # self.build(*shp)
             else:
                 self.input_shape = TensorShape(list(inp))
                 print('input shou be tensor or tuple of tensor')
@@ -1149,7 +1146,7 @@ class Layer(nn.Module):
             self.register_parameter(name, value)
         else:
             modules = self.__dict__.get('_modules')
-            if isinstance(value, nn.Module):
+            if isinstance(value, Layer):
                 if modules is None:
                     raise AttributeError(
                         "cannot assign module before Module.__init__() call")
@@ -1235,9 +1232,10 @@ class Sequential(Layer):
     """
 
     def __init__(self, *args, name=None):
-        super(Sequential, self).__init__()
+        super(Sequential, self).__init__(name=name)
         self._name = name
         self._built = False
+        self.uuid = uuid.uuid4().node
         args = unpack_singleton(args)
         if isinstance(args, (dict, OrderedDict, ModuleDict, nn.ModuleDict)):
             for key, module in args.items():
@@ -1290,12 +1288,20 @@ class Sequential(Layer):
                 for k, v in out.item_list:
                     self.get_root().signature.outputs[k] = tensor_to_shape(v, need_exclude_batch_axis=True, is_singleton=False)
             else:
-
+                out = enforce_singleton(out)
                 self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
-                self.get_root().signature.outputs.value_list[0].shape = self._output_shape.copy()
+                if len(self.get_root().signature.outputs) > 0:
+                    self.get_root().signature.outputs[self.get_root().signature.outputs.key_list[0]] = self._output_shape.copy()
+                else:
+                    self.get_root().signature.outputs['output'] = self._output_shape.copy()
 
         else:
+            sig = copy.deepcopy(module.signature)
             super(Sequential, self).add_module(name, module)
+            if len(self) == 1 or self._signature is None:
+                self._signature = sig
+            elif len(self) > 1:
+                self._signature.outputs = copy.deepcopy(sig.outputs)
         if len(self) > 0:
             self.__signature__ = self[0].__signature__
 
@@ -1318,24 +1324,26 @@ class Sequential(Layer):
         idx %= size
         return next(islice(iterator, idx, None))
 
-    def __getattr__(self, name):
-        if name in ['output', 'output_shape', '_output_shape']:
-            return self[-1].__getattr__(name)
-        if '_parameters' in self.__dict__:
-            _parameters = self.__dict__['_parameters']
-            if name in _parameters:
-                return _parameters[name]
-        if '_buffers' in self.__dict__:
-            _buffers = self.__dict__['_buffers']
-            if name in _buffers:
-                return _buffers[name]
-        if '_modules' in self.__dict__:
-            modules = self.__dict__['_modules']
-            if name in modules:
-                return modules[name]
-        if name in self.__dict__:
-            return self.__dict__[name]
-        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
+    #
+    # def __getattr__(self, name):
+    #
+    #     #if name in ['output', 'output_shape', '_output_shape']:
+    #     #    return self[-1].__getattr__(name)
+    #     if '_parameters' in self.__dict__:
+    #         _parameters = self.__dict__['_parameters']
+    #         if name in _parameters:
+    #             return _parameters[name]
+    #     if '_buffers' in self.__dict__:
+    #         _buffers = self.__dict__['_buffers']
+    #         if name in _buffers:
+    #             return _buffers[name]
+    #     if '_modules' in self.__dict__:
+    #         modules = self.__dict__['_modules']
+    #         if name in modules:
+    #             return modules[name]
+    #     if name in self.__dict__:
+    #         return self.__dict__[name]
+    #     raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
@@ -1703,6 +1711,7 @@ class Combine(Layer):
 
     def __init__(self, *args, name=None):
         super(Combine, self).__init__()
+        self.uuid = uuid.uuid4().node
         self._name = name
         self._built = False
 
@@ -1725,8 +1734,6 @@ class Combine(Layer):
             raise IndexError('index {} is out of range'.format(idx))
         idx %= size
         return next(islice(iterator, idx, None))
-
-
 
     def __getitem__(self, idx):
         if isinstance(idx, slice):
@@ -1788,11 +1795,9 @@ class Combine(Layer):
         if not self._built:
             # Signature(name=self.name)
             for shp, module in zip(input_shape, self._modules.values()):
-                #shp = tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
+                # shp = tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
                 module.build(shp)
             self._built = True
-
-
 
     @property
     def signature(self):
@@ -1802,22 +1807,21 @@ class Combine(Layer):
 
         """
         if self._signature is None:
-            self._signature=Signature(name=self.name)
-        for k,v in self._modules.items():
-            for inp_k,inp_v in v.signature.inputs.items():
-                if '{0}_{1}'.format(inp_k,k) not in self._signature.inputs:
-                    self._signature.inputs['{0}_{1}'.format(inp_k,k)]=inp_v
-            for out_k,out_v in v.signature.outputs.items():
+            self._signature = Signature(name=self.name)
+        for k, v in self._modules.items():
+            for inp_k, inp_v in v.signature.inputs.items():
+                if '{0}_{1}'.format(inp_k, k) not in self._signature.inputs:
+                    self._signature.inputs['{0}_{1}'.format(inp_k, k)] = inp_v
+            for out_k, out_v in v.signature.outputs.items():
                 if '{0}_{1}'.format(out_k, k) not in self._signature.outputs:
-                    self._signature.outputs['{0}_{1}'.format(out_k,k)]=out_v
+                    self._signature.outputs['{0}_{1}'.format(out_k, k)] = out_v
         return self._signature
-
 
     @signature.setter
     def signature(self, value):
         self._signature = value
 
-    def combine_forward(self,x):
+    def combine_forward(self, x):
         outputs = []
         for inp, module in zip(x, list(self._modules.values())):
             outputs.append(module(inp))
@@ -1826,10 +1830,10 @@ class Combine(Layer):
     def forward(self, *x):
         if len(x) == len(self._modules.values()):
             outputs = []
-            for inp,module in zip(x,list(self._modules.values())):
+            for inp, module in zip(x, list(self._modules.values())):
                 outputs.append(module(inp))
             return tuple(outputs)
-        elif len(x)==1:
+        elif len(x) == 1:
             outputs = []
             for module in self._modules.values():
                 outputs.append(module(x))
@@ -1925,7 +1929,7 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
     model.eval()
 
     # batch_size of 2 for batchnorm
-    x = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) for spec in input_specs]
+    x = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) if spec.optional == False else spec.default for spec in model._signature.inputs.value_list]
     # p    rint(type(x[0]))
 
     # create properties
@@ -2003,7 +2007,7 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs]).sum()
+    total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional == False]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
@@ -2353,18 +2357,18 @@ def fix_layer(layer: Layer):
         if not hasattr(module, 'uuid'):
             module.uuid = uuid.uuid4().node
         # check for root
-        if module.uuid == layer.uuid:
-            module.is_root = True
-        else:
-            module.is_root = False
+        # if module.uuid == layer.uuid:
+        #     module.is_root = True
+        # else:
+        #     module.is_root = False
         if not hasattr(module, 'relative_name'):
             module.relative_name = ''
         if not hasattr(module, '_uid_prefixs'):
             module._uid_prefixs = layer.get_root()._uid_prefixs
 
-        if not hasattr(module, '_default_name') or (module._default_name is None or len(module._default_name) == 0):
+        if not hasattr(module, 'default_name') or (module.default_name is None or len(module.default_name) == 0):
             module_prefix = module.__class__.__name__
-            module._default_name = camel2snake(module_prefix) + '_' + str(get_global_uid(camel2snake(module_prefix)))
+            module.default_name = camel2snake(module_prefix) + '_' + str(get_global_uid(camel2snake(module_prefix)))
 
         if not hasattr(module, '_name'):
             module._name = None
