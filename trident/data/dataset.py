@@ -270,7 +270,7 @@ class StreamDataset(Dataset):
     def __iter__(self):
         pass
 
-    def __getitem__(self):
+    def __getitem__(self,index):
         if index >= len(self.items):
             index = index % len(self.items)
         raise AssertionError("can not get item from StreamDataset by index")
@@ -1057,7 +1057,7 @@ class Iterator(object):
         self.paired_process_symbols = []
 
         self.is_shuffle = is_shuffle
-
+        self.memory_cache=[]
 
 
         self.data_template = OrderedDict()
@@ -1116,6 +1116,7 @@ class Iterator(object):
 
         self._batch_size = batch_size
         self.paired_transform_funcs = []
+        self.batch_transform_funcs=[]
 
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
@@ -1229,6 +1230,23 @@ class Iterator(object):
                 PrintException()
         return datadict
 
+
+
+    def batch_transform(self,datadict: Dict[TensorSpec, np.ndarray]):
+        if  len(self.batch_transform_funcs)>0:
+            if len(self.batch_transform_funcs) == 0:
+                return datadict
+
+                # if img_data.ndim>=2:
+            for fc in self.batch_transform_funcs:
+                try:
+                    if hasattr(fc,'memory_cache'):
+                        fc.memory_cache=self.memory_cache
+                        datadict = fc(datadict)
+                except:
+                    PrintException()
+            return datadict
+
     def get_datasets(self):
         datasets = []
         if self._data and isinstance(self._data, Dataset) and not isinstance(self._data, ZipDataset) and len(self._data) > 0:
@@ -1313,6 +1331,14 @@ class Iterator(object):
             if len(self.paired_process_symbols) > 0:
                 returnData = self.paired_transform(returnData)
 
+
+            if len(self.batch_transform_funcs) > 0:
+                self.memory_cache.append(copy.deepcopy(returnData))
+                if len(self.memory_cache)>self._batch_size:
+                    self.memory_cache.pop(0)
+                if  len(self.memory_cache)>self._batch_size//2:
+                    returnData = self.batch_transform(returnData)
+
             # for i in range(len(returnData)):
             #     ds = self.get_datasets()[i]
             #     returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
@@ -1328,10 +1354,10 @@ class Iterator(object):
                 threads[i].join()
 
 
-            if self.signature is None or len(self.signature) == 0:
-                self.signature = Signature(name='data_provider')
+            if self.signature is None or len(self.signature.outputs) == 0:
+                self._signature = Signature(name='data_provider')
                 for spec in returnData.key_list:
-                    self.signature.outputs[spec.name] = spec
+                    self._signature.outputs[spec.name] = spec
 
             self.pass_cnt += 1
             self.pass_time_spend += float(time.time() - start_time)

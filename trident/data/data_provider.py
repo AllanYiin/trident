@@ -151,16 +151,13 @@ class ImageDataProvider(object):
             dss = self.traindata.get_datasets()
             for ds in dss:
                 if isinstance(ds, ImageDataset):
-                    ds.transform_funcs = copy.deepcopy(value)
-            self.traindata.update_signature()
+                    ds.transform_funcs =value
+
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
             dss_t = self.testdata.get_datasets()
             for ds in dss_t:
                 if isinstance(ds, ImageDataset):
-                    ds.transform_funcs = copy.deepcopy(value)
-
-            self.testdata.update_signature()
-
+                    ds.transform_funcs =value
     def image_transform(self, img_data):
         if img_data.ndim == 4:
             return np.asarray([self.image_transform(im) for im in img_data])
@@ -222,13 +219,11 @@ class ImageDataProvider(object):
         self._paired_transform_funcs = value
 
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
-            self.traindata.paired_transform_funcs = copy.deepcopy(value)
-
-            self.traindata.update_signature()
+            self.traindata.paired_transform_funcs =value
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
-            self.testdata.paired_transform_funcs = copy.deepcopy(value)
-            self.testdata.update_signature()
+            self.testdata.paired_transform_funcs = value
+
 
     @property
     def batch_transform_funcs(self):
@@ -237,10 +232,10 @@ class ImageDataProvider(object):
     @batch_transform_funcs.setter
     def batch_transform_funcs(self, value):
         self._batch_transform_funcs = value
-        self.traindata.update_signature()
-        self.traindata.batch_sampler._batch_transform_funcs = value
+        self.traindata.batch_transform_funcs = value
         if self.testdata is not None:
-            self.testdata.update_signature()
+            self.traindata.batch_transform_funcs = value
+
 
     def batch_transform(self, batchdata):
         if hasattr(self, '_batch_transform_funcs') and len(self._batch_transform_funcs) > 0:

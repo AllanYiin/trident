@@ -122,7 +122,7 @@ class BatchSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.is_shuffle = is_shuffle
-        self._batch_transform_funcs=OrderedDict()
+
 
 
         idxes = np.arange(len(self.data_source.data))
@@ -140,39 +140,7 @@ class BatchSampler(Sampler):
         if inspect.isfunction(sample_filter) or callable(sample_filter):
             self.sample_filter = sample_filter
 
-    @property
-    def batch_transform_funcs(self):
-        return self._batch_transform_funcs
 
-    @batch_transform_funcs.setter
-    def batch_transform_funcs(self, value):
-        self._batch_transform_funcs = value
-        self.data_source.update_data_template()
-        if self.data_source is not None :
-            self.data_source.update_data_template()
-
-    def batch_transform(self,batchdata):
-        if hasattr(self,'_batch_transform_funcs')  and len(self._batch_transform_funcs)>0:
-            if isinstance(batchdata,tuple):
-                new_batchdata = copy.deepcopy(self.traindata.data_template)
-                for i in range(len(batchdata)):
-                    new_batchdata[new_batchdata.key_list[i]] = batchdata[i]
-                batchdata = new_batchdata
-            if isinstance(batchdata,OrderedDict):
-                if not all([isinstance(k,TensorSpec) for k in batchdata.key_list]):
-                    new_batchdata=copy.deepcopy(self.data_source.data_template)
-                    for i in range(len(batchdata)):
-                        new_batchdata[new_batchdata.key_list[i]]=batchdata[batchdata.key_list[i]]
-                    batchdata=new_batchdata
-
-                for trans in self._batch_transform_funcs:
-                    batchdata=trans(batchdata)
-                return batchdata
-            else:
-                return batchdata
-
-        else:
-            return batchdata
 
     def __iter__(self):
 
@@ -200,7 +168,7 @@ class BatchSampler(Sampler):
                             else:
                                 print([array.shape for array in unzip_batch_data[i] ])
                                 batch_data=[]
-                        returnData=self.batch_transform(returnData)
+
                         if self.data_source.mode=='tuple':
                             yield tuple(returnData.value_list)
                         elif self.data_source.mode=='dict':
@@ -225,7 +193,6 @@ class BatchSampler(Sampler):
                 else:
                     print([array.shape for array in unzip_batch_data[i]])
                     batch_data = []
-            returnData = self.batch_transform(returnData)
             if self.data_source.mode == 'tuple':
                 yield tuple(returnData.value_list)
             elif self.data_source.mode == 'dict':
