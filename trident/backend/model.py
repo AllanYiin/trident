@@ -951,7 +951,7 @@ class ModelBase(object):
             if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
                 try:
                     if self.output_fn is not None and callable(self.output_fn):
-                        self.output_fn(self,self.training_context, is_training=True, is_autocast_enabled=self.is_autocast_enabled)
+                        self.output_fn(model=self,training_context=self.training_context, is_training=True, is_autocast_enabled=self.is_autocast_enabled)
                     else:
                         self.do_calculate_forward(is_training=True)
 
@@ -979,7 +979,7 @@ class ModelBase(object):
 
             if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and self.training_context['stop_update'] < 1:
                 if self.output_fn is not None and callable(self.output_fn):
-                    self.output_fn(self,self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
+                    self.output_fn(model=self,training_context=self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
                 else:
                     self.do_calculate_forward(is_training=False)
 
@@ -1017,7 +1017,7 @@ class ModelBase(object):
                     test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
                     metric_value = test_values[-1]
                     history_metric_value = to_scalar(test_values[-1])
-                    verbose.append('{0}: {1}'.format(k, adaptive_format(metric_value,prev_value=test_values,value_type='metric')))
+                    verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value,prev_value=test_values,value_type='metric', name=k)))
                 out_sample_evaluation_str = cyan_color(self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
                 print(out_sample_evaluation_str)
             # self.training_context['steps'] += 1
