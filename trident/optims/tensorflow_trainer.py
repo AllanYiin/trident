@@ -1240,9 +1240,8 @@ class Model(ModelBase):
                     for k in self.training_context['out_sample_metrics'].get_keys():
                         test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
                         metric_value = test_values[-1]
-                        history_metric_value = np.array(test_values).mean()
-
-                        verbose.append('{0}: {1}'.format(k, adaptive_format(metric_value)))
+                        history_metric_value = to_scalar(test_values[-1])
+                        verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value, prev_value=test_values, value_type='metric', name=k)))
                     out_sample_evaluation_str = cyan_color(self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
                     print(out_sample_evaluation_str)
                 # self.training_context['steps'] += 1
