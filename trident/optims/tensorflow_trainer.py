@@ -13,15 +13,14 @@ import sys
 import time
 import uuid
 from functools import partial
-
+import tempfile
 import numpy as np
 import tensorflow as tf
 
 from trident import __version__
 from trident import context
 from trident.backend.common import *
-from trident.backend.model import ModelBase
-from trident.backend import model
+from trident.backend.model import ModelBase,progress_bar
 from trident.backend.opencv_backend import array2image, image2array
 from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call,DTYPE_MAPPING
 from trident.backend.tensorflow_ops import *
@@ -856,79 +855,107 @@ class Model(ModelBase):
             self.weights_history.append(weight_dict)
 
     def save_model(self, save_path=None, **kwargs):
+        is_abnormal = False
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
         if isinstance(self._model, Layer) and any_abnormal_number(self._model):
+            is_abnormal = True
             for para in self._model.parameters():
-                if any_abnormal_number(para.value()):
-                    para.assign(where(is_nan(para), random_normal_like(para.value(), mean=0, std=0.02).to(para.device), para))
+                if any_abnormal_number(para):
+                    para.data.copy_(where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+        if is_tensor(self._model) and any_abnormal_number(self._model):
+            is_abnormal = True
 
+            sys.stderr.write(self._get_name() + '  nan detected!!\n')
         if save_path is None:
             save_path = self.training_context['save_path']
-        folder, filename, ext = split_path(save_path)
-        if filename == '':
-            filename = self.name
-        if not filename.endswith('_tf'):
-            filename += '_tf'
 
-        save_path = os.path.join(folder, filename + ext)
-        self.training_context['save_path'] = save_path
-
-        if isinstance(self._model, Layer):
+        if save_path is not None:
             folder, filename, ext = split_path(save_path)
-            ext = '.pth.tar'
-            save_path = os.path.join(folder, filename + ext)
-            make_dir_if_need(sanitize_path(save_path))
-            save_path = sanitize_path(save_path)
-            device = get_device()
-            self._model.eval()
-            tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix='.pth.tar')
-            _, tempfile_name, tempext = split_path(temppath)
-            move_path = os.path.join(folder, tempfile_name + tempext)
-            try:
-                with tf.device('/cpu:0'):
-                    save({
-                        'state_dict': self._model.state_dict(),
-                        'backend': 'tensorflow',
-                        'trident_version': __version__,
-                        'tensorflow_version': tf.version.VERSION,
-                        'signature': self._model.signature
-                    }, temppath, is_compressed=True)
+            if filename == '':
+                filename = self.name
+            if not filename.endswith('_tf'):
+                filename += '_tf'
+            self.training_context['save_path'] = save_path
+        else:
+            save_path = self.training_context['save_path']
 
-                    os.close(tempfd)
+        if isinstance(self._model, Layer) and not is_abnormal:
+            try:
+                folder, filename, ext = split_path(save_path)
+                if filename == '':
+                    filename = self.name
+                if not filename.endswith('_tf'):
+                    filename += '_tf'
+                ext = '.pth.tar'
+                save_path = os.path.join(folder, filename + ext)
+                make_dir_if_need(sanitize_path(save_path))
+                save_path = sanitize_path(save_path)
+                device = get_device()
+                self._model.eval()
+                self._model.cpu()
+
+                #tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
+
+                try:
+                    temfolder=tempfile.gettempdir()
+                    tempfilename=filename+'_'+str(uuid.uuid4().node)
+                    temppath=os.path.join(temfolder,tempfilename+ext)
+                    move_path = os.path.join(folder, tempfilename + ext)
+                    with open(temppath,'wb') as f:
+                        with tf.device('/cpu:0'):
+                            save({
+                                'state_dict': self._model.state_dict(),
+                                'backend': 'tensorflow',
+                                'trident_version': __version__,
+                                'tensorflow_version': tf.version.VERSION,
+                                'signature': self._model.signature
+                            },f,is_compressed=True)
+
                     shutil.move(temppath, move_path)
                     if os.path.exists(save_path):
                         os.remove(save_path)
                     os.rename(move_path, save_path)
-            except:
-                if not os.path.exists(save_path):
-                    if os.path.exists(move_path):
-                        os.rename(move_path, save_path)
-                    elif os.path.exists(temppath):
-                        shutil.move(temppath, save_path)
 
-            save_path = save_path.replace('.pth.tar', '.pth')
-            tempfd2, temppath2 = tempfile.mkstemp(prefix=filename, suffix='.pth')
-            _, tempfile2_name, tempext2 = split_path(temppath2)
-            move_path2 = os.path.join(folder, tempfile2_name + tempext2)
-            try:
+                except Exception as e:
+                    print(e)
+                    if not os.path.exists(save_path):
+                        if os.path.exists(move_path):
+                            os.rename(move_path, save_path)
+                        elif os.path.exists(temppath):
+                            shutil.move(temppath, save_path)
 
-                save(self._model, temppath2)
-                os.close(tempfd2)
-                shutil.move(temppath2, move_path2)
-                if os.path.exists(save_path):
-                    os.remove(save_path)
-                os.rename(move_path2, save_path)
-            except:
-                if not os.path.exists(save_path):
-                    if os.path.exists(move_path2):
-                        os.rename(move_path2, save_path)
-                    elif os.path.exists(temppath2):
-                        shutil.move(temppath2, save_path)
-            gc.collect()
-            with tf.device(device):
+                ext = '.pth'
+                save_path = save_path.replace('.pth.tar', '.pth')
+                tempfilename2 = filename + '_' + str(uuid.uuid4().node)
+                temppath2 = os.path.join(temfolder, tempfilename2 + ext)
+                move_path2 = os.path.join(folder, tempfilename2 + ext)
+                try:
+                    with open(temppath2, 'wb') as f:
+                        save(self._model, f)
+
+                    shutil.move(temppath2, move_path2)
+                    if os.path.exists(save_path):
+                        os.remove(save_path)
+                    os.rename(move_path2, save_path)
+
+                except:
+                    if not os.path.exists(save_path):
+                        if os.path.exists(move_path2):
+                            os.rename(move_path2, save_path)
+                        elif os.path.exists(temppath2):
+                            shutil.move(temppath2, save_path)
+
+                gc.collect()
+                with tf.device(device):
+                    self._model.train()
                 self._model.train()
+
+            except Exception as e:
+                self._model.train()
+                print(e)
+                PrintException()
 
 
 
@@ -1099,7 +1126,7 @@ class Model(ModelBase):
                     if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
                         try:
                             if self.output_fn is not None and callable(self.output_fn):
-                                self.output_fn(self.training_context, is_training=True, is_autocast_enabled=self.is_autocast_enabled)
+                                self.output_fn(self,self.training_context, is_training=True, is_autocast_enabled=self.is_autocast_enabled)
                             else:
                                 self.do_calculate_forward(is_training=True)
 
@@ -1184,7 +1211,7 @@ class Model(ModelBase):
 
                 if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and self.training_context['stop_update'] < 1:
                     if self.output_fn is not None and callable(self.output_fn):
-                        self.output_fn(self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
+                        self.output_fn(self,self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
                     else:
                         self.do_calculate_forward(is_training=False)
                 self.do_calculate_metrics()
@@ -1622,7 +1649,7 @@ class MuiltiNetwork(Model):
             else:
                 loss_value = to_numpy(loss_values).astype(np.float32).mean()
         step_time = self.training_context['time_batch_progress']
-        model.progress_bar(step_time, self.training_context['current_batch'], self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
+        progress_bar(step_time, self.training_context['current_batch'], self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
                            'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
                                                                                   self.training_context['current_lr'],
                                                                                   self.training_context['current_epoch']),
@@ -1646,7 +1673,7 @@ class MuiltiNetwork(Model):
         total_losses = 0
         if 'total_losses' in self.epoch_loss_history:
             total_losses = self.epoch_loss_history['total_losses'][-1][-1]
-        model.progress_bar(step_time, self.training_context['current_epoch'] + 1, self.training_context['total_epoch'],
+        progress_bar(step_time, self.training_context['current_epoch'] + 1, self.training_context['total_epoch'],
                            'Loss: {0}| {1} | lr: {2:<10.3e}'.format(adaptive_format(total_losses, value_type='loss'), ', '.join(metric_strings),
                                                                     self._networks.value_list[0].training_context['current_lr']),
                            name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
