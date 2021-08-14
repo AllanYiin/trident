@@ -380,6 +380,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                     if os.path.isdir(os.path.join(base_folder, subdir)):
                         class_names.append(subdir)
             if len(class_names) == 0:
+
                 raise ValueError('No subfolder in base folder.')
             class_names = list(sorted(set(class_names)))
             print(class_names)
@@ -390,6 +391,8 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                 class_imgs = list_images(base_folder + '/{0}'.format(class_name))
                 if len(class_imgs)==0:
                     class_imgs = glob.glob(base_folder + '/{0}/*/*.*g'.format(class_name))
+                    class_imgs = list(sorted(class_imgs))
+
 
                 else:
                     print(base_folder + '/{0}/*.*g'.format(class_name))
@@ -731,6 +734,8 @@ def load_examples_data(dataset_name):
         extract_archive(tar_file_path, dirname, archive_format='tar')
         imgs = glob.glob(os.path.join(dirname, 'imgs', '*.*g'))
         masks = glob.glob(os.path.join(dirname, 'masks', '*.png'))
+        imgs=list(sorted(imgs))
+        masks = list(sorted(masks))
         # make_dir_if_need(os.path.join(dirname, 'trimap'))
         # for i in range(len(masks)):
         #     mask=mask2array(masks[i])
@@ -750,7 +755,8 @@ def load_examples_data(dataset_name):
         extract_archive(tar_file_path, dirname, archive_format='tar')
         imgs = glob.glob(os.path.join(dirname, 'images', '*.*g'))
         masks = glob.glob(os.path.join(dirname, 'masks', '*.png'))
-
+        imgs = list(sorted(imgs))
+        masks = list(sorted(masks))
         imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb,symbol='image')
         mskdata = MaskDataset(masks=masks, object_type=ObjectType.color_mask,symbol='mask')
 
@@ -773,6 +779,8 @@ def load_examples_data(dataset_name):
         extract_archive(tar_file_path, dirname, archive_format='tar')
         imgs = glob.glob(os.path.join(dirname, '*.*g'))
         imgs.extend(glob.glob(os.path.join(dirname, '*.bmp')))
+        imgs = list(sorted(imgs))
+
         print('get super resolution images :{0}'.format(len(imgs)))
 
         imgdata = ImageDataset(images=imgs * 2, object_type=ObjectType.rgb, symbol='lr')
@@ -782,6 +790,7 @@ def load_examples_data(dataset_name):
     elif dataset_name == 'examples_beauty':
         download_file_from_google_drive('1aJhxN9IqsxuayhRTm-gmxk6PiLe5wm9X', dirname, 'beauty.tar')
         tar_file_path = os.path.join(dirname, 'beauty.tar')
+
         extract_archive(tar_file_path, dirname, archive_format='tar')
         # 讀取圖片數據
         images_dict = {}
@@ -907,6 +916,8 @@ def load_examples_data(dataset_name):
         tar_file_path = os.path.join(dirname, 'anpr.tar')
         extract_archive(tar_file_path, dirname, archive_format='tar')
         imgs = glob.glob(os.path.join(dirname, '*.*g'))
+        imgs = list(sorted(imgs))
+
         # CCPD (Chinese City Parking Dataset, ECCV) and PDRC (license Plate Detection and Recognition Challenge)
         # https://github.com/detectRecog/CCPD
         provinces = ["皖", "沪", "津", "渝", "冀", "晋", "蒙", "辽", "吉", "黑", "苏", "浙", "京", "闽", "赣", "鲁", "豫", "鄂", "湘", "粤",
