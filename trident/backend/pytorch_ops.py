@@ -341,6 +341,9 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
                 x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
             elif len(x)==1:
                 x=unpack_singleton(x)
+                if dtype is None:
+                    dtype = Dtype.float32
+                x = torch.tensor(x,dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad).to(device)
             else:
                 if dtype is None:
                     dtype = Dtype.float32
