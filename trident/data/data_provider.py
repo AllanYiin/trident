@@ -475,6 +475,9 @@ class TextSequenceDataProvider(object):
             raise ValueError("Valid mode should be tuple or dict ")
 
         self.traindata = traindata
+        if  isinstance(traindata,Iterator):
+            if isinstance(traindata.data,TextSequenceDataset):
+                self.sequence_length=traindata.data.sequence_length
         self.testdata = testdata
         self.annotations = {}
 
@@ -735,7 +738,10 @@ class TextSequenceDataProvider(object):
         if self.scenario == 'test' and self.testdata is not None:
             index2textdict = self.testdata.data.index2text
         else:
-            index2textdict = self.traindata.data.index2text
+            if isinstance(self.traindata.data,ZipDataset):
+                index2textdict = self.traindata.data.items[0].index2text
+            else:
+                index2textdict = self.traindata.data.index2text
         return index2textdict[idx]
 
     def text2index(self, text_data: str):
