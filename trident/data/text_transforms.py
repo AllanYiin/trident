@@ -2,7 +2,7 @@ import builtins
 import os
 import copy
 import math
-import numbers
+
 import random
 import inspect
 import string
@@ -19,6 +19,7 @@ from trident.backend.common import *
 from trident.backend.tensorspec import TensorSpec, object_type_inference
 from trident.data.utils import download_file_from_google_drive, unpickle
 from trident.backend import numpy_ops
+import numbers
 
 if get_backend() == 'pytorch':
     #from trident.backend.pytorch_backend import get_device
@@ -28,11 +29,11 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 from trident.data.transform import TextTransform
 
-__all__ = ['bpmf_phonetic', 'numbers', 'alphabets', 'chinese_characters', 'RandomSwapChar', 'RandomInsertChar', 'ToHalfWidth', 'RandomMask', 'BopomofoConvert', 'ChineseConvert',
+__all__ = ['bpmf_phonetic', 'numbers_string', 'alphabets', 'chinese_characters', 'RandomSwapChar', 'RandomInsertChar', 'ToHalfWidth', 'RandomMask', 'BopomofoConvert', 'ChineseConvert',
            'RandomHomophonicTypo', 'RandomHomomorphicTypo', 'VocabsMapping']
 
 bpmf_phonetic = 'ㄅㄆㄇㄈㄉㄊㄋㄌㄍㄎㄏㄐㄑㄒㄓㄔㄕㄖㄗㄘㄙㄚㄛㄝㄞㄟㄠㄡㄢㄣㄤㄥㄦㄧㄨㄩ'
-numbers = '0123456789'
+numbers_string= '0123456789'
 alphabets = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
 # Ideographic number zero+CJK Unified Ideographs
 chinese_characters = '\u3007'.encode('utf-8').decode('utf-8') + ''.join([chr(i) for i in range(19968, 40959)])
@@ -525,18 +526,27 @@ class BopomofoConvert(TextTransform):
 
 class RandomMask(TextTransform):
     """
-    Swap two characters in given string randomly.
+    Masking characters or words in given string randomly.
 
     Args:
         probs (float): probability to swap characters
         name (string): transformation name.
 
     Examples:
-        >>> cc=BopomofoConvert(convert_ratio=1)
-        >>> data=list('呵呵呵，真是笑死人了，愛硬拗就會這樣下場吧。')
-        >>> result=cc(data)
+        >>> rm1=RandomMask(convert_ratio=0.15, unit='char')
+        >>> data=list('深度學習是機器學習的分支，是一種以人工神經網路為架構，對資料進行表徵學習的演算法。 ')
+        >>> result=rm1(data)
+        >>> print(len(result)==len(data))
+        True
         >>> print(result)
-        ㄏㄏㄏ，ㄓㄕ笑ㄙㄖ了，ㄞ硬ㄠ就會ㄓ樣下ㄔㄅ
+        深度學習是機器學習的分支，是一種以人工神經網路為架構，對資料進行表徵學習的演算法。
+        >>> rm2=RandomMask(convert_ratio=0.20, unit='word')
+        >>> data=list('Deep learning is a branch of machine learning. It is an algorithm that uses artificial neural networks as an architecture to characterize and learn data.  ')
+        >>> result=rm2(data)
+        >>> print(len(result)==len(data))
+        True
+        >>> print(result)
+        Deep learning is a branch of machine learning. It is an algorithm that uses artificial neural networks as an architecture to characterize and learn data.
 
     """
 
@@ -551,19 +561,46 @@ class RandomMask(TextTransform):
 
     def _apply_corpus(self, corpus, spec: TensorSpec):
         is_list = isinstance(corpus, list)
+        new_corpus_list = []
+        if not is_list:
+            corpus_list=corpus.split(' ')
+            for c in corpus_list:
+                new_corpus_list.append(c)
+                new_corpus_list.append(' ')
+            corpus=new_corpus_list[:-1]
+        else:
+            tmp_word=''
+            for c in corpus:
+                if  c in ['[CLS]', '[SEP]', '[PAD]', '[UNK]', '[MASK]']:
+                    if len(tmp_word)>0:
+                        new_corpus_list.append(tmp_word)
+                    tmp_word=''
+                    new_corpus_list.append(c)
+                elif c==' ' or c in string.punctuation:
+                    if len(tmp_word)>0:
+                        new_corpus_list.append(tmp_word)
+                    tmp_word=''
+                    new_corpus_list.append(c)
+                else:
+                    tmp_word+=c
+            corpus=new_corpus_list
+
         out_str = []
         for word in corpus:
             if word in ['[CLS]', '[SEP]', '[PAD]', '[UNK]', '[MASK]']:
                 out_str.append(word)
             else:
                 if self.unit == 'word':
-                    rr = random.random()
-                    if rr < self.convert_ratio and len(word) > 1 and word != ' ' and not is_punctuation(word) and not any([s in string.digits for s in word.lower()]) and out_str[
-                        -1] != '[MASK]':
-                        for char in word:
-                            out_str.append('[MASK]')
+
+                    if  len(word) > 1 and word != ' ' and not is_punctuation(word) and not any([s in string.digits for s in word.lower()]) and len(out_str)>2 and out_str[ -2] != '[MASK]':
+                        rr=random.random()
+                        if rr < self.convert_ratio:
+                            for char in word:
+                                out_str.append('[MASK]')
+                        else:
+                            out_str.extend(list(word))
                     else:
-                        out_str.append(word)
+                        out_str.extend(list(word))
                 else:
                     if len(word) > 0:
                         for char in word:
