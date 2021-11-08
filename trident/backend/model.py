@@ -640,10 +640,7 @@ class ModelBase(object):
         model = self.training_context['current_model']
         if is_tensor(model):
             data['output'] = self._model
-            if is_training and self.use_output_as_loss:
-                this_loss = data['output'].sum()
-                self.training_context['losses'].collect(model.signature.outputs.key_list[0], self.training_context['steps'], this_loss)
-                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+
         else:
             if not is_training:
                 model.eval()
@@ -666,10 +663,10 @@ class ModelBase(object):
                     data[self._signature.outputs.key_list[0]] = output
                 else:
                     data[self._signature.outputs.key_list[0]] = output
-                if is_training and self.use_output_as_loss:
-                    this_loss = output.sum()
-                    self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
-                    self.training_context['losses'].collect(signature.outputs.key_list[0], self.training_context['steps'], to_scalar(this_loss.copy()))
+        if is_training and self.use_output_as_loss and is_tensor(data['output']):
+            this_loss = data['output'].sum()
+            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+            self.training_context['losses'].collect('output', self.training_context['steps'], to_scalar(this_loss.copy()))
 
     def do_on_loss_calculation_start(self):
         for callback in self.callbacks:
@@ -728,9 +725,9 @@ class ModelBase(object):
         for k, v in self._regs.items():
             this_loss = to_tensor(0.0, requires_grad=True)
             if 'model' in v.signature.inputs:
-                this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
+                reg_weight=v.signature.inputs['reg_weight'].default if 'reg_weight' in v.signature.inputs and hasattr(v.signature.inputs['reg_weight'],'default') else 1e-6
+                this_loss = v(self._model,reg_weight=reg_weight) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
             elif 'output' in v.signature.inputs:
-
                 this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[
                                                                                                                                            'stop_update'] < 1 else to_tensor(0.0)
             if not any_abnormal_number(this_loss):
@@ -871,7 +868,7 @@ class ModelBase(object):
                      'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
                                                                             self.training_context['current_lr'],
                                                                             self.training_context['current_epoch']),
-                     name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
+                     name=self.training_context['model_name'].ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_batch_progress'] = 0
 
         self.do_on_progress_end()
@@ -892,7 +889,7 @@ class ModelBase(object):
                      'Loss: {0}| {1} | lr: {2:<10.3e}'.format(
                          adaptive_format(self.epoch_loss_history.get_last('total_losses')[-1], self.epoch_loss_history.get_series('total_losses')[-1], value_type='loss',
                                          name='total_losses'), ', '.join(metric_strings), self.training_context['current_lr']),
-                     name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
+                     name=self.training_context['model_name'].ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_epoch_progress'] = 0
 
         self.do_on_progress_end()
@@ -917,6 +914,9 @@ class ModelBase(object):
                 if self.training_context['current_epoch'] == 0:
                     # epoch is not the logical inteval for us to control the flow
                     self.training_context['steps'] = 0
+                    #on_epoch_start
+                    for callback in self.callbacks:
+                        callback.on_epoch_start(self.training_context)
 
                     self.training_context['grads_state'] = OrderedDict()
                     self.training_context['grads_state']['first_layer'] = []
@@ -1039,7 +1039,8 @@ class ModelBase(object):
         raise NotImplementedError
 
     def trigger_when(self, when='on_batch_end', frequency=None, unit='batch', action=None):
-
+        if 'epoch' in when:
+            unit='epoch'
         new_callbacks =LambdaCallback(when, frequency=frequency, unit=unit, action=action)
         self.with_callbacks(new_callbacks)
         return self
