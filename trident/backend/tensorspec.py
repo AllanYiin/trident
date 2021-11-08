@@ -26,6 +26,7 @@ class ObjectType(Enum):
     gray = 'gray_image'
     rgb = 'rgb_image'
     rgba = 'rgba_image'
+    image3d='image3d'
     image_path='image_path'
     label_mask = 'label_mask'
     color_mask = 'color_mask'
@@ -575,6 +576,13 @@ def get_signature(fn, name=None):
 
 
     """
+    if is_instance(fn,'Sequential') and len(fn)>0:
+        sig1=get_signature(fn[0])
+        sig2 =get_signature(fn[-1])
+        sig1.outputs=sig2.outputs
+        return sig1
+
+
     base_fn = fn
     base_signature = base_fn._signature if hasattr(fn, '_signature') else None
     if hasattr(fn, 'forward'):
@@ -601,8 +609,8 @@ def get_signature(fn, name=None):
         if k not in ['kwargs', 'self', 'args']:
             annotation = v.annotation
             _default = v.default if v.default != inspect.Parameter.empty else None
-            _optional = _default is not None
-            _dtype = type(_default) if _default is not None else annotation if not is_instance(annotation, str) else None
+            _optional = False if v.default == inspect.Parameter.empty else True
+            _dtype = None if _default is None else type(_default) if _default is not None  else annotation if not is_instance(annotation, str) else None
             _ndim = 0 if _dtype in [int, float, bool, str, numbers.Number, numbers.Integral] else None
             _shape = TensorShape([0]) if _dtype in [int, float, bool, str, numbers.Number, numbers.Integral] else None
             if annotation is Tensor:
