@@ -36,6 +36,7 @@ _valid_when=["on_training_start"
  ,"on_metrics_evaluation_end"
  ,"on_progress_start"
  ,"on_progress_end"
+,"on_excution_exception"
  ,"on_model_saving_start"
  ,"on_model_saving_end"]
 
@@ -251,7 +252,7 @@ class CallbackBase(ABC):
 
     def on_progress_start(self, training_context):
         """
-        Called at the beginning of the evaluation step.
+        Called at the beginning of the printing progress step.
         :param training_context: Dict containing information regarding the training process.
 
         """
@@ -259,7 +260,7 @@ class CallbackBase(ABC):
         pass
     def on_progress_end(self, training_context):
         """
-        Called at the end of the evaluation step.
+        Called at the end of the printing progress step.
 
 
 
@@ -269,7 +270,17 @@ class CallbackBase(ABC):
 
         pass
 
+    def on_excution_exception(self, training_context):
+        """
+        Called when the expection occure.
 
+
+
+        :param training_context: Dict containing information regarding the training process.
+
+        """
+
+        pass
     def on_model_saving_start(self, training_context):
         """
         Called just before the optimization step.
@@ -354,7 +365,7 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
     """
     Stops the training process if the results do not get better for a number of epochs.
     """
-    def __init__(self, monitor,mode,patience, min_delta=1e-4,stopped_epoch=None):
+    def __init__(self, monitor='total_losses',mode='min',patience=5, min_delta=1e-4,stopped_epoch=None):
 
         """
         Args:
@@ -383,7 +394,7 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
         self.monitor_op=None
         self.training_items=None
         self.stopped_epoch=stopped_epoch
-        self._reset()
+
 
     def _reset(self):
         """Resets wait counter and cooldown counter.
@@ -404,8 +415,11 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
 
 
     def on_training_start(self, training_context):
-        self.wait = 0
-        self.best = 0
+        self._reset()
+        if 'num_epochs' in training_context:
+            stopped_epoch=training_context['num_epochs']
+        elif 'total_epoch'  in training_context:
+            stopped_epoch=training_context['total_epoch']
 
 
     def on_overall_epoch_end(self, training_context):
@@ -440,6 +454,38 @@ class EarlyStoppingCriterionCallback(StoppingCriterionCallback):
         if  self.stopped_epoch is not None and self.training_items[0].training_context['steps']>=self.stopped_epoch:
                     results.append(True)
 
+
+    def on_overall_batch_end(self, training_context):
+        results=[]
+        self.training_items = training_context['training_items']
+        for item in self.training_items:
+
+            history = item.training_context['batch_losses'].get(self.monitor, item.training_context['batch_metrics'].get(self.monitor,
+                                                                                                               item.training_context[
+                                                                                                                   'batch_losses'][
+                                                                                                                   'total_losses']))
+
+            if history is None:
+                warnings.warn(
+                    'EarlyStoppingCriterionCallback conditioned on metric `%s` '
+                    'which is not available. Available metrics are: %s' %
+                    (self.monitor, ','.join(item.training_context['batch_metrics'].keys_list)), RuntimeWarning
+                )
+            else:
+                current = np.array(history[-min(5, len(history)):]).mean()
+
+                if self.monitor_op(current, self.best):
+                    self.best = current
+                    self.wait = 0
+                    results.append(False)
+                else:
+                    self.wait += 1
+                    if self.wait >= self.patience  :
+                        results.append(True)
+                    else:
+                        results.append(False)
+        if  self.stopped_epoch is not None and self.training_items[0].training_context['steps']>=self.stopped_epoch:
+                    results.append(True)
 
 
     def on_training_end(self, training_context):
