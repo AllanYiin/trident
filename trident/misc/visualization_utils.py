@@ -26,18 +26,18 @@ from matplotlib.collections import PolyCollection
 import matplotlib.patches as patches
 import matplotlib.font_manager
 
-fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
-fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
-default_font = None
-
-if sys.platform == 'win32':
-    if 'Microsoft Sans Serif' in fontnames:
-        default_font = matplotlib.rc('font', family='Microsoft Sans Serif')
-    else:
-        for name in fontnames:
-            if 'heiti' in name.lower():
-                default_font = matplotlib.rc('font', family=name)
-                break
+# fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+# fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
+# default_font = None
+#
+# if sys.platform == 'win32':
+#     if 'Microsoft Sans Serif' in fontnames:
+#         default_font = matplotlib.rc('font', family='Microsoft Sans Serif')
+#     else:
+#         for name in fontnames:
+#             if 'heiti' in name.lower():
+#                 default_font = matplotlib.rc('font', family=name)
+#                 break
 
 import PIL
 from PIL import Image
