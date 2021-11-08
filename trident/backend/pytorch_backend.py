@@ -405,7 +405,7 @@ class Layer(nn.Module):
         self.register_buffer('_output_tensor', None, persistent=False)
 
         self._signature = None
-        self.__signature__ =get_signature(this,name=self.name)
+        self.__signature__ =get_signature(self,name=self.name)
         self._device = get_device()
 
 
