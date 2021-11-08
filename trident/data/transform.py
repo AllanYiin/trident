@@ -1,4 +1,5 @@
 import numbers
+import random
 from abc import ABC, abstractmethod
 from collections import Iterable
 from typing import Sequence, Tuple, Dict, Union, Optional, Callable, Any
@@ -17,7 +18,7 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 
 
-__all__ = ['Transform', 'VisionTransform', 'TextTransform']
+__all__ = ['Transform', 'VisionTransform', 'TextTransform','Compose','OneOf']
 
 class Transform(ABC):
     """
@@ -178,19 +179,27 @@ class VisionTransform(Transform):
             keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
             idxs = np.array([(0, 1), (2, 1), (0, 3), (2, 3)]).flatten()
             location = np.asarray(location).reshape(-1, 4)[:, idxs].reshape(-1, 2)
-            location = self._apply_coords(location,spec).reshape((-1, 4, 2))
-            minxy = location.min(axis=1)
-            maxxy = location.max(axis=1)
+            location = self._apply_coords(location,spec).reshape((-1, 4,2))
+            x_ = location[:,:,0]
+            y_ = location[:,:,1]
+            xmin = np.min(x_, 1).reshape(-1, 1)
+            ymin = np.min(y_, 1).reshape(-1, 1)
+            xmax = np.max(x_, 1).reshape(-1, 1)
+            ymax = np.max(y_, 1).reshape(-1, 1)
+
+
             if keypoints is not None:
                 coords_keypoints = np.asarray(keypoints).reshape(-1, 2)
                 keypoints = self._apply_keypoints(coords_keypoints, spec).reshape((-1, keypoints.shape[-1]))
 
 
-            trans_boxes = np.concatenate((minxy, maxxy), axis=1)
+            trans_boxes = np.concatenate((xmin, ymin,xmax,ymax), axis=1)
             trans_boxes[:, 0::2] =clip(trans_boxes[:, 0::2] , 0, ew)
             trans_boxes[:, 1::2] = clip(trans_boxes[:, 1::2],0, eh)
-            if class_info is not None  and class_info.shape[-1]>0:
+            if class_info is not None  and class_info.shape[-1]>0 and keypoints is not None and len(keypoints)>0:
                 trans_boxes = np.concatenate((trans_boxes, class_info,keypoints), axis=1)
+            elif class_info is not None  and class_info.shape[-1]>0:
+                trans_boxes = np.concatenate((trans_boxes, class_info), axis=1)
             return trans_boxes
 
     def _apply_mask(self, mask,spec:TensorSpec):
@@ -206,7 +215,7 @@ class VisionTransform(Transform):
         return [[self._apply_coords(p,spec) for p in instance] for instance in polygons]
 
     def _apply_labels(self, labels,spec:TensorSpec):
-        raise NotImplementedError
+        return  labels
 
     def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
         spec=kwargs.get('spec')
@@ -292,16 +301,194 @@ class TextTransform(Transform):
         return None
 
     def _apply_corpus(self, corpus,spec:TensorSpec):
-        raise NotImplementedError
+        return corpus
 
     def _apply_sequence(self, sequence,spec:TensorSpec):
-        raise NotImplementedError
+        return sequence
 
     def _apply_sequence_labels(self, labels,spec:TensorSpec):
-        raise NotImplementedError
+        return  labels
 
     def _apply_sequence_mask(self, mask,spec:TensorSpec):
-        raise NotImplementedError
+        return  mask
+
+    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
+        spec=kwargs.get('spec')
+        return self.apply_batch(inputs,spec)
+
+
+class Compose(Transform):
+    r"""Composes several transforms together.
+    Args:
+        transforms: list of :class:`VisionTransform` to compose.
+        batch_compose: whether use shuffle_indices for batch data or not.
+            If True, use original input sequence.
+            Otherwise, the shuffle_indices will be used for transforms.
+        shuffle_indices: indices used for random shuffle, start at 1.
+            For example, if shuffle_indices is [(1, 3), (2, 4)], then the 1st and 3rd transform
+            will be random shuffled, the 2nd and 4th transform will also be shuffled.
+        order: the same with :class:`VisionTransform`
+
+    Examples:
+        .. testcode::
+
+           from megengine.data.transform import RandomHorizontalFlip, RandomVerticalFlip, CenterCrop, ToMode, Compose
+
+           transform_func = Compose([
+           RandomHorizontalFlip(),
+           RandomVerticalFlip(),
+           CenterCrop(100),
+           ToMode("CHW"),
+           ],
+           shuffle_indices=[(1, 2, 3)]
+           )
+    """
+
+    def __init__(
+            self, transforms=[], batch_compose=False, shuffle_indices=None
+    ):
+        super().__init__()
+        self.transforms = transforms
+        #self._set_order()
+
+        if batch_compose and shuffle_indices is not None:
+            raise ValueError(
+                "Do not support shuffle when apply transforms along the whole batch"
+            )
+        self.batch_compose = batch_compose
+
+        if shuffle_indices is not None:
+            shuffle_indices = [tuple(x - 1 for x in idx) for idx in shuffle_indices]
+        self.shuffle_indices = shuffle_indices
+
+    # def _set_order(self):
+    #     for t in self.transforms:
+    #         t.order = self.order
+    #         if isinstance(t, Compose):
+    #             t._set_order()
+
+    def apply_batch(self,inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
+        if not isinstance(inputs, OrderedDict):
+            if self.is_spatial == True:
+                self._shape_info = None
+            if spec is None:
+                spec = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True, is_singleton=True), object_type=ObjectType.rgb)
+            return self.apply(inputs, spec)
+        else:
+            results = OrderedDict()
+            sampledata = list(inputs.values())[0]
+            spec = inputs.key_list[0]
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+                for i in range(len(sampledata)):
+                    self._shape_info = None
+                    for spec, data in inputs.items():
+                        if spec not in results:
+                            results[spec] = []
+                        results[spec].append(self.apply(data[i], spec))
+            else:
+                if hasattr(self,'_shape_info'):
+                    self._shape_info = None
+                if hasattr(self, '_text_info'):
+                    self._text_info = None
+                for spec, data in inputs.items():
+                    results[spec] = self.apply(data, spec)
+            return results
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        for t in self._shuffle():
+            input = t.apply(input,spec)
+        return input
+
+    def _shuffle(self):
+        if self.shuffle_indices is not None:
+            source_idx = list(range(len(self.transforms)))
+            for idx in self.shuffle_indices:
+                shuffled = np.random.permutation(idx).tolist()
+                for src, dst in zip(idx, shuffled):
+                    source_idx[src] = dst
+            return [self.transforms[i] for i in source_idx]
+        else:
+            return self.transforms
+    def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
+        spec=kwargs.get('spec')
+        return self.apply_batch(inputs,spec)
+
+
+class OneOf(Transform):
+    r"""Composes several transforms together.
+    Args:
+        transforms: list of :class:`VisionTransform` to compose.
+        batch_compose: whether use shuffle_indices for batch data or not.
+            If True, use original input sequence.
+            Otherwise, the shuffle_indices will be used for transforms.
+        shuffle_indices: indices used for random shuffle, start at 1.
+            For example, if shuffle_indices is [(1, 3), (2, 4)], then the 1st and 3rd transform
+            will be random shuffled, the 2nd and 4th transform will also be shuffled.
+        order: the same with :class:`VisionTransform`
+
+    Examples:
+        .. testcode::
+
+           from megengine.data.transform import RandomHorizontalFlip, RandomVerticalFlip, CenterCrop, ToMode, Compose
+
+           transform_func = Compose([
+           RandomHorizontalFlip(),
+           RandomVerticalFlip(),
+           CenterCrop(100),
+           ToMode("CHW"),
+           ],
+           shuffle_indices=[(1, 2, 3)]
+           )
+    """
+
+    def __init__(
+            self, transforms=[], batch_compose=False
+    ):
+        super().__init__()
+        self.transforms = transforms
+        self.shuffle_indices=list(range(len(self.transforms)))
+        self.random_index=random.choice( self.shuffle_indices)
+
+        self.batch_compose = batch_compose
+
+
+    def apply_batch(self,inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
+        if not isinstance(inputs, OrderedDict):
+            if self.is_spatial == True:
+                self._shape_info = None
+            if spec is None:
+                spec = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True, is_singleton=True), object_type=ObjectType.rgb)
+            return self.apply(inputs, spec)
+        else:
+            results = OrderedDict()
+            sampledata = list(inputs.values())[0]
+            spec = inputs.key_list[0]
+            if (isinstance(sampledata, Iterable) and not isinstance(sampledata, np.ndarray)) or (is_tensor_like(sampledata) and spec.ndim == sampledata.ndim):
+                for i in range(len(sampledata)):
+                    self.random_index=random.choice(range(len(self.transforms)))
+
+                    if hasattr(self.transforms[self.random_index], '_shape_info'):
+                        self.transforms[self.random_index]._shape_info = None
+                    if hasattr(self.transforms[self.random_index], '_text_info'):
+                        self.transforms[self.random_index]._text_info = None
+                    for spec, data in inputs.items():
+                        if spec not in results:
+                            results[spec] = []
+                        results[spec].append(self.apply(data[i], spec))
+            else:
+                self.random_index = random.choice(range(len(self.transforms)))
+                if hasattr(self.transforms[self.random_index], '_shape_info'):
+                    self.transforms[self.random_index]._shape_info = None
+                if hasattr(self.transforms[self.random_index], '_text_info'):
+                    self.transforms[self.random_index]._text_info = None
+                for spec, data in inputs.items():
+                    results[spec] = self.apply(data, spec)
+            return results
+
+    def apply(self, input: Tuple,spec:TensorSpec):
+        t=self.transforms[self.random_index]
+        input = t.apply(input,spec)
+        return input
 
     def  __call__(self, inputs: Union[Dict[TensorSpec,np.ndarray],np.ndarray],**kwargs):
         spec=kwargs.get('spec')
