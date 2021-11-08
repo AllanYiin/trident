@@ -31,7 +31,8 @@ elif get_backend()=='tensorflow':
 from trident.loggers.history import *
 from trident.backend.model import *
 
-from trident.data import *
+from trident.data.dataset import *
+from trident.data.data_provider import *
 from trident.callbacks import *
 from trident.misc import *
 
@@ -44,12 +45,12 @@ if get_backend()=='pytorch':
     from trident.layers.pytorch_blocks import *
     from trident.layers.pytorch_normalizations import *
     from trident.layers.pytorch_rnn import *
+    from trident.layers.pytorch_transformers import *
 
     from trident.optims.pytorch_constraints import *
     from trident.optims.pytorch_regularizers import *
     from trident.optims.pytorch_losses import *
     from trident.optims.pytorch_metrics import *
-
     from trident.optims.pytorch_trainer import *
 
 elif get_backend()=='tensorflow':
@@ -76,6 +77,15 @@ elif get_backend()=='tensorflow':
 elif get_backend()=='onnx':
     import_or_install('onnx_runtime')
     pass
+
+from trident.data.image_common import *
+from trident.data.bbox_common import *
+from trident.data.label_common import *
+from trident.data.mask_common import *
+from trident.data.transform import *
+from trident.data.vision_transforms import *
+from trident.data.text_transforms import *
+from trident.data.data_loaders import *
 
 from trident.optims.trainers import TrainingPlan
 from trident.misc.ipython_utils import *
