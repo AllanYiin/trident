@@ -400,7 +400,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                 labels.extend([i] * len(class_imgs))
                 imgs.extend(class_imgs)
 
-            imagedata = ImageDataset(imgs, object_type=ObjectType.rgb)
+            imagedata = ImageDataset(imgs, object_type=object_type)
             print('extract {0} images...'.format(len(imagedata)))
             labelsdata = LabelDataset(labels,object_type=ObjectType.classification_label)
             labelsdata.binding_class_names(class_names)
