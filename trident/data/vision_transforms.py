@@ -1,6 +1,7 @@
 import builtins
 import inspect
 import math
+from PIL import Image
 import numbers
 import random
 import copy
@@ -11,7 +12,7 @@ import numpy as np
 from skimage.filters import threshold_minimum, threshold_local, threshold_isodata, threshold_yen
 
 from trident.backend.common import *
-from trident.backend.tensorspec import ObjectType
+from trident.backend.tensorspec import ObjectType, get_signature
 from trident.backend.tensorspec import TensorSpec
 
 if get_backend() == 'pytorch':
@@ -22,86 +23,107 @@ from trident.data.transform import VisionTransform
 
 __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 'RandomRescaleCrop', 'RandomCenterCrop', 'RandomMultiScaleImage', 'RandomTransform', 'RandomTransformAffine',
            'AdjustBrightness', 'AdjustContrast', 'AdjustSaturation', 'AddNoise', 'AdjustHue', 'RandomAdjustHue', 'RandomAdjustBrightness', 'RandomAdjustContrast',
-           'RandomAdjustSaturation','AutoLevel',
+           'RandomAdjustSaturation','AutoLevel','RandomLighting','GrayMixRGB',
            'Normalize', 'Unnormalize', 'CLAHE', 'Lighting', 'HorizontalFlip', 'RandomMirror', 'AdjustGamma', 'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
-           'RandomInvertColor', 'GrayScale', 'RandomGrayScale',
+           'RandomInvertColor', 'GrayScale', 'RandomGrayScale','RandomGridMask','GridMask',
            'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic','DetectionMixup']
 
 
-def randomize_with_validate(valid_range=None, no_change_value=None, **kwargs):
+def randomize_with_validate(keep_prob=0.5,valid_range=None, no_change_value=None, **kwargs):
     def randomize_wrapper(cls):
         class Wrapper:
-            def __init__(self, **kwargs):
+            def __init__(self):
+                self._args=None
+                self.rangs=None
+                self.other_args=None
+                self.keep_prob =keep_prob
                 self.valid_range = None
                 self.no_change_value = None
+
                 if isinstance(valid_range, (tuple, list)) and len(valid_range) == 2 and all([isinstance(t, numbers.Number) for t in valid_range]):
                     self.valid_range = valid_range
+                if 'scale' in kwargs and len(kwargs[ 'scale'])==2 and len([k for k,v in kwargs.items() if len(v)==2 ])==1 :
+                    self.valid_range=kwargs[ 'scale']
+                    kwargs.pop('scale')
+
                 if isinstance(no_change_value, numbers.Number):
                     self.no_change_value = float(no_change_value)
 
-                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
-                other_rangs = dict([(k, v) for k, v in kwargs.items() if not (isinstance(v, tuple) and len(v) == 2)])
 
-                self.kwargs = kwargs
+                # argspec = inspect.getfullargspec(cls.__init__)
+                # _args = argspec.args
+                # _args.remove('self')
+                # _args.remove('name')
+                self._args = get_signature(cls.__init__,name=cls.__name__)
 
-                argspec = inspect.getfullargspec(cls.__init__)
-                _args = argspec.args
-                _args.remove('self')
-                _args.remove('name')
+                self.rangs = dict([(k.replace('_range', ''), v) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
+                for argname,arg in self._args.inputs.items():
+                    if argname not in ['self','name','keep_ratio'] and 'size' not in argname and 'shape' not in argname and argname not in self.rangs and isinstance(arg.default,numbers.Number):
+                        self.rangs[argname]=self.valid_range
 
-                for k, v in self.kwargs.items():
-                    if k in _args:
-                        _args.remove(k)
-                self._args = _args
+                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in self.rangs.items()])
+                other_args = dict([(k, v.default) for k, v in self._args.inputs.items() if k.replace('_range', '') not in self.rangs ])
+                self.other_args = other_args
+
                 if len(rangs.values()) == 0 and self.valid_range is not None:
-                    if len(_args) == 0 and len(self.kwargs) == 0:
+                    if len(self.rangs) == 0 and len(kwargs) == 0:
                         self.wrap = cls()
                     else:
-                        self.wrap = cls(random.uniform(*self.valid_range), **other_rangs)
+                        self.wrap = cls(random.uniform(*self.valid_range), **other_args)
                 else:
 
-                    self.wrap = cls(*list(rangs.values()), **other_rangs)
-                self.rn = 0
+                    self.wrap = cls(*list(rangs.values()), **other_args)
+                self.rn = random.random()
 
             def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None, **kwargs):
-                rangs, other_rangs = self.set_random()
-                if len(rangs) > 0 and len(self.kwargs) > 0:
-                    for k, v in rangs:
-                        setattr(self.wrap, k, v)
-                else:
-                    if len(self._args) > 0:
-                        setattr(self.wrap, self._args[0], random.uniform(*self.valid_range))
+                keep_prob = kwargs.get('keep_prob', kwargs.get('keep_ratio', self.keep_prob))
+                self.keep_prob =keep_prob
+                self.rn=random.random()
+                if self.rn > keep_prob:
+                    rangs, other_args = self.set_random()
 
-                if self.rn % 5 > 0:
+                    for k,v in rangs.items():
+                        setattr(self.wrap, k, v)
+                    for k,v in other_args.items():
+                        setattr(self.wrap, k, v)
+
+                    # if len(rangs) > 0 and len(self.kwargs) > 0:
+                    #     for k, v in rangs:
+                    #         setattr(self.wrap, k, v)
+                    # else:
+                    #     if len(self._args) > 0:
+                    #         setattr(self.wrap, self._args[0], random.uniform(*self.valid_range))
                     return self.wrap(inputs, spec=spec, **kwargs)
                 else:
                     return inputs
 
             def set_random(self):
-                self.rn = random.randint(0, 10)
-                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
-                other_rangs = dict([(k, v) for k, v in kwargs.items() if not (isinstance(v, tuple) and len(v) == 2)])
-                return rangs, other_rangs
+                self.rn = random.random()
+                #self.rn = random.randint(0, 10)
+
+                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in self.rangs.items() if isinstance(v, tuple) and len(v) == 2])
+                other_args = dict([(k, v) for k, v in self.other_args.items() if not (isinstance(v, tuple) and len(v) == 2)])
+                return rangs, other_args
 
         Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
         Wrapper.__doc__ = cls.__doc__
         return Wrapper
-
     return randomize_wrapper
 
 
-def randomize(keep_ratio=0.2, **kwargs):
+def randomize(keep_prob=0.5, **kwargs):
     def randomize_wrapper(cls):
         class Wrapper:
-            def __init__(self, **kwargs):
+            def __init__(self):
                 self.kwargs = kwargs
                 self.wrap = cls()
-                self.keep_ratio = keep_ratio
+                self.keep_prob = keep_prob
                 self.rn = 0
 
             def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None, **kwargs):
-                keep_ratio = kwargs.get('keep_ratio', self.keep_ratio)
-                if self.rn > keep_ratio:
+                keep_prob = kwargs.get('keep_prob', kwargs.get('keep_ratio', self.keep_prob))
+                self.keep_prob =keep_prob
+                if self.rn > keep_prob:
                     return self.wrap(inputs, spec=spec, **kwargs)
                 else:
                     return inputs
@@ -112,6 +134,7 @@ def randomize(keep_ratio=0.2, **kwargs):
         Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
         Wrapper.__doc__ = cls.__doc__
         return Wrapper
+    return randomize_wrapper
 
 
 class Resize(VisionTransform):
@@ -171,8 +194,8 @@ class Resize(VisionTransform):
         h, w, th, tw, pad_vert, pad_horz = self._shape_info
         if h == th and w == tw:
             return coords
-        coords[:, 0] = coords[:, 0] * (tw / w)
-        coords[:, 1] = coords[:, 1] * (th / h)
+        coords[:, 0] = np.round(coords[:, 0] * (float(tw) / w))
+        coords[:, 1] = np.round(coords[:, 1] * (float(th) / h))
         if not self.align_corner:
             coords[:, 0] += pad_horz // 2
             coords[:, 1] += pad_vert // 2
@@ -227,7 +250,7 @@ class Resize(VisionTransform):
 
 
 class ShortestEdgeResize(VisionTransform):
-    def __init__(self, output_size, keep_aspect=True, interpolation=cv2.INTER_LANCZOS4, name='short_edge_resize', **kwargs):
+    def __init__(self, output_size, keep_aspect=True, interpolation=cv2.INTER_LANCZOS4, name='short_edge_resize'):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
@@ -343,7 +366,7 @@ class RandomRescaleCrop(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size, scale_range=(0.1, 3.0), interpolation=cv2.INTER_LANCZOS4, name='random_rescale_crop', **kwargs):
+    def __init__(self, output_size, scale_range=(0.5, 2.0), interpolation=cv2.INTER_LANCZOS4, name='random_rescale_crop', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
@@ -361,7 +384,7 @@ class RandomRescaleCrop(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        x, y, th, tw, eh, ew, target_scale = self._shape_info
+        x, y, padx,pady,th, tw, eh, ew, target_scale = self._shape_info
         image = cv2.resize(image, (tw, th), interpolation=self.interpolation)
         cropped_img = image[y: builtins.min(y + eh, th), x: builtins.min(x + ew, tw)]
         if cropped_img.shape[0] == eh and cropped_img.shape[1] == ew:
@@ -373,13 +396,16 @@ class RandomRescaleCrop(VisionTransform):
             return background
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        x, y, th, tw, eh, ew, target_scale = self._shape_info
-        coords[:, 0] = np.clip(coords[:, 0] * target_scale - x, 0, ew)
-        coords[:, 1] = np.clip(coords[:, 1] * target_scale - y, 0, eh)
+        x, y, padx,pady,th, tw, eh, ew, target_scale = self._shape_info
+        coords=np.round(coords*target_scale).astype(np.int32)
+        coords[:, 0] =coords[:, 0]- x
+        coords[:, 1] = coords[:, 1] - y
+        coords[:, 0] = np.clip(coords[:, 0] , 0, tw)+padx
+        coords[:, 1] = np.clip(coords[:, 1] , 0, th)+pady
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        x, y, th, tw, eh, ew, target_scale = self._shape_info
+        x, y, padx, pady, th, tw, eh, ew, target_scale = self._shape_info
         mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST)
         mask_shape = list(int_shape(mask))
         mask_shape[0] = eh
@@ -403,11 +429,17 @@ class RandomRescaleCrop(VisionTransform):
         target_scale = np.random.uniform(self.scale_range[0], self.scale_range[1])
         th, tw = int(round(height * target_scale)), int(round(width * target_scale))
         x, y = 0, 0
+        padx,pady=0,0
 
-        if 0 < ew < tw - 1 and 0 < eh < th - 1:
+        if 0 < ew < tw - 1 :
             x = np.random.randint(0, tw - ew)
+        elif 0<tw < ew-1:
+            padx=(ew-tw)//2
+        if 0 < eh < th - 1:
             y = np.random.randint(0, th - eh)
-        return x, y, th, tw, eh, ew, target_scale
+        elif 0 < th < eh - 1:
+            pady = (eh - th) // 2
+        return x, y,padx,pady, th, tw, eh, ew, target_scale
 
 
 class RandomCenterCrop(VisionTransform):
@@ -599,7 +631,7 @@ class RandomTransformAffine(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15,border_mode='random_color', interpolation=cv2.INTER_AREA,keep_ratio=0.5, name='transform_affine', **kwargs):
+    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15,border_mode='random_color', interpolation=cv2.INTER_AREA,keep_prob=0.5, name='transform_affine', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = None
@@ -614,7 +646,7 @@ class RandomTransformAffine(VisionTransform):
             self.border_mode ='random_color'
         else:
             self.border_mode=border_mode
-        self.keep_ratio=keep_ratio
+        self.keep_prob=keep_prob
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
@@ -627,9 +659,9 @@ class RandomTransformAffine(VisionTransform):
 
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        mat_img, height, width, is_flip ,rr= self._shape_info
+        mat_img, height, width,angle, is_flip ,rr,shear_factor= self._shape_info
 
-        if rr>self.keep_ratio:
+        if rr>self.keep_prob:
             image = np.clip(image.astype(np.float32), 0, 255)[:, :, :3]
             _borderMode=cv2.BORDER_CONSTANT
             _borderValue = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
@@ -642,41 +674,52 @@ class RandomTransformAffine(VisionTransform):
             elif self.border_mode=='zero':
                 _borderValue=(0,0,0)
 
-            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue )  # , borderMode=cv2.BORDER_REPLICATE
+            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue,flags=cv2.INTER_LANCZOS4 )  # , borderMode=cv2.BORDER_REPLICATE
+            # if shear_factor>0:
+            #     image = cv2.warpAffine(image, mat_shear, dsize=(int(nW), image.shape[0]), borderMode=_borderMode,borderValue=_borderValue,flags=cv2.INTER_LANCZOS4)
+            #     image = cv2.resize(image,(width, height))
             if is_flip:
-                return image[:, ::-1]
+                return np.fliplr(image)
+
             else:
                 return image
         else:
             return image
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        mat_img, height, width, is_flip,rr = self._shape_info
-        if rr>self.keep_ratio:
-            #
+        mat_img, height, width,angle, is_flip,rr,shear_factor = self._shape_info
+        if rr>self.keep_prob:
+
             coords = coords.transpose([1, 0])
             coords = np.insert(coords, 2, 1, axis=0)
             # # print(coords)
             # # print(transform_matrix)
             coords_result = np.matmul(mat_img, coords)
             coords_result = coords_result[0:2, :].transpose([1, 0])
+
             if is_flip:
-                coords_result[:, 0::2] = width - coords_result[:, 0::2]
+                if coords_result.shape[-1] == 4:
+                    coords_result = np.stack([width - coords_result[..., 2], coords_result[..., 1], width - coords_result[..., 0], coords_result[..., 3]], axis=-1)
+                elif coords_result.shape[-1] == 2:
+                    coords_result[..., 0] = width - coords_result[..., 0]
+
             return coords_result
         else:
             return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
         mask = unpack_singleton(mask)
-        mat_img, height, width, is_flip,rr = self._shape_info
-        if rr>self.keep_ratio:
+        mat_img, height, width,angle, is_flip,rr ,shear_factor= self._shape_info
+        if rr>self.keep_prob:
             mask_dtype = mask.dtype
             mask = mask.astype(np.float32)
 
-            mask = cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0))  # , borderMode=cv2.BORDER_REPLICATE
+            mask = cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0),flags=cv2.INTER_NEAREST)  # , borderMode=cv2.BORDER_REPLICATE
+            mask[mask>=0.5]=1
+            mask[mask < 0.5] =0
             mask = mask.astype(mask_dtype)
             if is_flip:
-                return mask[:, ::-1]
+                return np.fliplr(mask)
             else:
                 return mask
         else:
@@ -687,76 +730,32 @@ class RandomTransformAffine(VisionTransform):
         h, w, c = image.shape
         self.output_size = (h, w)
 
-        # rotation
-        angle = random.uniform(-1 * self.rotation_range, self.rotation_range)
-        scale = 1.0
-        shear = 0
-        translations = (0, 0)
-        # translation
-        if self.shift_range is not None:
-            if isinstance(self.shift_range, numbers.Number):
-                self.shift_range = (-1 * self.shift_range, self.shift_range)
-            max_dx = self.shift_range[0] * image.shape[1]
-            max_dy = self.shift_range[1] * image.shape[0]
-            translations = (np.round(random.uniform(-max_dx, max_dx)),
-                            np.round(random.uniform(-max_dy, max_dy)))
-        else:
-            translations = (0, 0)
+        h, w = image.shape[0:2]
+        angle = np.random.uniform(-self.rotation_range, self.rotation_range) if self.rotation_range>0 else 0
+        scale = np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range>0 else 1
+        tx = np.random.uniform(-self.shift_range, self.shift_range) * w
+        ty = np.random.uniform(-self.shift_range, self.shift_range) * h
+        M = np.eye(3)
+        mat = cv2.getRotationMatrix2D((w // 2, h // 2), angle, scale)
+        mat[:, 2] += (tx, ty)
+        M[:2]=mat
 
-        # scale
-        if self.zoom_range is not None:
-            scale = random.uniform(1 - self.zoom_range, 1 + self.zoom_range)
-        else:
-            scale = 1.0
+        # Shear
+        shear_factor = random.uniform(0, self.shear_range) if self.shear_range>0 else 0
+        # mat_shear= np.array([[1, abs(shear_factor), 0], [0, 1, 0]])
+        #
+        # nW = image.shape[1] + abs(shear_factor * image.shape[0])
 
-        # shear
-        if self.shear_range is not None:
-            if isinstance(self.shear_range, numbers.Number):
-                shear = [random.uniform(-1 * self.shear_range, self.shear_range), 0.]
-            elif len(self.shear_range) == 2:
-                shear = [random.uniform(self.shear_range[0], self.shear_range[1]), 0.]
-            elif len(self.shear_range) == 4:
-                shear = [random.uniform(self.shear_range[0], self.shear_range[1]),
-                         random.uniform(self.shear_range[2], self.shear_range[3])]
-        else:
-            shear = 0.0
+        # Shear
+        S= np.eye(3)
+        S[0, 1] = math.tan(random.uniform(-self.shear_range, self.shear_range) * math.pi / 180)  # x shear (deg)
+        S[1, 0] = math.tan(random.uniform(-self.shear_range, self.shear_range) * math.pi / 180)  # y shear (deg)
 
-
-        center = (image.shape[1] * 0.5 + 0.5, image.shape[0] * 0.5 + 0.5)
-
-        angle = math.radians(angle)
-        # if isinstance(shear, (tuple, list)) and len(shear) == 2:
-        #     shear = [math.radians(s) for s in shear]
-        # elif isinstance(shear, numbers.Number):
-        #     shear = math.radians(shear)
-        #     shear = [shear, 0]
-        # else:
-        #     raise ValueError(
-        #         "Shear should be a single value or a tuple/list containing " +
-        #         "two values. Got {}.".format(shear))
-
-        scale = 1.0 / scale
-
-        # Inverted rotation matrix with scale and shear
-        d = math.cos(angle + shear[0]) * math.cos(angle + shear[1]) + \
-            math.sin(angle + shear[0]) * math.sin(angle + shear[1])
-        matrix = [
-            math.cos(angle + shear[0]), math.sin(angle + shear[0]), 0,
-            -math.sin(angle + shear[1]), math.cos(angle + shear[1]), 0
-        ]
-        matrix = [scale / d * m for m in matrix]
-
-        # Apply inverse of translation and of center translation: RSS^-1 * C^-1 * T^-1
-        matrix[2] += matrix[0] * (-center[0] - translations[0]) + matrix[1] * (-center[1] - translations[1])
-        matrix[5] += matrix[3] * (-center[0] - translations[0]) + matrix[4] * (-center[1] - translations[1])
-
-        # Apply center translation: C * RSS^-1 * C^-1 * T^-1
-        matrix[2] += center[0]
-        matrix[5] += center[1]
-
+        mat=S @M
         rr_flip= np.random.random()
         rr= np.random.random()
-        return np.array(matrix).reshape((2, 3)), h, w, rr_flip < self.random_flip,rr
+
+        return np.array(mat[:2]).reshape((2, 3)), h, w,angle, rr_flip < self.random_flip,rr,shear_factor
 
 
 RandomTransform = RandomTransformAffine
@@ -811,11 +810,46 @@ class HorizontalFlip(VisionTransform):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
         height, width = self._shape_info
-        return image[:, ::-1]
+        return np.fliplr(image)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         height, width = self._shape_info
-        coords[:, 0::2] = width - coords[:, 0::2]
+        if coords.shape[-1]==4:
+            coords=np.stack([width-coords[..., 2],coords[..., 1],width-coords[..., 0], coords[..., 3]],axis=-1)
+        elif coords.shape[-1]==2:
+            coords[..., 0]=width-coords[..., 0]
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        mask = unpack_singleton(mask)
+        height, width = self._shape_info
+        return mask[:, ::-1]
+
+    def _get_shape(self, image):
+        height, width, _ = image.shape
+        return height, width
+
+class VerticalFlip(VisionTransform):
+    def __init__(self, name='vertical_flip', **kwargs):
+        super().__init__(name)
+        self.is_spatial = True
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        image = unpack_singleton(image)
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
+        height, width = self._shape_info
+        return np.flipud(image)
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        height, width = self._shape_info
+        if coords.shape[-1]==4:
+            coords=np.stack([coords[..., 0],height-coords[..., 3],coords[..., 2], height-coords[..., 1]],axis=-1)
+        elif coords.shape[-1]==2:
+            coords[..., 1]=height-coords[..., 1]
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
@@ -828,7 +862,7 @@ class HorizontalFlip(VisionTransform):
         return height, width
 
 
-@randomize
+@randomize(keep_prob=0.8)
 class RandomMirror(HorizontalFlip):
     pass
 
@@ -1178,6 +1212,36 @@ class RandomAdjustGamma(AdjustGamma):
     pass
 
 
+class GrayMixRGB(VisionTransform):
+
+    def __init__(self, keep_prob=0.5, name='gray_mix_rgb', **kwargs):
+        super().__init__(name)
+
+        self.keep_prob = keep_prob
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        if random.random() <= self.keep_prob:
+            return image
+
+        dtype = image.dtype
+        image = image.astype(np.float32)
+        gray = cv2.cvtColor(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
+        gray0 = gray[:, :, 0]
+        min_rgb = image.mean(-1)
+        mask = np.expand_dims(np.greater(gray0, min_rgb), -1)
+        image = mask * gray + (1 - mask) * image
+
+        return image.clip(0, 255).astype(np.float32)
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
 class Blur(VisionTransform):
     def __init__(self, ksize=5, name='blur', **kwargs):
         super().__init__(name)
@@ -1220,28 +1284,30 @@ class InvertColor(VisionTransform):
         return mask
 
 
-class GrayScale(VisionTransform):
-    def __init__(self, keepdims=True, name='gray_scale', **kwargs):
+
+class GrayMixRGB(VisionTransform):
+
+    def __init__(self, keep_prob=0.5, name='gray_mix_rgb', **kwargs):
         super().__init__(name)
-        self.is_spatial = False
-        self.keepdims = keepdims
+
+        self.keep_prob = keep_prob
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
-        if image.ndim == 4 and self.keepdims:
-            return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGBA2GRAY), cv2.COLOR_GRAY2RGB)
-        elif image.ndim == 4 and not self.keepdims:
-            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGBA2GRAY)
-        elif image.ndim == 3 and self.keepdims:
-            return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
-        elif image.ndim == 3 and not self.keepdims:
-            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2GRAY)
-        elif image.ndim == 2 and self.keepdims:
-            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
-        else:
-            return np.clip(image, 0, 255)
+        if random.random() <= self.keep_prob:
+            return image
+
+        dtype = image.dtype
+        image = image.astype(np.float32)
+        gray = cv2.cvtColor(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
+        gray0 = gray[:, :, 0]
+        min_rgb = image.mean(-1)
+        mask = np.expand_dims(np.greater(gray0, min_rgb), -1)
+        image = mask * gray + (1 - mask) * image
+
+        return image.clip(0, 255).astype(np.float32)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
@@ -1279,12 +1345,12 @@ class RandomBlur(Blur):
     pass
 
 
-@randomize
+@randomize(keep_prob=0.8)
 class RandomInvertColor(InvertColor):
     pass
 
 
-@randomize
+@randomize(keep_prob=0.8)
 class RandomGrayScale(GrayScale):
     pass
 
@@ -1516,7 +1582,7 @@ class AdaptiveBinarization(VisionTransform):
 
 class Lighting(VisionTransform):
 
-    def __init__(self, scale=0, name='lighting', **kwargs):
+    def __init__(self, scale=0.0, name='lighting', **kwargs):
         super().__init__(name)
         if scale < 0:
             raise ValueError("lighting scale should be non-negative")
@@ -1538,16 +1604,21 @@ class Lighting(VisionTransform):
             return image
 
         dtype = image.dtype
-        image = image.astype(np.float32)
+        image = (image/255.0).astype(np.float32)
         alpha = np.random.normal(scale=self.scale, size=3)
         image = image + self.eigvec.dot(alpha * self.eigval)
-        return image.clip(0, 255).astype(dtype)
+        return (image*255).clip(0, 255).astype(dtype)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
+
+@randomize_with_validate(valid_range=(0, 3.), no_change_value=0.)
+class RandomLighting(Lighting):
+    pass
+
 
 
 class CLAHE(VisionTransform):
@@ -1713,7 +1784,110 @@ class RandomErasing(VisionTransform):
         return mask
 
 
-class DetectionMixup(VisionTransform):
+
+class GridMask(VisionTransform):
+    """GridMask augmentation for image classification and object detection.
+
+    Args:
+        num_grid (int): number of grid in a row or column.
+        fill_value (int, float, lisf of int, list of float): value for dropped pixels.
+        rotate ((int, int) or int): range from which a random angle is picked. If rotate is a single int
+            an angle is picked from (-rotate, rotate). Default: (-90, 90)
+        mode (int):
+            0 - cropout a quarter of the square of each grid (left top)
+            1 - reserve a quarter of the square of each grid (left top)
+            2 - cropout 2 quarter of the square of each grid (left top & right bottom)
+
+    Targets:
+        image, mask
+
+    Image types:
+        uint8, float32
+
+    Reference:
+        https://arxiv.org/abs/2001.04086
+         https://github.com/akuxcw/GridMask
+    """
+
+    def __init__(self, d1=96, d2=None, rotate = 1, ratio = 0.5, mode=0, keep_prob=0.5, name='gridmask', **kwargs):
+        super().__init__(name)
+        self.d1 = d1
+        self.d2=d2
+        self.rotate = rotate
+        self.ratio = ratio
+        self.keep_prob = keep_prob
+        self.mode = mode
+
+
+    def set_prob(self, epoch, max_epoch):
+        self.prob = self.keep_prob * min(1, epoch / max_epoch)
+
+    def get_grid(self,image):
+        h,w=image.shape[:2]
+        hh = math.ceil((math.sqrt(h * h + w * w)))
+
+        if self.d2 is None:
+            self.d2=maximum(h,w)
+
+        d = np.random.randint(self.d1, self.d2)
+        # d = self.d
+
+        # maybe use ceil? but i guess no big difference
+        self.l = math.ceil(d * self.ratio)
+
+        mask = np.ones((hh, hh), np.float32)
+        st_h = np.random.randint(d)
+        st_w = np.random.randint(d)
+        for i in range(-1, hh // d + 1):
+            s = d * i + st_h
+            t = s + self.l
+            s = max(min(s, hh), 0)
+            t = max(min(t, hh), 0)
+            mask[s:t, :] *= 0
+        for i in range(-1, hh // d + 1):
+            s = d * i + st_w
+            t = s + self.l
+            s = max(min(s, hh), 0)
+            t = max(min(t, hh), 0)
+            mask[:, s:t] *= 0
+        r = np.random.randint(self.rotate)
+        mask = Image.fromarray(np.uint8(mask))
+        mask = mask.rotate(r)
+        mask = np.asarray(mask)
+        mask = mask[(hh - h) // 2:(hh - h) // 2 + h, (hh - w) // 2:(hh - w) // 2 + w]
+
+
+        if self.mode == 1:
+            mask = 1 - mask
+
+        mask = mask.expand_as(image)
+        image = image * mask
+
+        return image
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        rr = random.random()
+        n, c, h, w = image.size()
+        if rr > self.keep_prob:
+            y = []
+            for i in range(n):
+                y.append(self.get_grid(image[i]))
+            y = concate(y).view(n, c, h, w)
+            return y
+        else:
+            return image
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
+
+class RandomGridMask(VisionTransform):
     """Perform gamma correction on an image.
         Also known as Power Law Transform. Intensities in RGB mode are adjusted
         based on the following equation:
@@ -1726,6 +1900,147 @@ class DetectionMixup(VisionTransform):
         gain (float): The constant multiplier.
     """
 
+    def __init__(self, output_size=None, d1=None, d2=None, max_d1=None, rotate_range=(0.2, 1), ratio=0.2, mode=0, keep_prob=0.5, name='gridmask', **kwargs):
+        super().__init__(name)
+        self.output_size = output_size
+        self.d1 = d1
+        self.d2 = d2
+        self.max_d1 = max_d1
+        self.rotate_range = rotate_range
+        self.ratio = ratio
+        self.keep_prob = keep_prob
+        self.mode = mode
+        self.current_mask = None
+
+    def set_prob(self, epoch, max_epoch):
+        self.prob = self.keep_prob * min(1, epoch / max_epoch)
+
+    def get_grid(self, image):
+        h, w = image.shape[:2]
+        if self.output_size is None:
+            self.output_size = (h, w)
+        hh = math.ceil((math.sqrt(h * h + w * w)))
+        d2 = self.d2
+        d1 = None
+        if self.d2 is None:
+            d2 = minimum(h, w)
+        elif isinstance(self.d2, numbers.Number):
+            pass
+        elif isinstance(self.d2, (tuple, list)):
+            d2 = random.choice(list(self.d2))
+
+        if self.d1 is None:
+            divisors = get_divisors(minimum(h, w))
+
+            divisors = list(sorted(set(divisors)))
+            divisors = [d for d in divisors if d <= minimum(h, w) / 2.0]
+            if self.max_d1 is not None:
+                divisors = [d for d in divisors if d <= self.max_d1]
+            if minimum(h, w) in divisors:
+                divisors.remove(minimum(h, w))
+            d1 = random.choice(divisors)
+        elif isinstance(self.d1, (tuple, list)):
+            d1 = random.choice(list(self.d1))
+
+        d = np.random.randint(d1, d2)
+        # d = self.d
+
+        # maybe use ceil? but i guess no big difference
+        self.l = math.ceil(d * self.ratio)
+
+        mask = np.ones((hh, hh), np.float32)
+        st_h = np.random.randint(d)
+        st_w = np.random.randint(d)
+        for i in range(-1, hh // d + 1):
+            s = d * i + st_h
+            t = s + self.l
+            s = max(min(s, hh), 0)
+            t = max(min(t, hh), 0)
+            mask[s:t, :] *= 0
+        for i in range(-1, hh // d + 1):
+            s = d * i + st_w
+            t = s + self.l
+            s = max(min(s, hh), 0)
+            t = max(min(t, hh), 0)
+            mask[:, s:t] *= 0
+        r = np.random.randint(self.rotate_range[0], self.rotate_range[1], )
+        mask = Image.fromarray(np.uint8(mask))
+        mask = mask.rotate(r)
+        mask = np.asarray(mask)
+        mask = mask[(hh - h) // 2:(hh - h) // 2 + h, (hh - w) // 2:(hh - w) // 2 + w]
+
+        if self.mode == 1:
+            mask = 1 - mask
+        # 暫存mask以處理bbox
+        self.current_mask = mask.copy()
+        image = image * np.expand_dims(mask, -1)
+
+        return image
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
+        h, w, rr, keep = self._shape_info
+        height, width = self.output_size
+        if keep:
+            return image
+        else:
+            return self.get_grid(image)
+
+    def _apply_boxes(self, boxes, spec: TensorSpec):
+        h, w, rr, keep = self._shape_info
+        if keep:
+            return boxes
+        elif boxes is None:
+            return boxes
+        else:
+            keep_boxes = []
+            location = boxes[:, :4]
+            class_info = boxes[:, 4:5] if boxes.shape[-1] > 4 else None
+            keypoints = boxes[:, 5:] if boxes.shape[-1] > 5 else None
+            # 如果剛好格線遮蔽了小框，則排除小框定義
+            boxes[:,2] = np.clip(boxes[:,2], 0, w)
+            boxes[:,3] = np.clip(boxes[:,3], 0, h)
+            for i in range(len(boxes)):
+                box=np.round(location[i]).astype(np.int32)
+                if self.current_mask[box[1]:box[3] + 1, box[0]:box[2] + 1].sum() == 0:
+                    pass
+                else:
+                    keep_boxes.append(boxes[i])
+            if len(keep_boxes)>1:
+                return np.stack(keep_boxes, 0)
+            elif len(keep_boxes)==1:
+                return np.array(keep_boxes)
+            else:
+                return None
+
+
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        h, w, rr, keep = self._shape_info
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        h, w, rr, keep = self._shape_info
+        height, width = self.output_size
+        return mask
+
+    def _get_shape(self, image):
+        h, w = image.shape[:2]
+
+        rr = random.random()
+        keep = rr < self.keep_prob
+        if self.output_size is None:
+            self.output_size = (h, w)
+        return h, w, rr, keep
+
+
+
+
+class DetectionMixup(VisionTransform):
     def __init__(self, output_size=None, keep_prob=0.8, name='detection_mixup', **kwargs):
         super().__init__(name)
         self.alpha=1
@@ -1761,26 +2076,48 @@ class DetectionMixup(VisionTransform):
         keep, other_idx, lam = self._shape_info
         if keep:
             return boxes
+
         height, width = self.output_size
-        box1 = self.memory_cache[other_idx][spec].copy()
-        B = boxes.shape[0]
-        location = boxes[:, :4]
-        class_info = boxes[:, 4:5] if boxes.shape[-1] > 4 else None
-        keypoints = boxes[:, 5:] if boxes.shape[-1] > 5 else None
+        box1 = self.memory_cache[other_idx][spec].copy()  if  self.memory_cache[other_idx][spec] is not None else None
+        box0=boxes.copy() if boxes is not None else None
+        if boxes is None or len(boxes)==0 or np.array_equal(np.unique(boxes),-1*np.ones(1)):
+            box0=None
+        if box1 is None or len(box1)==0 or np.array_equal(np.unique(box1),-1*np.ones(1)):
+            box1=None
 
-        location1 = box1[:, :4].reshape((box1.shape[0], 2, 2))
-        class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
-        keypoints1 = box1[:, 5:].reshape((box1.shape[0], -1, 2)) if box1.shape[-1] > 5 else None
 
-        location1[:, :, 0] = np.clip(location1[:, :, 0], 0, width)
-        keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0], 0, width)
-        location1[:, :, 1] = np.clip(location1[:, :, 1], 0, height)
-        keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1], 0, height)
-        box1 = np.concatenate([location1.reshape((B, -1)), class_info1, keypoints1.reshape((B, -1))], axis=-1)
 
-        trans_boxes = np.concatenate([boxes, box1], axis=0)
-        return trans_boxes
+        merge_boxes=[]
+        if box0 is not None :
+            # B = box0.shape[0]
+            # location = box0[:, :4]
+            # class_info = box0[:, 4:5] if box0.shape[-1] > 4 else None
+            # keypoints = box0[:, 5:] if box0.shape[-1] > 5 else None
+            merge_boxes.append(box0)
+        if box1 is not None :
+            # B1 = box1.shape[0]
+            # location1 = box1[:, :4].reshape((B1, 2, 2))
+            # class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
+            # keypoints1 = box1[:, 5:].reshape((B1, -1, 2)) if box1.shape[-1] > 5 else None
+            #
+            # location1[:, :, 0] = np.clip(location1[:, :, 0], 0, width)
+            # location1[:, :, 1] = np.clip(location1[:, :, 1], 0, height)
+            # if keypoints1 is not None:
+            #     keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0], 0, width)
+            #     keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1], 0, height)
+            #
+            # merge_list=[location1.reshape((B1,4)), class_info1]
+            # if keypoints1 is not None and len(keypoints1)>0:
+            #     merge_list.append(keypoints1.reshape((B1, -1)))
+            #
+            # box1 = np.concatenate(merge_list, axis=-1)
+            merge_boxes.append(box1)
 
+        if len(merge_boxes)>0:
+            trans_boxes = np.concatenate(merge_boxes, axis=0)
+            return trans_boxes
+        else:
+            return None
 
     def _apply_mask(self, mask, spec: TensorSpec):
          return mask
@@ -1805,6 +2142,7 @@ class DetectionMixup(VisionTransform):
 
         return keep,other_idx,lam
 
+
 class ImageMosaic(VisionTransform):
     """Perform gamma correction on an image.
         Also known as Power Law Transform. Intensities in RGB mode are adjusted
@@ -1822,8 +2160,7 @@ class ImageMosaic(VisionTransform):
         super().__init__(name)
         self.output_size = output_size
         self.keep_prob = keep_prob
-        self.memory_cache=[]
-
+        self.memory_cache = []
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
@@ -1833,58 +2170,164 @@ class ImageMosaic(VisionTransform):
 
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        keep,other_idxes,center,img1_offsetx,img1_offsety,img2_offsetx,img2_offsety,img3_offsetx,img3_offsety = self._shape_info
+        keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety = self._shape_info
         if keep:
             return image
-        height,width=self.output_size
-        p1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety+center[0], img1_offsetx:img1_offsetx+width-center[1], :]
-        p2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety+height-center[0], img2_offsetx:img2_offsetx+center[1], :]
-        p3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety+height-center[0], img3_offsetx:img3_offsetx+width-center[1], :]
+        height, width = self.output_size
+        p1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety + center[0], img1_offsetx:img1_offsetx + width - center[1], :]
+        p2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety + height - center[0], img2_offsetx:img2_offsetx + center[1], :]
+        p3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety + height - center[0], img3_offsetx:img3_offsetx + width - center[1], :]
+        # print('p2',p2.shape)
+        # print('p3',p3.shape)
 
         base_img = image.copy()
-        base_img[:p1.shape[0], center[1]:center[1]+p1.shape[1], :] = p1
-        base_img[center[0]:center[0]+p2.shape[0], :p2.shape[1], :] = p2
-        base_img[center[0]:center[0]+p3.shape[0], center[1]:center[1]+p3.shape[1] :] = p3
+        base_img[:p1.shape[0], center[1]:center[1] + p1.shape[1], :] = p1
+        base_img[center[0]:center[0] + p2.shape[0], :p2.shape[1], :] = p2
+        base_img[center[0]:center[0] + p3.shape[0], center[1]:center[1] + p3.shape[1]:] = p3
 
-        return clip(image, 0, 255).astype(np.float32)
-
+        return clip(base_img, 0, 255).astype(np.float32)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
 
-    def _apply_boxes(self, boxes,spec:TensorSpec):
+    def _apply_boxes(self, boxes, spec: TensorSpec):
         keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety = self._shape_info
         if keep:
             return boxes
         height, width = self.output_size
-        box1 = self.memory_cache[other_idxes[0]][spec].copy()
-        B=boxes.shape[0]
-        location= boxes[:, :4]
-        class_info = boxes[:, 4:5] if boxes.shape[-1]>4 else None
-        keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
+        concate_list_all = []
+        box0 = boxes.copy() if boxes is not None else None
+        if box0 is None or len(box0) == 0:
+            pass
+        else:
+            location0 = box0[:, :4].reshape(box0.shape[0], 2, 2)
+            location0[:, :, 0] = np.clip(location0[:, :, 0], 0, center[1])
+            location0[:, :, 1] = np.clip(location0[:, :, 1], 0, center[0])
 
-        location1 = box1[:, :4].reshape((box1.shape[-1],2,2))
-        class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
-        keypoints1 = box1[:, 5:].reshape((box1.shape[-1],-1,2)) if box1.shape[-1] > 5 else None
+            class_info0 = box0[:, 4:5] if box0.shape[-1] > 4 else None
+            keypoints0 = box0[:, 5:] if box0.shape[-1] > 5 else None
+            if box0.shape[-1] > 5:
+                keypoints0 = box0[:, 5:].reshape(box0.shape[0], -1, 2)
+                invisible_keypoints0 = np.less_equal(keypoints0, 0).astype(np.bool)
+                keypoints0[:, :, 0] = np.clip(keypoints0[:, :, 0], 0, center[1])
+                keypoints0[:, :, 1] = np.clip(keypoints0[:, :, 1], 0, center[0])
+                keypoints0[invisible_keypoints0] = -1
+            else:
+                pass
+            concate_list0 = None
+            if keypoints0 is None:
+                # print('concate_list0',location0.reshape((box0.shape[0], 4)).shape,class_info0.shape)
+                concate_list0 = [location0.reshape((box0.shape[0], 4)), class_info0]
+            else:
+                concate_list0 = [location0.reshape((box0.shape[0], 4)), class_info0, keypoints0.reshape((box0.shape[0], -1))]
 
-        location1[:,:,0]=np.clip(location1[:,:,0],0,width)
-        keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0], 0, width)
-        location1[:, :, 1] = np.clip(location1[:, :, 1], 0, height)
-        keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1], 0, height)
-        box1=np.concatenate([location1.reshape((B,-1)),class_info1,keypoints1.reshape((B,-1))],axis=-1)
+            box0 = np.concatenate(concate_list0, axis=-1)
+            concate_list_all.append(box0)
 
-        trans_boxes=np.concatenate([boxes,box1],axis=0)
+        box1 =self.memory_cache[other_idxes[0]][spec].copy() if  self.memory_cache[other_idxes[0]][spec] is not None else None
+        if box1 is None or len(box1) == 0:
+            pass
+        else:
+            location1 = box1[:, :4].reshape(box1.shape[0], 2, 2)
+            location1[:, :, 0] = np.clip(location1[:, :, 0] - img1_offsetx + center[1], center[1], width)
+            location1[:, :, 1] = np.clip(location1[:, :, 1] - img1_offsety, 0, center[0])
+
+            class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
+            keypoints1 = None
+            if box1.shape[-1] > 5:
+                keypoints1 = box1[:, 5:].reshape(box1.shape[0], -1, 2)
+                invisible_keypoints1 = np.less_equal(keypoints1, 0).astype(np.bool)
+                keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0] - img1_offsetx + center[1], center[1], width)
+                keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1] - img1_offsety, 0, center[0])
+                keypoints1[invisible_keypoints1] = -1
+
+            else:
+                pass
+            concate_list1 = None
+            if keypoints1 is None:
+                # print('concate_list1',location1.reshape((box1.shape[0], 4)).shape,class_info1.shape)
+                concate_list1 = [location1.reshape((box1.shape[0], 4)), class_info1]
+            else:
+                concate_list1 = [location1.reshape((box1.shape[0], 4)), class_info1, keypoints1.reshape((box1.shape[0], -1))]
+            box1 = np.concatenate(concate_list1, axis=-1)
+            concate_list_all.append(box1)
+
+        box2 = self.memory_cache[other_idxes[1]][spec].copy() if  self.memory_cache[other_idxes[1]][spec] is not None else None
+        if box2 is None or len(box2) == 0:
+            pass
+        else:
+            location2 = box2[:, :4].reshape(box2.shape[0], 2, 2)
+            location2[:, :, 0] = np.clip(location2[:, :, 0] - img2_offsetx, 0, center[1])
+            location2[:, :, 1] = np.clip(location2[:, :, 1] - img2_offsety + center[0], center[0], height)
+
+            class_info2 = box2[:, 4:5] if box2.shape[-1] > 4 else None
+            keypoints2 = None
+            if box2.shape[-1] > 5:
+                keypoints2 = box2[:, 5:].reshape(box2.shape[0], -1, 2)
+                invisible_keypoints2 = np.less_equal(keypoints2, 0).astype(np.bool)
+                keypoints2[:, :, 0] = np.clip(keypoints2[:, :, 0] - img2_offsetx, 0, center[1])
+                keypoints2[:, :, 1] = np.clip(keypoints2[:, :, 1] - img2_offsety + center[0], center[0], height)
+                keypoints2[invisible_keypoints2] = -1
+
+
+            else:
+                pass
+            concate_list2 = None
+            if keypoints2 is None:
+                # print('concate_list2',location2.reshape((box2.shape[0], 4)).shape,class_info2.shape)
+                concate_list2 = [location2.reshape((box2.shape[0], 4)), class_info2]
+            else:
+                concate_list2 = [location2.reshape((box2.shape[0], 4)), class_info2, keypoints2.reshape((box2.shape[0], -1))]
+
+            box2 = np.concatenate(concate_list2, axis=-1)
+            concate_list_all.append(box2)
+
+        box3 = self.memory_cache[other_idxes[2]][spec].copy() if  self.memory_cache[other_idxes[2]][spec] is not None else None
+        if box3 is None or len(box3) == 0:
+            pass
+        else:
+            location3 = box3[:, :4].reshape(box3.shape[0], 2, 2)
+            location3[:, :, 0] = np.clip(location3[:, :, 0] - img3_offsetx + center[1], center[1], width)
+            location3[:, :, 1] = np.clip(location3[:, :, 1] - img3_offsety + center[0], center[0], height)
+
+            class_info3 = box3[:, 4:5] if box3.shape[-1] > 4 else None
+            keypoints3 = None
+            if box3.shape[-1] > 5:
+                keypoints3 = box3[:, 5:].reshape(box3.shape[0], -1, 2)
+                invisible_keypoints3 = np.less_equal(keypoints3, 0).astype(np.bool)
+                keypoints3[:, :, 0] = np.clip(keypoints3[:, :, 0] - img3_offsetx + center[1], center[1], width)
+                keypoints3[:, :, 1] = np.clip(keypoints3[:, :, 1] - img3_offsety + center[0], center[0], height)
+                keypoints3[invisible_keypoints3] = -1
+
+
+            else:
+                pass
+            concate_list3 = None
+            if keypoints3 is None:
+                # print('concate_list3',location3.reshape((box3.shape[0], 4)).shape,class_info3.shape)
+                concate_list3 = [location3.reshape((box3.shape[0], 4)), class_info3]
+            else:
+                concate_list3 = [location3.reshape((box3.shape[0], 4)), class_info3, keypoints3.reshape((box3.shape[0], -1))]
+            box3 = np.concatenate(concate_list3, axis=-1)
+            concate_list_all.append(box3)
+
+        trans_boxes = np.concatenate(concate_list_all, axis=0)
+
+        hw = clip(trans_boxes[:, :4][..., 2:] - trans_boxes[:, :4][..., :2], 0.0, None)
+        area = hw[..., 0] * hw[..., 1]
+        area_mask = area >= 1
+        trans_boxes = trans_boxes[area_mask, :]
+
         return trans_boxes
 
-
     def _apply_mask(self, mask, spec: TensorSpec):
-        keep, other_idxes, center,img1_offsetx,img1_offsety,img2_offsetx,img2_offsety,img3_offsetx,img3_offsety = self._shape_info
+        keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety = self._shape_info
         height, width = self.output_size
         if keep:
             return mask
-        mp1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety+center[0], img1_offsetx:img1_offsetx+width-center[1], :]
-        mp2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety+height-center[0], img2_offsetx:img2_offsetx+center[1], :]
-        mp3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety+height-center[0], img3_offsetx:img3_offsetx+width-center[1], :]
+        mp1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety + center[0], img1_offsetx:img1_offsetx + width - center[1], :]
+        mp2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety + height - center[0], img2_offsetx:img2_offsetx + center[1], :]
+        mp3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety + height - center[0], img3_offsetx:img3_offsetx + width - center[1], :]
 
         base_msk = mask.copy()
         base_msk[:mp1.shape[0], center[1]:center[1] + mp1.shape[1], :] = mp1
@@ -1892,14 +2335,14 @@ class ImageMosaic(VisionTransform):
         base_msk[center[0]:center[0] + mp3.shape[0], center[1]:center[1] + mp3.shape[1]:] = mp3
         return base_msk
 
-
     def _get_shape(self, image):
         if self.output_size is None:
-            self.output_size=image.shape[:2]
+            self.output_size = image.shape[:2]
         rr = random.random()
-        keep=rr<self.keep_prob or len(self.memory_cache[:-1])<=3
-        other_idxes=None
-        center=None
+        keep = rr < self.keep_prob or len(self.memory_cache[:-1]) <= 3
+        other_idxes = None
+        center = None
+        img1_offsetx = img1_offsety = img2_offsetx = img2_offsety = img3_offsetx = img3_offsety = 0
         if not keep:
             other_idxes = list(range(len(self.memory_cache[:-1])))
             random.shuffle(other_idxes)
@@ -1910,174 +2353,15 @@ class ImageMosaic(VisionTransform):
             center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
 
             img1 = self.memory_cache[other_idxes[0]].value_list[0]
-            img1_offsetx=img1.shape[1] if img1.shape[1]-1<(width-center[1]) else np.random.choice(np.arange(0,img1.shape[1]-(width-center[1]),1))
+            img1_offsetx = img1.shape[1] if img1.shape[1] - 1 < (width - center[1]) else np.random.choice(np.arange(0, img1.shape[1] - (width - center[1]), 1))
             img1_offsety = img1.shape[0] if img1.shape[0] - 1 < center[0] else np.random.choice(np.arange(0, img1.shape[0] - center[0], 1))
 
             img2 = self.memory_cache[other_idxes[1]].value_list[0]
             img2_offsetx = img2.shape[1] if img2.shape[1] - 1 < center[1] else np.random.choice(np.arange(0, img2.shape[1] - center[1], 1))
-            img2_offsety = img2.shape[0] if img2.shape[0] - 1 < (height-center[0])else np.random.choice(np.arange(0, img2.shape[0] - (height-center[0]), 1))
-
+            img2_offsety = img2.shape[0] if img2.shape[0] - 1 < (height - center[0]) else np.random.choice(np.arange(0, img2.shape[0] - (height - center[0]), 1))
 
             img3 = self.memory_cache[other_idxes[2]].value_list[0]
             img3_offsetx = img3.shape[1] if img3.shape[1] - 1 < (width - center[1]) else np.random.choice(np.arange(0, img3.shape[1] - (width - center[1]), 1))
-            img3_offsety = img3.shape[0] if img3.shape[0] - 1 < (height-center[0]) else np.random.choice(np.arange(0, img3.shape[0] - (height-center[0]), 1))
+            img3_offsety = img3.shape[0] if img3.shape[0] - 1 < (height - center[0]) else np.random.choice(np.arange(0, img3.shape[0] - (height - center[0]), 1))
 
-        return (keep,other_idxes,center,img1_offsetx,img1_offsety,img2_offsetx,img2_offsety,img3_offsetx,img3_offsety)
-
-# class ImageMosaic1(VisionTransform):
-#     """Perform gamma correction on an image.
-#         Also known as Power Law Transform. Intensities in RGB mode are adjusted
-#         based on the following equation:
-#         I_out = 255 * gain * ((I_in / 255) ** gamma)
-#         See https://en.wikipedia.org/wiki/Gamma_correction for more details.
-#     Args:
-#         gamma (float): Non negative real number. gamma larger than 1 make the
-#             shadows darker, while gamma smaller than 1 make dark regions
-#             lighter.
-#         gain (float): The constant multiplier.
-#     """
-#
-#     def __init__(self, output_size=None, keep_prob=0.7, name='image_mosaic', **kwargs):
-#         super().__init__(name)
-#         self.output_size = output_size
-#         self.keep_prob = keep_prob
-#
-#     def apply_batch(self, inputs: Sequence[Tuple], spec: Optional[TensorSpec] = None):
-#         r"""Apply transform on batch input data."""
-#         if not isinstance(inputs, OrderedDict):
-#             if spec is None and self.is_spatial == True:
-#                 self._shape_info = None
-#                 spec = TensorSpec(shape=tensor_to_shape(inputs, need_exclude_batch_axis=True, is_singleton=True), object_type=ObjectType.rgb)
-#             return self.apply(inputs, spec)
-#         else:
-#             results = OrderedDict()
-#             imgs = None
-#             boxes = None
-#             masks = None
-#             imgs = inputs.value_list[0]
-#
-#             if int_shape(imgs)[0] <= 4:
-#                 return inputs
-#             else:
-#                 for i in range(len(inputs.values())):
-#                     k, v = inputs.item_list[i]
-#                     results[k] = []
-#                     if i == 0:
-#                         imgs = v
-#                     elif isinstance(k, TensorSpec) and 'box' in str(k.object_type).lower():
-#                         boxes = v
-#                     elif isinstance(k, TensorSpec) and 'mask' in str(k.object_type).lower():
-#                         masks = v
-#                 if get_backend() == 'pytorch':
-#                     imgs = imgs.transpose([0, 2, 3, 1])
-#
-#                 for i in range(int_shape(imgs)[0]):
-#                     rr = random.random()
-#                     if rr > self.keep_prob:
-#
-#                         img = imgs[i]
-#
-#                         other_idxes = list(range(int_shape(imgs)[0]))
-#                         other_idxes.remove(i)
-#                         random.shuffle(other_idxes)
-#                         other_idxes = other_idxes[:3]
-#
-#                         height, width = self.output_size
-#                         rs = np.random.uniform(0.5, 1.5, [2])  # random shift
-#                         center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
-#
-#                         # crop each image
-#                         p1 = imgs[other_idxes[0]].copy()[:center[0], center[1]:width, :]
-#                         p2 = imgs[other_idxes[1]].copy()[center[0]:height, :center[1], :]
-#                         p3 = imgs[other_idxes[2]].copy()[center[0]:height, center[1]:width, :]
-#
-#                         base_img = img.copy()
-#                         base_img[:center[0], center[1]:width, :] = p1
-#                         base_img[center[0]:height, :center[1], :] = p2
-#                         base_img[center[0]:height, center[1]:width, :] = p3
-#
-#                         results[results.key_list[0]].append(base_img)
-#
-#                         if masks is not None and masks[i].any():
-#                             msk = masks[i]
-#                             mp1 = masks[other_idxes[0]].copy()[:center[0], center[1]:width]
-#                             mp2 = masks[other_idxes[1]].copy()[center[0]:height, :center[1]]
-#                             mp3 = masks[other_idxes[2]].copy()[center[0]:height, center[1]:width]
-#
-#                             base_msk = msk.copy()
-#                             base_msk[:center[0], center[1]:width] = mp1
-#                             base_msk[center[0]:height, :center[1]] = mp2
-#                             base_msk[center[0]:height, center[1]:width] = mp3
-#
-#                             mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
-#                             if mask_key:
-#                                 results[mask_key[0]].append(base_msk)
-#
-#                         mosaic_bboxes = []
-#                         if boxes is not None and boxes[i].any():
-#                             box = boxes[i]
-#                             box1 = boxes[other_idxes[0]]
-#                             box2 = boxes[other_idxes[1]]
-#                             box3 = boxes[other_idxes[2]]
-#                             box_list = []
-#                             if box.any():
-#                                 box[:, 0][box[:, 0] > center[1]] = center[1]
-#                                 box[:, 2][box[:, 2] > center[1]] = center[1]
-#                                 box[:, 1][box[:, 1] > center[0]] = center[0]
-#                                 box[:, 3][box[:, 3] > center[0]] = center[0]
-#                                 box_list.append(box)
-#                             if box1.any():
-#                                 box1[:, 0][box1[:, 0] < center[1]] = center[1]
-#                                 box1[:, 2][box1[:, 2] < center[1]] = center[1]
-#                                 box1[:, 1][box1[:, 1] > center[0]] = center[0]
-#                                 box1[:, 3][box1[:, 3] > center[0]] = center[0]
-#                                 box_list.append(box1)
-#
-#                             if box2.any():
-#                                 box2[:, 0][box2[:, 0] > center[1]] = center[1]
-#                                 box2[:, 2][box2[:, 2] > center[1]] = center[1]
-#                                 box2[:, 1][box2[:, 1] < center[0]] = center[0]
-#                                 box2[:, 3][box2[:, 3] < center[0]] = center[0]
-#                                 box_list.append(box2)
-#
-#                             if box3.any():
-#                                 box3[:, 0][box3[:, 0] < center[1]] = center[1]
-#                                 box3[:, 2][box3[:, 2] < center[1]] = center[1]
-#                                 box3[:, 1][box3[:, 1] < center[0]] = center[0]
-#                                 box3[:, 3][box3[:, 3] < center[0]] = center[0]
-#                                 box_list.append(box3)
-#
-#                             if len(box_list) > 0:
-#                                 mosaic_bboxes = np.concatenate(box_list)
-#                                 # remove no area bbox
-#                                 keep_x = mosaic_bboxes[:, 2] - mosaic_bboxes[:, 0] > 16
-#                                 keep_y = mosaic_bboxes[:, 3] - mosaic_bboxes[:, 1] > 16
-#                                 keep_mask = np.logical_and(keep_x, keep_y)
-#                                 mosaic_bboxes = mosaic_bboxes[keep_mask]
-#                             else:
-#                                 mosaic_bboxes = list()
-#                         box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
-#                         if box_key:
-#                             results[box_key[0]].append(mosaic_bboxes)
-#                     else:
-#                         results[results.key_list[0]].append(imgs[i])
-#                         mask_key = [k for k in results.key_list if 'mask' in str(k.object_type).lower()]
-#                         if mask_key:
-#                             results[mask_key[0]].append(masks[i])
-#                         box_key = [k for k in results.key_list if 'box' in str(k.object_type).lower()]
-#                         if box_key:
-#                             results[box_key[0]].append(boxes[i])
-#
-#             for i in range(len(results)):
-#                 if i == 0:
-#                     result_imgs = np.stack(results.value_list[i], 0)
-#                     if get_backend() == 'pytorch':
-#                         result_imgs = result_imgs.transpose([0, 3, 1, 2])
-#
-#                     results[results.key_list[0]] = result_imgs
-#                 elif not 'box' in str(results.key_list[i].object_type).lower():
-#                     results[results.key_list[i]] = np.array(results.value_list[i])
-#             return results
-#
-#     def apply(self, input: Tuple, spec: TensorSpec):
-#         return super().apply(input, spec)
+        return keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety
