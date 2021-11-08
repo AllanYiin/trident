@@ -1285,36 +1285,34 @@ class InvertColor(VisionTransform):
 
 
 
-class GrayMixRGB(VisionTransform):
-
-    def __init__(self, keep_prob=0.5, name='gray_mix_rgb', **kwargs):
+class GrayScale(VisionTransform):
+    def __init__(self, keepdims=True, name='gray_scale', **kwargs):
         super().__init__(name)
-
-        self.keep_prob = keep_prob
+        self.is_spatial = False
+        self.keepdims = keepdims
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
-        if random.random() <= self.keep_prob:
-            return image
-
-        dtype = image.dtype
-        image = image.astype(np.float32)
-        gray = cv2.cvtColor(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
-        gray0 = gray[:, :, 0]
-        min_rgb = image.mean(-1)
-        mask = np.expand_dims(np.greater(gray0, min_rgb), -1)
-        image = mask * gray + (1 - mask) * image
-
-        return image.clip(0, 255).astype(np.float32)
+        if image.ndim == 4 and self.keepdims:
+            return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGBA2GRAY), cv2.COLOR_GRAY2RGB)
+        elif image.ndim == 4 and not self.keepdims:
+            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGBA2GRAY)
+        elif image.ndim == 3 and self.keepdims:
+            return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
+        elif image.ndim == 3 and not self.keepdims:
+            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2GRAY)
+        elif image.ndim == 2 and self.keepdims:
+            return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_GRAY2RGB)
+        else:
+            return np.clip(image, 0, 255)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
-
 
 class ToRGB(VisionTransform):
     def __init__(self, name='to_rgb', **kwargs):
