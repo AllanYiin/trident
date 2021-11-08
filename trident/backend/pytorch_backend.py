@@ -14,9 +14,10 @@ import os
 import shutil
 import sys
 import uuid
+import warnings
 from collections import defaultdict, abc
 from types import MethodType
-from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Mapping, TypeVar
+from typing import List, Tuple, Optional, Union, Callable, Any, Iterable,Iterator,Mapping, TypeVar,overload
 from functools import partial
 import numpy as np
 
@@ -30,7 +31,7 @@ import torch.nn as nn
 import torch.onnx
 import torch.utils.hooks as hooks
 from torch.utils.hooks import RemovableHandle
-
+from torch._jit_internal import _copy_to_script_wrapper
 from torch.nn.parameter import Parameter
 from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
@@ -93,7 +94,7 @@ def get_device():
 
     """
     if ctx.device is None:
-        set_device("cuda" if torch.cuda.is_available() else "cpu")
+        set_device("cuda" if torch.cuda.is_available() else 'tpu' if is_tpu_available() else  "cpu")
 
     return get_session().device
 
@@ -102,6 +103,8 @@ def set_device(device='cpu'):
     device = device.lower().replace('gpu', 'cuda')
     if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
+    if device == 'tpu' and not is_tpu_available():
+        raise ValueError('Tpu is not available...')
     try:
         set_session('device', device)
 
@@ -311,11 +314,11 @@ class Parameter(nn.Parameter):
 
     @property
     def trainable(self):
-        return super().requires_grad
+        return self.requires_grad
 
     @trainable.setter
     def trainable(self, value):
-        super().requires_grad = value
+        self.requires_grad = value
 
 
 class Layer(nn.Module):
@@ -361,7 +364,9 @@ class Layer(nn.Module):
 
 
     """
-
+    _version: int = 1
+    training: bool
+    _is_full_backward_hook: Optional[bool]
     def __init__(self, name=None, keep_output=False, **kwargs):
         """
 
@@ -400,8 +405,9 @@ class Layer(nn.Module):
         self.register_buffer('_output_tensor', None, persistent=False)
 
         self._signature = None
+        self.__signature__ =get_signature(this,name=self.name)
         self._device = get_device()
-        self.__signature__ = inspect.signature(self.forward)
+
 
         self.dump_patches = True
 
@@ -510,7 +516,7 @@ class Layer(nn.Module):
                 mod.nodes = self.nodes
                 mod.is_root = False
                 mod._device = self._device
-
+                mod.to(self._device)
                 reset_name(mod, self._uid_prefixs)
                 mod.relative_name = name if mod.relative_name == '' else name + '.' + mod.relative_name
 
@@ -557,7 +563,7 @@ class Layer(nn.Module):
         ans = input('(Y/N) << ').lower()
         if ans in ['yes', 'y']:
             for name, module in self.named_modules():
-                if len(module._parameters) == 0 or module.trainable:
+                if len(module._parameters) > 0 or module.trainable:
                     module._input_shape = None
                     module._output_shape = None
                     module._built = False
@@ -632,7 +638,7 @@ class Layer(nn.Module):
     @property
     def trainable(self):
         if len(self._parameters) == 0:
-            return None
+            return False
 
         elif len(self._parameters) > 0:
             for k, v in self._parameters.items():
@@ -728,92 +734,109 @@ class Layer(nn.Module):
             """
         return self._apply(lambda t: t.cuda(device))
 
-    def to(self, *args, **kwargs):
-        r"""Moves and/or casts the parameters and buffers.
 
-        This can be called as
 
-        .. function:: to(device=None, dtype=None, non_blocking=False)
-
-        .. function:: to(dtype, non_blocking=False)
-
-        .. function:: to(tensor, non_blocking=False)
-
-        .. function:: to(memory_format=torch.channels_last)
-
-        Its signature is similar to :meth:`torch.Tensor.to`, but only accepts
-        floating point desired :attr:`dtype` s. In addition, this method will
-        only cast the floating point parameters and buffers to :attr:`dtype`
-        (if given). The integral parameters and buffers will be moved
-        :attr:`device`, if that is given, but with dtypes unchanged. When
-        :attr:`non_blocking` is set, it tries to convert/move asynchronously
-        with respect to the host if possible, e.g., moving CPU Tensors with
-        pinned memory to CUDA devices.
-
-        See below for examples.
-
-        .. note::
-            This method modifies the module in-place.
-
-        Args:
-            device (:class:`torch.device`): the desired device of the parameters
-                and buffers in this module
-            dtype (:class:`torch.dtype`): the desired floating point type of
-                the floating point parameters and buffers in this module
-            tensor (torch.Tensor): Tensor whose dtype and device are the desired
-                dtype and device for all parameters and buffers in this module
-            memory_format (:class:`torch.memory_format`): the desired memory
-                format for 4D parameters and buffers in this module (keyword
-                only argument)
-
-        Returns:
-            Module: self
-
-        Example::
-
-            >>> linear = nn.Linear(2, 2)
-            >>> linear.weight
-            Parameter containing:
-            tensor([[ 0.1913, -0.3420],
-                    [-0.5113, -0.2325]])
-            >>> linear.to(torch.double)
-            Linear(in_features=2, out_features=2, bias=True)
-            >>> linear.weight
-            Parameter containing:
-            tensor([[ 0.1913, -0.3420],
-                    [-0.5113, -0.2325]], dtype=torch.float64)
-            >>> gpu1 = torch.device("cuda:1")
-            >>> linear.to(gpu1, dtype=torch.half, non_blocking=True)
-            Linear(in_features=2, out_features=2, bias=True)
-            >>> linear.weight
-            Parameter containing:
-            tensor([[ 0.1914, -0.3420],
-                    [-0.5112, -0.2324]], dtype=torch.float16, device='cuda:1')
-            >>> cpu = torch.device("cpu")
-            >>> linear.to(cpu)
-            Linear(in_features=2, out_features=2, bias=True)
-            >>> linear.weight
-            Parameter containing:
-            tensor([[ 0.1914, -0.3420],
-                    [-0.5112, -0.2324]], dtype=torch.float16)
-
-        """
-
-        device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
-
-        if dtype is not None:
-            if not dtype.is_floating_point:
-                raise TypeError('nn.Module.to only accepts floating point '
-                                'dtypes, but got desired dtype={}'.format(dtype))
-        if device is not None:
-            self.get_root()._device = device.type
-
-        def convert(t):
-            if convert_to_format is not None and t.dim() == 4:
-                return t.to(device, dtype if t.is_floating_point() else None, non_blocking, memory_format=convert_to_format)
-            return t.to(device, dtype if t.is_floating_point() else None, non_blocking)
-
-        return self._apply(convert)
+    # def to(self, *args, **kwargs):
+    #     r"""Moves and/or casts the parameters and buffers.
+    #
+    #     This can be called as
+    #
+    #     .. function:: to(device=None, dtype=None, non_blocking=False)
+    #
+    #     .. function:: to(dtype, non_blocking=False)
+    #
+    #     .. function:: to(tensor, non_blocking=False)
+    #
+    #     .. function:: to(memory_format=torch.channels_last)
+    #
+    #     Its signature is similar to :meth:`torch.Tensor.to`, but only accepts
+    #     floating point or complex :attr:`dtype`s. In addition, this method will
+    #     only cast the floating point or complex parameters and buffers to :attr:`dtype`
+    #     (if given). The integral parameters and buffers will be moved
+    #     :attr:`device`, if that is given, but with dtypes unchanged. When
+    #     :attr:`non_blocking` is set, it tries to convert/move asynchronously
+    #     with respect to the host if possible, e.g., moving CPU Tensors with
+    #     pinned memory to CUDA devices.
+    #
+    #     See below for examples.
+    #
+    #     .. note::
+    #         This method modifies the module in-place.
+    #
+    #     Args:
+    #         device (:class:`torch.device`): the desired device of the parameters
+    #             and buffers in this module
+    #         dtype (:class:`torch.dtype`): the desired floating point or complex dtype of
+    #             the parameters and buffers in this module
+    #         tensor (torch.Tensor): Tensor whose dtype and device are the desired
+    #             dtype and device for all parameters and buffers in this module
+    #         memory_format (:class:`torch.memory_format`): the desired memory
+    #             format for 4D parameters and buffers in this module (keyword
+    #             only argument)
+    #
+    #     Returns:
+    #         Module: self
+    #
+    #     Examples::
+    #
+    #         >>> linear = nn.Linear(2, 2)
+    #         >>> linear.weight
+    #         Parameter containing:
+    #         tensor([[ 0.1913, -0.3420],
+    #                 [-0.5113, -0.2325]])
+    #         >>> linear.to(torch.double)
+    #         Linear(in_features=2, out_features=2, bias=True)
+    #         >>> linear.weight
+    #         Parameter containing:
+    #         tensor([[ 0.1913, -0.3420],
+    #                 [-0.5113, -0.2325]], dtype=torch.float64)
+    #         >>> gpu1 = torch.device("cuda:1")
+    #         >>> linear.to(gpu1, dtype=torch.half, non_blocking=True)
+    #         Linear(in_features=2, out_features=2, bias=True)
+    #         >>> linear.weight
+    #         Parameter containing:
+    #         tensor([[ 0.1914, -0.3420],
+    #                 [-0.5112, -0.2324]], dtype=torch.float16, device='cuda:1')
+    #         >>> cpu = torch.device("cpu")
+    #         >>> linear.to(cpu)
+    #         Linear(in_features=2, out_features=2, bias=True)
+    #         >>> linear.weight
+    #         Parameter containing:
+    #         tensor([[ 0.1914, -0.3420],
+    #                 [-0.5112, -0.2324]], dtype=torch.float16)
+    #
+    #         >>> linear = nn.Linear(2, 2, bias=None).to(torch.cdouble)
+    #         >>> linear.weight
+    #         Parameter containing:
+    #         tensor([[ 0.3741+0.j,  0.2382+0.j],
+    #                 [ 0.5593+0.j, -0.4443+0.j]], dtype=torch.complex128)
+    #         >>> linear(torch.ones(3, 2, dtype=torch.cdouble))
+    #         tensor([[0.6122+0.j, 0.1150+0.j],
+    #                 [0.6122+0.j, 0.1150+0.j],
+    #                 [0.6122+0.j, 0.1150+0.j]], dtype=torch.complex128)
+    #
+    #     """
+    #
+    #     device, dtype, non_blocking, convert_to_format = torch._C._nn._parse_to(*args, **kwargs)
+    #
+    #     if dtype is not None:
+    #         if not (dtype.is_floating_point or dtype.is_complex):
+    #             raise TypeError('nn.Module.to only accepts floating point or complex '
+    #                             'dtypes, but got desired dtype={}'.format(dtype))
+    #         if dtype.is_complex:
+    #             warnings.warn(
+    #                 "Complex modules are a new feature under active development whose design may change, "
+    #                 "and some modules might not work as expected when using complex tensors as parameters or buffers. "
+    #                 "Please file an issue at https://github.com/pytorch/pytorch/issues/new?template=bug-report.md "
+    #                 "if a complex module does not work as expected.")
+    #
+    #     def convert(t):
+    #         if convert_to_format is not None and t.dim() in (4, 5):
+    #             return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None,
+    #                         non_blocking, memory_format=convert_to_format)
+    #         return t.to(device, dtype if t.is_floating_point() or t.is_complex() else None, non_blocking)
+    #
+    #     return self._apply(convert)
 
     @property
     def built(self):
@@ -996,8 +1019,11 @@ class Layer(nn.Module):
         os.remove(save_path)
 
     def _call_impl(self, *input, **kwargs):
+        forward_call = (self._slow_forward if torch._C._get_tracing_state() else self.forward)
+
+        # Do not call functions when jit is used
         full_backward_hooks, non_full_backward_hooks = [], []
-        if len(self._backward_hooks) > 0 or len(_global_backward_hooks) > 0:
+        if self._backward_hooks or _global_backward_hooks:
             full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
 
         is_all_numpy = False
@@ -1005,29 +1031,24 @@ class Layer(nn.Module):
 
         # only do in the root
         if self.is_root:
-
             if isinstance(input, (tuple)):
                 is_all_numpy = all([isinstance(inp, np.ndarray) for inp in input])
-                input = tuple([to_tensor(inp, device=get_device()) for inp in input])
+                input = tuple([to_tensor(inp, device=self.device) for inp in input])
             else:
                 if isinstance(input, np.ndarray):
                     is_all_numpy = True
-                input = to_tensor(input, device=get_device())
+                input = to_tensor(input, device=self.device)
                 input = (input,)
 
-        for hook in itertools.chain(
-                _global_forward_pre_hooks.values(),
-                self._forward_pre_hooks.values()):
-            result = hook(self, input)
-            if result is not None:
-                if not isinstance(result, tuple):
-                    result = (result,)
-                input = result
+        if _global_forward_pre_hooks or self._forward_pre_hooks:
+            for hook in (*_global_forward_pre_hooks.values(), *self._forward_pre_hooks.values()):
+                result = hook(self, input)
+                if result is not None:
+                    if not isinstance(result, tuple):
+                        result = (result,)
+                    input = result
 
-        bw_hook = None
-        if len(full_backward_hooks) > 0:
-            bw_hook = hooks.BackwardHook(self, full_backward_hooks)
-            input = bw_hook.setup_input_hook(input)
+
 
         if not self._built:
             inp = unpack_singleton(input)
@@ -1054,32 +1075,39 @@ class Layer(nn.Module):
 
             self._built = True
 
-        if torch._C._get_tracing_state():
-            result = self._slow_forward(*input, **kwargs)
-        else:
-            result = self.forward(*input, **kwargs)
-            result = unpack_singleton(result)
+        bw_hook = None
+        if full_backward_hooks:
+            bw_hook = hooks.BackwardHook(self, full_backward_hooks)
+            input = bw_hook.setup_input_hook(input)
 
-            if hasattr(self, 'keep_output') and self.keep_output == True:
-                # make a op
-                self._output_tensor = result
-            if self._output_shape is None or is_built == False:
-                output = result
-                if is_tensor(output):  # one output
-                    self._output_shape = tensor_to_shape(output)
-                elif isinstance(output, (list, tuple)):
-                    output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
-                    # if not isinstance(item, (list,tuple)) lstm
-                    self._output_shape = unpack_singleton(output_shape)
 
-        for hook in itertools.chain(
-                _global_forward_hooks.values(),
-                self._forward_hooks.values()):
-            hook_result = hook(self, input, result)
-            if hook_result is not None:
-                result = hook_result
+        result = forward_call(*input, **kwargs)
+        result = unpack_singleton(result)
 
-        if (len(self._backward_hooks) > 0) or (len(_global_backward_hooks) > 0):
+
+        if hasattr(self, 'keep_output') and self.keep_output == True:
+            # make a op
+            self._output_tensor = result
+        if self._output_shape is None or is_built == False:
+            output = result
+            if is_tensor(output):  # one output
+                self._output_shape = tensor_to_shape(output)
+            elif isinstance(output, (list, tuple)):
+                output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                # if not isinstance(item, (list,tuple)) lstm
+                self._output_shape = unpack_singleton(output_shape)
+
+        if _global_forward_hooks or self._forward_hooks:
+            for hook in (*_global_forward_hooks.values(), *self._forward_hooks.values()):
+                hook_result = hook(self, input, result)
+                if hook_result is not None:
+                    result = hook_result
+
+        if bw_hook:
+            result = bw_hook.setup_output_hook(result)
+
+        # Handle the non-full backward hooks
+        if non_full_backward_hooks:
             var = result
             while not isinstance(var, torch.Tensor):
                 if isinstance(var, dict):
@@ -1088,12 +1116,12 @@ class Layer(nn.Module):
                     var = var[0]
             grad_fn = var.grad_fn
             if grad_fn is not None:
-                for hook in itertools.chain(
-                        _global_backward_hooks.values(),
-                        self._backward_hooks.values()):
+                for hook in non_full_backward_hooks:
                     wrapper = functools.partial(hook, self)
                     functools.update_wrapper(wrapper, hook)
                     grad_fn.register_hook(wrapper)
+                self._maybe_warn_non_full_backward_hook(input, result, grad_fn)
+
 
         if is_all_numpy == True and self.training == False and self.is_root == True:
             if is_tensor(result):
@@ -1296,7 +1324,9 @@ class Sequential(Layer):
                     self.get_root().signature.outputs['output'] = self._output_shape.copy()
 
         else:
-            sig = copy.deepcopy(module.signature)
+            if not hasattr(module,'_signature') or module._signature is None:
+                module._signature=get_signature(module)
+            sig = copy.deepcopy(module._signature)
             super(Sequential, self).add_module(name, module)
             if len(self) == 1 or self._signature is None:
                 self._signature = sig
@@ -1324,27 +1354,7 @@ class Sequential(Layer):
         idx %= size
         return next(islice(iterator, idx, None))
 
-    #
-    # def __getattr__(self, name):
-    #
-    #     #if name in ['output', 'output_shape', '_output_shape']:
-    #     #    return self[-1].__getattr__(name)
-    #     if '_parameters' in self.__dict__:
-    #         _parameters = self.__dict__['_parameters']
-    #         if name in _parameters:
-    #             return _parameters[name]
-    #     if '_buffers' in self.__dict__:
-    #         _buffers = self.__dict__['_buffers']
-    #         if name in _buffers:
-    #             return _buffers[name]
-    #     if '_modules' in self.__dict__:
-    #         modules = self.__dict__['_modules']
-    #         if name in modules:
-    #             return modules[name]
-    #     if name in self.__dict__:
-    #         return self.__dict__[name]
-    #     raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
-
+    @_copy_to_script_wrapper
     def __getitem__(self, idx):
         if isinstance(idx, slice):
             returnDict = OrderedDict()
@@ -1366,13 +1376,19 @@ class Sequential(Layer):
             key = self._get_item_by_idx(self._modules.keys(), idx)
             delattr(self, key)
 
+    @_copy_to_script_wrapper
     def __len__(self):
         return len(self._modules)
 
+    @_copy_to_script_wrapper
     def __dir__(self):
         keys = super(Sequential, self).__dir__()
         keys = [key for key in keys if not key.isdigit()]
         return keys
+
+    @_copy_to_script_wrapper
+    def __iter__(self) -> Iterator[nn.Module]:
+        return iter(self._modules.values())
 
     def forward(self, *x, **kwargs):
         x = unpack_singleton(x)
@@ -1387,11 +1403,11 @@ class Sequential(Layer):
                     x = module(*x, **kwargs)
             else:
                 x = module(x, **kwargs)
-            # class_name=module.__class__.__name__.lower()
-            # if 'lstm' in class_name or 'gru' in class_name:
-            #     if isinstance(x,tuple):
-            #         x
-            #         kwargs['hx']=hx
+            class_name=module.__class__.__name__.lower()
+            if 'lstm' in class_name or 'gru' in class_name:
+                if isinstance(x,tuple):
+                    x,hx=x
+                    kwargs['hx']=hx
 
         return x
 
@@ -1440,6 +1456,7 @@ class ModuleList(Layer):
             idx += len(self)
         return str(idx)
 
+    @_copy_to_script_wrapper
     def __getitem__(self, idx):
         if isinstance(idx, slice):
             return self.__class__(list(self._modules.values())[idx])
@@ -1462,15 +1479,18 @@ class ModuleList(Layer):
         str_indices = [str(i) for i in range(len(self._modules))]
         self._modules = OrderedDict(list(zip(str_indices, self._modules.values())))
 
+    @_copy_to_script_wrapper
     def __len__(self):
         return len(self._modules)
 
+    @_copy_to_script_wrapper
     def __iter__(self):
         return iter(self._modules.values())
 
     def __iadd__(self, modules):
         return self.extend(modules)
 
+    @_copy_to_script_wrapper
     def __dir__(self):
         keys = super(ModuleList, self).__dir__()
         keys = [key for key in keys if not key.isdigit()]
@@ -1571,15 +1591,15 @@ class ModuleDict(Layer):
     def __delitem__(self, key: str) -> None:
         del self._modules[key]
 
-    # @_copy_to_script_wrapper
+    @_copy_to_script_wrapper
     def __len__(self) -> int:
         return len(self._modules)
 
-    # @_copy_to_script_wrapper
+    @_copy_to_script_wrapper
     def __iter__(self):
         return iter(self._modules)
 
-    # @_copy_to_script_wrapper
+    @_copy_to_script_wrapper
     def __contains__(self, key: str) -> bool:
         return key in self._modules
 
