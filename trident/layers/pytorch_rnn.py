@@ -7,7 +7,7 @@ import math
 import numbers
 import random
 import warnings
-from typing import Optional, Tuple, overload
+from typing import Optional, Tuple, overload,Union
 
 import torch
 import torch.nn as nn
@@ -49,13 +49,14 @@ class RNNBase(Layer):
     in_sequence: bool
     filter_index: int
 
-    def __init__(self, mode: str, hidden_size: int,
+    def __init__(self, mode: str, hidden_size: int,proj_size: int = 0,
                  num_layers: int = 1,stateful=False, use_bias: bool = True, batch_first: bool = False,
-                 dropout_rate: float = 0., bidirectional: bool = False,name=None,keep_output=False,in_sequence=True,filter_index=-1) -> None:
+                 dropout_rate: float = 0., bidirectional: bool = False,keep_output=False,in_sequence=True,filter_index=-1,name=None) -> None:
         super(RNNBase, self).__init__(name=name,keep_output=keep_output)
 
         self.mode = mode
         self.hidden_size = hidden_size
+        self.proj_size= proj_size
         self.num_layers = num_layers
         self.use_bias = use_bias
         self.stateful=stateful
@@ -142,7 +143,10 @@ class RNNBase(Layer):
 
             self._flat_weights = [(lambda wn: getattr(self, wn) if hasattr(self, wn) else None)(wn) for wn in self._flat_weights_names]
             self.flatten_parameters()
-            self.reset_parameters()
+            stdv = 1.0 / math.sqrt(self.hidden_size)
+            for weight in self.parameters():
+                init.uniform_(weight, -stdv, stdv)
+           # self.reset_parameters()
 
 
     # def __setattr__(self, attr, value):
@@ -192,10 +196,12 @@ class RNNBase(Layer):
             # an inplace operation on self._flat_weights
             with torch.no_grad():
                 if torch._use_cudnn_rnn_flatten_weight():
+                    num_weights = 4 if self.use_bias else 2
+                    if self.proj_size > 0:
+                        num_weights += 1
                     torch._cudnn_rnn_flatten_weight(
-                        self._flat_weights, (4 if self.use_bias else 2),
-                        self.input_filters, rnn.get_cudnn_mode(self.mode), self.hidden_size, self.num_layers,
-                        self.batch_first, bool(self.bidirectional))
+                        self._flat_weights, num_weights,
+                        self.input_filters, rnn.get_cudnn_mode(self.mode), self.hidden_size, self.proj_size,self.num_layers,self.batch_first, bool(self.bidirectional))
 
     def _apply(self, fn):
         ret = super(RNNBase, self)._apply(fn)
@@ -227,12 +233,17 @@ class RNNBase(Layer):
 
     def get_expected_hidden_size(self, input: Tensor, batch_sizes: Optional[Tensor]) -> Tuple[int, int, int]:
         if batch_sizes is not None:
-            mini_batch = batch_sizes[0]
-            mini_batch = int(mini_batch)
+            mini_batch = int(batch_sizes[0])
         else:
             mini_batch = input.size(0) if self.batch_first else input.size(1)
         num_directions = 2 if self.bidirectional else 1
-        expected_hidden_size = (self.num_layers * num_directions,  mini_batch, self.hidden_size)
+
+        if self.proj_size > 0:
+            expected_hidden_size = (self.num_layers * num_directions,
+                                    mini_batch, self.proj_size)
+        else:
+            expected_hidden_size = (self.num_layers * num_directions,
+                                    mini_batch, self.hidden_size)
         return expected_hidden_size
 
     def check_hidden_size(self, hx: Tensor, expected_hidden_size: Tuple[int, int, int],
@@ -251,19 +262,22 @@ class RNNBase(Layer):
             return hx
         return apply_permutation(hx, permutation)
 
-    def forward(self, input: Tensor, hx: Optional[Tensor] = None, _rnn_impls=None) -> Tuple[Tensor, Tensor]:
+    def forward(self,
+                input: Union[Tensor, PackedSequence],
+                hx: Optional[Tensor] = None) -> Tuple[Union[Tensor, PackedSequence], Tensor]:
         is_packed = isinstance(input, PackedSequence)
         if is_packed:
             input, batch_sizes, sorted_indices, unsorted_indices = input
-            max_batch_size = batch_sizes[0]
-            max_batch_size = int(max_batch_size)
+            max_batch_size = int(batch_sizes[0])
         else:
+            input = cast(Tensor, input)
             batch_sizes = None
             max_batch_size = input.size(0) if self.batch_first else input.size(1)
             sorted_indices = None
             unsorted_indices = None
 
         if hx is None:
+            input = cast(Tensor, input)
             num_directions = 2 if self.bidirectional else 1
             hx = torch.zeros(self.num_layers * num_directions,
                              max_batch_size, self.hidden_size,
@@ -273,14 +287,18 @@ class RNNBase(Layer):
             # the user believes he/she is passing in.
             hx = self.permute_hidden(hx, sorted_indices)
 
+        assert hx is not None
+        input = cast(Tensor, input)
         self.check_forward_args(input, hx, batch_sizes)
         _impl = _rnn_impls[self.mode]
         if batch_sizes is None:
-            result = _impl(input, hx, self._flat_weights, self.use_bias, self.num_layers,
-                           self.dropout_rate, self.training, self.bidirectional, self.batch_first)
+            result = _impl(input, hx, self._flat_weights, self.bias, self.num_layers,
+                           self.dropout, self.training, self.bidirectional, self.batch_first)
         else:
-            result = _impl(input, batch_sizes, hx, self._flat_weights, self.use_bias,
-                           self.num_layers, self.dropout_rate, self.training, self.bidirectional)
+            result = _impl(input, batch_sizes, hx, self._flat_weights, self.bias,
+                           self.num_layers, self.dropout, self.training, self.bidirectional)
+
+        output: Union[Tensor, PackedSequence]
         output = result[0]
         hidden = result[1]
 
@@ -293,7 +311,7 @@ class RNNBase(Layer):
         if self.num_layers != 1:
             s += ', num_layers={num_layers}'
         if self.use_bias is not True:
-            s += ', bias={bias}'
+            s += ', use_bias={use_bias}'
         if self.batch_first is not False:
             s += ', batch_first={batch_first}'
         if self.dropout_rate != 0:
@@ -567,50 +585,55 @@ class LSTM(RNNBase):
         >>> output, (hn, cn) = rnn(input, (h0, c0))
     """
 
-    def __init__(self, hidden_size,num_layers:int =2,activation=None,stateful=False,use_bias=False,use_attention=False,attention_size=16,batch_first=False,dropout_rate=0,bidirectional=False,name=None,keep_output=False, in_sequence=True,filter_index=-1, **kwargs):
-        super(LSTM, self).__init__(mode='LSTM', hidden_size=hidden_size,
-                 num_layers=num_layers, stateful=stateful,use_bias=use_bias, batch_first=batch_first,
-                 dropout_rate=dropout_rate, bidirectional=bidirectional,name=name,keep_output=keep_output,in_sequence=in_sequence,filter_index=filter_index)
+    def __init__(self, hidden_size,proj_size=0,num_layers:int =2,activation=None,stateful=False,use_bias=False,use_attention=False,attention_size=16,batch_first=False,dropout_rate=0,bidirectional=False,keep_output=False,name=None, **kwargs):
+        super(LSTM, self).__init__(mode='LSTM', hidden_size=hidden_size, proj_size=proj_size,
+        num_layers=num_layers, stateful = stateful, use_bias=use_bias, batch_first = batch_first,
+        dropout_rate= dropout_rate, bidirectional = bidirectional, keep_output =keep_output, in_sequence = True, filter_index =-1, name = name)
 
-        self.mode = 'LSTM'
         self.use_attention=use_attention
         self.attention_size=attention_size
-        self.hidden_state=None
-        self.cell_state=None
 
-
-        self.stateful=stateful
 
 
 
     def initial_state(self,input) :
         max_batch_size = input.size(0) if self.batch_first else input.size(1)
         num_directions = 2 if self.bidirectional else 1
-        zeros = torch.zeros(self.num_layers * num_directions,
-                                max_batch_size, self.hidden_size,
-                                dtype=dtype.float32, requires_grad=False).to(get_device())
-        self.hidden_state=zeros
-        self.cell_state = zeros
+
+        h_zeros=torch.zeros(self.num_layers * num_directions,
+                                  max_batch_size, self.hidden_size,
+                                  dtype=input.dtype, device=input.device).to(get_device())
+        c_zeros= torch.zeros(self.num_layers * num_directions,
+                                  max_batch_size, self.hidden_size,
+                                  dtype=input.dtype, device=input.device).to(get_device())
+        hx = (h_zeros, c_zeros)
+        return hx
 
 
 
-    def clear_state(self):
-        self.hidden_state= zeros_like(self.hidden_state,dtype=dtype.float32, requires_grad=False ).to(get_device())
-        self.cell_state= zeros_like(self.cell_state,dtype=dtype.float32, requires_grad=False).to(get_device())
+    def get_expected_cell_size(self, input: Tensor, batch_sizes: Optional[Tensor]) -> Tuple[int, int, int]:
+        if batch_sizes is not None:
+            mini_batch = int(batch_sizes[0])
+        else:
+            mini_batch = input.size(0) if self.batch_first else input.size(1)
+        num_directions = 2 if self.bidirectional else 1
+        expected_hidden_size = (self.num_layers * num_directions,
+                                mini_batch, self.hidden_size)
+        return expected_hidden_size
 
     def check_forward_args(self, input: Tensor, hidden: Tuple[Tensor, Tensor], batch_sizes: Optional[Tensor]):
         self.check_input(input, batch_sizes)
         expected_hidden_size = self.get_expected_hidden_size(input, batch_sizes)
 
-        self.check_hidden_size(self.hidden_state, expected_hidden_size,
+        self.check_hidden_size(hidden[0], self.get_expected_hidden_size(input, batch_sizes),
                                'Expected hidden[0] size {}, got {}')
-        self.check_hidden_size(self.cell_state, expected_hidden_size,
+        self.check_hidden_size(hidden[1], self.get_expected_cell_size(input, batch_sizes),
                                'Expected hidden[1] size {}, got {}')
 
     def permute_hidden(self, hx: Tuple[Tensor, Tensor], permutation: Optional[Tensor]) -> Tuple[Tensor, Tensor]:
         if permutation is None:
             return hx
-        return apply_permutation(self.hidden_state, permutation), apply_permutation(self.cell_state, permutation)
+        return apply_permutation(hx[0], permutation), apply_permutation(hx[1], permutation)
 
     def attention(self, lstm_output):
         batch_size, sequence_length, channels = int_shape(lstm_output)
@@ -628,24 +651,22 @@ class LSTM(RNNBase):
 
     @overload
     @torch._jit_internal._overload_method  # noqa: F811
-    def forward(self, input: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None
+    def forward(self, x: Tensor, hx: Optional[Tuple[Tensor, Tensor]] = None
                 ) -> Tuple[Tensor, Tuple[Tensor, Tensor]]:  # noqa: F811
         pass
 
     @overload
     @torch._jit_internal._overload_method  # noqa: F811
-    def forward(self, input: PackedSequence, hx: Optional[Tuple[Tensor, Tensor]] = None
+    def forward(self,  x:PackedSequence, hx: Optional[Tuple[Tensor, Tensor]] = None
                 ) -> Tuple[PackedSequence, Tuple[Tensor, Tensor]]:  # noqa: F811
         pass
 
-    def forward(self, *x, **kwargs):  # noqa: F811
-        x=unpack_singleton(x)
-        if isinstance(x,tuple):
-            x,hx=x
-        orig_input =x
+    def forward(self, x, hx=None):
+        orig_input = x
+        is_packed_sequence=isinstance(orig_input, PackedSequence)
         self.flatten_parameters()
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
-        if isinstance(orig_input, PackedSequence):
+        if is_packed_sequence:
             x, batch_sizes, sorted_indices, unsorted_indices = x
             max_batch_size = batch_sizes[0]
             max_batch_size = int(max_batch_size)
@@ -657,38 +678,39 @@ class LSTM(RNNBase):
             sorted_indices = None
             unsorted_indices = None
 
-
-        if self.hidden_state is None or self.cell_state is None or max_batch_size!=int_shape(self.hidden_state)[1]:
-            self.initial_state(x)
+        if hx is None:
+            #if self.hidden_state is None or self.cell_state is None or max_batch_size!=int_shape(self.hidden_state)[1]:
+            hx=self.initial_state(x)
+            hx = self.permute_hidden(hx, sorted_indices)
         else:
             if not self.stateful:
-                self.clear_state()
-            self.hidden_state, self.cell_state = self.permute_hidden((self.hidden_state, self.cell_state), sorted_indices)
+                hx=self.initial_state(x)
+            hx = self.permute_hidden(hx, sorted_indices)
 
-        self.check_forward_args(x, (self.hidden_state, self.cell_state), batch_sizes)
+        self.check_forward_args(x, hx, batch_sizes)
 
         if not isinstance(x, PackedSequence):
-            result = _VF.lstm(x, (self.hidden_state, self.cell_state), self._flat_weights, self.use_bias, self.num_layers,
+            result = _VF.lstm(x,hx, self._flat_weights, self.use_bias, self.num_layers,
                               self.dropout_rate, self.training, self.bidirectional, self.batch_first)
         else:
-            result = _VF.lstm(x, batch_sizes, (self.hidden_state, self.cell_state), self._flat_weights, self.use_bias,
+            result = _VF.lstm(x, batch_sizes, hx, self._flat_weights, self.use_bias,
                               self.num_layers, self.dropout_rate, self.training, self.bidirectional)
 
 
         output = result[0].permute(1, 0, 2) if self.batch_first == False else result[0]
-        #hidden = result[1:]
-        self.hidden_state=result[1:][0].detach()
-        self.cell_state=result[1:][1].detach()
+        hidden = result[1:]
+        # self.hidden_state=hidden[0]
+        # self.cell_state=hidden[1]
         if self.use_attention:
             output = self.attention(output)
 
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
-        if isinstance(orig_input, PackedSequence):
+        if is_packed_sequence:
             output_packed = PackedSequence(output, batch_sizes, sorted_indices, unsorted_indices)
-            return output_packed, self.permute_hidden((self.hidden_state, self.cell_state), unsorted_indices)
+            return output_packed, self.permute_hidden(hidden, unsorted_indices)
         else:
 
-            return output, self.permute_hidden((self.hidden_state, self.cell_state), unsorted_indices)
+            return output, self.permute_hidden(hidden, unsorted_indices)
 
 class LSTMDecoder(Layer):
     def __init__(self, num_chars, embedding_dim, h_size=512, num_layers=2,sequence_length=128,stateful=True, dropout_rate=0.2,bidirectional=False,use_attention=False,attention_size=16,teacher_forcing_ratio=1):
@@ -896,7 +918,7 @@ class GRU(RNNBase):
             result = _VF.gru(x, batch_sizes, self.hidden_state, self._flat_weights, self.use_bias,
                              self.num_layers, self.dropout_rate, self.training, self.bidirectional)
         output = result[0]
-        self.hidden_state = result[1].detach()
+        self.hidden_state = result[1]
 
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
         if isinstance(orig_input, PackedSequence):
