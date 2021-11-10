@@ -31,6 +31,7 @@ import torch
 import torch.nn as nn
 
 from trident import __version__
+from trident import context
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 
@@ -39,7 +40,7 @@ from trident.backend.pytorch_ops import *
 from trident.backend import model
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
-from trident.callbacks import UnfreezeModelCallback,LambdaCallback
+from trident.callbacks import UnfreezeModelCallback, LambdaCallback
 from trident.backend.opencv_backend import array2image, image2array
 
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
@@ -48,14 +49,14 @@ from trident.data.data_provider import DataProvider
 from trident.optims.pytorch_constraints import get_constraint
 from trident.optims.pytorch_losses import *
 from trident.optims.pytorch_metrics import get_metric
-from trident.optims.pytorch_optimizers import get_optimizer
+from trident.optims.pytorch_optimizers import get_optimizer,Optimizer
 from trident.optims.pytorch_regularizers import get_reg
 from trident.callbacks import LambdaCallback
 from trident.layers.pytorch_layers import *
 
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
 from trident.data.image_common import *
-from trident import context
+
 
 __all__ = ['Model', 'MuiltiNetwork', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel', 'ImageGenerationModel',
            'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel', 'LanguageModel']
@@ -140,9 +141,11 @@ class Model(model.ModelBase):
                     for k, v in inputs.items():
                         inp = to_tensor(v)
                         output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=k)
-            self._model.signature = self._model._signature
+
 
         elif isinstance(output, (Layer, nn.Module)):
+            output._signature = get_signature(output)
+
             if inputs is not None and not isinstance(inputs, (tuple, list, dict)):
                 inputs = (inputs,)
             if input_shape is not None and not isinstance(input_shape, (tuple, list, dict)):
@@ -254,9 +257,13 @@ class Model(model.ModelBase):
                     op.to(get_device())
                     # prevent pytorch 'ValueError: Expected more than 1 value per channel when training, got input size ....
                     op.eval()
-                    out = fix_layer(op)(dummay_input)
+                    out = op(dummay_input)
                     model_list.append(op)
-                    output_list.extend(*out)
+                    if isinstance(out,list):
+                        output_list.extend(out)
+                    else:
+                        output_list.append(out)
+
             model = Combine(model_list)
             self._model = model
             self.name = model.name
@@ -282,7 +289,15 @@ class Model(model.ModelBase):
 
     @property
     def device(self):
-        return get_device()
+        return self._model.device if self._model is not None else None
+
+    @device.setter
+    def device(self,value):
+        if self._model is not None:
+            self._model.device=value
+            self._model.to(value)
+
+
 
     def train(self):
         if self._model is not None and isinstance(self._model, torch.Tensor):
@@ -406,6 +421,10 @@ class Model(model.ModelBase):
         if isinstance(optimizer, str):
             optimizer_class = get_optimizer(optimizer)
             self.optimizer = optimizer_class(params, **kwargs)
+        elif inspect.isclass(optimizer) and optimizer.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
+            self.optimizer = optimizer(params, **kwargs)
+        elif isinstance(optimizer,Optimizer):
+            self.optimizer =optimizer
         else:
             self.optimizer = optimizer(params, **kwargs)
 
@@ -415,7 +434,8 @@ class Model(model.ModelBase):
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, name='', **kwargs):
         alias = name
-        argnames = Signature()
+        signature = getattr(loss, "signature", None)
+
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
 
@@ -457,16 +477,17 @@ class Model(model.ModelBase):
                 self._losses[alias] = loss
             else:
                 self._losses[alias] = partial(loss, **kwargs)
-        args = get_signature(loss, alias)
+        args = get_signature(loss, alias) if signature is None else signature
         for k, v in kwargs.items():
             if k in args.inputs and v is not None:
                 args.inputs[k].default = v
-        self._losses[alias].signature = args
+        if signature is None:
+            self._losses[alias].signature = args
         print(self._losses[alias].signature)
 
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
-        # self._losses[alias].signature = argnames
+
         self._losses[alias].start_epoch = start_epoch
 
         return self
@@ -474,7 +495,7 @@ class Model(model.ModelBase):
     def with_metric(self, metric, print_only=False, name='', **kwargs):
 
         alias = name
-        argnames = OrderedDict()
+
         if (alias is None or len(alias) == 0) and hasattr(metric, '__name__'):
             alias = metric.__name__
 
@@ -504,18 +525,16 @@ class Model(model.ModelBase):
                 alias = alias + '_' + str(len(dup_keys) + 1)
             self._metrics[alias] = metric
         args = get_signature(metric, alias)
+        remove_key=[k for k in kwargs.keys() if k not in args.inputs or kwargs.get(k) is None]
+        for k in remove_key:
+            kwargs.pop(k)
 
-        for k in kwargs.keys():
-            if k in args.inputs and kwargs.get(k) is not None:
-                pass
-            else:
-                kwargs.pop(k)
         if len(kwargs) > 0:
             self._metrics[alias] = partial(metric, **kwargs)
         self._metrics[alias].signature = args
         print(self._metrics[alias].signature)
         self._metrics[alias].__name__ = alias
-        # self._metrics[alias].signature = argnames
+
         self._metrics[alias].print_only = print_only
         return self
 
@@ -640,7 +659,7 @@ class Model(model.ModelBase):
 
     def do_on_epoch_end(self):
         super().do_on_epoch_end()
-        if self.model is not None and self.model.device == 'cuda':
+        if self.model is not None and is_gpu_available() and self.model.device == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             gc.collect()
@@ -782,12 +801,12 @@ class Model(model.ModelBase):
         # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list]
+            input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list] if not is_tensor(self._model) else []
             for item in train_data.key_list:
                 if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[item].dtype.kind in {'U', 'S'}:
-                    train_data[item] =[s.decode() for s in train_data[item]]
+                    train_data[item] = [s.decode() for s in train_data[item]]
                 else:
-                    train_data[item] = to_tensor(train_data[item], device=get_device())
+                    train_data[item] = to_tensor(train_data[item]).to(get_device())
                 if item in input_list and 'float' in str(train_data[item].dtype):
                     train_data[item].require_grads = True
 
@@ -795,7 +814,7 @@ class Model(model.ModelBase):
                     if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[item].dtype.kind in {'U', 'S'}:
                         test_data[item] = [s.decode() for s in test_data[item]]
                     else:
-                        test_data[item] = to_tensor(test_data[item], device=get_device())
+                        test_data[item] = to_tensor(test_data[item]).to(get_device())
 
             self.training_context['train_data'] = train_data
             self.training_context['test_data'] = test_data
@@ -839,11 +858,18 @@ class Model(model.ModelBase):
 
                 if not accumulate_grads:
                     super().on_optimization_step_start()
+
+                    if log_gradients:
+                        self.log_gradient()
                     # amp support
                     if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
                         self.gradscaler.unscale_(self.optimizer)
                         self.gradscaler.step(self.optimizer)
                         self.gradscaler.update()
+                    elif is_tpu_available():
+                        import torch_xla.core.xla_model as xm
+                        ctx.print('current_loss device',self.training_context['current_loss'].device)
+                        xm.optimizer_step(self.optimizer, barrier=True)
                     else:
                         self.optimizer.step(self.get_current_loss)
 
@@ -857,6 +883,8 @@ class Model(model.ModelBase):
                         self._model.zero_grad()
 
                     self.do_on_optimization_step_end()
+                    for callback in self.callbacks:
+                        callback.on_optimization_step_end(self.training_context)
 
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1 if self.training_context['stop_update'] > 1 else self.training_context[
@@ -874,7 +902,7 @@ class Model(model.ModelBase):
                         (self.training_context['current_loss'] / self.accumulation_steps).backward(retain_graph=self.training_context['retain_graph'])
 
         except Exception as e:
-            print(e)
+            ctx.print(e)
             PrintException()
 
     def do_on_optimization_step_end(self):
@@ -927,7 +955,6 @@ class Model(model.ModelBase):
                 folder, filename, ext = split_path(save_path)
                 if filename == '':
                     filename = self.name
-
                 ext = '.pth.tar'
                 save_path = os.path.join(folder, filename + ext)
                 make_dir_if_need(sanitize_path(save_path))
@@ -935,41 +962,46 @@ class Model(model.ModelBase):
                 device = get_device()
                 self._model.eval()
                 self._model.cpu()
-                tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
-                _, tempfile_name, tempext = split_path(temppath)
-                move_path = os.path.join(folder, tempfile_name + tempext)
+
+                temfolder=tempfile.gettempdir()
+                tempfilename=filename+'_'+str(uuid.uuid4().node)
+                temppath=os.path.join(temfolder,tempfilename+ext)
+                move_path = os.path.join(folder, tempfilename + ext)
                 try:
-                    torch.save({
-                        'state_dict': self._model.state_dict(),
-                        'backend': 'pytorch',
-                        'trident_version': __version__,
-                        'pytorch_version': torch.__version__,
-                        'signature': self._model.signature
-                    }, temppath)
-                    os.close(tempfd)
+                    with open(temppath,'wb') as f:
+                        torch.save({
+                            'state_dict': self._model.state_dict(),
+                            'backend': 'pytorch',
+                            'trident_version': __version__,
+                            'pytorch_version': torch.__version__,
+                            'signature': self._model.signature
+                        }, f)
+
                     shutil.move(temppath, move_path)
                     if os.path.exists(save_path):
                         os.remove(save_path)
                     os.rename(move_path, save_path)
 
-                except:
+                except Exception as e:
+                    ctx.print(e)
                     if not os.path.exists(save_path):
                         if os.path.exists(move_path):
                             os.rename(move_path, save_path)
                         elif os.path.exists(temppath):
                             shutil.move(temppath, save_path)
 
+                ext = '.pth'
                 save_path = save_path.replace('.pth.tar', '.pth')
-                tempfd2, temppath2 = tempfile.mkstemp(prefix=filename, suffix='.pth')
-                _, tempfile2_name, tempext2 = split_path(temppath2)
-                move_path2 = os.path.join(folder, tempfile2_name + tempext2)
+                tempfilename2 = filename + '_' + str(uuid.uuid4().node)
+                temppath2 = os.path.join(temfolder, tempfilename2 + ext)
+                move_path2 = os.path.join(folder, tempfilename2 + ext)
                 try:
-                    save(self._model, temppath2)
-                    os.close(tempfd2)
-                    shutil.move(temppath2, move_path2)
+                    with open(temppath2, 'wb') as f:
+                        save(self._model, f)
 
+                    shutil.move(temppath2, move_path2)
                     if os.path.exists(save_path):
-                        os.unlink(save_path)
+                        os.remove(save_path)
                     os.rename(move_path2, save_path)
 
                 except:
@@ -984,7 +1016,7 @@ class Model(model.ModelBase):
 
             except Exception as e:
                 self._model.train()
-                print(e)
+                ctx.print(e)
                 PrintException()
 
         elif is_tensor(self._model) and not is_abnormal:
@@ -1016,7 +1048,7 @@ class Model(model.ModelBase):
 
             np.save(save_path, numpy_model)
 
-            sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
+            #sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
         else:
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
@@ -1029,7 +1061,8 @@ class Model(model.ModelBase):
             import_or_install('torch.onnx')
             self._model.eval()
 
-            dummy_input =tuple([to_tensor(spec.shape.get_dummy_tensor())  for spec in self.signature.inputs.value_list])
+            dummy_input = tuple([to_tensor(spec.shape.get_dummy_tensor()) for spec in self.signature.inputs.value_list])
+
             folder, filename, ext = split_path(save_path)
             if filename == '':
                 filenam = self.name
@@ -1040,34 +1073,37 @@ class Model(model.ModelBase):
             save_path = sanitize_path(save_path)
 
             outputs = self._model(dummy_input)
-            # if dynamic_axes is None:
-            #     # dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
-            #     #                 self.outputs.key_list[0]: [0]}
-            #     dynamic_axes = {self.inputs.key_list[0]: {0: 'batch'}, self.outputs.key_list[0]: {0: 'batch'}}
+            if dynamic_axes is None:
+                # dynamic_axes = {self.inputs.key_list[0]: [0],  # variable lenght axes
+                #                 self.outputs.key_list[0]: [0]}
+                dynamic_axes = {self.inputs.key_list[0]: {0: 'batch'}, self.outputs.key_list[0]: {0: 'batch'}}
 
-            dynamic_axes = {}
+            #dynamic_axes = {}
 
-            for inp in self.inputs.key_list:
-                dynamic_axes[inp] = [0]
-            for out in self.outputs.key_list:
-                dynamic_axes[out] = [0]
-            tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix='.onnx')
-            _, tempfile_name, tempext = split_path(temppath)
-            move_path = os.path.join(folder, tempfile_name + tempext)
+            # for inp in self.inputs.key_list:
+            #     dynamic_axes[inp] = [0]
+            # for out in self.outputs.key_list:
+            #     dynamic_axes[out] = [0]
+            temfolder = tempfile.gettempdir()
+            tempfilename = filename + '_' + str(uuid.uuid4().node)
+            temppath = os.path.join(temfolder, tempfilename + ext)
+            move_path = os.path.join(folder, tempfilename + ext)
+
             try:
-                with torch.no_grad():
-                    with torch.cuda.amp.autocast(enabled=False):
-                        torch.onnx.export(self._model,  # model being run
-                                          dummy_input,  # model input (or a tuple for multiple inputs)
-                                          temppath,  # where to save the model (can be a file or file-like object)
-                                          export_params=True,  # store the trained parameter weights inside the model file
-                                          opset_version=11,  # the ONNX version to export the model to
-                                          do_constant_folding=False,  # whether to execute constant folding for optimization
-                                          input_names=self.signature.inputs.key_list,  # the model's input names
-                                          keep_initializers_as_inputs=False,
-                                          output_names=self.signature.outputs.key_list,  # the model's output names
-                                          dynamic_axes=dynamic_axes)
-                os.close(tempfd)
+                with open(temppath, 'wb') as f:
+                    torch.onnx.export(self._model,  # model being run
+
+                                      dummy_input,  # model input (or a tuple for multiple inputs)
+                                      f,  # where to save the model (can be a file or file-like object)
+                                      export_params=True,  # store the trained parameter weights inside the model file
+                                      opset_version=11,  # the ONNX version to export the model to
+                                      do_constant_folding=True,  # whether to execute constant folding for optimization
+                                      input_names=self.signature.inputs.key_list,  # the model's input names
+                                      keep_initializers_as_inputs=False,
+                                      verbose=False,
+                                      output_names=self.signature.outputs.key_list,  # the model's output names
+                                      dynamic_axes=dynamic_axes)
+
                 shutil.move(temppath, move_path)
                 if os.path.exists(save_path):
                     os.remove(save_path)
@@ -1091,7 +1127,7 @@ class Model(model.ModelBase):
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
     def load_model(self, file_path, **kwargs):
-        print('Loading pretrained model from {}'.format(file_path))
+        ctx.print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
@@ -1130,7 +1166,7 @@ class Model(model.ModelBase):
                     value = pretrained_dict[key]
                     if is_tensor(value) and any_abnormal_number(value):
                         has_abnormal = True
-                        print('detect abnormal in state_dict[{0}],value:{1}'.format(key), value)
+                        ctx.print('detect abnormal in state_dict[{0}],value:{1}'.format(key, value))
                         pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
                     if is_tensor(value) and ndim(value) == 0:
                         pretrained_dict[key] = to_tensor(value.item())
@@ -1138,7 +1174,7 @@ class Model(model.ModelBase):
                 if has_abnormal:
                     sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
                 self._model.load_state_dict(pretrained_dict, strict=False)
-                print('Model loaded!')
+                ctx.print('Model loaded!')
                 # must switch to evluate first beforeinference or training
                 # Dropout and Batch normalization will behavior change!!!
 
@@ -1294,16 +1330,16 @@ class Model(model.ModelBase):
                     self.training_context['summary_writer'] = SummaryWriter(os.path.join(working_directory, 'Logs'))
 
                 except Exception as e:
-                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
-                    print(e)
+                    ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    ctx.print(e)
                     PrintException()
             elif get_backend() == 'tensorflow':
                 try:
                     from trident.loggers.tensorflow_tensorboard import SummaryWriter
                     self.training_context['summary_writer'] = SummaryWriter(os.path.join(working_directory, 'Logs'))
                 except Exception as e:
-                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
-                    print(e)
+                    ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    ctx.print(e)
                     PrintException()
 
 
@@ -1492,6 +1528,7 @@ class MuiltiNetwork(Model):
         for k in self._networks.keys():
             self._networks[k].train()
         return self
+
     def eval(self):
         for k in self._networks.keys():
             self._networks[k].eval()
@@ -1989,7 +2026,7 @@ class LanguageModel(Model):
                 self._model.train()
                 self._model.to(device)
             except Exception as e:
-                print(e)
+                ctx.print(e)
                 PrintException()
 
         elif isinstance(self._model, torch.Tensor):
@@ -2057,7 +2094,7 @@ class LanguageModel(Model):
             raise ValueError('only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
 
     def load_model(self, file_path, **kwargs):
-        print('Loading pretrained model from {}'.format(file_path))
+        ctx.print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
@@ -2098,7 +2135,7 @@ class LanguageModel(Model):
                     value = pretrained_dict[key]
                     if is_tensor(value) and any_abnormal_number(value):
                         has_abnormal = True
-                        print('detect abnormal in state_dict[{0}],value:{1}'.format(key), value)
+                        ctx.print('detect abnormal in state_dict[{0}],value:{1}'.format(key), value)
                         pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
                     if is_tensor(value) and ndim(value) == 0:
                         pretrained_dict[key] = to_tensor(value.item())
@@ -2106,11 +2143,11 @@ class LanguageModel(Model):
                 if has_abnormal:
                     sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
                 self._model.load_state_dict(pretrained_dict, strict=False)
-                print('Model loaded!')
+                ctx.print('Model loaded!')
                 # must switch to evluate first beforeinference or training
                 # Dropout and Batch normalization will behavior change!!!
 
                 self._model.eval()
-        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
-            self._model.signature = state_dict['signature']
+        if "signature" in state_dict.keys() and (self._model._signature is None or state_dict['signature'] != self._model._signature):
+            self._model._signature = state_dict['signature']
         self._model.to(get_device())

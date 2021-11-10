@@ -2,12 +2,12 @@ import inspect
 import json
 import os
 import sys
-import time
 import threading
 import platform
 from collections import OrderedDict
 import numpy as np
 import locale
+
 
 _trident_context=None
 
@@ -169,9 +169,30 @@ class _Context:
     def _initial_context(self):
         self._module_dict = dict()
         self.trident_dir = self._get_trident_dir()
-        self.backend = 'pytorch'
+        self.backend =None
+        self.print=print
+
+        self.is_tensorboard_available=False
+        self.is_tensorflow_available = False
+        self.is_pytorch_available = False
+        self.is_numba_available = False
+        self.is_tensorboard_available = False
+        if 'tensorboard' in sys.modules:
+            self.is_tensorboard_available=True
+        if 'tensorflow' in sys.modules:
+            self.is_tensorflow_available=True
+        if 'torch' in sys.modules:
+            self.is_pytorch_available=True
+        if 'cupy' in sys.modules:
+            self.is_cupy_available=True
+
+
         self.enable_tensorboard=False
         self.summary_writer=None
+        self.mlflow_logger = None
+        self.enable_mlflow = False
+
+
         self.locale = locale.getdefaultlocale()[0].lower()
 
         self.image_backend = 'opencv'
@@ -183,8 +204,19 @@ class _Context:
         self.numpy_print_format = '{0:.4e}'
         self.amp_available = False
         self.is_autocast_enabled = False
+
+        self.tensorboard_server='localhost'
+        self.tensorboard_port =6006
+        self.mlflow_server = 'localhost'
+        self.mlflow_port = 5000
+
+        if 'COLAB_TPU_ADDR' in os.environ:
+            self.tpu_address = 'grpc://' + os.environ['COLAB_TPU_ADDR']
+            print('TPU is available.')
+
         _config_path = os.path.expanduser(os.path.join(self.trident_dir, 'trident.json'))
         _config = {}
+
         if os.path.exists(_config_path):
             try:
                 with open(_config_path) as f:
@@ -202,6 +234,7 @@ class _Context:
         if 'TRIDENT_WORKING_DIR' in os.environ:
             self.working_directory = os.environ['TRIDENT_WORKING_DIR']
             os.chdir(os.environ['TRIDENT_WORKING_DIR'])
+
 
         if 'TRIDENT_BACKEND' in os.environ:
             if self.backend != os.environ['TRIDENT_BACKEND']:
@@ -274,13 +307,22 @@ class _Context:
         self.enable_tensorboard=True
         self.summary_writer = summary_writer
 
+    def try_enable_mlflow(self,mlflow_logger):
+        self.enable_mlflow=True
+        self.mlflow_logger = mlflow_logger
+
     def regist_data_provider(self,data_provider ):
         if not hasattr(self._thread_local_info,'data_providers'):
             self._thread_local_info.data_providers=OrderedDict()
         self._thread_local_info.data_providers[getattr(data_provider,'uuid')]=data_provider
 
-    def get_data_provider(self):
-        return list(self._thread_local_info.data_providers.values())
+    def get_data_provider(self,name=None):
+        if name is None:
+            return list(self._thread_local_info.data_providers.values())
+        else:
+            for dp in self._thread_local_info.data_providers.values():
+                if dp.name==name:
+                    return dp
 
     def regist_resources(self,resource_name,resource ):
         if not hasattr(self._thread_local_info,'resources'):

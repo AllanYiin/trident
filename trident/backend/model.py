@@ -22,13 +22,13 @@ from trident.backend.common import to_list, format_time, get_terminal_size, get_
     PrintException, OrderedDict, split_path, sanitize_path, adaptive_format, dtype, cyan_color, get_class
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
-
+from trident import context
 from trident.data.image_common import *
 from trident.data.vision_transforms import Unnormalize
 from trident.loggers.history import HistoryBase
 
-_session = get_session()
-working_directory = _session.working_directory
+ctx = context._context()
+working_directory = ctx.working_directory
 
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import *
@@ -283,7 +283,7 @@ class ModelBase(object):
                 self._outputs[arg_names[i + len(old_inputs)]] = spec
                 self._targets[target_arg] = spec
 
-            print(self._signature)
+            ctx.print(self._signature)
         elif not isinstance(arg_names, (list, tuple)):
             raise ValueError('arg_names should be list or tuple')
         elif len(self._signature) != len(arg_names):
@@ -715,7 +715,7 @@ class ModelBase(object):
                         if self.training_context['is_collect_data']:
                             self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
                 except Exception as e:
-                    print(e)
+                    ctx.print(e)
                     PrintException()
 
         self.do_on_loss_calculation_end()
@@ -956,7 +956,7 @@ class ModelBase(object):
                         self.do_calculate_forward(is_training=True)
 
                 except Exception as e:
-                    print(e)
+                    ctx.print(e)
                     PrintException()
 
             # write output in to data
@@ -1019,7 +1019,7 @@ class ModelBase(object):
                     history_metric_value = to_scalar(test_values[-1])
                     verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value,prev_value=test_values,value_type='metric', name=k)))
                 out_sample_evaluation_str = cyan_color(self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
-                print(out_sample_evaluation_str)
+                ctx.print(out_sample_evaluation_str)
             # self.training_context['steps'] += 1
 
         except KeyboardInterrupt as k:
@@ -1064,6 +1064,10 @@ class ModelBase(object):
 
     def gpu(self):
         self.cuda()
+
+
+    def xpu(self):
+        self._model.xpu()
 
     def train(self, mode=True):
         if isinstance(self._model, Layer):

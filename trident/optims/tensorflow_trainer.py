@@ -250,7 +250,7 @@ class Model(ModelBase):
     def device(self):
         return get_device()
 
-    def train(self):
+    def train(self,**kwargs):
         if self._model is not None and isinstance(self._model, Tensor):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
@@ -382,7 +382,7 @@ class Model(ModelBase):
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, name='', **kwargs):
         alias = name
-        argnames = Signature()
+        signature = getattr(loss, "signature", None)
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
 
@@ -424,12 +424,16 @@ class Model(ModelBase):
                 self._losses[alias] = loss
             else:
                 self._losses[alias] = partial(loss, **kwargs)
-        args = get_signature(loss, alias)
+
+
+        args = get_signature(loss, alias) if signature is None else signature
         for k, v in kwargs.items():
             if k in args.inputs and v is not None:
                 args.inputs[k].default = v
-        self._losses[alias].signature = args
-        print(self._losses[alias].signature)
+        if signature is None:
+            self._losses[alias].signature = args
+
+        ctx.print(self._losses[alias].signature)
 
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
@@ -478,7 +482,7 @@ class Model(ModelBase):
         if len(kwargs) > 0:
             self._metrics[alias] = partial(metric, **kwargs)
         self._metrics[alias].signature = args
-        print(self._metrics[alias].signature)
+        ctx.print(self._metrics[alias].signature)
         self._metrics[alias].__name__ = alias
         # self._metrics[alias].signature = argnames
         self._metrics[alias].print_only = print_only
@@ -630,7 +634,7 @@ class Model(ModelBase):
                     temp[k] = self.training_context['losses'][k][-1][-1]
             if 'total_losses' not in temp:
                 temp['total_losses'] = to_numpy(self.training_context['current_loss']).mean()
-            print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
+            ctx.print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -724,7 +728,7 @@ class Model(ModelBase):
                         # elif '' not in data_feed.value_list:
                         self.training_context['data_feed'] = data_feed
 
-                        print('data_feed', data_feed)
+                        ctx.print('data_feed', data_feed)
             except:
                 PrintException()
 
@@ -816,8 +820,7 @@ class Model(ModelBase):
 
         if self.training_context['stop_update'] < 1:
 
-            for callback in self.training_context['callbacks']:
-                callback.on_optimization_step_start(self.training_context)
+            super().on_optimization_step_start()
 
             if self.training_context['stop_update'] == 0:
                 self.optimizer.step(self.training_context['grads_and_vars'])
@@ -897,12 +900,11 @@ class Model(ModelBase):
                 self._model.cpu()
 
                 #tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
-
+                temfolder = tempfile.gettempdir()
+                tempfilename = filename + '_' + str(uuid.uuid4().node)
+                temppath = os.path.join(temfolder, tempfilename + ext)
+                move_path = os.path.join(folder, tempfilename + ext)
                 try:
-                    temfolder=tempfile.gettempdir()
-                    tempfilename=filename+'_'+str(uuid.uuid4().node)
-                    temppath=os.path.join(temfolder,tempfilename+ext)
-                    move_path = os.path.join(folder, tempfilename + ext)
                     with open(temppath,'wb') as f:
                         with tf.device('/cpu:0'):
                             save({
@@ -919,7 +921,7 @@ class Model(ModelBase):
                     os.rename(move_path, save_path)
 
                 except Exception as e:
-                    print(e)
+                    ctx.print(e)
                     if not os.path.exists(save_path):
                         if os.path.exists(move_path):
                             os.rename(move_path, save_path)
@@ -954,7 +956,7 @@ class Model(ModelBase):
 
             except Exception as e:
                 self._model.train()
-                print(e)
+                ctx.print(e)
                 PrintException()
 
 
@@ -1005,7 +1007,7 @@ class Model(ModelBase):
         self._model.train()
 
     def load_model(self, file_path, **kwargs):
-        print('Loading pretrained model from {}'.format(file_path))
+        ctx.print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
@@ -1050,7 +1052,7 @@ class Model(ModelBase):
             if has_abnormal:
                 sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
             self._model.load_state_dict(pretrained_dict, strict=False)
-            print('Model loaded!')
+            ctx.print('Model loaded!')
             # must switch to evluate first beforeinference or training
             # Dropout and Batch normalization will behavior change!!!
 
@@ -1131,7 +1133,7 @@ class Model(ModelBase):
                                 self.do_calculate_forward(is_training=True)
 
                         except Exception as e:
-                            print(e)
+                            ctx.print(e)
                             PrintException()
 
                     self.do_on_loss_calculation_start()
@@ -1174,7 +1176,7 @@ class Model(ModelBase):
                                     if self.training_context['is_collect_data']:
                                         self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
                             except Exception as e:
-                                print(e)
+                                ctx.print(e)
                                 PrintException()
 
                     self.do_on_loss_calculation_end()
@@ -1195,7 +1197,7 @@ class Model(ModelBase):
                 grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
                 # grads = tuple([where(is_nan(grad), zeros_like(grad), grad) for grad in grads])
 
-                self.training_context['grads_and_vars'] = zip(grads, vars);
+                self.training_context['grads_and_vars'] = zip(grads, vars)
 
                 # self.optimizer.step(zip(grads,vars))
                 self.do_gradient_update(log_gradients and is_collect_data)
@@ -1243,7 +1245,7 @@ class Model(ModelBase):
                         history_metric_value = to_scalar(test_values[-1])
                         verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value, prev_value=test_values, value_type='metric', name=k)))
                     out_sample_evaluation_str = cyan_color(self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
-                    print(out_sample_evaluation_str)
+                    ctx.print(out_sample_evaluation_str)
                 # self.training_context['steps'] += 1
             except KeyboardInterrupt as k:
                 self.do_on_excution_exception()
@@ -1385,16 +1387,16 @@ class Model(ModelBase):
                     self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
 
                 except Exception as e:
-                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
-                    print(e)
+                    ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    ctx.print(e)
                     PrintException()
             elif get_backend() == 'tensorflow':
                 try:
                     from trident.loggers.tensorflow_tensorboard import SummaryWriter
                     self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
                 except Exception as e:
-                    print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
-                    print(e)
+                    ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
+                    ctx.print(e)
                     PrintException()
 
 
@@ -1798,7 +1800,7 @@ class ImageDetectionModel(Model):
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
     def infer_single_image(self, img, scale=1):
-        if self._model.built:
+        if isinstance(self._model,Layer) and self._model.built:
             self._model.to(self.device)
             self._model.eval()
 
@@ -2101,12 +2103,12 @@ class LanguageModel(Model):
     def save_onnx(self, save_path=None, **kwargs):
         pass
 
-    def save_weights(self, file_path, **kwargs):
+    def save_weights(self, save_path=None, **kwargs):
         for callback in self.training_context['callbacks']:
             callback.on_model_saving_start(self.training_context)
 
-        if file_path is not None:
-            self._model.save_weights(file_path)
+        if save_path is not None:
+            self._model.save_weights(save_path)
         elif 'save_path' in self.training_context and self.training_context['save_path'] is not None:
             self._model.save_weights(self.training_context['save_path'])
 
@@ -2124,7 +2126,7 @@ class LanguageModel(Model):
         self._model.train()
 
     def load_model(self, file_path, **kwargs):
-        print('Loading pretrained model from {}'.format(file_path))
+        ctx.print('Loading pretrained model from {}'.format(file_path))
         folder, filename, ext = split_path(file_path)
         if filename == '':
             filename = self.name
@@ -2169,7 +2171,7 @@ class LanguageModel(Model):
             if has_abnormal:
                 sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
             self._model.load_state_dict(pretrained_dict, strict=False)
-            print('Model loaded!')
+            ctx.print('Model loaded!')
             # must switch to evluate first beforeinference or training
             # Dropout and Batch normalization will behavior change!!!
 
