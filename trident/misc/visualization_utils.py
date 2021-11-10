@@ -6,7 +6,7 @@ import builtins
 import sys
 
 
-from trident.backend.common import if_none
+from trident.backend.common import if_none,get_plateform
 from trident.backend.opencv_backend import array2image
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 import math
@@ -25,8 +25,23 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
 import matplotlib.patches as patches
 import matplotlib.font_manager
+import PIL
+from PIL import Image
+from PIL import ImageDraw
+from PIL import ImageFont
 
-# fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+
+
+fonts = matplotlib.font_manager.findSystemFonts(fontpaths=None, fontext='ttf')
+default_font = None
+if get_plateform()== 'linux':
+    candidate=[f for f in fonts if 'Ubuntu-LI.ttf' in f or 'LiberationSans-Regular.ttf' in f]
+    default_font=candidate[0] if len(candidate)>0 else  fonts[0]
+elif get_plateform()== 'windows':
+    candidate = [f for f in fonts if 'Microsoft Sans Serif' in matplotlib.font_manager.FontProperties(fname=f).get_name()  or 'heiti' in matplotlib.font_manager.FontProperties(fname=f).get_name() ]
+    default_font = candidate[0] if len(candidate) > 0 else fonts[0]
+# ImageFont.truetype(f, 20)
+#if
 # fontnames = [matplotlib.font_manager.FontProperties(fname=fname).get_name() for fname in fonts]
 # default_font = None
 #
@@ -39,10 +54,6 @@ import matplotlib.font_manager
 #                 default_font = matplotlib.rc('font', family=name)
 #                 break
 
-import PIL
-from PIL import Image
-from PIL import ImageDraw
-from PIL import ImageFont
 
 import colorsys
 import itertools
@@ -111,17 +122,21 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
         draw.rectangle(((box[0], box[1]), (box[2], box[3])), outline=color, fill=None, width=tl)
         fontcolor = (255, 255, 255)
         avg_color = np.array(list(color)).mean()
-        font=None#ImageFont.truetype(fonts[fontnames.index('Hiragino Sans GB')],int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
-        if avg_color > 150:
+        min_color= np.array(list(color)).min()
+        font=ImageFont.truetype(default_font, int(math.sqrt(img_shape[0] / 1000) * 16+1 ))
+        #font=None#ImageFont.truetype(fonts[fontnames.index('Hiragino Sans GB')],int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+        if avg_color >=120 or min_color<=32:
             fontcolor = (0, 0, 0)
-        if label and get_plateform() == 'windows':
-            font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
+        if label :
+            #font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
             tf = max(tl - 1, 1)  # font thickness
             t_size = draw.textsize(label, font=font)
-            c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
             offset = font.getoffset(label)
-            draw.rectangle((c1, c2), fill=color,width=2)
-            draw.text((c1[0], c1[1] - 2- offset[1] ), u'{0}'.format(label), fill=fontcolor, font=font)
+            c2 = c1[0] , c1[1] - t_size[1] - offset[1] - 3
+            c3= c1[0] + offset[0] + t_size[0]+3, c1[1]
+
+            draw.rectangle((c2, c3), fill=color,width=2)
+            draw.text((c1[0]+2, c1[1] - t_size[1] - offset[1] - 2), ' {0}'.format(label), fill=fontcolor, font=font)
     except Exception as e:
         print('image_size', img_shape,box)
         print(e)
