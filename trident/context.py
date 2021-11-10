@@ -71,6 +71,29 @@ def make_dir_if_need(path):
             sys.stderr.write('folder:{0} is not valid path'.format(folder))
     return sanitize_path(path)
 
+def get_sitepackages():  # pragma: no cover
+    installed_packages=None
+    try:
+        import subprocess
+        import sys
+
+        reqs = subprocess.check_output([sys.executable, '-m', 'pip', 'freeze'])
+        installed_packages = [r.decode().split('==')[0] for r in reqs.split()]
+        return installed_packages
+
+    # virtualenv does not ship with a getsitepackages impl so we fallback
+    # to using distutils if we can
+    # https://github.com/pypa/virtualenv/issues/355
+    except Exception as e:
+        print(e)
+        try:
+            from distutils.sysconfig import get_python_lib
+
+            return [get_python_lib()]
+
+        # just incase, don't fail here, it's not worth it
+        except Exception:
+            return []
 
 
 class _ThreadLocalInfo(threading.local):
@@ -171,21 +194,24 @@ class _Context:
         self.trident_dir = self._get_trident_dir()
         self.backend =None
         self.print=print
+        site_packages=get_sitepackages()
 
         self.is_tensorboard_available=False
         self.is_tensorflow_available = False
         self.is_pytorch_available = False
         self.is_numba_available = False
         self.is_tensorboard_available = False
-        if 'tensorboard' in sys.modules:
+        self.is_mlflow_available = False
+        if 'tensorboard' in site_packages:
             self.is_tensorboard_available=True
-        if 'tensorflow' in sys.modules:
+        if 'tensorflow' in site_packages:
             self.is_tensorflow_available=True
-        if 'torch' in sys.modules:
+        if 'torch' in site_packages:
             self.is_pytorch_available=True
-        if 'cupy' in sys.modules:
+        if 'cupy' in site_packages:
             self.is_cupy_available=True
-
+        if 'mlflow' in site_packages:
+            self.is_mlflow_available = True
 
         self.enable_tensorboard=False
         self.summary_writer=None
