@@ -34,8 +34,8 @@ class Identity(Layer):
         tensor([-3.0, -1.0, 0.0, 2.0])
 
     """
-    def __init__(self, name=None):
-        super(Identity, self).__init__(name=name)
+    def __init__(self, keep_output=False,name=None):
+        super(Identity, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -60,8 +60,8 @@ class Relu(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(Relu, self).__init__(name=name)
+    def __init__(self,keep_output=False, name=None):
+        super(Relu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -94,8 +94,8 @@ class Relu6(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(Relu6, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Relu6, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -119,8 +119,8 @@ class LeakyRelu(Layer):
 
     """
 
-    def __init__(self, alpha=0.2, name=None):
-        super(LeakyRelu, self).__init__()
+    def __init__(self, alpha=0.2, keep_output=False,name=None):
+        super(LeakyRelu, self).__init__(keep_output=keep_output,name=name)
         self.alpha = alpha
         self._built = True
 
@@ -148,8 +148,8 @@ class LeakyRelu6(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(LeakyRelu6, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(LeakyRelu6, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -169,8 +169,8 @@ class SmoothRelu(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(SmoothRelu, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(SmoothRelu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -195,8 +195,8 @@ class CRelu(Layer):
         ([pdf](http://proceedings.mlr.press/v48/shang16.pdf))
     """
 
-    def __init__(self, axis=1,name=None):
-        super(CRelu, self).__init__()
+    def __init__(self, axis=1,keep_output=False,name=None):
+        super(CRelu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
         self.axis=axis
 
@@ -230,8 +230,8 @@ class Silu(Layer):
         >>> output = m(input)
     """
 
-    def __init__(self, name=None):
-        super(Silu, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Silu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -254,8 +254,8 @@ class PRelu(Layer):
 
     """
 
-    def __init__(self, num_parameters=None, init=0.25, name=None):
-        super(PRelu, self).__init__(name=name)
+    def __init__(self, num_parameters=None, init=0.25, keep_output=False,name=None):
+        super(PRelu, self).__init__(keep_output=keep_output,name=name)
         self.num_parameters = None
         if num_parameters == 1:
             self.num_parameters = num_parameters
@@ -287,8 +287,8 @@ class Sigmoid(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(Sigmoid, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Sigmoid, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -311,8 +311,8 @@ class Tanh(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(Tanh, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Tanh, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -337,8 +337,8 @@ class Swish(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(Swish, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Swish, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -358,8 +358,8 @@ class HardSigmoid(Layer):
 
     """
 
-    def __init__(self, inplace=False, name=None):
-        super(HardSigmoid, self).__init__()
+    def __init__(self, inplace=False, keep_output=False,name=None):
+        super(HardSigmoid, self).__init__(keep_output=keep_output,name=name)
 
         self.inplace = inplace
         self._built = True
@@ -390,8 +390,8 @@ class HardSwish(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(HardSwish, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(HardSwish, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -406,8 +406,8 @@ class HardTanh(Layer):
         >>> HardTanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
     """
 
-    def __init__(self, name=None):
-        super(HardTanh, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(HardTanh, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -438,8 +438,8 @@ class Selu(Layer):
         Günter Klambauer, Thomas Unterthiner, Andreas Mayr, Sepp Hochreiter
 
     """
-    def __init__(self,  name=None):
-        super(Selu, self).__init__()
+    def __init__(self,  keep_output=False,name=None):
+        super(Selu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -456,8 +456,8 @@ class Elu(Layer):
          ```
     """
 
-    def __init__(self, name=None):
-        super(Elu, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Elu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -466,8 +466,8 @@ class Elu(Layer):
 
 
 class LecunTanh(Layer):
-    def __init__(self, name=None):
-        super(LecunTanh, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(LecunTanh, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -476,8 +476,8 @@ class LecunTanh(Layer):
 
 
 class SoftSign(Layer):
-    def __init__(self, name=None):
-        super(SoftSign, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(SoftSign, self).__init__(keep_output=keep_output,name=name)
 
     def forward(self, x, **kwargs):
         
@@ -485,8 +485,8 @@ class SoftSign(Layer):
 
 
 class SoftPlus(Layer):
-    def __init__(self, name=None):
-        super(SoftPlus, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(SoftPlus, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -495,8 +495,8 @@ class SoftPlus(Layer):
 
 
 class Logit(Layer):
-    def __init__(self, name=None):
-        super(Logit, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Logit, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -520,8 +520,8 @@ class LogLog(Layer):
             tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
 
     """
-    def __init__(self, name=None):
-        super(LogLog, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(LogLog, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -546,8 +546,8 @@ class Mish(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super().__init__()
+    def __init__(self, keep_output=False,name=None):
+        super().__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -573,8 +573,8 @@ class HardMish(Layer):
         <tf.Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32)>
 
     """
-    def __init__(self,name=None):
-        super(HardMish, self).__init__(name=name)
+    def __init__(self,keep_output=False,name=None):
+        super(HardMish, self).__init__(keep_output=keep_output,name=name)
         self._built = True
     def forward(self, x, **kwargs):
         
@@ -593,8 +593,8 @@ class Softmax(Layer):
            ValueError: In case `dim(x) == 1`.
     """
 
-    def __init__(self, axis=1,name=None):
-        super(Softmax, self).__init__()
+    def __init__(self, axis=1,keep_output=False,name=None):
+        super(Softmax, self).__init__(keep_output=keep_output,name=name)
         self.axis=axis
         self._built = True
 
@@ -604,8 +604,8 @@ class Softmax(Layer):
 
 
 class LogSoftmax(Layer):
-    def __init__(self, name=None):
-        super(LogSoftmax, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(LogSoftmax, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -633,8 +633,8 @@ class Gelu(Layer):
 
     """
 
-    def __init__(self, name=None):
-        super(Gelu, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(Gelu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -647,8 +647,8 @@ class GptGelu(Layer):
     slightly different results).
     """
 
-    def __init__(self, name=None):
-        super(GptGelu, self).__init__()
+    def __init__(self, keep_output=False,name=None):
+        super(GptGelu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
 
     def forward(self, x, **kwargs):
@@ -666,8 +666,8 @@ class SIREN(Layer):
     Sitzmann et. al. (https://arxiv.org/abs/2006.09661)
     """
 
-    def __init__(self, w0=1.0,name=None):
-        super(SIREN, self).__init__()
+    def __init__(self, w0=1.0,keep_output=False,name=None):
+        super(SIREN, self).__init__(keep_output=keep_output,name=name)
         self._built = True
         self.w0 = w0
 
@@ -680,11 +680,13 @@ def get_activation(fn_name,only_layer=False):
     """
 
     Args:
+        only_layer (bool):
         fn_name ():
 
     Returns:
 
     Examples:
+        >>> a=get_activation('relu')
         >>> print(get_activation('swish'))
 
 

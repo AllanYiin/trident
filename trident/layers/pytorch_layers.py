@@ -28,7 +28,7 @@ from trident.layers.pytorch_normalizations import get_normalization
 __all__ = ['Dense', 'Embedding', 'Flatten', 'Concatenate', 'Concate', 'SoftMax', 'Add', 'Subtract', 'Dot', 'Scale', 'Conv1d', 'Conv2d', 'Conv3d',
            'TransConv1d', 'TransConv2d', 'TransConv3d', 'SeparableConv1d', 'SeparableConv2d', 'SeparableConv3d',
            'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'GatedConv2d', 'GcdConv2d', 'Lambda', 'Reshape', 'Permute',
-           'CoordConv2d', 'Upsampling2d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer', 'Aggregation']
+           'CoordConv2d', 'Upsampling1d', 'Upsampling2d', 'Upsampling3d', 'Dropout', 'AlphaDropout', 'SelfAttention', 'SingleImageLayer', 'Aggregation']
 
 _session = get_session()
 
@@ -82,6 +82,12 @@ class Dense(Layer):
         >>> output = m(input)
         >>> print(output.size())
         torch.Size([2, 30])
+
+        >>> m = Dense(128)
+        >>> input = to_tensor(torch.randn(1, 32,64))
+        >>> output = m(input)
+        >>> print(output.size())
+        torch.Size([1, 32,128])
     """
 
     def __init__(self, num_filters=None, use_bias=True, activation=None, weights_norm=None, keep_output=False, name=None, filter_index=-1, depth_multiplier=1, **kwargs):
@@ -124,19 +130,14 @@ class Dense(Layer):
 
     def forward(self, x, **kwargs):
         # x=enforce_singleton(x)
-        if ndim(x) > 2:
-            x = squeeze(x)
-        shp = None
-        # if hasattr(self, 'in_sequence') and self.in_sequence:
-        #     x=x.permute(0,2,1)
+        # if ndim(x) > 2:
+        #     x = squeeze(x)
+        # shp = None
 
         if hasattr(self, 'weights_norm') and self.weights_norm is not None:
             x = F.linear(x, self.weights_norm(self.weight), self.bias)
         else:
             x = F.linear(x, self.weight, self.bias)
-
-        # if hasattr(self, 'in_sequence') and self.in_sequence:
-        #     x = x.permute(0, 2, 1)
 
         if self.activation is not None:
             x = self.activation(x)
@@ -223,12 +224,12 @@ class Embedding(Layer):
     keep_output: bool
     name: str
 
-    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = None,
+    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = 3,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
-                 sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=1, keep_output: bool = False, name: Optional[str] = None, add_noise=False,
+                 sparse: bool = False, _weight: Optional[Tensor] = None, keep_output: bool = False, name: Optional[str] = None, add_noise=False,
                  noise_intensity=0.005) -> None:
-        super(Embedding, self).__init__(keep_output=keep_output, name=name)
-        self.filter_index = filter_index
+        super(Embedding, self).__init__(keep_output=keep_output, filter_index=1, name=name)
+
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.add_noise = add_noise
@@ -247,21 +248,23 @@ class Embedding(Layer):
         self.norm_type = norm_type
         self.scale_grad_by_freq = scale_grad_by_freq
         if _weight is not None and int_shape(_weight)[-1] == embedding_dim and len(int_shape(_weight)) == 2:
-            self.weight = Parameter(_weight)
+            self.weight = Parameter(_weight.to(self.get_root().device))
             self.weight.requires_grad = False
             self.num_embeddings = int_shape(self.weight)[0]
-            self._built = True
-        elif _weight is not None:
-            raise ValueError('Shape[-1] of weight does not match embedding_dim')
-        elif _weight is None and self.num_embeddings is not None:
-            self.weight = Parameter(torch.Tensor(self.num_embeddings, self.embedding_dim))
-            init.normal_(self.weight)
-            self._built = True
-        if self._built:
-            self.to(self.device)
             if self.padding_idx is not None:
                 with torch.no_grad():
                     self.weight[self.padding_idx].fill_(0)
+            self._built = True
+        elif _weight is not None:
+            raise ValueError('Shape[-1] of weight does not match embedding_dim')
+        elif _weight is None and self.num_embeddings is not None and self.embedding_dim is not None:
+            self.weight = Parameter(torch.Tensor(self.num_embeddings, self.embedding_dim).to(self.get_root().device))
+            init.normal_(self.weight)
+            if self.padding_idx is not None:
+                with torch.no_grad():
+                    self.weight[self.padding_idx].fill_(0)
+            self._built = True
+
         self.sparse = sparse
 
     def build(self, input_shape: TensorShape):
@@ -484,12 +487,12 @@ class SoftMax(Layer):
             self.noise_intensity = 0.005
         if self.training:
             if self.add_noise:
-                noise = self.noise_intensity * torch.randn_like(x, dtype=dtype.float32)
+                noise = self.noise_intensity * torch.randn(x.shape, dtype=dtype.float32,device=x.device).detach()
                 x = x + noise
-            x = F.log_softmax(x, dim=self.axis)
+            return F.log_softmax(x, dim=self.axis)
         else:
-            x = torch.softmax(x, dim=self.axis)
-        return x
+            return torch.exp(F.log_softmax(x, dim=self.axis))
+
 
 
 class Scale(Layer):
@@ -541,9 +544,9 @@ class Scale(Layer):
                 self.register_buffer('weight_power', ones(1, dtype=dtype.float32))
             elif self.mode == 'channel':
 
-                self.register_buffer('weight_scale', Parameter(ones(self.input_filters, dtype=dtype.float32)))
-                self.register_buffer('weight_shift', Parameter(zeros(self.input_filters, dtype=dtype.float32)))
-                self.register_buffer('weight_power', Parameter(ones(self.input_filters, dtype=dtype.float32)))
+                self.register_parameter('weight_scale', Parameter(ones(self.input_filters, dtype=dtype.float32)))
+                self.register_parameter('weight_shift', Parameter(zeros(self.input_filters, dtype=dtype.float32)))
+                self.register_parameter('weight_power', Parameter(ones(self.input_filters, dtype=dtype.float32)))
             elif self.mode == 'elementwise':
                 new_shape = input_shape.dims[1:]
                 self.register_parameter('weight_scale', Parameter(ones(new_shape, dtype=dtype.float32)))
@@ -580,12 +583,20 @@ class Aggregation(Layer):
         self.keepdims = keepdims
 
     def build(self, input_shape: TensorShape):
-        if self._built == False:
+        if not self._built:
             dims = input_shape.dims
-            if self.keepdims == True:
-                dims[self.axis] = 1
+            if self.keepdims:
+                if isinstance(self.axis,(list,tuple)):
+                    for a in self.axis:
+                        dims[a] = 1
+                elif isinstance(self.axis,numbers.Integral):
+                    dims[self.axis] = 1
             else:
-                dims.pop(self.axis)
+                if isinstance(self.axis,(list,tuple)):
+                    for a in self.axis:
+                        dims.pop(self.axis)
+                elif isinstance(self.axis,numbers.Integral):
+                    dims.pop(self.axis)
             self.output_shape = TensorShape(dims)
             self._built = True
 
@@ -1612,7 +1623,7 @@ class DepthwiseConv3d(_ConvNd):
         self.activation = get_activation(activation)
         self._built = False
 
-    def forward(self, x, **kwargs):
+    def conv3d_forward(self, x, **kwargs):
         if self.padding_mode == 'circular':
             expanded_padding = (
                 (self.padding[2] + 1) // 2, self.padding[2] // 2, (self.padding[1] + 1) // 2, self.padding[1] // 2, (self.padding[0] + 1) // 2, self.padding[0] // 2)
@@ -1621,7 +1632,10 @@ class DepthwiseConv3d(_ConvNd):
             x = F.pad(x, (self.padding[2], self.padding[2], self.padding[1], self.padding[1], self.padding[0], self.padding[0]),
                       mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
-        x = self.conv1(x)
+        return F.conv3d(x, self.weight, self.bias, self.strides, _triple(0), self.dilation, self.groups)
+    def forward(self, x, **kwargs):
+        x = self.conv3d_forward(x)
+
         if self.activation is not None:
             x = self.activation(x)
         return x
@@ -2246,36 +2260,6 @@ class CoordConv2d(Layer):
         return ret
 
 
-class Upsampling2d(Layer):
-    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False, **kwargs):
-        super(Upsampling2d, self).__init__(keep_output=keep_output, name=name)
-        self.rank = 2
-        self.size = size
-        if isinstance(scale_factor, tuple):
-            self.scale_factor = tuple(float(factor) for factor in scale_factor)
-        else:
-            self.scale_factor = float(scale_factor) if scale_factor else None
-        self.mode = mode
-        self.align_corners = align_corners
-
-    def forward(self, x, **kwargs):
-
-        if self.mode == 'pixel_shuffle':
-            return F.pixel_shuffle(x, int(self.scale_factor))
-        elif self.mode == 'nearest':
-            return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
-        else:
-            return F.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners)
-
-    def extra_repr(self):
-        if self.scale_factor is not None:
-            info = 'scale_factor=' + str(self.scale_factor)
-        else:
-            info = 'size=' + str(self.size)
-        info += ', mode=' + self.mode
-        return info
-
-
 class Upsampling1d(Layer):
     def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False, **kwargs):
         super(Upsampling1d, self).__init__(keep_output=keep_output, name=name)
@@ -2306,10 +2290,71 @@ class Upsampling1d(Layer):
         return info
 
 
+class Upsampling2d(Layer):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False, **kwargs):
+        super(Upsampling2d, self).__init__(keep_output=keep_output, name=name)
+        self.rank = 2
+        self.size = size
+        if isinstance(scale_factor, tuple):
+            self.scale_factor = tuple(float(factor) for factor in scale_factor)
+        else:
+            self.scale_factor = float(scale_factor) if scale_factor else None
+        self.mode = mode
+        self.align_corners = align_corners
+
+    def forward(self, x, **kwargs):
+
+        if self.mode == 'pixel_shuffle':
+            return F.pixel_shuffle(x, int(self.scale_factor))
+        elif self.mode == 'nearest':
+            return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
+        else:
+            return F.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners)
+
+    def extra_repr(self):
+        if self.scale_factor is not None:
+            info = 'scale_factor=' + str(self.scale_factor)
+        else:
+            info = 'size=' + str(self.size)
+        info += ', mode=' + self.mode
+        return info
+
+
+
+class Upsampling3d(Layer):
+    def __init__(self, size=None, scale_factor=None, mode='nearest', align_corners=True, name=None, keep_output=False, **kwargs):
+        super(Upsampling3d, self).__init__(keep_output=keep_output, name=name)
+        self.rank = 3
+        self.size = size
+        if isinstance(scale_factor, tuple):
+            self.scale_factor = tuple(float(factor) for factor in scale_factor)
+        else:
+            self.scale_factor = float(scale_factor) if scale_factor else None
+        self.mode = mode
+        self.align_corners = align_corners
+
+    def forward(self, x, **kwargs):
+
+        if self.mode == 'pixel_shuffle':
+            return pixel_shuffle3d(x, int(self.scale_factor))
+        elif self.mode == 'nearest':
+            return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
+        else:
+            return F.interpolate(x, self.size, self.scale_factor, self.mode, self.align_corners)
+
+    def extra_repr(self):
+        if self.scale_factor is not None:
+            info = 'scale_factor=' + str(self.scale_factor)
+        else:
+            info = 'size=' + str(self.size)
+        info += ', mode=' + self.mode
+        return info
+
+
 class Dropout(Layer):
     def __init__(self, dropout_rate=0, name=None, keep_output=False, **kwargs):
         super(Dropout, self).__init__(keep_output=keep_output, name=name)
-        self.inplace = True
+        self.inplace = False
         if dropout_rate < 0 or dropout_rate > 1:
             raise ValueError("dropout probability has to be between 0 and 1, ""but got {}".format(dropout_rate))
         self.dropout_rate = dropout_rate

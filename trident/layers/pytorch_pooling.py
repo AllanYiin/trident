@@ -234,7 +234,7 @@ class MaxPool2d(_PoolNd):
                             self.return_indices)
 
 
-class MaxPool3d(_PoolNd):
+class MaxPool3d(Layer):
     """Applies a 3D max pooling over an input signal composed of several input
     planes.
 
@@ -307,6 +307,7 @@ class MaxPool3d(_PoolNd):
         self.padding = _triple(self.padding)
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
+
 
     def forward(self, x,**kwargs):
         return F.max_pool3d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
