@@ -28,6 +28,7 @@ def write_config(_config_path):
             session.pop('_thread_local_info')
             session.pop('_context_handle')
             session.pop('_module_dict')
+            session.pop('print')
             f.write(json.dumps(session, indent=4))
     except IOError:
         # Except permission denied.
@@ -62,13 +63,23 @@ if get_backend()== 'pytorch':
     _session.image_data_format='channels_first'
     _session.image_channel_order='rgb'
     import torch
+    from trident.backend.pytorch_ops import *
+
     if torch.cuda.is_available():
         os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
         os.environ["CUDA_VISIBLE_DEVICES"] = "0"
         set_session('device','cuda')
+    elif is_tpu_available():
+        import torch_xla.core.xla_model as xm
+
+        os.environ['XLA_USE_BF16'] = '1'
+        os.environ['XLA_TENSOR_ALLOCATOR_MAXSIZE'] = '1000000000'
+        set_session('device', 'tpu')
+        set_session('print', xm.master_print)
 
 
-    from trident.backend.pytorch_ops import *
+
+
     from trident.backend.pytorch_backend import *
 
 elif _session.backend == 'tensorflow':

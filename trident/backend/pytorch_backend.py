@@ -99,25 +99,37 @@ def get_device():
     return get_session().device
 
 
-def set_device(device='cpu'):
+def set_device(device=None):
+
+    if device is None:
+        if is_gpu_available():
+            device='cuda'
+        elif is_tpu_available():
+            device='xla'
+        else:
+            device='cpu'
     device = device.lower().replace('gpu', 'cuda')
     if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
     if device == 'tpu' and not is_tpu_available():
         raise ValueError('Tpu is not available...')
     try:
-        set_session('device', device)
+        device_=device
+        if device=='tpu':
+            import torch_xla.core.xla_model as xm
+            device_ = xm.xla_device()
+        set_session('device', device_)
 
         gcitems = gc.get_objects()
         for i in range(len(gcitems)):
             obj = gcitems[i]
             try:
-                if is_tensor(obj):
-                    obj.to(device)
+                if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                    obj.to(device_)
                 elif isinstance(obj, nn.Module):
-                    obj.to(device)
-            except Exception as e:
-                print(e)
+                    obj.to(device_)
+            except Exception:
+                pass
     except Exception as e:
         print(e)
 
@@ -143,8 +155,7 @@ def load(f):
     item = torch.load(f, map_location=torch.device('cpu'))
     if isinstance(item, nn.Module):
         item.eval()
-        if 'cuda' in get_device():
-            item.cuda()
+        item.to(get_device())
     return item
 
 
@@ -405,7 +416,7 @@ class Layer(nn.Module):
         self.register_buffer('_output_tensor', None, persistent=False)
 
         self._signature = None
-        self.__signature__ =get_signature(self,name=self.name)
+        self._signature=get_signature(self,name=self.name)
         self._device = get_device()
 
 
@@ -673,9 +684,9 @@ class Layer(nn.Module):
             self.to(value)
         elif isinstance(value, torch.device):
             self._device = value.type
-            self.to(value)
+            self.to(value.type)
         else:
-            print(value)
+            self._device = value
             self.to(value)
 
     def cuda(self, device: Optional[Union[int, torch.device]] = None):
@@ -708,6 +719,9 @@ class Layer(nn.Module):
         Returns:
             Module: self
         """
+        if is_tpu_available() and (device == 'tpu' or device is None):
+            import torch_xla.core.xla_model as xm
+            device = xm.xla_device()
         return self._apply(lambda t: t.xpu(device))
 
     def cpu(self):
@@ -1033,11 +1047,11 @@ class Layer(nn.Module):
         if self.is_root:
             if isinstance(input, (tuple)):
                 is_all_numpy = all([isinstance(inp, np.ndarray) for inp in input])
-                input = tuple([to_tensor(inp, device=self.device) for inp in input])
+                input = tuple([to_tensor(inp, device=get_device()) for inp in input])
             else:
                 if isinstance(input, np.ndarray):
                     is_all_numpy = True
-                input = to_tensor(input, device=self.device)
+                input = to_tensor(input, device=get_device())
                 input = (input,)
 
         if _global_forward_pre_hooks or self._forward_pre_hooks:
@@ -1235,6 +1249,7 @@ class Layer(nn.Module):
         return main_str
 
 
+
 class Sequential(Layer):
     r"""A sequential container.
     Modules will be added to it in the order they are passed in the constructor.
@@ -1333,12 +1348,12 @@ class Sequential(Layer):
             elif len(self) > 1:
                 self._signature.outputs = copy.deepcopy(sig.outputs)
         if len(self) > 0:
-            self.__signature__ = self[0].__signature__
+            self._signature = self[0]._signature
 
     def remove_at(self, idx):
         self.__delitem__(idx)
         if len(self) > 0:
-            self.__signature__ = self[0].__signature__
+            self._signature = self[0]._signature
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
             if isinstance(self._signature, Signature):
@@ -1861,6 +1876,8 @@ class Combine(Layer):
         return None
 
 
+
+
 def print_network(net, verbose=False):
     num_params = 0
     for i, param in enumerate(net.parameters()):
@@ -2369,8 +2386,8 @@ def fix_layer(layer: Layer):
 
     for module in layer.modules():
         module.dump_patches = True
-        if not hasattr(module, '__signature__'):
-            module.__signature__ = inspect.signature(module.forward)
+        if not hasattr(module, '_signature'):
+            module._signature = inspect.signature(module.forward)
         class_name = module.__class__.__name__
         if not hasattr(layer, 'get_root'):
             setattr(layer, 'get_root', MethodType(get_root, layer))
@@ -2486,7 +2503,7 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
         mod.register_buffer('_output_tensor', None, persistent=False)
 
         mod._device = get_device()
-        mod.__signature__ = inspect.signature(mod.forward)
+        mod._signature = inspect.signature(mod.forward)
         mod.dump_patches = True
         if not hasattr(mod, 'get_root'):
             setattr(mod, 'get_root', MethodType(get_root, mod))

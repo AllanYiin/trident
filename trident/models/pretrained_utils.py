@@ -96,13 +96,16 @@ def _make_recovery_model_include_top(recovery_model:Layer,default_shape=None,inp
         for module in recovery_model.modules():
             module._input_shape=None
             module._output_shape = None
-    recovery_model.to(get_device())
-    out = recovery_model(to_tensor(new_tensorshape.get_dummy_tensor(), device=get_device()))
 
+    recovery_model.to(get_device())
+    recovery_model.device=get_device()
+    dummy_input=to_tensor(new_tensorshape.get_dummy_tensor()).to(recovery_model.device)
+    print(dummy_input.device)
+    out = recovery_model(dummy_input)
     if isinstance(recovery_model.signature, Signature):
         recovery_model.signature.inputs.value_list[0].shape = TensorShape(dims)
         recovery_model.signature.inputs.value_list[0].object_type=ObjectType.rgb
-    recovery_model.to(get_device())
+
     return recovery_model
 
 

@@ -36,10 +36,12 @@ def is_gpu_available():
 
 
 def is_tpu_available():
-    if 'XRT_TPU_CONFIG' in os.environ:
+    try:
+        import torch_xla
+        import torch_xla.core.xla_model as xm
         return True
-    return
-
+    except:
+        return False
 
 def _get_device():
     """get current device
@@ -48,30 +50,37 @@ def _get_device():
 
     """
     if get_session().device is None:
-        _set_device("cuda" if torch.cuda.is_available() else "cpu")
+        _set_device("cuda" if torch.cuda.is_available() else 'tpu' if is_tpu_available() else  "cpu")
     return get_session().device
 
 def _set_device(device='cpu'):
     device = device.lower().replace('gpu', 'cuda')
     if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
+    if device == 'tpu' and not is_tpu_available():
+        raise ValueError('Tpu is not available...')
     try:
-        set_session('device', device)
-        if device == 'cpu':
-            gcitems = gc.get_objects()
-            for i in range(len(gcitems)):
-                obj = gcitems[i]
-                try:
-                    if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
-                        obj.to(device)
-                    elif isinstance(obj, nn.Module):
-                        obj.to(device)
-                except Exception:
-                    pass
+        device_=device
+        if device=='tpu':
+            import torch_xla.core.xla_model as xm
+            device_ = xm.xla_device()
+        set_session('device', device_)
+
+        gcitems = gc.get_objects()
+        for i in range(len(gcitems)):
+            obj = gcitems[i]
+            try:
+                if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                    obj.to(device_)
+                elif isinstance(obj, nn.Module):
+                    obj.to(device_)
+            except Exception:
+                pass
     except Exception as e:
         print(e)
 
-__all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','to_scalar','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
+
+__all__ = ['Tensor','is_gpu_available','is_tpu_available','is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','to_scalar','ndim','numel', 'cast','str2dtype', 'int_shape','tensor_to_shape', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -83,7 +92,8 @@ __all__ = ['Tensor','is_gpu_available','is_tensor', 'is_tensor_like', 'to_numpy'
            'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
            'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather', 'index_select','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
-           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy','rgb2xyz','rgb2hsv','rgb2lab','rgb2gray','xyz2lab','xyz2rgb','lab2xyz','lab2rgb']
+           'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy',
+           'rgb2xyz','rgb2hsv','rgb2lab','rgb2gray','xyz2lab','xyz2rgb','lab2xyz','lab2rgb','bbox_iou','bbox_giou','bbox_ciou','bbox_diou']
 
 Tensor=torch.Tensor
 
@@ -296,7 +306,9 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         tensor([0, 1, 2, 3, 4])
 
     """
-
+    if is_tpu_available() and (device=='tpu' or device is None):
+        import torch_xla.core.xla_model as xm
+        device= xm.xla_device()
     input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
@@ -308,6 +320,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         dtype = str2dtype(dtype)
     if device is None:
         device =_get_device()
+
 
     if isinstance(x, Tensor):
         if x is not None :
@@ -4397,6 +4410,278 @@ def gray2rgb(gray:Tensor):
 
 
 
+############################
+## bounding box
+###########################
+
+@numpy_compatible
+def bbox_iou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (k, 4)
+
+    Returns:
+         ious(Tensor): shape (n, k)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3802)
+
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
+    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3703)
+
+
+
+
+    """
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    ious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return ious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        ious = torch.zeros((cols, rows))
+        exchange = True
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
+
+    lt = maximum(bboxes1[:, None, :2], bboxes2[:, :2])  # [N,M,2]
+    rb = minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])  # [N,M,2]
+    wh = torch.clamp(rb - lt, min=0)  # [N,M,2]
+    inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+    print(inter_area)
+
+
+    union =  area1[:, None] + area2 -inter_area
+    print(union)
+    ious = inter_area / union
+    ious = torch.clamp(ious,min=0,max = 1.0)
+    if exchange:
+        ious = ious.T
+    print(ious)
+    return ious
+
+@numpy_compatible
+def bbox_diou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (k, 4)
+
+    Returns:
+         ious(Tensor): shape (n, k)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3854)
+
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
+    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3745)
+
+
+
+
+    """
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    dious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return dious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        dious = torch.zeros((cols, rows))
+        exchange = True
+
+    w1 = bboxes1[:, 2] - bboxes1[:, 0]
+    h1 = bboxes1[:, 3] - bboxes1[:, 1]
+    w2 = bboxes2[:, 2] - bboxes2[:, 0]
+    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+
+    area1 = w1 * h1
+    area2 = w2 * h2
+    center_x1 = (bboxes1[:, None,2] + bboxes1[:, None,0]) / 2
+    center_y1 = (bboxes1[:, None,3] + bboxes1[:, None,1]) / 2
+    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+
+    inter_max_xy = torch.minimum(bboxes1[:, None,2:],bboxes2[:, 2:])
+    inter_min_xy = torch.maximum(bboxes1[:,None, :2],bboxes2[:, :2])
+    out_max_xy = torch.maximum(bboxes1[:, None,2:],bboxes2[:, 2:])
+    out_min_xy = torch.minimum(bboxes1[:,None, :2],bboxes2[:, :2])
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:,:, 0] * inter[:,:, 1]
+    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
+    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
+    outer_diag = (outer[:, :,0] ** 2) + (outer[:,:, 1] ** 2)
+    union = area1[:, None]+area2-inter_area
+    ious = inter_area / union
+    ious = torch.clamp(ious, min=0, max=1.0)
+
+    dious =ious - (inter_diag) / torch.clamp(outer_diag,min=1.0)
+    dious = torch.clamp(dious,min=-1.0,max = 1.0)
+    if exchange:
+        dious = dious.T
+    return dious
+
+@numpy_compatible
+def bbox_ciou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (k, 4)
+
+    Returns:
+         ious(Tensor): shape (n, k)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3854)
+
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
+    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3745)
+
+    """
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    cious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return cious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        cious = torch.zeros((cols, rows))
+        exchange = True
+
+    w1 = bboxes1[:, 2] - bboxes1[:, 0]
+    h1 = bboxes1[:, 3] - bboxes1[:, 1]
+    w2 = bboxes2[:, 2] - bboxes2[:, 0]
+    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+
+    area1 = w1 * h1
+    area2 = w2 * h2
+
+    center_x1 = (bboxes1[:, None, 2] + bboxes1[:, None, 0]) / 2
+    center_y1 = (bboxes1[:, None, 3] + bboxes1[:, None, 1]) / 2
+
+    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+
+    inter_max_xy = torch.minimum(bboxes1[:, None,2:],bboxes2[:, 2:])
+    inter_min_xy = torch.maximum(bboxes1[:,None, :2],bboxes2[:, :2])
+    out_max_xy = torch.maximum(bboxes1[:, None,2:],bboxes2[:, 2:])
+    out_min_xy = torch.minimum(bboxes1[:,None, :2],bboxes2[:, :2])
+
+    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:,:, 0] * inter[:,:, 1]
+    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
+    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
+    outer_diag = (outer[:, :,0] ** 2) + (outer[:,:, 1] ** 2)
+    union = area1[:, None] + area2 - inter_area
+    ious = inter_area / union
+    ious = torch.clamp(ious, min=0, max=1.0)
+
+    u = (inter_diag) / outer_diag
+    w1=w1.unsqueeze(1)
+    h1=h1.unsqueeze(1)
+    v = (4 / (math.pi ** 2)) * torch.pow((torch.atan(w2 / h2) - torch.atan(w1 / h1)), 2)
+    with torch.no_grad():
+        S = 1 - ious
+        alpha = v / (S + v)
+    cious = ious - (u + alpha * v)
+    cious = torch.clamp(cious,min=-1.0,max = 1.0)
+    if exchange:
+        cious = cious.T
+    return cious
+
+@numpy_compatible
+def bbox_giou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (k, 4)
+
+    Returns:
+         ious(Tensor): shape (n, k)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3924)
+
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
+    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3795)
+
+
+
+
+    """
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    ious = torch.zeros((rows, cols))
+    if rows * cols == 0:
+        return ious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        ious = torch.zeros((cols, rows))
+        exchange = True
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
+
+
+    inter_max_xy = minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])
+    inter_min_xy = maximum(bboxes1[:, None, :2], bboxes2[:, :2])
+
+    wh = torch.clamp(inter_max_xy - inter_min_xy, min=0)  # [N,M,2]
+    inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+
+
+    out_max_xy = maximum(bboxes1[:, None,2:],bboxes2[:, 2:])
+    out_min_xy = minimum(bboxes1[:, None,:2],bboxes2[:, :2])
+    out_wh = torch.clamp(out_max_xy - out_min_xy, min=0)  # [N,M,2]
+    outer_area = out_wh[:, :, 0] * out_wh[:, :, 1]  # [N,M]
+
+    union = (area1[:, None] +area2-inter_area).float()
+    closure = outer_area.float()
+    ious = inter_area / union
+    ious = torch.clamp(ious, min=0, max=1.0)
+
+    ious =ious - ((closure - union) / closure)
+    if exchange:
+        ious = ious.T
+    return ious
 
 
 ############################
