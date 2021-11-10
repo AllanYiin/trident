@@ -22,7 +22,7 @@ from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, SpectralNorm
 from trident.layers.pytorch_pooling import *
 from trident.backend.common import *
-from trident.backend.pytorch_backend import Layer, Sequential, ModuleList
+from trident.backend.pytorch_backend import Layer, Sequential, ModuleList,Parameter
 from trident.backend.pytorch_ops import *
 
 __all__ = ['FullConnect_Block','Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'TemporalConv1d_Block',
@@ -117,6 +117,29 @@ class FullConnect_Block(Layer):
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
+    def fuse(self):
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            with torch.no_grad():
+                bn_rv = self.norm.running_var.data.copy()
+                bn_rm = self.norm.running_mean.data.copy()
+                bn_eps = self.norm.eps.data.copy()
+                bn_w = self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                linear_w = self.fc.weight.data.copy()
+                linear_b = self.fc.bias.data.copy() if self.fc.use_bias else zeros_like(bn_rm)
+                bn_scale = bn_w * torch.rsqrt(bn_rv + bn_eps)
+
+                fused_w = linear_w * bn_scale.unsqueeze(-1)
+                fused_b = (linear_b - bn_rm) * bn_scale + bn_b
+                self.fc.weight.data.copy_(fused_w)
+                self.fc.bias = Parameter(fused_b)
+                # if self.fc.use_bias:
+                #
+                #     self.fc.bias.data.copy_(fused_b)
+                # else:
+
+                self.norm = None
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -131,6 +154,7 @@ class Conv1d_Block(Layer):
                  normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005,
                  dropout_rate=0, name=None, depth_multiplier=None, keep_output=False, sequence_rank='cna', **kwargs):
         super(Conv1d_Block, self).__init__(name=name, keep_output=keep_output)
+        self.rank = 1
         if sequence_rank in ['cna', 'nac']:
             self.sequence_rank = sequence_rank
         else:
@@ -221,14 +245,13 @@ class Conv1d_Block(Layer):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         return s.format(**self.__dict__)
 
-
 class Conv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
                  activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
                  keep_output=False, sequence_rank='cna', **kwargs):
         super(Conv2d_Block, self).__init__(name=name, keep_output=keep_output)
-
+        self.rank = 2
         if sequence_rank in ['cna', 'nac', 'acn']:
             self.sequence_rank = sequence_rank
         else:
@@ -322,6 +345,31 @@ class Conv2d_Block(Layer):
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            with torch.no_grad():
+                bn_rv=self.norm.running_var.data.copy()
+                bn_rm=self.norm.running_mean.data.copy()
+                bn_eps=self.norm.eps.data.copy()
+                conv_w=self.conv.weight.data.copy()
+                conv_b = self.conv.bias.data.copy() if self.conv.use_bias else zeros_like(bn_rm)
+                bn_w=self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+
+                conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+                conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                self.conv.weight.data.copy_(conv_w)
+                #self.conv.bias.data.copy_(conv_b) if self.conv.use_bias else \
+                self.conv.bias=Parameter(conv_b)
+                self.norm=None
+
+
+
+
+
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -331,6 +379,114 @@ class Conv2d_Block(Layer):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         return s.format(**self.__dict__)
 
+class Conv3d_Block(Layer):
+    def __init__(self, kernel_size=(3, 3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
+                 activation=None, normalization=None, use_spectral=False, use_bias=False, dilation=1, groups=1,
+                 add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
+                 keep_output=False, sequence_rank='cna', **kwargs):
+        super(Conv3d_Block, self).__init__(name=name, keep_output=keep_output)
+        self.rank = 3
+        if sequence_rank in ['cna', 'nac', 'acn']:
+            self.sequence_rank = sequence_rank
+        else:
+            self.sequence_rank = 'cna'
+        self.kernel_size = kernel_size
+        self.num_filters = num_filters
+        self.strides = strides
+
+        self.padding_mode = padding_mode
+        padding = kwargs.get('padding', None)
+        if 'padding' in kwargs:
+            kwargs.pop('padding')
+        if isinstance(padding, str) and auto_pad == False:
+            auto_pad = (padding.lower() == 'same')
+        elif isinstance(padding, int) and padding > 0:
+            padding = _triple(padding)
+            auto_pad = False
+        elif isinstance(padding, tuple):
+            auto_pad = False
+            pass
+        self.auto_pad = auto_pad
+        self.padding = padding
+        # if self.auto_pad == False:
+        #     self.padding = 0
+        # else:
+        #     self.padding= tuple([n-2 for n in  list(self.kernel_size)]) if hasattr(self.kernel_size,'__len__') else
+        #     self.kernel_size-2
+
+        self.use_bias = use_bias
+        self.dilation = dilation
+        self.groups = groups
+
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
+        self.dropout_rate = dropout_rate
+        self.droupout = None
+        self.depth_multiplier = depth_multiplier
+        self.keep_output = keep_output
+
+        norm = get_normalization(normalization)
+        conv = Conv3d(kernel_size=self.kernel_size, num_filters=self.num_filters, strides=self.strides,
+                      auto_pad=self.auto_pad, padding_mode=self.padding_mode, activation=None,
+                      use_bias=self.use_bias, dilation=self.dilation, groups=self.groups,
+                      depth_multiplier=self.depth_multiplier, padding=self.padding, **kwargs).to(self.device)
+        self.use_spectral = use_spectral
+        if isinstance(norm, SpectralNorm):
+            self.use_spectral = True
+            norm = None
+            conv = nn.utils.spectral_norm(conv)
+        if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+
+        elif self.sequence_rank == 'nac':
+            self.add_module('norm', norm)
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('conv', conv)
+
+        elif self.sequence_rank == 'acn':
+            self.add_module('activation',  get_activation(activation,only_layer=True))
+            self.add_module('conv', conv)
+            self.add_module('norm', norm)
+        self._name = name
+
+    def build(self, input_shape: TensorShape):
+        if not self._built:
+
+            self.conv.input_shape = input_shape
+            if self.use_spectral:
+                self.conv = nn.utils.spectral_norm(self.conv)
+                if self.norm is SpectralNorm:
+                    self.norm = None
+
+            # if self.norm is not None:
+            #     self.norm.input_shape = self.conv.output_shape
+            self.to(self.device)
+            self._built = True
+
+    def forward(self, x, **kwargs):
+
+        if not hasattr(self, 'sequence_rank'):
+            setattr(self, 'sequence_rank', 'cna')
+        if self.add_noise == True and self.training == True:
+            noise = self.noise_intensity * torch.randn_like(x, dtype=x.dtype)
+            x = x + noise
+        for child in list(self.children())[:3]:
+            if child is not None:
+                x = child(x)
+        if self.training and self.dropout_rate > 0:
+            x = F.dropout(x, p=self.dropout_rate, training=self.training)
+        return x
+
+    def extra_repr(self):
+        s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
+        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
+            if inspect.isfunction(self.__dict__['activation']):
+                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
+            elif isinstance(self.__dict__['activation'], nn.Module):
+                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
+        return s.format(**self.__dict__)
 
 class TransConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
@@ -849,7 +1005,7 @@ class ShortCut2d(Layer):
         self.to(self.device)
 
     def build(self, input_shape: TensorShape):
-        if self._built == False:
+        if not self._built:
             if self.branch_from is not None:
                 for k, v in self.nodes.item_list:
                     if v.name == self.branch_from:
@@ -885,7 +1041,6 @@ class ShortCut2d(Layer):
 
         branch1 = None
         if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes.key_list:
-            tt = self.nodes.get(self.branch_from_uuid)
             branch1 = identity(self.nodes.get(self.branch_from_uuid)._output_tensor)
             if self.mode == 'add':
                 current = current + branch1
@@ -894,7 +1049,7 @@ class ShortCut2d(Layer):
             elif self.mode == 'concate':
                 concate_list.append(branch1)
                 if len(concate_list) > 1:
-                    print('')
+                    pass
         try:
             if self.mode == 'concate':
                 x = concate(concate_list, axis=self.axis)
