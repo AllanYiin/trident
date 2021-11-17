@@ -18,7 +18,6 @@ import six
 from scipy.io import loadmat
 from tqdm import tqdm
 
-
 from trident.backend.common import *
 
 try:
@@ -26,6 +25,10 @@ try:
 except ImportError:
     from six.moves.urllib.request import urlretrieve
 
+__all__: object = ['is_connected', 'ensure_dir','ensure_parent_dir','TqdmProgress','calculate_md5','check_integrity','download_file','get_onedrive_directdownload',
+           'download_file_from_google_drive','download_file_from_onedrive','get_image_from_google_drive','get_file_from_google_drive',
+           'download_model_from_google_drive','download_model_from_onedrive','extract_archive','pickle_it','unpickle','save_dict_as_h5',
+          'read_dict_from_h5','get_file_create_time','read_mat']
 
 def is_connected():
     try:
@@ -175,7 +178,7 @@ def get_onedrive_directdownload(onedrive_link):
     return resultUrl
 
 
-def download_file_from_google_drive(file_id, dirname, filename=None, md5=None, need_up_to_date=False):
+def download_file_from_google_drive(file_id, dirname=None, filename=None, md5=None, need_up_to_date=False):
     """Download a Google Drive file from  and place it in root.
 
     Args:
@@ -187,13 +190,16 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None, n
     """
     # Based on https://stackoverflow.com/questions/38511444/python-download-files-from-google-drive-using-url
     import requests
-    url = "https://docs.google.com/uc?export=download"
 
+    url = "https://drive.google.com/uc?export=download"
+    if not dirname:
+        dirname=os.path.join(get_trident_dir(),'downloads')
     if not filename:
         filename = file_id
     _h = _read_h(dirname)
 
     dest_path = os.path.join(dirname, filename)
+    make_dir_if_need(dest_path)
     is_downloaded = _h[filename].get('is_downloaded', False) if filename in _h else _h.get('is_downloaded', False)
 
     if os.path.exists(dest_path) and os.path.isfile(dest_path) and _h != {} and is_downloaded == True and need_up_to_date == False:
@@ -203,14 +209,14 @@ def download_file_from_google_drive(file_id, dirname, filename=None, md5=None, n
         try:
             session = requests.Session()
             response = session.get(url, params={'id': file_id}, stream=True)
+            content_type = response.headers.get('content-type')
+
 
             token = _get_confirm_token(response)
             if token:
                 params = {'id': file_id, 'confirm': token}
                 response = session.get(url, params=params, stream=True)
             _save_response_content(response, dest_path)
-            _write_h(dirname, True, False, filename)
-            return True
         except Exception as e:
             _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
@@ -572,46 +578,51 @@ def extract_archive(file_path, target_folder=None, archive_format='auto'):
         False otherwise.
     """
     folder, file, ext = split_path(file_path)
-    _h = _read_h(target_folder)
     filename = file + ext
-    is_extracted = _h[filename].get('is_extracted', False) if filename in _h else _h.get('is_extracted', False)
-    if _h != {} and is_extracted == True and os.path.exists(file_path):
-        print('extraction is finished, donnot need extract again.')
-        return True
-    if archive_format is None:
-        return False
-    if archive_format == 'auto':
-        archive_format = ['tar', 'zip']
-    if isinstance(archive_format, six.string_types):
-        archive_format = [archive_format]
+    try:
 
-    is_match_fn = tarfile.is_tarfile
-    open_fn = tarfile.open
-    for archive_type in archive_format:
-        if archive_type == 'tar':
-            open_fn = tarfile.open
-            is_match_fn = tarfile.is_tarfile
-        if archive_type == 'zip':
-            open_fn = zipfile.ZipFile
-            is_match_fn = zipfile.is_zipfile
-
-        if is_match_fn(file_path):
-            print('Starting to decompress the archive....')
-            with open_fn(file_path) as archive:
-                try:
-                    archive.extractall(target_folder)
-                    _write_h(target_folder, True, True)
-                except (tarfile.TarError, RuntimeError, KeyboardInterrupt):
-                    sys.stderr.write('Decompressing the archive is not success')
-                    PrintException()
-                    _write_h(target_folder, True, False, filename)
-                    if os.path.exists(target_folder):
-                        shutil.rmtree(target_folder)
-                    raise
-            _write_h(target_folder, True, True, filename)
+        _h = _read_h(target_folder)
+        is_extracted = _h[filename].get('is_extracted', False) if filename in _h else _h.get('is_extracted', False)
+        if _h != {} and is_extracted == True and os.path.exists(file_path):
+            print('extraction is finished, donnot need extract again.')
             return True
-        else:
-            _write_h(target_folder, True, False, filename)
+        if archive_format is None:
+            return False
+        if archive_format == 'auto':
+            archive_format = ['tar', 'zip']
+        if isinstance(archive_format, six.string_types):
+            archive_format = [archive_format]
+
+        is_match_fn = tarfile.is_tarfile
+        open_fn = tarfile.open
+        for archive_type in archive_format:
+            if archive_type == 'tar':
+                open_fn = tarfile.open
+                is_match_fn = tarfile.is_tarfile
+            if archive_type == 'zip':
+                open_fn = zipfile.ZipFile
+                is_match_fn = zipfile.is_zipfile
+
+            if is_match_fn(file_path):
+                print('Starting to decompress the archive....')
+                with open_fn(file_path) as archive:
+                    try:
+                        archive.extractall(target_folder)
+                        _write_h(target_folder, True, True)
+                    except (tarfile.TarError, RuntimeError, KeyboardInterrupt):
+                        sys.stderr.write('Decompressing the archive is not success')
+                        PrintException()
+                        _write_h(target_folder, True, False, filename)
+                        if os.path.exists(target_folder):
+                            shutil.rmtree(target_folder)
+                        raise
+                _write_h(target_folder, True, True, filename)
+                return True
+            else:
+                _write_h(target_folder, True, False, filename)
+    except Exception as e:
+        print(e)
+        _write_h(dirname, False, False, filename)
     return False
 
 
@@ -633,7 +644,8 @@ def unpickle(file):
         dict = pickle.load(fo, encoding='bytes')
     return dict
 
-def save_dict_as_h5(save_path,dict_need_save):
+
+def save_dict_as_h5(save_path, dict_need_save):
     try:
         import h5py
     except ImportError:
@@ -643,16 +655,17 @@ def save_dict_as_h5(save_path,dict_need_save):
             for k, v in dict_need_save.items():
                 f.create_dataset(k, data=v)
 
+
 def read_dict_from_h5(save_path):
     try:
         import h5py
     except ImportError:
         h5py = None
     if h5py is not None:
-        return_dict=OrderedDict()
+        return_dict = OrderedDict()
         with h5py.File(save_path, 'r') as f:
-            for k,v in f.items():
-                return_dict[k]=v
+            for k, v in f.items():
+                return_dict[k] = v
             return return_dict
 
 
