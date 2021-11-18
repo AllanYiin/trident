@@ -53,19 +53,21 @@ class RNNBase(Layer):
                  num_layers: int = 1,stateful=False, use_bias: bool = True, batch_first: bool = False,
                  dropout_rate: float = 0., bidirectional: bool = False,keep_output=False,in_sequence=True,filter_index=-1,name=None) -> None:
         super(RNNBase, self).__init__(name=name,keep_output=keep_output)
-
+        self.in_sequence=in_sequence
+        self.filter_index=filter_index
         self.mode = mode
         self.hidden_size = hidden_size
         self.proj_size= proj_size
         self.num_layers = num_layers
         self.use_bias = use_bias
         self.stateful=stateful
+        self.hx=None
         self._batch_first = batch_first
         if not self._batch_first:
             self.batch_index =1
         else:
             self.batch_index = 0
-        self.filter_index = -1
+
         self.dropout_rate = float(dropout_rate)
         self.bidirectional = bidirectional
         self.num_directions = 2 if bidirectional else 1
@@ -478,7 +480,7 @@ class RNN(RNNBase):
 #
 # TODO: remove the overriding implementations for LSTM and GRU when TorchScript
 # support expressing these two modules generally.
-from torch.nn.modules.rnn import LSTM
+
 
 class LSTM(RNNBase):
     r"""Applies a multi-layer long short-term memory (LSTM) RNN to an input
@@ -585,7 +587,7 @@ class LSTM(RNNBase):
         >>> output, (hn, cn) = rnn(input, (h0, c0))
     """
 
-    def __init__(self, hidden_size,proj_size=0,num_layers:int =2,activation=None,stateful=False,use_bias=False,use_attention=False,attention_size=16,batch_first=False,dropout_rate=0,bidirectional=False,keep_output=False,name=None, **kwargs):
+    def __init__(self, hidden_size,proj_size=0,num_layers:int =2,stateful=False,use_bias=False,use_attention=False,attention_size=16,batch_first=False,dropout_rate=0,bidirectional=False,keep_output=False,name=None, **kwargs):
         super(LSTM, self).__init__(mode='LSTM', hidden_size=hidden_size, proj_size=proj_size,
         num_layers=num_layers, stateful = stateful, use_bias=use_bias, batch_first = batch_first,
         dropout_rate= dropout_rate, bidirectional = bidirectional, keep_output =keep_output, in_sequence = True, filter_index =-1, name = name)
@@ -593,8 +595,8 @@ class LSTM(RNNBase):
         self.use_attention=use_attention
         self.attention_size=attention_size
 
-
-
+    def clear_state(self):
+        self.hx = None
 
     def initial_state(self,input) :
         max_batch_size = input.size(0) if self.batch_first else input.size(1)
@@ -606,8 +608,8 @@ class LSTM(RNNBase):
         c_zeros= torch.zeros(self.num_layers * num_directions,
                                   max_batch_size, self.hidden_size,
                                   dtype=input.dtype, device=input.device).to(get_device())
-        hx = (h_zeros, c_zeros)
-        return hx
+        self.hx = (h_zeros, c_zeros)
+        return self.hx
 
 
 
@@ -662,6 +664,10 @@ class LSTM(RNNBase):
         pass
 
     def forward(self, x, hx=None):
+        # helper to inject peephole connection if requested
+        # def peep(x, c, C):
+        #     return x + C * c if use_peepholes else x
+        #
         orig_input = x
         is_packed_sequence=isinstance(orig_input, PackedSequence)
         self.flatten_parameters()
@@ -678,14 +684,14 @@ class LSTM(RNNBase):
             sorted_indices = None
             unsorted_indices = None
 
+        if self.stateful and self.hx is not None:
+                hx=self.hx
+
         if hx is None:
             #if self.hidden_state is None or self.cell_state is None or max_batch_size!=int_shape(self.hidden_state)[1]:
             hx=self.initial_state(x)
-            hx = self.permute_hidden(hx, sorted_indices)
-        else:
-            if not self.stateful:
-                hx=self.initial_state(x)
-            hx = self.permute_hidden(hx, sorted_indices)
+
+        hx = self.permute_hidden(hx, sorted_indices)
 
         self.check_forward_args(x, hx, batch_sizes)
 
@@ -698,11 +704,15 @@ class LSTM(RNNBase):
 
 
         output = result[0].permute(1, 0, 2) if self.batch_first == False else result[0]
-        hidden = result[1:]
-        # self.hidden_state=hidden[0]
-        # self.cell_state=hidden[1]
         if self.use_attention:
             output = self.attention(output)
+
+        hidden = result[1:]
+        if self.stateful:
+            self.hx = hidden
+        # self.hidden_state=hidden[0]
+        # self.cell_state=hidden[1]
+
 
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
         if is_packed_sequence:
