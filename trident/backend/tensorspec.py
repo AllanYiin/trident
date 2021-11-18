@@ -576,11 +576,11 @@ def get_signature(fn, name=None):
 
 
     """
-    if is_instance(fn,'Sequential') and len(fn)>0:
-        sig1=get_signature(fn[0])
-        sig2 =get_signature(fn[-1])
-        sig1.outputs=sig2.outputs
-        return sig1
+    # if is_instance(fn,'Sequential') and len(fn)>0:
+    #     sig1=get_signature(fn[0])
+    #     sig2 =get_signature(fn[-1])
+    #     sig1.outputs=sig2.outputs
+    #     return sig1
 
 
     base_fn = fn
@@ -594,14 +594,15 @@ def get_signature(fn, name=None):
     paras = list(sig.parameters.items())
 
     returns = sig.return_annotation
-    if sig.return_annotation is not inspect._empty:
+    if sig.return_annotation is not inspect._empty and returns is not None:
         if isinstance(returns, str):
             signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
         elif returns is Tensor:
             pass
         else:
-            for i in range(len(returns)):
-                signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))
+            if returns is not None:
+                for i in range(len(returns)):
+                    signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))
     else:
         signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
 
