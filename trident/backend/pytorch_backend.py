@@ -1333,10 +1333,11 @@ class Sequential(Layer):
             else:
                 out = enforce_singleton(out)
                 self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
-                if len(self.get_root().signature.outputs) > 0:
-                    self.get_root().signature.outputs[self.get_root().signature.outputs.key_list[0]] = self._output_shape.copy()
-                else:
-                    self.get_root().signature.outputs['output'] = self._output_shape.copy()
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape=self._output_shape
+                # if len(self.get_root().signature.outputs) > 0:
+                #     self.get_root().signature=get_signature(self)
+                # else:
+                #     self.get_root().signature.outputs['output'] = self._output_shape.copy()
 
         else:
             if not hasattr(module,'_signature') or module._signature is None:
@@ -1347,18 +1348,15 @@ class Sequential(Layer):
                 self._signature = sig
             elif len(self) > 1:
                 self._signature.outputs = copy.deepcopy(sig.outputs)
-        if len(self) > 0:
-            self._signature = self[0]._signature
+
 
     def remove_at(self, idx):
         self.__delitem__(idx)
-        if len(self) > 0:
-            self._signature = self[0]._signature
+
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
             if isinstance(self._signature, Signature):
-                self._signature.outputs = OrderedDict()
-                self._signature.outputs['output'] = TensorSpec(shape=self[-1]._output_shape)
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape=self[-1]._output_shape
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -1946,16 +1944,18 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
         ):
             hooks.append(module.register_forward_hook(hook))
 
-    device = device.lower()
+    device = device.lower() if isinstance(device,str) else device.__name__
     assert device in [
         "cuda",
         "cpu",
+        "tpu",
+        "xla",
     ], "Input device is not valid, please specify 'cuda' or 'cpu'"
 
-    if device == "cuda" and torch.cuda.is_available():
-        dtype = torch.cuda.FloatTensor
-    else:
-        dtype = torch.FloatTensor
+    # if device == "cuda" and torch.cuda.is_available():
+    #     dtype = torch.cuda.FloatTensor
+    # else:
+    #     dtype = torch.FloatTensor
 
     for name, module in model.named_modules():
         module.relative_name = name
