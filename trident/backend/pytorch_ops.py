@@ -1835,7 +1835,7 @@ def where(flag, value_if_true=None, value_if_false=None):
     if value_if_true is None and value_if_false is None:
         return torch.where(flag)
     else:
-        return torch.where(flag.byte(), value_if_true, value_if_false)
+        return torch.where(flag.bool(), value_if_true, value_if_false)
 
 
 ############################
@@ -4459,17 +4459,17 @@ def bbox_iou(bboxes1, bboxes2):
     rb = minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])  # [N,M,2]
     wh = torch.clamp(rb - lt, min=0)  # [N,M,2]
     inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
-    print(inter_area)
+    #print('inter_area',inter_area)
 
 
     union =  area1[:, None] + area2 -inter_area
-    print(union)
+    #print('union',union)
     ious = inter_area / union
     ious = torch.clamp(ious,min=0,max = 1.0)
     if exchange:
         ious = ious.T
-    print(ious)
-    return ious
+    #print('ious',ious)
+    return reduce_max(ious,0).mean()
 
 @numpy_compatible
 def bbox_diou(bboxes1, bboxes2):
