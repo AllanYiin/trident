@@ -12,7 +12,7 @@ import numbers
 from itertools import repeat
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import backend as K
+
 from tensorflow.python.client import device_lib
 from tensorflow.python.distribute import sharded_variable
 from tensorflow.python.ops import embedding_ops
@@ -363,11 +363,10 @@ class SoftMax(Layer):
             self.add_noise = False
             self.noise_intensity = 0.005
         if self.training:
-            x = tf.math.log_softmax(x, self.axis)
             if self.add_noise == True:
-                noise = self.noise_intensity * tf.random.normal(shape=x.get_shape(), mean=1, stddev=1,dtype=x.dtype)
+                noise = self.noise_intensity * tf.random.uniform(shape=x.get_shape(),minval=0.0,maxval=1.0,dtype=x.dtype)
                 x = x + noise
-
+            x = tf.math.log_softmax(x, self.axis)
         else:
             x = tf.math.softmax(x, self.axis)
         return x
@@ -671,12 +670,12 @@ class _ConvNd(Layer):
 
                     if self.transposed:
                         # filter_height, filter_width,  out_channels in_channels,
-                        self.weight =Parameter(tf.random.normal(shape=[*self.kernel_size, int(channel_multiplier), self.input_filters], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
+                        self.weight =Parameter(tf.random.normal(shape=[*self.kernel_size,  self.num_filters // self.groups, self.input_filters], mean=0,  stddev=1) * 0.02, trainable=True, name='weight')
 
                     else:
 
                         # [filter_height, filter_width, in_channels, out_channels]`
-                        self.weight =Parameter( data=tf.random.normal(shape=[*self.kernel_size, self.input_filters, int(channel_multiplier)], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
+                        self.weight =Parameter( data=tf.random.normal(shape=[*self.kernel_size, self.input_filters,  self.num_filters // self.groups], mean=0,    stddev=1) * 0.02, trainable=True, name='weight')
 
                         if self.separable:
                             pointwise_kernel_size = (1,) * len(self.kernel_size)
@@ -901,7 +900,7 @@ class Conv2d(_ConvNd):
 
 
     def conv2d_forward(self, x, **kwargs):
-        if self.auto_pad == True and len(self.padding) == self.rank + 2:
+        if self.auto_pad == True and len(self.padding) == self.rank+2 :
             x = tf.pad(x, self.padding, mode='CONSTANT')
         else:
             if len(self.padding)==4:
