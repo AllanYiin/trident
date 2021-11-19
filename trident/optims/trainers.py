@@ -445,7 +445,8 @@ class TrainingPlan(object):
                         available_items.remove(data_provider.traindata.label.symbol)
                 elif len(trainingitem.signature.outputs) == len(label_symbols) == 1:
                     data_feed[trainingitem.signature.outputs.key_list[0].replace("output", "target").replace("student", "teacher")] = data_provider.traindata.label.symbol
-                    available_items.remove(data_provider.traindata.label.symbol)
+                    # if data_provider.traindata.label.symbol in available_items:
+                    #     available_items.remove(data_provider.traindata.label.symbol)
 
                 for out in trainingitem.signature.outputs.key_list:  # fill the data_feed by key
                     if out in available_items:  # output=putput
@@ -488,7 +489,7 @@ class TrainingPlan(object):
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
 
-        data_provider = self._dataloaders.value_list[0]
+        data_provider = self._dataloaders.value_list[-1]
         data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'
         try:
