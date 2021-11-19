@@ -529,11 +529,36 @@ def _forward_unimplemented(self, *input: Any) -> None:
     """
     raise NotImplementedError
 
-def Parameter(data, trainable=True, dtype=None, name=None, **kwargs):
-    if dtype is None:
-        dtype = tf.float32
-    return tf.Variable(initial_value=cast(data, dtype), trainable=trainable, name=name)
+# def Parameter(data, trainable=True, dtype=None, name=None, **kwargs):
+#     if dtype is None:
+#         dtype = tf.float32
+#     return tf.Variable(initial_value=cast(data, dtype), trainable=trainable, name=name)
 
+
+def Parameter(data, trainable=True, name=None):
+    return tf.Variable(initial_value = data,trainable = trainable,dtype=data.dtype,name=name)
+#
+# class Parameter(tf.Variable):
+#     def __init__(self,  data, trainable=True, **kwargs):
+#         """
+#         Args:
+#             name (str) :name of the layer.
+#             keep_output (bool) :whether need to kept output tensor in execution time.
+#
+#
+#         """
+#         return tf.V
+#
+#
+#         super(Parameter, self).__init__(initial_value = data,trainable = trainable,dtype=data.dtype)
+#
+#     @property
+#     def trainable(self):
+#         return self.trainable
+#
+#     @trainable.setter
+#     def trainable(self, value):
+#         self.trainable = value
 
 class Layer(tf.Module):
     """Trident extened tf.Module as base layer class.
@@ -2179,24 +2204,42 @@ class Sequential(Layer):
             module (Module): child module to be added to the module.
         """
 
-        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
+        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[ -1]._output_shape is not None:
             last_output = self[-1]._output_shape
             dummay_input = to_tensor(last_output.get_dummy_tensor()).to(self.device)
             out = module(dummay_input)
             self._modules[name] = module
-            self._output_shape = module.output_shape
+            if isinstance(out, OrderedDict):
+                self._output_shape = tuple(
+                    [tensor_to_shape(o, need_exclude_batch_axis=True, is_singleton=False) for o in out.value_list])
+                self.get_root().signature.outputs = OrderedDict()
+                for k, v in out.item_list:
+                    self.get_root().signature.outputs[k] = tensor_to_shape(v, need_exclude_batch_axis=True,    is_singleton=False)
+            else:
+                out = enforce_singleton(out)
+                self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self._output_shape
+                # if len(self.get_root().signature.outputs) > 0:
+                #     self.get_root().signature=get_signature(self)
+                # else:
+                #     self.get_root().signature.outputs['output'] = self._output_shape.copy()
+
         else:
+            if not hasattr(module, '_signature') or module._signature is None:
+                module._signature = get_signature(module)
+            sig = copy.deepcopy(module._signature)
             super(Sequential, self).add_module(name, module)
-        self._signature = None
+            if len(self) == 1 or self._signature is None:
+                self._signature = sig
+            elif len(self) > 1:
+                self._signature.outputs = copy.deepcopy(sig.outputs)
 
     def remove_at(self, idx):
         self.__delitem__(idx)
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
-            if isinstance(self._signature, Signature) and len(self._signature.outputs) > 0:
-                self._signature.outputs[self._signature.outputs.key_list[0]] = TensorSpec(shape=self[-1]._output_shape)
-            else:
-                self._signature = None
+            if isinstance(self._signature, Signature):
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self[-1]._output_shape
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
