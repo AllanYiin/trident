@@ -598,7 +598,7 @@ def get_signature(fn, name=None):
         if isinstance(returns, str):
             signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
         elif returns is Tensor:
-            signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
+            signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
         else:
             if returns is not None:
                 for i in range(len(returns)):

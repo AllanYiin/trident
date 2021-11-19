@@ -48,7 +48,7 @@ _backend = ctx.get_backend()
 __all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine',
            'try_map_args_and_call',
            'print_mem_stack',
-           'normalize_padding', 'fix_layer', 'DTYPE_MAPPING']
+           'normalize_padding', 'fix_layer', 'DTYPE_MAPPING','fix_pytorch_module']
 
 _FUN_NAMES = [
     ('equal', tops.equal)]
@@ -2465,9 +2465,11 @@ def fix_layer(layer: Layer):
 
 def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_shape: (tuple, TensorShape) = None):
     module.is_root = True
+    module.name=module.__class__.__name__
     module._nodes = OrderedDict()
     module._uid_prefixs = defaultdict(int)
     module._signature = get_signature(module)
+    module.signature = get_signature(module)
 
     def get_uid(prefix=''):
         module._uid_prefixs[prefix] += 1
@@ -2503,8 +2505,20 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
         mod.register_buffer('_output_tensor', None, persistent=False)
 
         mod._device = get_device()
-        mod._signature = inspect.signature(mod.forward)
+        #mod._signature = inspect.signature(mod.forward)
         mod.dump_patches = True
+        #
+        # def getsignature(mod):
+        #     return mod._signature
+        #
+        # def setsignature(mod, value):
+        #     mod._signature = value
+        #
+        # def delsignature(mod):
+        #     del mod._signature
+        #
+        # mod.signature= property(getsignature, setsignature, delsignature, "signature")
+
         if not hasattr(mod, 'get_root'):
             setattr(mod, 'get_root', MethodType(get_root, mod))
         if hasattr(mod, 'dims'):

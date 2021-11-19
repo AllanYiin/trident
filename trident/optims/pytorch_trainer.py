@@ -144,7 +144,11 @@ class Model(model.ModelBase):
 
 
         elif isinstance(output, (Layer, nn.Module)):
-            output._signature = get_signature(output)
+            if not isinstance(output,Layer):
+                output=fix_pytorch_module(output, input_shape=input_shape,input_tensor=inputs)
+            output.train()
+            #c._signature = get_signature(output)
+
 
             if inputs is not None and not isinstance(inputs, (tuple, list, dict)):
                 inputs = (inputs,)
@@ -203,7 +207,7 @@ class Model(model.ModelBase):
                                     available_items.remove(sk)
                                     break
 
-            # update notes
+            # update nodes
             output.is_root = True
             output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules()) if isinstance(mod, Layer)])
             for name, mod in output.named_modules():
@@ -1185,7 +1189,8 @@ class Model(model.ModelBase):
 
     def summary(self):
         # self.rebinding_input_output(self._model.input_shape)
-
+        if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None or len(self._model._signature.outputs)==0:
+            self._model._signature = get_signature(self._model, self._model._name)
         summary(self._model, [item for item in self._model._signature.inputs.value_list])
         return self
 
