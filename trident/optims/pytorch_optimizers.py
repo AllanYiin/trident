@@ -62,7 +62,7 @@ class Optimizer(optimizer.Optimizer):
         Returns: the weights need to train
 
         """
-        return self.param_groups['params']
+        return [self.param_groups[i]['params'] for i in range(len(self.param_groups))]
 
     @parameters.setter
     def parameters(self,value):
@@ -322,7 +322,7 @@ class SGD(optim.SGD):
         Returns: the weights need to train
 
         """
-        return self.param_groups['params']
+        return self.param_groups[0]['params']
 
     @property
     def lr(self):
@@ -412,7 +412,7 @@ class LBFGS(lbfgs.LBFGS):
         Returns: the weights need to train
 
         """
-        return self.param_groups['params']
+        return self.param_groups[0]['params']
 
     @property
     def lr(self):
@@ -482,7 +482,7 @@ class Adadelta(adadelta.Adadelta):
         Returns: the weights need to train
 
         """
-        return self.param_groups['params']
+        return self.param_groups[0]['params']
 
     @property
     def lr(self):
@@ -552,7 +552,7 @@ class Adagrad(adagrad.Adagrad):
         Returns: the weights need to train
 
         """
-        return self.param_groups['params']
+        return  self.param_groups[0]['params']
 
     @property
     def lr(self):
@@ -632,7 +632,7 @@ class RMSprop(rmsprop.RMSprop):
         Returns: the weights need to train
 
         """
-        return self.param_groups['params']
+        return self.param_groups[0]['params']
 
     @property
     def lr(self):

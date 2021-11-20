@@ -296,6 +296,40 @@ class Optimizer(trackable.Trackable):
             if verbose:
                 print('learning rate changed! ( form {0:.3e} to {1:.3e})'.format(old_lr, new_lr))
 
+
+    @property
+    def parameters(self):
+        """
+
+        Returns: the weights need to train
+
+        """
+        return [self.param_groups[i]['params'] for i in range(len(self.param_groups))]
+
+    @parameters.setter
+    def parameters(self,value):
+        """
+
+        Returns: the weights need to train
+
+        """
+        if isinstance(value, tf.Variable):
+            raise TypeError("params argument given to the optimizer should be "
+                            "an iterable of Tensors or dicts, but got " +
+                            value.__class__.__name__)
+        if not hasattr(self,'param_groups') or self.param_groups is None or len(self.param_groups)==0:
+            self.param_groups=[]
+
+            param_groups = list(value)
+            if len(param_groups) == 0:
+                raise ValueError("optimizer got an empty parameter list")
+            if not isinstance(param_groups[0], dict):
+                param_groups = [{'params': param_groups}]
+                for param_group in param_groups:
+                    self.add_param_group(param_group)
+        else:
+            self.param_groups[0]['params']=value
+
     @property
     def lr(self):
         """str: The getter method of the 'learning rate' property."""
