@@ -17,14 +17,14 @@ from typing import TypeVar, Tuple, Optional, Iterator, Dict
 
 import cv2
 import numpy as np
-
+from trident import context
 from trident.backend import iteration_tools
 from trident.backend.common import *
-from trident.backend.numpy_ops import DTYPE_MAPPING
+#from trident.backend.numpy_ops import DTYPE_MAPPING
 from trident.backend.opencv_backend import file2array
-from trident.backend.tensorspec import TensorSpec
+from trident.backend.tensorspec import TensorSpec,ObjectType
 from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, \
-    array2image
+    array2image,TensorShape
 from trident.data.label_common import label_backend_adaptive
 from trident.data.mask_common import mask_backend_adaptive, color2label
 from trident.data.samplers import *
@@ -38,14 +38,12 @@ except ImportError:
     import queue as Queue
 
 if get_backend() == 'pytorch':
-    from trident.backend.pytorch_backend import to_tensor, ObjectType
-    from trident.backend.pytorch_ops import tensor_to_shape, expand_dims, cast
+    from trident.backend.pytorch_ops import tensor_to_shape, expand_dims, cast,to_tensor
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_backend import to_tensor, ObjectType
-    from trident.backend.tensorflow_ops import tensor_to_shape, expand_dims, cast
+    from trident.backend.tensorflow_ops import tensor_to_shape, expand_dims, cast,to_tensor
 
 __all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
-           'NumpyDataset', 'RandomNoiseDataset']
+           'NumpyDataset', 'RandomNoiseDataset', 'ArrayDataset']
 
 _UID_PREFIX = collections.defaultdict(int)
 
@@ -109,9 +107,8 @@ class Dataset(DatasetBase):
 
     def __setattr__(self, name: str, value) -> None:
         object.__setattr__(self, name, value)
-        if name=='symbol' and isinstance(self._element_spec,TensorSpec):
-            self._element_spec._name=value
-
+        if name == 'symbol' and isinstance(self._element_spec, TensorSpec):
+            self._element_spec._name = value
 
     def __len__(self) -> int:
         return len(self.items)
@@ -210,7 +207,7 @@ class ZipDataset(Dataset):
         if name.endswith('transform_funcs'):
             if 'items' in self.__dict__:
                 items = self.__dict__['items']
-                ds=items[0]
+                ds = items[0]
                 if name in ds.__dict__:
                     return ds.__dict__[name]
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
@@ -221,7 +218,7 @@ class ZipDataset(Dataset):
                 items = self.__dict__['items']
                 for ds in items:
                     if hasattr(ds, name):
-                        setattr(ds,name,value)
+                        setattr(ds, name, value)
         else:
             object.__setattr__(self, name, value)
 
@@ -270,7 +267,7 @@ class StreamDataset(Dataset):
     def __iter__(self):
         pass
 
-    def __getitem__(self,index):
+    def __getitem__(self, index):
         if index >= len(self.items):
             index = index % len(self.items)
         raise AssertionError("can not get item from StreamDataset by index")
@@ -316,13 +313,13 @@ class ImageDataset(Dataset):
         self.is_paired_process = False
 
     def __getitem__(self, index: int):
-        if index>=len(self.items):
-            index=index%len(self.items)
+        if index >= len(self.items):
+            index = index % len(self.items)
         img = self.items[index]  # self.pop(index)
 
-        if isinstance(img, str) and self.object_type==ObjectType.image_path:
+        if isinstance(img, str) and self.object_type == ObjectType.image_path:
             return img
-        elif isinstance(img, np.ndarray) and self.object_type!=ObjectType.image_path:
+        elif isinstance(img, np.ndarray) and self.object_type != ObjectType.image_path:
             return img
         else:
             img = file2array(img)
@@ -344,7 +341,10 @@ class ImageDataset(Dataset):
         elif self.object_type == ObjectType.rgb and img.ndim == 3:
             if img.shape[-1] == 1:
                 img = cv2.cvtColor(img[:, :, 0], cv2.COLOR_GRAY2RGB)
+            elif img.shape[-1] == 4:
+                img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
             img = img[:, :, :3]
+
         elif self.object_type == ObjectType.rgba:
             if img.ndim == 2:
                 img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGBA)
@@ -355,7 +355,7 @@ class ImageDataset(Dataset):
         return img
 
     def data_transform(self, img_data):
-        if self.object_type==ObjectType.image_path:
+        if self.object_type == ObjectType.image_path:
             return img_data
         if len(self.transform_funcs) == 0:
             return image_backend_adaption(img_data)
@@ -404,8 +404,6 @@ class ImageDataset(Dataset):
             return img_data
 
 
-
-
 class MaskDataset(Dataset):
     def __init__(self, masks, class_names=None, object_type: ObjectType = ObjectType.label_mask,
                  get_image_mode: GetImageMode = GetImageMode.processed, symbol="mask", **kwargs):
@@ -434,9 +432,12 @@ class MaskDataset(Dataset):
         if isinstance(mask, str):
             if self.object_type == ObjectType.binary_mask:
                 mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
-                mask[mask > 0] = 1
-                mask[mask <= 0] = 0
+                if mask.max() > 1:
+                    mask = mask / mask.max()
+                mask[mask >= 0.5] = 1
+                mask[mask < 0.5] = 0
                 mask.astype(np.int64)
+
             elif self.object_type == ObjectType.alpha_mask:
                 mask = file2array(mask, flag=cv2.IMREAD_GRAYSCALE)
             elif self.object_type == ObjectType.label_mask:
@@ -525,7 +526,7 @@ class LabelDataset(Dataset):
     def binding_class_names(self, class_names=None, language=None):
         if class_names is not None and hasattr(class_names, '__len__'):
             if language is None:
-                language = 'en-us'
+                language = context._context().locale
             self.class_names[language] = list(class_names)
 
             self.__default_language__ = language
@@ -654,14 +655,14 @@ class RandomNoiseDataset(Dataset):
         self.is_paired_process = False
         self.is_spatial = False
         self.transform_funcs = []
-        self.length=sys.maxsize
+        self.length = sys.maxsize
 
     def data_transform(self, noise_data):
         return noise_data
 
     def __getitem__(self, index: int):
         if self.random_mode == 'normal':
-            return (np.random.standard_normal(self.shape)-0.5)*2
+            return (np.random.standard_normal(self.shape) - 0.5) * 2
         elif self.random_mode == 'uniform':
             return np.random.uniform(-1, 1, self.shape)
 
@@ -854,11 +855,16 @@ class RandomNoiseDataset(Dataset):
 #
 
 class TextSequenceDataset(Dataset):
-    def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, storage_unit='section',section_delimiter='\n\n', stopwords=None, sequence_length: int = 64, sequence_start_at='random',
-                 include_segment_ids=False,include_mask_ids=False,object_type=ObjectType.corpus, symbol=None, **kwargs):
-        super().__init__(None,symbol=symbol, object_type=object_type, **kwargs)
+    def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, storage_unit='section', section_delimiter='\n\n', stopwords=None, sequence_length: int = 64,
+                 sequence_start_at='random',
+                 include_segment_ids=False, include_mask_ids=False, object_type=ObjectType.corpus, symbol=None, **kwargs):
+        super().__init__(None, symbol=symbol, object_type=object_type, **kwargs)
+        valid_sequence_start_at = ['random', 'slide', 'follow_up', 'section_start', 'word_start', 'next_section_start']
         self.sequence_length = sequence_length
-        self.sequence_start_at = sequence_start_at
+        if sequence_start_at in valid_sequence_start_at:
+            self.sequence_start_at = sequence_start_at
+        else:
+            self.sequence_start_at = 'random'
         self.length_index = OrderedDict()
         self.vocabs_frequency = OrderedDict()
         self.transform_funcs = []
@@ -866,7 +872,7 @@ class TextSequenceDataset(Dataset):
             self.section_delimiter = section_delimiter
         else:
             self.section_delimiter = '\n\n'
-        self.storage_unit=storage_unit
+        self.storage_unit = storage_unit
         self.vocabs = None
         self.text2index = None
         self.index2text = None
@@ -877,16 +883,14 @@ class TextSequenceDataset(Dataset):
         self.sequence_offset = sequence_offset
         self.dtype = np.float32 if self.is_onehot else np.int64
 
-
         self.is_paired_process = False
 
-
-    def add_corpus(self,corpus):
+    def add_corpus(self, corpus):
         if hasattr(corpus, "__iter__"):
             self.items.extend(corpus)
             if self.vocabs is None:
 
-                chars = sorted(list(set( ''.join(corpus ))))
+                chars = sorted(list(set(''.join(corpus))))
                 chars.insert(0, '[CLS]')
                 chars.insert(1, '[SEP]')
                 chars.insert(2, '[UNK]')
@@ -896,33 +900,32 @@ class TextSequenceDataset(Dataset):
                 self.vocabs = chars
                 self.text2index = dict((c, i) for i, c in enumerate(chars))
                 self.index2text = dict((i, c) for i, c in enumerate(chars))
-                self.vocabs_frequency=OrderedDict((c, 1) for i, c in enumerate(chars))
+                self.vocabs_frequency = OrderedDict((c, 1) for i, c in enumerate(chars))
                 for ch in list(''.join(corpus)):
                     self.vocabs_frequency[ch] += 1
 
             else:
                 new_chars = sorted(list(set(''.join(corpus))))
-                new_chars=[ch for ch in new_chars if ch not in self.vocabs]
-                new_chars=list(sorted(set(''.join(new_chars))))
+                new_chars = [ch for ch in new_chars if ch not in self.vocabs]
+                new_chars = list(sorted(set(''.join(new_chars))))
                 for ch in new_chars:
                     self.vocabs.append(ch)
-                    self.text2index[ch]=len(self.vocabs)-1
-                    self.index2text[len(self.vocabs)-1]=ch
-                    self.vocabs_frequency[ch]=1
+                    self.text2index[ch] = len(self.vocabs) - 1
+                    self.index2text[len(self.vocabs) - 1] = ch
+                    self.vocabs_frequency[ch] = 1
 
                 for ch in list(''.join(corpus)):
                     self.vocabs_frequency[ch] += 1
 
-            self.length_index=OrderedDict()
-            total_len=0
+            self.length_index = OrderedDict()
+            total_len = 0
             for i in range(len(self.items)):
-                total_len+=(len(self.items[i])+2)
-                self.length_index[i]=total_len
+                total_len += (len(self.items[i]) + 2)
+                self.length_index[i] = total_len
 
 
         else:
             raise ValueError('corpus should be a collection.')
-
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -940,22 +943,24 @@ class TextSequenceDataset(Dataset):
             return len(self.items)
 
     def __getitem__(self, index: int):
+        if self.sequence_start_at == 'next_section_start':
+            index = index + 1
         sequencetext = None
         if isinstance(self.sequence_offset, int):
-            if self.sequence_start_at == 'random':
-                for k,v in self.length_index.item_list:
-                    if v>index:
-                        last_v = self.length_index[k - 1] if k>0 else 0
+            if self.sequence_start_at in ['random', 'word_start']:
+                for k, v in self.length_index.item_list:
+                    if v > index:
+                        last_v = self.length_index[k - 1] if k > 0 else 0
                         sectiontext = list(self.items[k])
                         sectiontext.insert(0, '[CLS]')
-                        is_end=self.items[k].endswith('\n\n')
+                        is_end = self.items[k].endswith('\n\n')
                         if is_end:
-                            sectiontext=sectiontext[:-2]
+                            sectiontext = sectiontext[:-2]
                         sectiontext.append('[SEP]')
-                        if k+1<len( self.length_index) and not is_end :
+                        if k + 1 < len(self.length_index) and not is_end:
                             sectiontext.append('[CLS]')
-                            sectiontext.extend(list(self.items[k+1]))
-                            is_end = self.items[k+1].endswith('\n\n')
+                            sectiontext.extend(list(self.items[k + 1]))
+                            is_end = self.items[k + 1].endswith('\n\n')
                             if is_end:
                                 sectiontext = sectiontext[:-2]
                             sectiontext.append('[SEP]')
@@ -966,18 +971,17 @@ class TextSequenceDataset(Dataset):
                             if is_end:
                                 sectiontext = sectiontext[:-2]
                             sectiontext.append('[SEP]')
-                        idx=index-last_v
+                        idx = index - last_v
 
-                        sequencetext =sectiontext[idx+self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length,len(sectiontext))]
+                        sequencetext = sectiontext[idx + self.sequence_offset:builtins.min(idx + self.sequence_offset + self.sequence_length, len(sectiontext))]
                         break
-            elif self.sequence_start_at == 'section_start':
+            elif self.sequence_start_at.endswith('section_start'):
                 sectiontext = list(self.items[index])
                 sectiontext.insert(0, '[CLS]')
                 sectiontext.append('[SEP]')
-                sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length,len(sectiontext))]
+                sequencetext = sectiontext[self.sequence_offset:builtins.min(self.sequence_offset + self.sequence_length, len(sectiontext))]
 
         return sequencetext
-
 
     def data_transform(self, text_data):
         if len(self.transform_funcs) == 0:
@@ -985,16 +989,17 @@ class TextSequenceDataset(Dataset):
 
         for fc in self.transform_funcs:
             text_data = fc(text_data, spec=self.element_spec)
-        #text_data = text_backend_adaption(text_data)
+        # text_data = text_backend_adaption(text_data)
 
         arr = None
-        if isinstance(text_data,np.ndarray):
+        if isinstance(text_data, np.ndarray):
             return text_data
         elif self.is_onehot:
             arr = np.zeros((self.sequence_length, len(self.text2index)))
             for i in range(self.sequence_length):
                 if i < len(text_data):
                     this_char = text_data[i]
+
                     if this_char in self.text2index:
                         arr[i, self.text2index[this_char]] = 1
                     else:
@@ -1005,7 +1010,7 @@ class TextSequenceDataset(Dataset):
         else:
             arr = np.zeros((self.sequence_length))
             for i in range(self.sequence_length):
-                if i<len(text_data):
+                if i < len(text_data):
                     this_char = text_data[i]
                     if this_char in self.text2index:
                         arr[i] = self.text2index[this_char]
@@ -1015,10 +1020,6 @@ class TextSequenceDataset(Dataset):
                     arr[i] = self.text2index['[PAD]']
             arr = arr.astype(np.int64)
         return arr
-
-
-
-
 
     def text_transform(self, text_data):
         return self.data_transform(text_data)
@@ -1057,8 +1058,7 @@ class Iterator(object):
         self.paired_process_symbols = []
 
         self.is_shuffle = is_shuffle
-        self.memory_cache=[]
-
+        self.memory_cache = []
 
         self.data_template = OrderedDict()
         self.mode = mode
@@ -1104,10 +1104,10 @@ class Iterator(object):
 
         for k in range(len(datasets)):
             ds = datasets[k]
-            if isinstance(ds,TextSequenceDataset):
-                ds.element_spec = TensorSpec(shape=TensorShape([None,ds.sequence_length]), dtype=dtype.long,object_type=ds.object_type, name=ds.symbol)
-            elif ds.object_type==ObjectType.image_path:
-                ds.element_spec = TensorSpec(shape=TensorShape([None]),dtype=str,object_type=ds.object_type, name=ds.symbol)
+            if isinstance(ds, TextSequenceDataset):
+                ds.element_spec = TensorSpec(shape=TensorShape([None, ds.sequence_length]), dtype=dtype.long, object_type=ds.object_type, name=ds.symbol)
+            elif ds.object_type == ObjectType.image_path:
+                ds.element_spec = TensorSpec(shape=TensorShape([None]), dtype=str, object_type=ds.object_type, name=ds.symbol)
             else:
                 if len(ds) > 0:
                     dataitem = ds[k]
@@ -1116,7 +1116,7 @@ class Iterator(object):
 
         self._batch_size = batch_size
         self.paired_transform_funcs = []
-        self.batch_transform_funcs=[]
+        self.batch_transform_funcs = []
 
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
@@ -1129,7 +1129,6 @@ class Iterator(object):
             self.sample_filter = sample_filter
             self.batch_sampler.sample_filter = self.sample_filter
 
-
     @property
     def data(self):
         return self._data
@@ -1137,7 +1136,6 @@ class Iterator(object):
     @data.setter
     def data(self, value):
         self._data = value
-
 
         if self._label is not None and isinstance(self._label, (MaskDataset, BboxDataset, ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(
                 self._data):
@@ -1157,7 +1155,7 @@ class Iterator(object):
     def label(self, value):
         self._label = value
 
-        if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len( self._label) == len(self._data):
+        if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(self._data):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
 
         else:
@@ -1174,8 +1172,7 @@ class Iterator(object):
     def unpair(self, value):
         self._unpair = value
 
-
-        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffle,  drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
 
@@ -1204,7 +1201,7 @@ class Iterator(object):
     @property
     def signature(self):
         datasets = self.get_datasets()
-        if self._signature is not None and len(self._signature.outputs)==len(datasets):
+        if self._signature is not None and len(self._signature.outputs) == len(datasets):
             return self._signature
         else:
             self._signature = Signature(name='data_provider')
@@ -1216,7 +1213,6 @@ class Iterator(object):
             self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
             self._sample_iter = iter(self.batch_sampler)
             return self._signature
-
 
     def paired_transform(self, datadict: Dict[TensorSpec, np.ndarray]):
         if len(self.paired_transform_funcs) == 0:
@@ -1230,26 +1226,27 @@ class Iterator(object):
                 PrintException()
         return datadict
 
-
-
-    def batch_transform(self,datadict: Dict[TensorSpec, np.ndarray]):
-        if  len(self.batch_transform_funcs)>0:
+    def batch_transform(self, datadict: Dict[TensorSpec, np.ndarray]):
+        if len(self.batch_transform_funcs) > 0:
             if len(self.batch_transform_funcs) == 0:
                 return datadict
 
                 # if img_data.ndim>=2:
             for fc in self.batch_transform_funcs:
                 try:
-                    if hasattr(fc,'memory_cache'):
-                        fc.memory_cache=self.memory_cache
+                    if hasattr(fc, 'memory_cache'):
+                        fc.memory_cache = self.memory_cache
                         datadict = fc(datadict)
+                    elif fc.__class__.__name__ in ['OneOf', 'Compose']:
+                        datadict = fc(datadict)
+
                 except:
                     PrintException()
             return datadict
 
     def get_datasets(self):
         datasets = []
-        if self._data and isinstance(self._data, Dataset) and not isinstance(self._data, ZipDataset) and len(self._data) > 0:
+        if self._data is not None and isinstance(self._data, Dataset) and not isinstance(self._data, ZipDataset) and len(self._data) > 0:
             datasets.append(self._data)
         elif self._data and isinstance(self._data, ZipDataset):
             for ds in self._data.items:
@@ -1281,12 +1278,12 @@ class Iterator(object):
         for ds, result, value in zip(datasets, results.key_list, results.value_list):
             spec = copy.deepcopy(ds._element_spec)
             if spec.name == ds.symbol:
-                if isinstance(value,np.ndarray):
-                    dtype=DTYPE_MAPPING[value.dtype.type]
-                elif isinstance(value,numbers.Integral):
-                    dtype=numbers.Integral
-                elif isinstance(value,numbers.Real):
-                    dtype=numbers.Real
+                if isinstance(value, np.ndarray):
+                    dtype = DTYPE_MAPPING[value.dtype.type]
+                elif isinstance(value, numbers.Integral):
+                    dtype = numbers.Integral
+                elif isinstance(value, numbers.Real):
+                    dtype = numbers.Real
                 spec.shape = tensor_to_shape(to_tensor(value), need_exclude_batch_axis=True, is_singleton=True)
                 spec.object_type = ds.object_type
                 spec.dtype = dtype
@@ -1297,7 +1294,6 @@ class Iterator(object):
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         return self._signature
-
 
     def print_statistics(self):
         print('avg. process time: {0:.5f}'.format(self.pass_time_spend / float(builtins.max(1, self.pass_cnt))))
@@ -1310,7 +1306,7 @@ class Iterator(object):
             bbox = None
             mask = None
 
-            returnData =OrderedDict()# copy.deepcopy(self.data_template)
+            returnData = OrderedDict()  # copy.deepcopy(self.data_template)
 
             data = self.data.__getitem__(index) if self.data is not None and len(self.data) > 0 else None
             label = self.label.__getitem__(index) if self.label is not None and len(self.label) > 0 else None
@@ -1322,21 +1318,20 @@ class Iterator(object):
             if len(returnData) > 0 and len(returnData) != len(self.get_datasets()):
                 raise ValueError("Flattened data should have same length as datasets")
 
-
-            for n  in range(len(self.get_datasets())):
-                ds=self.get_datasets()[n]
-                spec= ds.element_spec
+            for n in range(len(self.get_datasets())):
+                ds = self.get_datasets()[n]
+                spec = ds.element_spec
                 returnData[spec] = results[n]
 
             if len(self.paired_process_symbols) > 0:
                 returnData = self.paired_transform(returnData)
 
-
+            # for batch transform cache data in memory
             if len(self.batch_transform_funcs) > 0:
                 self.memory_cache.append(copy.deepcopy(returnData))
-                if len(self.memory_cache)>self._batch_size:
+                if len(self.memory_cache) > self._batch_size:
                     self.memory_cache.pop(0)
-                if  len(self.memory_cache)>self._batch_size//2:
+                if len(self.memory_cache) > self._batch_size // 2:
                     returnData = self.batch_transform(returnData)
 
             # for i in range(len(returnData)):
@@ -1353,7 +1348,6 @@ class Iterator(object):
             for i in range(len(returnData)):
                 threads[i].join()
 
-
             if self.signature is None or len(self.signature.outputs) == 0:
                 self._signature = Signature(name='data_provider')
                 for spec in returnData.key_list:
@@ -1369,13 +1363,12 @@ class Iterator(object):
 
     def __setattr__(self, name: str, value) -> None:
         object.__setattr__(self, name, value)
-        if name in ['_data','_label', '_unpair']:
+        if name in ['_data', '_label', '_unpair']:
             self._signature = None
-        if name=='_unpair':
-            self._signature=None
-            if isinstance(value,RandomNoiseDataset):
-                value.length=len(self.data)
-
+        if name == '_unpair':
+            self._signature = None
+            if isinstance(value, RandomNoiseDataset):
+                value.length = len(self.data)
 
     def _next_index(self):
         return next(self._sample_iter)
@@ -1441,7 +1434,7 @@ class MetricIterator(Iterator):
 
         self._batch_size = batch_size
         self.paired_transform_funcs = []
-        self.batch_sampler = BatchSampler(self, self._batch_size,is_shuffle=self.is_shuffle, drop_last=False)
+        self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self._sample_iter = iter(self.batch_sampler)
         self.buffer_size = 10
         self.out_queue = Queue.Queue(maxsize=self.buffer_size)

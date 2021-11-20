@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import numbers
 import sys
 from typing import Callable, Any
 
@@ -22,8 +23,8 @@ from trident.backend.tensorspec import ObjectType
 from trident.layers.pytorch_layers import Dense
 
 from trident import context
-
-from trident.backend.common import dtype as Dtype
+from trident.backend.model import ModelBase
+from trident.backend import dtype as Dtype
 from trident.backend.common import *
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
@@ -48,7 +49,7 @@ class _ClassificationLoss(Loss):
     """Calculate loss for  complex classification task."""
 
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_ratio=3.5, binding_dataset_symbol=None,
+                 ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None,
                  name=None, **kwargs):
         """
 
@@ -82,7 +83,7 @@ class _ClassificationLoss(Loss):
             label_smooth (bool):If True, mean we will apply label-smoothing in loss calculation.
 
         """
-        super(_ClassificationLoss, self).__init__(reduction=reduction, sample_weight=sample_weight, axis=axis, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+        super(_ClassificationLoss, self).__init__(reduction=reduction, sample_weight=sample_weight, axis=axis, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,  input_names=input_names, output_names=output_names,name=name)
         self.need_target_onehot = False
         self.is_multiselection = False
         self.is_target_onehot = False
@@ -200,17 +201,25 @@ class _ClassificationLoss(Loss):
             pass
 
         output_exp = exp(output)
-
-        if (ndim(output) >= 1 and 'float' in str(output.dtype) and reduce_min(output) >= 0 and reduce_max(output) <= 1):
+        if ndim(output) >= 1 and 'float' in str(output.dtype) and reduce_min(output) >= 0 :
             self.is_logsoftmax = False
-            self.from_logits = True
+            if reduce_max(output) > 1:
+                output=output/reduce_max(output)
+
+            sum_output=reduce_sum(output,axis=self.axis,keepdims=True)
+            if reduce_max(abs(sum_output-1))<1e-3:
+                self.from_logits = True
+            else:
+                output=output/clip(sum_output,1e-7,1-1e-7)
+                self.from_logits = True
+
             if self.auto_balance and self.label_statistics is not None:
-                if int_shape(output)[1] == len(self.label_statistics):
+                if self.num_classes== len(self.label_statistics):
                     new_shp = [1] * len(int_shape(output))
                     new_shp[1] = len(self.label_statistics)
-                    output = output * clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple(new_shp))), min=1e-7)
+                    output = output * clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple(new_shp)),requires_grad=False), min=1e-7)
 
-            output = clip(output, min=1e-7, max=1 - 1e-7)
+            output = clip(output, min=1e-7, max=1)
 
         elif (ndim(output) >= 1 and 'float' in str(output.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
             self.is_logsoftmax = True
@@ -241,14 +250,14 @@ class _ClassificationLoss(Loss):
             self.need_target_onehot = True
         if target.dtype == str2dtype('long'):
             self.is_target_onehot = False
-        elif target.dtype != str2dtype('long') and (target.min() >= 0 and target.max() <= 1 and abs(output_exp.sum(-1).mean() - 1) < 1e-4):
-            target = clip(target, min=1e-7, max=1 - 1e-7)
+        elif target.dtype != str2dtype('long') and (target.min() >= 0 and target.max() <= 1 and abs(target.sum(self.axis)-1).mean() < 1e-4):
+            target = clip(target, min=1e-7, max=1- 1e-7)
             self.is_target_onehot = True
 
         # need target onehot but currently not
         if target.dtype == torch.long and self.need_target_onehot == True and self.is_target_onehot == False:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(get_device())
-            target = clip(target, min=1e-7, max=1 - 1e-7)
+
             target.require_grads = False
             self.is_target_onehot = True
             if self.label_smooth:
@@ -281,7 +290,7 @@ class _ClassificationLoss(Loss):
     def _handel_abnormal(self, loss):
         if any_abnormal_number(loss):
             sys.stderr.write('{0} has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.name))
-            loss = where(is_nan(loss), ones_like(loss, requires_grad=True) * 1e-7, loss)
+            loss = where(is_abnormal_number(loss), ones_like(loss, requires_grad=False) * 1e-7, loss)
         return loss
 
     def forward(self, output: Tensor, target: Tensor, **kwargs) -> 'loss':
@@ -318,7 +327,7 @@ class _ClassificationLoss(Loss):
             is_hard = None
             if target.dtype == Dtype.int64:
                 is_hard = greater(target, 0)
-                num_hard = is_hard.sum().item()
+                num_hard =builtins.max( is_hard.sum().item(),1)
                 num_easy = int(self.ohem_ratio * num_hard)
             hard_cases = is_hard > 0
 
@@ -334,7 +343,7 @@ class _ClassificationLoss(Loss):
 class _PairwiseLoss(Loss):
     """Calculate loss for  complex classification task."""
 
-    def __init__(self, axis=None, sample_weight=None, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name=None, **kwargs):
+    def __init__(self, axis=None, sample_weight=None, reduction='mean', enable_ohem=False, ohem_ratio=3.5, input_names=None, output_names=None,name=None, **kwargs):
         """
 
         Args:
@@ -367,7 +376,7 @@ class _PairwiseLoss(Loss):
             label_smooth (bool):If True, mean we will apply label-smoothing in loss calculation.
 
         """
-        super(_PairwiseLoss, self).__init__(reduction=reduction, axis=axis, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+        super(_PairwiseLoss, self).__init__(reduction=reduction, axis=axis, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,  input_names=input_names, output_names=output_names, name=name)
         self.sample_weight = sample_weight
 
         # initilize weight
@@ -402,6 +411,8 @@ class _PairwiseLoss(Loss):
         # output, target = self.flatten_check(output, target)
         if self.sample_weight is None or len(self.sample_weight) != int_shape(output)[0]:
             self.sample_weight = ones((int_shape(output)[0]), dtype=output.dtype)
+        if isinstance(target,numbers.Number):
+            target=ones_like(output)*target
 
         if output.shape == target.shape:
             if self.enable_ohem:
@@ -556,7 +567,7 @@ class CrossEntropyLoss(_ClassificationLoss):
     """
 
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_ratio=3.5, binding_dataset_symbol=None, name='CrossEntropyLoss'):
+                 ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='CrossEntropyLoss'):
         """
 
         Args:
@@ -570,7 +581,7 @@ class CrossEntropyLoss(_ClassificationLoss):
             name (stringf):
         """
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol,  input_names=input_names, output_names=output_names, name=name)
         self._built = True
         self.need_target_onehot = False
 
@@ -603,14 +614,13 @@ class CrossEntropyLoss(_ClassificationLoss):
             else:
                 reshape_shape = [1] * ndim(output)
                 reshape_shape[self.axis] = self.num_classes
-                sample_weight = sample_weight.view(*reshape_shape)
                 sample_weight = self.sample_weight.view(*reshape_shape) * self.ignore_index_weight.view(*reshape_shape)
 
             if not self.is_logsoftmax:
                 return -reduce_sum(target * F.log_softmax(output, dim=self.axis) * sample_weight, axis=self.axis)
             else:
                 return -reduce_sum(target * output * sample_weight, axis=self.axis)
-        return loss
+
 
 
 class NLLLoss(_ClassificationLoss):
@@ -722,9 +732,9 @@ class NLLLoss(_ClassificationLoss):
     """
 
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_ratio=3.5, binding_dataset_symbol=None, name='NllLoss'):
+                 ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='NllLoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self.need_target_onehot = False
         self._built = True
 
@@ -804,9 +814,9 @@ class F1ScoreLoss(_ClassificationLoss):
     """
 
     def __init__(self, beta=1, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean',
-                 enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, name='CrossEntropyLoss'):
+                 enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='CrossEntropyLoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self.beta = beta
 
         self.need_target_onehot = True
@@ -859,13 +869,16 @@ class FocalLoss(_ClassificationLoss):
         normalized (bool): Compute normalized focal loss (https://arxiv.org/pdf/1909.07829.pdf).
         threshold (float, optional): Compute reduced focal loss (https://arxiv.org/abs/1903.01347).
 
+     Examples:
 
+        >>> FocalLoss(reduction='mean',axis=-1)(to_tensor([[0.1, 0.7 , 0.2],[0.3 , 0.6 , 0.1],[0.9 , 0.05 , 0.05],[0.3 , 0.4 , 0.3]]).float(),to_tensor([1,0,1,2]).long()).cpu()
+        tensor(1.1305)
     """
 
     def __init__(self, alpha=0.5, gamma=2, normalized=False, threshold=None, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None,
-                 label_smooth=False, reduction='mean', enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, name='FocalLoss'):
+                 label_smooth=False, reduction='mean', enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='FocalLoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=None, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=None ,  input_names=input_names, output_names=output_names, name=name)
         self.alpha = alpha
         self.gamma = gamma
         self.threshold = threshold
@@ -885,31 +898,34 @@ class FocalLoss(_ClassificationLoss):
         Returns:
 
             """
+        alpha = torch.zeros(self.num_classes).to(output.device)
+        alpha[0] += self.alpha
+        alpha[1:] += (1 - self.alpha)
+        if ndim(output) > 2 and self.axis==1:
+            output = output.view(output.size(0), output.size(1), -1)  # N,C,H,W => N,C,H*W
+            output = output.transpose(1, 2)  # N,C,H*W => N,H*W,C
+            output = output.contiguous().view(-1, output.size(2))  # N,H*W,C => N*H*W,C
 
-        if not self.need_target_onehot:
-            if self.is_target_onehot:
-                target = argmax(target, self.axis)
-            if self.is_logsoftmax == False:
-                output = torch.log_softmax(output, self.axis)
-            probs = exp(output)
-            return F.nll_loss(pow(1 - probs, self.gamma) * output, target, self.sample_weight, ignore_index=self.ignore_index, reduction='none')
-        else:
-            sample_weight = self.sample_weight
-            if ndim(output) == 2:
-                if self.is_logsoftmax == True:
-                    sample_weight = self.sample_weight * self.ignore_index_weight
-            else:
-                reshape_shape = [1] * ndim(output)
-                reshape_shape[self.axis] = self.num_classes
-                sample_weight = self.sample_weight.view(*reshape_shape)
-                if self.is_logsoftmax == True:
-                    sample_weight = self.sample_weight.view(*reshape_shape) * self.ignore_index_weight.view(*reshape_shape)
 
-            if self.is_logsoftmax == False:
-                output = torch.log_softmax(output, self.axis)
-            probs = exp(output) * sample_weight
-            loss = -self.alpha * target * pow((1 - probs), self.gamma) * output
-            return loss
+        if self.is_target_onehot and target.dtype != dtype.long:
+            target = argmax(target, self.axis)
+            self.is_target_onehot=False
+        target = target.view(-1, 1)
+
+        if not self.is_logsoftmax:
+            output=log_softmax(output)
+            self.is_logsoftmax=True
+
+        logpt=output
+        logpt = logpt.gather(1, target)
+        pt = logpt.data.exp()
+        #
+        loss=-1 *  ((1 - pt) ** self.gamma) * logpt
+        alpha=alpha.gather(0, target.view(-1))
+        loss=loss*(alpha.view(-1,1))
+        return loss
+
+
 
         # - \alpha(1 - softmax(x)[class ]) ^ gamma \log(softmax(x)[class])
 
@@ -939,9 +955,9 @@ class FocalLoss(_ClassificationLoss):
 
 class BCELoss(_ClassificationLoss):
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_ratio=3.5, binding_dataset_symbol=None, name='BCELoss'):
+                 ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='BCELoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self._built = True
         self.num_classes = None
         self.is_logsoftmax = False
@@ -1008,7 +1024,7 @@ class DiceLoss(_ClassificationLoss):
     """
 
     def __init__(self, smooth=1., axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean',
-                 enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, name='DiceLoss'):
+                 enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None,  input_names=None, output_names=None,name='DiceLoss'):
         """
         Args:
             axis (int): the axis where the class label is.
@@ -1022,7 +1038,7 @@ class DiceLoss(_ClassificationLoss):
         """
 
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self.smooth = smooth
         self.is_logsoftmax = False
         self.need_target_onehot = True
@@ -1061,9 +1077,9 @@ class DiceLoss(_ClassificationLoss):
 
 class KLDivergenceLoss(_ClassificationLoss):
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_ratio=3.5, binding_dataset_symbol=None, name='KLDivergenceLoss'):
+                 ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='KLDivergenceLoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol, name=name)
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self._built = True
         self.num_classes = 1
         self.is_logsoftmax = False
@@ -1093,8 +1109,8 @@ class L1Loss(_PairwiseLoss):
      See :class:`~torch.nn.L1Loss` for details.
      """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name='L1Loss'):
-        super(L1Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, input_names=None, output_names=None,name='L1Loss'):
+        super(L1Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio ,  input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1121,8 +1137,8 @@ class L2Loss(_PairwiseLoss):
         See :class:`~torch.nn.MSELoss` for details.
         """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name='MSELoss'):
-        super(L2Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None ,name='MSELoss'):
+        super(L2Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,   input_names=input_names, output_names=output_names,name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1148,8 +1164,8 @@ class SmoothL1Loss(_PairwiseLoss):
     See :class:`~torch.nn.SmoothL1Loss` for details.
     """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name='SmoothL1Loss'):
-        super(SmoothL1Loss, self).__init__(enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, reduction=reduction, name=name)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None ,  name='SmoothL1Loss'):
+        super(SmoothL1Loss, self).__init__(enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, reduction=reduction,input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
         self.huber_delta = 0.5
@@ -1177,8 +1193,8 @@ class MSELoss(_PairwiseLoss):
         See :class:`~torch.nn.MSELoss` for details.
         """
 
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name='MSELoss'):
-        super(MSELoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None,name='MSELoss'):
+        super(MSELoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio  ,  input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1198,8 +1214,8 @@ class MSELoss(_PairwiseLoss):
 
 
 class WingLoss(_PairwiseLoss):
-    def __init__(self, omega=10, epsilon=2, name='WingLoss'):
-        super(WingLoss, self).__init__()
+    def __init__(self, omega=10, epsilon=2,  input_names=None, output_names=None,name='WingLoss'):
+        super(WingLoss, self).__init__(  input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.omega = omega
         self.epsilon = epsilon
@@ -1224,12 +1240,12 @@ class WingLoss(_PairwiseLoss):
             delta_y - c
         )
 
-        return reduce_mean(losses, [1, 2])
+        return losses
 
 
 class AdaptiveWingLoss(_PairwiseLoss):
-    def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1, name='AdaptiveWingLoss'):
-        super(AdaptiveWingLoss, self).__init__()
+    def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1,  input_names=None, output_names=None,name='AdaptiveWingLoss'):
+        super(AdaptiveWingLoss, self).__init__(  input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.omega = omega
         self.theta = theta
@@ -1247,24 +1263,19 @@ class AdaptiveWingLoss(_PairwiseLoss):
         Returns:
 
         """
-        y = target
-        y_hat = output
-        delta_y = (y - y_hat).abs()
-        delta_y1 = delta_y[delta_y < self.theta]
-        delta_y2 = delta_y[delta_y >= self.theta]
-        y1 = y[delta_y < self.theta]
-        y2 = y[delta_y >= self.theta]
-        loss1 = self.omega * torch.log(1 + torch.pow(delta_y1 / self.omega, self.alpha - y1))
-        A = self.omega * (1 / (1 + torch.pow(self.theta / self.epsilon, self.alpha - y2))) * (self.alpha - y2) * (
-            torch.pow(self.theta / self.epsilon, self.alpha - y2 - 1)) * (1 / self.epsilon)
-        C = self.theta * A - self.omega * torch.log(1 + torch.pow(self.theta / self.epsilon, self.alpha - y2))
-        loss2 = A * delta_y2 - C
-        return (loss1.sum() + loss2.sum()) / (len(loss1) + len(loss2))
+        lossMat = torch.zeros_like(output,dtype=output.dtype).to(output.device)
+        A = self.omega * (1 / (1 + (self.theta / self.epsilon) ** (self.alpha - target))) * (self.alpha - target) * ((self.theta / self.epsilon) ** (self.alpha - target - 1)) / self.epsilon
+        C = self.theta * A - self.omega * torch.log(1 + (self.theta / self.epsilon) ** (self.alpha - target))
+        case1_ind = torch.abs(target - output) < self.theta
+        case2_ind = torch.abs(target - output) >= self.theta
+        lossMat[case1_ind] = self.omega * torch.log(1 + torch.abs((target[case1_ind] - output[case1_ind]) / self.epsilon) ** (self.alpha - target[case1_ind]))
+        lossMat[case2_ind] = A[case2_ind] * torch.abs(target[case2_ind] - output[case2_ind]) - C[case2_ind]
+        return lossMat
 
 
 class ExponentialLoss(_PairwiseLoss):
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name='ExponentialLoss'):
-        super(ExponentialLoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None,name='ExponentialLoss'):
+        super(ExponentialLoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, input_names=input_names, output_names=output_names,name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1289,8 +1300,8 @@ class ExponentialLoss(_PairwiseLoss):
 
 
 class ItakuraSaitoLoss(_PairwiseLoss):
-    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5, name='ItakuraSaitoLoss'):
-        super(ItakuraSaitoLoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+    def __init__(self, reduction='mean', enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None,name='ItakuraSaitoLoss'):
+        super(ItakuraSaitoLoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,input_names=input_names, output_names=output_names ,name=name)
         self.name = name
         self.reduction = reduction
 
@@ -1318,8 +1329,8 @@ class ItakuraSaitoLoss(_PairwiseLoss):
 
 
 class CosineSimilarityLoss(_PairwiseLoss):
-    def __init__(self, enable_ohem=False, ohem_ratio=3.5, name='CosineSimilarityLoss'):
-        super(CosineSimilarityLoss, self).__init__(enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
+    def __init__(self, enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None,name='CosineSimilarityLoss'):
+        super(CosineSimilarityLoss, self).__init__(enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,input_names=input_names, output_names=output_names, name=name)
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -1419,19 +1430,18 @@ def ssim(X, Y, window, data_range: float, use_padding: bool = False):
     return ssim_val, cs
 
 
-class MS_SSIMLoss(_Loss):
-    def __init__(self, window_size=11, window_sigma=1.5, data_range=255., channel=3, use_padding=False, weights=None, levels=4, eps=1e-8):
+class MS_SSIMLoss(_PairwiseLoss):
+    def __init__(self, window_size=11, window_sigma=1.5, data_range=255., channel=3, use_padding=False, weights=None, levels=4, eps=1e-8,input_names=None, output_names=None,name='ms_ssim'):
         super(MS_SSIMLoss, self).__init__()
 
         self.window_size = window_size
         self.channel = channel
         window = create_window(window_size, window_sigma, channel)
-        self.register_buffer('window', window.to(get_device()))
+        self.window=window.to(get_device())
         self.data_range = data_range
         self.use_padding = use_padding
         self.eps = eps
-        window = create_window(window_size, window_sigma, channel)
-        self.register_buffer('window', window.to(get_device()))
+
 
         if weights is None:
             weights = [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]
@@ -1441,7 +1451,7 @@ class MS_SSIMLoss(_Loss):
             weights = weights[:levels]
             weights = weights / weights.sum()
 
-        self.register_buffer('weights', weights.to(get_device()))
+        self.weights=weights.to(get_device())
 
     def ms_ssim(self, X, Y):
         '''
@@ -1485,13 +1495,13 @@ class MS_SSIMLoss(_Loss):
         # In this file's image training demo. I feel the old ms-ssim more better. So I keep use old ms-ssim op.
         return ms_ssim_val
 
-    def forward(self, output, target) -> 'loss':
-        return self.ms_ssim(output, target).mean()
+    def calculate_loss(self, output, target, **kwargs):
+        return self.ms_ssim(output, target)
 
 
 class IoULoss(_ClassificationLoss):
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_ratio=3.5, name='lou_loss'):
+                 ohem_ratio=3.5,  input_names=None, output_names=None,name='lou_loss'):
         super(IoULoss, self).__init__(raxis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
                                       label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
         self.need_target_onehot = False
@@ -1520,7 +1530,7 @@ class IoULoss(_ClassificationLoss):
 
 
 class SoftIoULoss(Loss):
-    def __init__(self, n_classes, reduction="mean", reduced=False):
+    def __init__(self, n_classes, reduction="mean", reduced=False, input_names=None, output_names=None,name='softiou'):
         super(SoftIoULoss, self).__init__()
         self.n_classes = n_classes
         self.reduction = reduction
@@ -1906,18 +1916,19 @@ class CenterLoss(_Loss):
         init.kaiming_uniform_(self.centers, a=sqrt(5))
         self.to(_device)
 
-    def forward(self, output, target) -> 'loss':
+    def forward(self, features, target) -> 'loss':
         """
         Args:
-            output: feature matrix with shape (batch_size, feat_dim).
+            features: feature matrix with shape (batch_size, feat_dim).
             target: ground truth labels with shape (num_classes).
 
         """
-        assert output.size(0) == target.size(0), "features.size(0) is not equal to labels.size(0)"
-        batch_size = output.size(0)
-        distmat = torch.pow(output, 2).sum(dim=1, keepdim=True).expand(batch_size, self.num_classes) + torch.pow(
+
+        batch_size = features.size(0)
+        self.centers.to(features.dtype).to(features.device)
+        distmat = torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, self.num_classes) + torch.pow(
             self.centers, 2).sum(dim=1, keepdim=True).expand(self.num_classes, batch_size).t()
-        distmat.addmm_(1, -2, output, self.centers.t())
+        distmat.addmm_(1, -2, features, self.centers.t())
         classes = torch.arange(self.num_classes).long().to(_device)
 
         target = target.unsqueeze(1).expand(batch_size, self.num_classes)
@@ -1929,9 +1940,9 @@ class CenterLoss(_Loss):
             dist.append(value)
         dist = torch.cat(dist)
         if self.reduction == 'mean':
-            return dist.mean() / self.num_classes
+            return dist.mean() #/ self.num_classes
         else:
-            return dist.sum() / self.num_classes
+            return dist.sum() #/ self.num_classes
 
 
 class StyleLoss(nn.Module):
@@ -1950,7 +1961,7 @@ class StyleLoss(nn.Module):
 class PerceptionLoss(_PairwiseLoss):
     def __init__(self, net, reduction="mean"):
         super(PerceptionLoss, self).__init__()
-        if issubclass(net, get_class('Model', 'trident.optims.pytorch_trainer')):
+        if isinstance(net, ModelBase):
             net = net.model
         self.ref_model = net
         self.ref_model.trainable = False
@@ -1961,7 +1972,7 @@ class PerceptionLoss(_PairwiseLoss):
                 module.keep_output = True
 
         self.reduction = reduction
-        self.to(_device)
+        self.ref_model.to(_device)
 
     def vgg_preprocess(self, img):
         return ((img + 1) / 2) * to_tensor([[0.485, 0.456, 0.406]]).unsqueeze(-1).unsqueeze(-1) + to_tensor([[0.229, 0.224, 0.225]]).unsqueeze(-1).unsqueeze(-1)
@@ -1980,10 +1991,12 @@ class PerceptionLoss(_PairwiseLoss):
         target_features = OrderedDict()
         output_features = OrderedDict()
         _ = self.ref_model(self.vgg_preprocess(output))
+        #_ = self.ref_model(output)
         for item in self.layer_name_mapping.values():
             output_features[item] = getattr(self.ref_model, item).output
 
-        _ = self.ref_model(self.preprocess(target))
+        _ = self.ref_model(self.vgg_preprocess(target))
+        #_ = self.ref_model(target)
         for item in self.layer_name_mapping.values():
             target_features[item] = getattr(self.ref_model, item).output.detach()
 
@@ -1991,9 +2004,9 @@ class PerceptionLoss(_PairwiseLoss):
         num_filters = 0
         for i in range(len(self.layer_name_mapping)):
             b, c, h, w = output_features.value_list[i].shape
-            loss += ((output_features.value_list[i] - target_features.value_list[i]) ** 2).sum() / (h * w)
-            num_filters += c
-        return loss / (output.size(0) * num_filters)
+            loss=loss+ ((output_features.value_list[i] - target_features.value_list[i]) ** 2).sum()/(c*h*w)
+
+        return loss
 
 
 class EdgeLoss(_Loss):

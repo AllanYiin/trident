@@ -9,7 +9,9 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import variables as tf_variables
 from trident.backend.common import get_session, addindent, enforce_singleton, unpack_singleton, get_time_suffix, get_class, \
-    format_time, get_terminal_size, snake2camel, camel2snake,Signature,epsilon,TensorShape,dtype
+    format_time, get_terminal_size, snake2camel, camel2snake,Signature,epsilon
+from trident.backend import dtype
+from trident.backend.tensorspec import TensorSpec,TensorShape
 from trident.backend.tensorflow_backend import Layer, Sequential, Parameter
 from trident.backend.tensorflow_ops import *
 from trident.layers.tensorflow_initializers import *

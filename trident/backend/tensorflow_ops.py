@@ -21,11 +21,8 @@ from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
 from tensorflow.python.framework.ops  import composite_tensor
 from tensorflow.python.ops import math_ops
-
-from trident.backend.common import dtype as Dtype
-
-from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, TensorShape
-
+from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session,TensorShape
+from trident.backend import dtype as Dtype
 __all__ = ['Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor','to_scalar', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',

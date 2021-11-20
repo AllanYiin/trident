@@ -41,7 +41,7 @@ from trident.backend.common import camel2snake, to_list, unpack_singleton, enfor
     get_args_spec
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
-from trident.backend.common import dtype 
+from trident.backend import dtype
 
 _FUN_NAMES = [
     ('float', tops.float),
@@ -57,7 +57,7 @@ from trident.data.utils import pickle_it
 from trident.backend import tensorflow_serialization as serialization
 from trident import context
 __all__ = ['set_device', 'DTYPE_MAPPING','Layer', 'get_device', 'Parameter', 'Sequential', 'ModuleList', 'ModuleDict', 'summary', 'normalize_padding', 'load', 'save', 'try_map_args_and_call',
-           'fix_layer']
+           'fix_layer','fix_keras_module']
 
 ctx = context._context()
 
@@ -3251,4 +3251,108 @@ def fix_layer(layer: Layer):
 
     return layer
 
+
+def fix_keras_module(module: tf.Module, input_tensor: Tensor = None, input_shape: (tuple, TensorShape) = None):
+    # module.is_root = True
+    # module.name=module.__class__.__name__
+    # module._nodes = OrderedDict()
+    # module._uid_prefixs = defaultdict(int)
+    # module._signature = get_signature(module)
+    # module.signature = get_signature(module)
+    #
+    # def get_uid(prefix=''):
+    #     module._uid_prefixs[prefix] += 1
+    #     return module._uid_prefixs[prefix]
+    #
+    # def get_root(module):
+    #     if not hasattr(module, '_nodes') or module._nodes is None or len(module._nodes) < 2:
+    #         return module
+    #     if hasattr(list(module._nodes.values())[0], 'is_root') and list(module._nodes.values())[0].is_root == True:
+    #         return list(module._nodes.values())[0]
+    #     else:
+    #         for name, node in module._nodes.items():
+    #             if hasattr(node, 'default_name') and node.default_name == "sequential_1":
+    #                 return node
+    #         return module
+    #
+    # for name, mod in module.named_modules():
+    #     if mod != module:
+    #         module.is_root = False
+    #     mod._built = True
+    #     mod.built = True
+    #     mod.relative_name = name
+    #     mod.batch_index = 0
+    #     mod.filter_index = 1
+    #     mod.in_sequence = False
+    #     mod.uuid = uuid.uuid4().node
+    #     prefix = mod.__class__.__name__
+    #     mod.default_name = camel2snake(prefix) + '_' + str(get_uid(camel2snake(prefix)))
+    #
+    #     mod._input_shape = None
+    #     mod._output_shape = None
+    #     mod.keep_output = False
+    #     mod.register_buffer('_output_tensor', None, persistent=False)
+    #
+    #     mod._device = get_device()
+    #     #mod._signature = inspect.signature(mod.forward)
+    #     mod.dump_patches = True
+    #     #
+    #     # def getsignature(mod):
+    #     #     return mod._signature
+    #     #
+    #     # def setsignature(mod, value):
+    #     #     mod._signature = value
+    #     #
+    #     # def delsignature(mod):
+    #     #     del mod._signature
+    #     #
+    #     # mod.signature= property(getsignature, setsignature, delsignature, "signature")
+    #
+    #     if not hasattr(mod, 'get_root'):
+    #         setattr(mod, 'get_root', MethodType(get_root, mod))
+    #     if hasattr(mod, 'dims'):
+    #         mod.axis = mod.dims
+    #     if hasattr(module, 'keepdim'):
+    #         value = getattr(module, 'keepdim')
+    #         setattr(module, 'keepdims', value)
+    #
+    # def register_hook(module):
+    #     def hook(module, input, output):
+    #         # class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
+    #         input = iteration_tools.flatten([input], iterable_types=(list, tuple))
+    #         input = unpack_singleton([item for item in input if item is not None])
+    #
+    #         if isinstance(input, (list, tuple)):
+    #             module._input_shape = tuple([tensor_to_shape(t, need_exclude_batch_axis=True, is_singleton=False) for t in input])
+    #             module.input_shape = module._input_shape
+    #         elif is_tensor(input):
+    #             module._input_shape = tensor_to_shape(input, need_exclude_batch_axis=True, is_singleton=False)
+    #             module.input_shape = module._input_shape
+    #
+    #         output = iteration_tools.flatten([output], iterable_types=(list, tuple))
+    #         output = unpack_singleton([item for item in output if item is not None])
+    #         if isinstance(output, (list, tuple)):
+    #             module._output_shape = tuple([tensor_to_shape(t, need_exclude_batch_axis=True, is_singleton=False) for t in output])
+    #             module.output_shape = module._output_shape
+    #         elif is_tensor(output):
+    #             module._output_shape = tensor_to_shape(output, need_exclude_batch_axis=True, is_singleton=False)
+    #             module.output_shape = module._output_shape
+    #
+    #         hooks.append(module.register_forward_hook(hook))
+    #
+    # hooks = []
+    #
+    # # register hook
+    # module.apply(register_hook)
+    #
+    # if input_tensor is None:
+    #     input_tensor = to_tensor(TensorShape(input_shape).get_dummy_tensor())
+    # # make a forward pass
+    # # print(x.shape)
+    # module(input_tensor)
+    #
+    # # remove these hooks
+    # for h in hooks:
+    #     h.remove()
+    return module
 

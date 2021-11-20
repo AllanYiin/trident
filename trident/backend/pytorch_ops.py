@@ -2,28 +2,26 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import collections
-import numbers
 import builtins
+import collections
+import gc
 import math
-import os
+import numbers
 import random
-from distutils.version import Version, LooseVersion
 from collections import Sized, Iterable
-from enum import Enum
+from distutils.version import LooseVersion
 from functools import wraps
 from typing import Tuple, List, Optional, Union, Sequence
-import gc
-from warnings import warn
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
 from torch.nn.parameter import Parameter
-from trident.backend.common import dtype as Dtype
+
+from trident.backend import dtype as Dtype
 from trident.backend.common import *
+#from trident.backend.tensorspec import TensorShape
 
 version = torch.__version__
 pt_version = LooseVersion(vstring=version)

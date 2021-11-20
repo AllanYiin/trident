@@ -5,7 +5,8 @@ import sys
 from collections import Counter
 from enum import Enum
 from inspect import signature
-from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, dtype, is_instance
+from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, is_instance
+from trident.backend import dtype
 from typing import Optional, Union, overload
 import numpy as np
 
@@ -13,9 +14,15 @@ __all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spe
            'object_type_inference', 'distict_color_count']
 
 if get_backend() == 'pytorch':
+    import torch
+    Tensor = torch.Tensor
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
+    import tensorflow as tf
+    Tensor=tf.Tensor
     from trident.backend.tensorflow_ops import *
+
+
 
 _primes = [1, 2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71, 73, 79, 83, 89, 97, 101, 103, 107, 109, 113, 127, 131, 137, 139, 149, 151, 157, 163, 167,
            173, 179, 181, 191, 193, 197, 199, 211, 223, 227, 229, 233, 239, 241, 251]
@@ -230,7 +237,7 @@ class TensorSpec(object):
         return copy.deepcopy(self)
 
     @classmethod
-    def tensor_to_spec(cls, t: Tensor, object_type: ObjectType = None, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=None):
+    def tensor_to_spec(cls, t, object_type: ObjectType = None, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=None):
         if isinstance(t,str):
             return cls(shape=TensorShape([None]), dtype=str, object_type=object_type,
                        optional=optional,

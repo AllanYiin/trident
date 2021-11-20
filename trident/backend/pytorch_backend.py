@@ -35,11 +35,12 @@ from torch._jit_internal import _copy_to_script_wrapper
 from torch.nn.parameter import Parameter
 from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec, dtype
+    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
+from trident.backend import dtype
 from trident import context
 
 ctx = context._context()

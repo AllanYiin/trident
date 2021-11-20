@@ -2,7 +2,9 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import builtins
 import math
+import numbers
 import sys
 
 import numpy as np
@@ -11,15 +13,18 @@ from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn
+from tqdm import tqdm
+
 from trident import context
 
-from trident.backend.common import camel2snake, get_class, epsilon, PrintException
+from trident.backend.common import camel2snake, get_class, epsilon, PrintException, to_list
 from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.optims.losses import Loss
-from trident.backend.common import dtype
 
+from trident.backend import dtype
+from trident.backend.tensorspec import TensorSpec,TensorShape
 # def cosine_similarity(target, output):
 #     assert target.ndim == 2
 #     assert output.ndim == 2
@@ -88,17 +93,7 @@ class _ClassificationLoss(Loss):
         self.ignore_index_weight = None
         self.auto_balance = auto_balance
         self.auto_balance = auto_balance
-        if self.auto_balance:
-            self.label_statistics = None
-            ctx = context._context()
-            if hasattr(ctx._thread_local_info, 'data_providers') and len(ctx._thread_local_info.data_providers) > 0:
-                dp = list(ctx._thread_local_info.data_providers.values())[0]
-                if dp.traindata.label.__class__.__name__ == 'LabelDataset':
-                    unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
-                    reweights = np.clip(counts, 1, np.inf) / np.sum(counts).astype(np.float32)
 
-                    reweights1 = np.max(reweights) / reweights
-                    self.label_statistics = reweights1
         if cutoff is not None and not 0 < cutoff < 1:
             raise ValueError('cutoff should between 0 and 1')
         self.cutoff = cutoff
@@ -158,6 +153,44 @@ class _ClassificationLoss(Loss):
             return output, target
         else:
             raise ValueError('output and target have diffent elements.')
+
+    def _calculate_label_statistics(self):
+        ctx = context._context()
+        if hasattr(ctx._thread_local_info, 'data_providers') and len(ctx._thread_local_info.data_providers) > 0:
+
+            dp = list(ctx._thread_local_info.data_providers.values())[-1]
+            if dp.traindata.label.__class__.__name__ != 'ZipDataset':
+                self.binding_dataset_symbol = dp.traindata.label.symbol
+            ds = [ds for ds in dp.traindata.get_datasets() if ds.symbol == self.binding_dataset_symbol if self.binding_dataset_symbol is not None]
+            ds = ds[0] if len(ds) > 0 else None
+            if ds is not None and ds.__class__.__name__ == 'LabelDataset':
+                print('Start retrive label class distribution for auto-balance in loss function.')
+                unique, counts = np.unique(np.array(dp.traindata.label.items), return_counts=True)
+                reweights = np.clip(counts, 1, np.inf) / np.sum(counts).astype(np.float32)
+                reweights1 = np.max(reweights) / reweights
+                reweights1[reweights == 1] = 1
+                self.label_statistics = reweights1
+
+            elif ds is not None and ds.__class__.__name__ == 'MaskDataset' and dp.traindata.label.object_type in [ObjectType.label_mask, ObjectType.color_mask]:
+                print('Start retrive label class distribution for auto-balance in loss function.')
+                unique, counts = tf.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]), dtype=dtype.long, device='cpu'),
+                                              return_counts=True)
+                unique = to_list(to_numpy(unique))
+                counts = to_numpy(counts)
+                if len(unique) != builtins.max(unique) + 1:
+                    counts = np.array([counts[unique.index(i)] if i in unique else 0 for i in range(builtins.max(unique) + 1)])
+                reweights = np.clip(counts, 1, np.inf) / np.sum(counts).astype(np.float32)
+                reweights1 = np.max(reweights) / reweights
+                reweights1[reweights == 1] = 1
+                self.label_statistics = reweights1
+
+            elif ds is not None and ds.__class__.__name__ == 'TextSequenceDataset':
+                chars_count = np.array(ds.vocabs_frequency.value_list).astype(np.float32)
+                reweights = np.clip(chars_count, 1, np.inf) / np.sum(chars_count).astype(np.float32)
+                reweights1 = np.max(reweights) / reweights
+                # fix for rare words
+                reweights1[reweights == 1] = 1
+                self.label_statistics = reweights1
 
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
@@ -269,11 +302,13 @@ class _ClassificationLoss(Loss):
 
             """
         try:
+
             output, target = self.flatten_check(output, target)
-            loss = self.calculate_loss(*self.preprocess(output, target, **kwargs))
+            if self.auto_balance and self.label_statistics is None:
+                self._calculate_label_statistics()
+            loss = self.calculate_loss(*self.preprocess(output, target.detach(), **kwargs))
             loss = self._handel_abnormal(loss)
             loss = self._get_reduction(loss)
-
             return loss
         except Exception as e:
             print(e)
@@ -380,7 +415,11 @@ class _PairwiseLoss(Loss):
         Returns:
 
         """
+        if isinstance(target, numbers.Number):
+            target = ones_like(output) * target
+
         output, target = self.flatten_check(output, target)
+
         if output.shape == target.shape:
             return output, target
 

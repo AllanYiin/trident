@@ -19,7 +19,8 @@ import numpy as np
 from trident.callbacks.callback_base import LambdaCallback, UnfreezeModelCallback
 
 from trident.backend.common import to_list, format_time, get_terminal_size, get_session, get_backend, \
-    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format, dtype, cyan_color, get_class
+    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format,  cyan_color, get_class
+from trident.backend import dtype
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
 from trident import context

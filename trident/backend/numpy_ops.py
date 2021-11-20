@@ -14,7 +14,8 @@ from functools import partial
 from typing import Tuple, List, Optional, Union, Sequence
 
 import numpy as np
-from trident.backend.common import *
+from trident.backend.common import epsilon,is_numpy,to_list
+from trident.backend import dtype
 #
 # __all__ = [ 'ndim', 'cast', 'int_shape', 'is_nan', 'is_inf',
 #            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number', 'less', 'equal', 'greater',
@@ -3358,6 +3359,188 @@ def gray2rgb(gray:np.ndarray):
     return rgb
 
 
+############################
+## bounding box
+###########################
+
+
+def bbox_iou(bboxes1:np.ndarray, bboxes2:np.ndarray):
+    """
+
+     Args:
+         bboxes1 (ndarray): shape (n, 4)
+         bboxes2 (ndarray): shape (k, 4)
+
+     Returns:
+          ious(ndarray): shape (n, k)
+
+     Examples;
+     >>> boxes1=np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
+     >>> boxes2=np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]])
+     >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+     >>> print(iou_loss)
+     0.38019627987703136
+
+     >>> boxes1=np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
+     >>> boxes2=np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]])
+     >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+     >>> print(iou_loss)
+     0.37027548071628236
+     """
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    ious = np.zeros((rows, cols))
+    if rows * cols == 0:
+        return ious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        ious = np.zeros((cols, rows))
+        exchange = True
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
+
+    lt = np.maximum(bboxes1[:, None, :2], bboxes2[:, :2])  # [N,M,2]
+    rb = np.minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])  # [N,M,2]
+    wh = np.clip(rb - lt, a_min=0,a_max=np.inf)  # [N,M,2]
+    inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter_area
+    ious = inter_area / union
+    ious = np.clip(ious,a_min=0,a_max = 1.0)
+    if exchange:
+        ious = ious.T
+    return ious
+
+
+def bbox_diou(bboxes1:np.ndarray, bboxes2:np.ndarray):
+
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    dious = np.zeros((rows, cols))
+    if rows * cols == 0:
+        return dious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        dious = np.zeros((cols, rows))
+        exchange = True
+
+    w1 = bboxes1[:, 2] - bboxes1[:, 0]
+    h1 = bboxes1[:, 3] - bboxes1[:, 1]
+    w2 = bboxes2[:, 2] - bboxes2[:, 0]
+    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+
+    area1 = w1 * h1
+    area2 = w2 * h2
+    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
+    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
+    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+
+    inter_max_xy = np.min(bboxes1[:, 2:],bboxes2[:, 2:])
+    inter_min_xy = np.max(bboxes1[:, :2],bboxes2[:, :2])
+    out_max_xy = np.max(bboxes1[:, 2:],bboxes2[:, 2:])
+    out_min_xy = np.min(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = np.clip((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
+    outer = np.clip((out_max_xy - out_min_xy), min=0)
+    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
+    union = area1+area2-inter_area
+    dious = inter_area / union - (inter_diag) / outer_diag
+    dious = np.clip(dious,min=-1.0,max = 1.0)
+    if exchange:
+        dious = dious.T
+    return dious
+
+
+def bbox_ciou(bboxes1:np.ndarray, bboxes2:np.ndarray):
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    cious = np.zeros((rows, cols))
+    if rows * cols == 0:
+        return cious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        cious = np.zeros((cols, rows))
+        exchange = True
+
+    w1 = bboxes1[:, 2] - bboxes1[:, 0]
+    h1 = bboxes1[:, 3] - bboxes1[:, 1]
+    w2 = bboxes2[:, 2] - bboxes2[:, 0]
+    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+
+    area1 = w1 * h1
+    area2 = w2 * h2
+
+    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
+    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
+    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+
+    inter_max_xy = np.min(bboxes1[:, 2:],bboxes2[:, 2:])
+    inter_min_xy = np.max(bboxes1[:, :2],bboxes2[:, :2])
+    out_max_xy = np.max(bboxes1[:, 2:],bboxes2[:, 2:])
+    out_min_xy = np.min(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = np.clip((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
+    outer =np.clip((out_max_xy - out_min_xy), min=0)
+    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
+    union = area1+area2-inter_area
+    u = (inter_diag) / outer_diag
+    iou = inter_area / union
+    v = (4 / (math.pi ** 2)) * np.pow((np.arctan(w2 / h2) - np.arctan(w1 / h1)), 2)
+
+    S = 1 - iou
+    alpha = v / (S + v)
+    cious = iou - (u + alpha * v)
+    cious = np.clip(cious,min=-1.0,max = 1.0)
+    if exchange:
+        cious = cious.T
+    return cious
+
+
+def bbox_giou(bboxes1:np.ndarray, bboxes2:np.ndarray):
+    rows = bboxes1.shape[0]
+    cols = bboxes2.shape[0]
+    ious = np.zeros((rows, cols))
+    if rows * cols == 0:
+        return ious
+    exchange = False
+    if bboxes1.shape[0] > bboxes2.shape[0]:
+        bboxes1, bboxes2 = bboxes2, bboxes1
+        ious = np.zeros((cols, rows))
+        exchange = True
+    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (
+        bboxes1[:, 3] - bboxes1[:, 1])
+    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (
+        bboxes2[:, 3] - bboxes2[:, 1])
+
+    inter_max_xy = np.min(bboxes1[:, 2:],bboxes2[:, 2:])
+
+    inter_min_xy = np.max(bboxes1[:, :2],bboxes2[:, :2])
+
+    out_max_xy = np.max(bboxes1[:, 2:],bboxes2[:, 2:])
+
+    out_min_xy = np.min(bboxes1[:, :2],bboxes2[:, :2])
+
+    inter = np.clip((inter_max_xy - inter_min_xy), min=0)
+    inter_area = inter[:, 0] * inter[:, 1]
+    outer = np.clip((out_max_xy - out_min_xy), min=0)
+    outer_area = outer[:, 0] * outer[:, 1]
+    union = area1+area2-inter_area
+    closure = outer_area
+
+    ious = inter_area / union - (closure - union) / closure
+    ious = np.clip(ious,min=-1.0,max = 1.0)
+    if exchange:
+        ious = ious.T
+    return ious
 
 
 

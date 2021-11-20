@@ -72,8 +72,8 @@ if get_backend()== 'pytorch':
     elif is_tpu_available():
         import torch_xla.core.xla_model as xm
 
-        os.environ['XLA_USE_BF16'] = '1'
-        os.environ['XLA_TENSOR_ALLOCATOR_MAXSIZE'] = '1000000000'
+        # os.environ['XLA_USE_BF16'] = '1'
+        # os.environ['XLA_TENSOR_ALLOCATOR_MAXSIZE'] = '1000000000'
         set_session('device', 'tpu')
         set_session('print', xm.master_print)
 

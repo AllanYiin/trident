@@ -7,10 +7,11 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 from trident.context import *
 from trident.backend.common import *
-from trident.backend import dtype
-import  trident.backend.numpy_ops
+#from trident.backend import dtype
+#import  trident.backend.numpy_ops
 
 import trident.backend.load_backend
+
 if get_backend()=='pytorch':
     from trident.backend.pytorch_ops import *
 
@@ -19,7 +20,7 @@ elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_ops import *
 
 
-from trident.backend.tensorspec import *
+
 
 if get_backend()=='pytorch':
     from trident.backend.pytorch_backend import *
@@ -27,9 +28,10 @@ if get_backend()=='pytorch':
 elif get_backend()=='tensorflow':
     from trident.backend.tensorflow_backend import *
 
-
+from trident.backend.tensorspec import *
 from trident.loggers.history import *
-from trident.backend.model import *
+from trident.backend import model
+from trident.backend.pillow_backend import *
 
 from trident.data.dataset import *
 from trident.data.data_provider import *
@@ -78,6 +80,7 @@ elif get_backend()=='onnx':
     import_or_install('onnx_runtime')
     pass
 
+from trident.data.utils import *
 from trident.data.image_common import *
 from trident.data.bbox_common import *
 from trident.data.label_common import *
@@ -91,6 +94,6 @@ from trident.optims.trainers import TrainingPlan
 from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import *
 from trident.backend.iteration_tools import *
-import trident.models
+#import trident.models
 
 
