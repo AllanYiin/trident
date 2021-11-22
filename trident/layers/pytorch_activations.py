@@ -60,9 +60,10 @@ class Relu(Layer):
 
     """
 
-    def __init__(self,keep_output=False, name=None):
+    def __init__(self,inplace=False,keep_output=False, name=None):
         super(Relu, self).__init__(keep_output=keep_output,name=name)
         self._built = True
+        self.inplace=inplace
 
     def forward(self, x, **kwargs):
         """
@@ -72,8 +73,12 @@ class Relu(Layer):
         Returns: output tensor
 
         """
-        
-        return relu(x)
+        if not hasattr(self,'inplace'):
+            self.inplace=False
+        if self.inplace and not x.is_leaf:
+            return torch.relu_(x)
+        else:
+            return torch.relu(x)
 
 
 class Relu6(Layer):
@@ -94,13 +99,18 @@ class Relu6(Layer):
 
     """
 
-    def __init__(self, keep_output=False,name=None):
+    def __init__(self,inplace=False, keep_output=False,name=None):
         super(Relu6, self).__init__(keep_output=keep_output,name=name)
         self._built = True
+        self.inplace=inplace
 
     def forward(self, x, **kwargs):
-        
-        return relu6(x)
+        if not hasattr(self,'inplace'):
+            self.inplace=False
+        if self.inplace and not x.is_leaf:
+            return torch.clip_(F.relu(x, self.alpha),max=6)
+        else:
+            return torch.clip(F._relu(x, self.alpha),max=6)
 
 
 class LeakyRelu(Layer):
@@ -119,14 +129,21 @@ class LeakyRelu(Layer):
 
     """
 
-    def __init__(self, alpha=0.2, keep_output=False,name=None):
+    def __init__(self,inplace=False, alpha=0.2, keep_output=False,name=None):
         super(LeakyRelu, self).__init__(keep_output=keep_output,name=name)
         self.alpha = alpha
         self._built = True
+        self.inplace=inplace
 
     def forward(self, x, **kwargs):
+        if not hasattr(self,'inplace'):
+            self.inplace=False
+        if self.inplace and not x.is_leaf:
+            return F.leaky_relu(x,self.alpha,inplace=True)
+        else:
+            return F.leaky_relu(x,self.alpha,inplace=False)
         
-        return leaky_relu(x, self.alpha)
+
 
     def extra_repr(self):
         s = 'alpha={alpha}'
@@ -148,13 +165,18 @@ class LeakyRelu6(Layer):
 
     """
 
-    def __init__(self, keep_output=False,name=None):
+    def __init__(self,inplace=False, keep_output=False,name=None):
         super(LeakyRelu6, self).__init__(keep_output=keep_output,name=name)
         self._built = True
+        self.inplace=inplace
 
     def forward(self, x, **kwargs):
-        
-        return leaky_relu6(x)
+        if not hasattr(self,'inplace'):
+            self.inplace=False
+        if self.inplace and not x.is_leaf:
+            return torch.clip_(F.leaky_relu(x, self.alpha, inplace=True),min=-6,max=6)
+        else:
+            return torch.clip(F.leaky_relu(x, self.alpha, inplace=False),min=-6,max=6)
 
     def extra_repr(self):
         s = 'alpha={alpha}'
