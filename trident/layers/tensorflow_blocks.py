@@ -747,19 +747,20 @@ class ShortCut2d(Layer):
         concate_list = []
 
         for k, v in self._modules.items():
-            new_item = v(x) if not isinstance(v, Identity) else x
-            if current is None:
-                current = new_item
-                concate_list.append(current)
-            else:
-                if self.mode == 'add':
-                    current = current + new_item
-                elif self.mode == 'dot':
-                    current = current * new_item
-                elif self.mode == 'concate':
-                    concate_list.append(new_item)
+            if k!='activation':
+                new_item = v(x) if not isinstance(v, Identity) else x
+                if current is None:
+                    current = new_item
+                    concate_list.append(current)
                 else:
-                    raise ValueError('Not valid shortcut mode')
+                    if self.mode == 'add':
+                        current = current + new_item
+                    elif self.mode == 'dot':
+                        current = current * new_item
+                    elif self.mode == 'concate':
+                        concate_list.append(new_item)
+                    else:
+                        raise ValueError('Not valid shortcut mode')
 
         if hasattr(self, 'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
             new_item = self.nodes.get(self.branch_from_uuid)._output_tensor
@@ -884,21 +885,22 @@ class ShortCut(Layer):
         concate_list = []
 
         for k, v in self._modules.items():
-            new_item = v(x)  # if not isinstance(v, Identity) else x
-            if current is None:
-                current = new_item
-                concate_list.append(current)
-            else:
-                if self.mode == 'add':
-                    current = current + new_item
-                elif self.mode == 'subtract':
-                    current = current -new_item
-                elif self.mode == 'dot':
-                    current = current * new_item
-                elif self.mode == 'concate':
-                    concate_list.append(new_item)
+            if k != 'activation':
+                new_item = v(x)  # if not isinstance(v, Identity) else x
+                if current is None:
+                    current = new_item
+                    concate_list.append(current)
                 else:
-                    raise ValueError('Not valid shortcut mode')
+                    if self.mode == 'add':
+                        current = current + new_item
+                    elif self.mode == 'subtract':
+                        current = current -new_item
+                    elif self.mode == 'dot':
+                        current = current * new_item
+                    elif self.mode == 'concate':
+                        concate_list.append(new_item)
+                    else:
+                        raise ValueError('Not valid shortcut mode')
 
         if hasattr(self,
                    'branch_from_uuid') and self.branch_from_uuid is not None and self.branch_from_uuid in self.nodes:
