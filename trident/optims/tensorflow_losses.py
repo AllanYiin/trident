@@ -23,7 +23,7 @@ from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.optims.losses import Loss
 
-from trident.backend import dtype
+from trident.backend import dtype as Dtype
 from trident.backend.tensorspec import TensorSpec,TensorShape
 # def cosine_similarity(target, output):
 #     assert target.ndim == 2
@@ -173,7 +173,7 @@ class _ClassificationLoss(Loss):
 
             elif ds is not None and ds.__class__.__name__ == 'MaskDataset' and dp.traindata.label.object_type in [ObjectType.label_mask, ObjectType.color_mask]:
                 print('Start retrive label class distribution for auto-balance in loss function.')
-                unique, counts = tf.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]), dtype=dtype.long, device='cpu'),
+                unique, counts = tf.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]), dtype=Dtype.long, device='cpu'),
                                               return_counts=True)
                 unique = to_list(to_numpy(unique))
                 counts = to_numpy(counts)
@@ -266,7 +266,7 @@ class _ClassificationLoss(Loss):
             self.is_target_onehot = True
 
         # need target onehot but currently not
-        if target.dtype == tf.int64 and self.need_target_onehot == True and self.is_target_onehot == False:
+        if target.dtype == Dtype.int64 and self.need_target_onehot == True and self.is_target_onehot == False:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis)
             self.is_target_onehot = True
             if self.label_smooth:
@@ -423,7 +423,7 @@ class _PairwiseLoss(Loss):
         if output.shape == target.shape:
             return output, target
 
-        elif target.dtype == tf.int64 and ndim(output) == ndim(target) + 1:
+        elif target.dtype == Dtype.int64 and ndim(output) == ndim(target) + 1:
             num_class = int_shape(output)[self.axis]
             target = make_onehot(target, num_class, self.axis).float()
         return output, target
@@ -448,7 +448,7 @@ class _PairwiseLoss(Loss):
             hard_mask = None
             reduce_axis = list(range(output_.ndim))[1:]
             base_losses = pow(output_ - target, 2).mean(axis=reduce_axis) if len(reduce_axis) > 0 else pow(output_ - target, 2)
-            if target.dtype == dtype.int64:
+            if target.dtype == Dtype.int64:
                 hard_mask = target < 0
                 num_hard = reduce_sum(hard_mask).numpy()
                 num_easy = int(self.ohem_ratio * num_hard)
@@ -566,13 +566,13 @@ class CrossEntropyLoss(_ClassificationLoss):
             if self.is_target_onehot:
                 # -sum([p[i] * log2(q[i]) for i in range(len(p))])
                 if not self.is_logsoftmax:
-                    loss = nn.sparse_softmax_cross_entropy_with_logits_v2(labels=argmax(target, -1), logits=output)
+                    loss = nn.softmax_cross_entropy_with_logits_v2(labels=target, logits=output)
                     # loss = -reduce_sum(target * log_softmax(output, axis=self.axis, keepdims=True) * sample_weight, axis=-self.axis)
 
                 else:
-
+                    output = exp(output)
                     # loss = nn.softmax_cross_entropy_with_logits_v2(labels=target, logits=exp(output))
-                    loss = -reduce_sum(target * output * sample_weight, axis=self.axis)
+                    loss = nn.softmax_cross_entropy_with_logits_v2(labels=target, logits=output)
 
                 if ndim(loss) > 1:
                     reduce_axes = list(range(loss.ndim))
@@ -585,9 +585,9 @@ class CrossEntropyLoss(_ClassificationLoss):
             elif not self.is_target_onehot and ndim(target) == ndim(output) - 1:
                 if self.is_logsoftmax:
                     output = exp(output)
-                target = cast(target, cast_dtype=dtype.int64)
+                target = cast(target, cast_dtype=Dtype.int64)
 
-                loss = nn.sparse_softmax_cross_entropy_with_logits(labels=target, logits=output)
+                loss = nn.sparse_softmax_cross_entropy_with_logits_v2(labels=target, logits=output)
                 return loss
 
                 # loss = reduce_sum(loss, self.axis)
@@ -703,7 +703,7 @@ class F1ScoreLoss(_ClassificationLoss):
                 self.from_logits = True
             if not self.from_logits:
                 output = softmax(output, self.axis)
-            if target.dtype == tf.int64 or self.is_target_onehot == False:
+            if target.dtype == Dtype.int64 or self.is_target_onehot == False:
                 target = cast(make_onehot(target, self.num_classes, axis=1), output.dtype)
 
             tp = (target * output * self.sample_weight * self.ignore_index_weight).sum(axis=self.axis)
@@ -1064,7 +1064,7 @@ class WingLoss(_PairwiseLoss):
         c = self.omega * (1.0 - log(1.0 + self.omega / self.epsilon))
 
         losses = where(
-            greater(delta_y, self.omega, dtype=dtype.bool),
+            greater(delta_y, self.omega, dtype=Dtype.bool),
             self.omega * log(1.0 + delta_y / self.epsilon),
             delta_y - c
         )

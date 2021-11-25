@@ -124,7 +124,7 @@ class _ClassificationLoss(Loss):
 
                 elif ds is not None and ds.__class__.__name__ == 'MaskDataset' and dp.traindata.label.object_type in [ObjectType.label_mask, ObjectType.color_mask]:
                     print('Start retrive label class distribution for auto-balance in loss function.')
-                    unique, counts = torch.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]), dtype=dtype.long, device='cpu'),
+                    unique, counts = torch.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]), dtype=Dtype.long, device='cpu'),
                                                   return_counts=True)
                     unique = to_list(to_numpy(unique))
                     counts = to_numpy(counts)
@@ -155,10 +155,10 @@ class _ClassificationLoss(Loss):
             elif self.axis == -1:
                 output = reshape(output, (output.size(0), -1, output.size(-1)))
 
-            if ndim_target == ndim_output - 1 and target.dtype == dtype.long:
+            if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
                 target = reshape(target, (target.size(0), -1))
 
-            elif ndim_target == ndim_output and target.dtype != dtype.long:
+            elif ndim_target == ndim_output and target.dtype != Dtype.long:
                 if self.axis == 1:
                     target = reshape(target, (target.size(0), target.size(1), -1))
 
@@ -255,7 +255,7 @@ class _ClassificationLoss(Loss):
             self.is_target_onehot = True
 
         # need target onehot but currently not
-        if target.dtype == torch.long and self.need_target_onehot == True and self.is_target_onehot == False:
+        if target.dtype == Dtype.long and self.need_target_onehot == True and self.is_target_onehot == False:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(get_device())
 
             target.require_grads = False
@@ -418,7 +418,7 @@ class _PairwiseLoss(Loss):
             if self.enable_ohem:
                 output, target = self._do_ohem(output, target)
             return output, target
-        elif target.dtype == torch.int64 and ndim(output) == ndim(target) + 1:
+        elif target.dtype == Dtype.int64 and ndim(output) == ndim(target) + 1:
             num_class = int_shape(output)[self.axis]
             target = make_onehot(target, num_class, self.axis).float()
             if self.enable_ohem:
@@ -600,7 +600,7 @@ class CrossEntropyLoss(_ClassificationLoss):
 
         sample_weight = cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)
         if not self.need_target_onehot:
-            if self.is_target_onehot and target.dtype != dtype.long:
+            if self.is_target_onehot and target.dtype != Dtype.long:
                 target = argmax(target, self.axis)
             if not self.is_logsoftmax:
                 return torch.nn.functional.nll_loss(torch.nn.functional.log_softmax(output, dim=1), target, weight=sample_weight, reduction='none')
@@ -829,7 +829,7 @@ class F1ScoreLoss(_ClassificationLoss):
             self.from_logits = True
         if not self.from_logits:
             output = softmax(output, self.axis)
-        if target.dtype == torch.int64 or self.is_target_onehot == False:
+        if target.dtype == Dtype.int64 or self.is_target_onehot == False:
             target = make_onehot(target, self.num_classes, axis=1).to(output.dtype)
         target.require_grads = False
 
@@ -907,7 +907,7 @@ class FocalLoss(_ClassificationLoss):
             output = output.contiguous().view(-1, output.size(2))  # N,H*W,C => N*H*W,C
 
 
-        if self.is_target_onehot and target.dtype != dtype.long:
+        if self.is_target_onehot and target.dtype != Dtype.long:
             target = argmax(target, self.axis)
             self.is_target_onehot=False
         target = target.view(-1, 1)
@@ -1359,7 +1359,7 @@ def create_window(window_size: int, sigma: float, channel: int):
     :param channel: input channel
     :return: 1D kernel
     '''
-    coords = torch.arange(window_size, dtype=torch.float)
+    coords = torch.arange(window_size, dtype=Dtype.float)
     coords -= window_size // 2
 
     g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
@@ -1445,7 +1445,7 @@ class MS_SSIMLoss(_PairwiseLoss):
 
         if weights is None:
             weights = [0.0448, 0.2856, 0.3001, 0.2363, 0.1333]
-        weights = torch.tensor(weights, dtype=torch.float, requires_grad=False)
+        weights = torch.tensor(weights, dtype=Dtype.float, requires_grad=False)
         self.levels = levels
         if levels is not None:
             weights = weights[:levels]
@@ -1516,7 +1516,7 @@ class IoULoss(_ClassificationLoss):
             self.from_logits = True
         if not self.from_logits:
             output = softmax(output, self.axis)
-        if target.dtype != torch.int64 or self.is_target_onehot == True:
+        if target.dtype != Dtype.int64 or self.is_target_onehot == True:
             target = argmax(target, axis=self.axis)
         batch_size = int_shape(output)[0]
         output = argmax(output, axis=self.axis)
