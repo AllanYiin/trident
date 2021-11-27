@@ -15,13 +15,16 @@ if sys.getdefaultencoding() != defaultencoding:
 PACKAGE_ROOT = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 
-__version__ = '0.7.3.22'
+__version__ = '0.7.4'
 stderr.write('trident {0}\n'.format(__version__))
 
 from trident import context
 from trident.backend import *
 import threading
 import random
+import cv2
+import glob
+from tqdm import tqdm
 import numpy as np
 
 
