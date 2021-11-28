@@ -22,7 +22,8 @@ from trident import context
 from trident.backend.common import *
 from trident.backend.model import ModelBase,progress_bar
 from trident.backend.opencv_backend import array2image, image2array
-from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call,DTYPE_MAPPING
+from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call,DTYPE_MAPPING,fix_keras_module
+from trident.backend import dtype
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_ops import is_tensor
 from trident.backend.tensorflow_serialization import save, load_pthtar
@@ -75,8 +76,24 @@ class Model(ModelBase):
         self.accumulate_grads_inteval = 1
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
-        if hasattr(output, '_signature'):
-            output._signature = None
+        if output is None:
+            raise ValueError('There is at least one output')
+        elif  'keras' in output.__module__:
+            output._is_keras=True
+            output = fix_keras_module(output)
+            output.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
+            self._model = output
+            self.training_context['current_model'] = self._model
+            if self.save_path is None:
+                save_path = os.path.join('Models', '{0}_keras.h5'.format(self._model._name))
+                self.save_path = sanitize_path(make_dir_if_need(save_path))
+            else:
+                self.save_path = sanitize_path(make_dir_if_need(self.save_path))
+            self.training_context['save_path'] = self.save_path
+            return self
+        else:
+            output._is_keras = False
+
         if isinstance(input_shape, numbers.Integral):
             input_shape = TensorShape([None] + [input_shape])
         elif isinstance(input_shape, (tuple, list)) and isinstance(input_shape[-1], numbers.Integral):
@@ -162,18 +179,16 @@ class Model(ModelBase):
             # input_shape = unpack_singleton(input_shape)
             #
 
-        if output is None:
-            raise ValueError('There is at least one output')
 
-        elif isinstance(output, (Layer, tf.Module)):
-            # update notes
+
+        if isinstance(output, (Layer, tf.Module)):
             output.is_root = True
-            output.nodes = OrderedDict([(mod.uuid, mod) for mod in list(output.modules()) if isinstance(mod, Layer)])
+            output.nodes=OrderedDict()
             for name, mod in output.named_modules():
                 if isinstance(mod, Layer):
                     mod.nodes = output.nodes
                     mod.relative_name = name
-            # output.cpu()
+
 
             out = None
             if inputs is not None:
@@ -255,6 +270,8 @@ class Model(ModelBase):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
             self._model.train()
+        elif self._model is not None and self._model._is_keras:
+            self._model.train()
         else:
             raise ValueError('There is no built model ,nothing to learn')
 
@@ -263,12 +280,19 @@ class Model(ModelBase):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
+
+        elif self._model is not None and self._model._is_keras:
+            self._model.eval()
         else:
             raise ValueError('There is no built model ,nothing to evaluate')
 
     @property
     def layers(self):
-        if self._model is not None and isinstance(self._model, Layer):
+        if getattr(self._model,'_is_keras',False):
+            return self._model.layers
+        elif self._model is not None and isinstance(self._model, Layer):
+            return self._model.nodes
+        elif self._model is not None and self._model._is_keras:
             return self._model.nodes
         else:
             return []
@@ -368,7 +392,11 @@ class Model(ModelBase):
         return self
 
     def with_optimizer(self, optimizer, **kwargs):
-        params = [self._model] if is_tensor(self._model) else self._model.parameters()
+        params = None
+        if getattr(self._model,'_is_keras',False):
+            params=self._model.weights
+        else:
+            params=[self._model] if is_tensor(self._model) else self._model.parameters()
         if isinstance(optimizer, str):
             optimizer_class = get_optimizer(optimizer)
             self.optimizer = optimizer_class(params, **kwargs)
@@ -380,7 +408,7 @@ class Model(ModelBase):
 
         return self
 
-    def with_loss(self, loss, loss_weight=1, start_epoch=0, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
         alias = name
         signature = getattr(loss, "signature", None)
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
@@ -439,6 +467,7 @@ class Model(ModelBase):
         self._losses[alias].__name__ = alias
         # self._losses[alias].signature = argnames
         self._losses[alias].start_epoch = start_epoch
+        self._losses[alias].as_metric = as_metric
 
         return self
 
@@ -952,15 +981,53 @@ class Model(ModelBase):
                 gc.collect()
                 with tf.device(device):
                     self._model.train()
+            except Exception as e:
+                self._model.train()
+                ctx.print(e)
+                PrintException()
+        elif self._model._is_keras:
+            try:
+                folder, filename, ext = split_path(save_path)
+                if filename == '':
+                    filename = self.name
+                if not filename.endswith('keras'):
+                    filename += '_keras'
+                ext = '.h5'
+                save_path = os.path.join(folder, filename + ext)
+                make_dir_if_need(sanitize_path(save_path))
+                save_path = sanitize_path(save_path)
+
+
+                # tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
+                temfolder = tempfile.gettempdir()
+                tempfilename = filename + '_' + str(uuid.uuid4().node)
+                temppath = os.path.join(temfolder, tempfilename + ext)
+                move_path = os.path.join(folder, tempfilename + ext)
+
+                try:
+                    self._model.save(temppath)
+
+                    shutil.move(temppath, move_path)
+                    if os.path.exists(save_path):
+                        os.remove(save_path)
+                    os.rename(move_path, save_path)
+
+                except Exception as e:
+                    ctx.print(e)
+                    if not os.path.exists(save_path):
+                        if os.path.exists(move_path):
+                            os.rename(move_path, save_path)
+                        elif os.path.exists(temppath):
+                            shutil.move(temppath, save_path)
+
+
+                gc.collect()
                 self._model.train()
 
             except Exception as e:
                 self._model.train()
                 ctx.print(e)
                 PrintException()
-
-
-
 
 
         elif is_tensor(self._model):
@@ -1256,9 +1323,12 @@ class Model(ModelBase):
 
     def summary(self):
         if self._model.built:
-            if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None:
-                self._model._signature = get_signature(self._model, self._model._name)
-            summary(self._model, [item for item in self._model._signature.inputs.value_list])
+            if self._model._is_keras:
+                self._model.summary()
+            else:
+                if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None:
+                    self._model._signature = get_signature(self._model, self._model._name)
+                summary(self._model, [item for item in self._model._signature.inputs.value_list])
             return self
         else:
             raise ValueError('This model has not yet been built. ')
@@ -1501,9 +1571,9 @@ class MuiltiNetwork(Model):
             self._networks[k].with_optimizer(optimizer=optimizer, **kwargs)
         return self
 
-    def with_loss(self, loss, loss_weight=1, start_epoch=0, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
         for k in self._networks.keys():
-            self._networks[k].with_loss(loss, loss_weight=loss_weight, start_epoch=start_epoch, name=name, **kwargs)
+            self._networks[k].with_loss(loss, loss_weight=loss_weight, start_epoch=start_epoch,as_metric=as_metric, name=name, **kwargs)
 
         return self
 
