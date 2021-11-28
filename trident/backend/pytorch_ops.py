@@ -3724,7 +3724,7 @@ def random_choice(x: Tensor,n:int=1):
 
 
 
-def random_normal(shape, mean=0.0, std=1.0, dtype=dtype.float32, seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype=Dtype.float32, seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3821,7 +3821,7 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=None, seed=None):
 
 
 
-def random_uniform(shape, min_value=0.0, max_value=None, dtype=dtype.float32, seed=None):
+def random_uniform(shape, min_value=0.0, max_value=None, dtype=Dtype.float32, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3890,9 +3890,9 @@ def random_uniform(shape, min_value=0.0, max_value=None, dtype=dtype.float32, se
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is not None:
-        t=zeros(shape=shape,dtype=dtype)
+        t=zeros(shape=shape,dtype=torch.float32)
         t.uniform_(min_value, max_value)
-        return t
+        return t.to(dtype)
     else:
         t = zeros(shape=shape, dtype=torch.float32)
         t.uniform_(min_value, max_value)
@@ -3900,7 +3900,7 @@ def random_uniform(shape, min_value=0.0, max_value=None, dtype=dtype.float32, se
 
 
 @numpy_compatible
-def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=dtype.float32, seed=None):
+def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=Dtype.float32, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3969,12 +3969,13 @@ def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=dtype.float32, se
         if dtype is not None:
             dtype = str2dtype(dtype)
     if dtype is not None:
-        t=torch.zeros(int_shape(x),dtype=dtype)
+        t=torch.zeros(int_shape(x),dtype=torch.float32)
         t.uniform_(min_value, max_value)
-        return t
+        return t.to(dtype)
     else:
         t = torch.zeros(int_shape(x), dtype=torch.float32)
         t.uniform_(min_value, max_value)
+
         return t
 
 
@@ -4131,7 +4132,7 @@ def rgb2hsv(rgb:Tensor):
 
     # -- H channel
     # red is max
-    maxc_tmp = equal(out_v, rgb, dtype=dtype.float32)
+    maxc_tmp = equal(out_v, rgb, dtype=Dtype.float32)
     _, max_indices = rgb.copy().max(dim=axis)
     out_h = None
     if ndim(rgb) == 3:
