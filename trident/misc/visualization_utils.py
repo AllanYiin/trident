@@ -130,13 +130,13 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
         if label :
             #font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
             tf = max(tl - 1, 1)  # font thickness
-            t_size = draw.textsize(label, font=font)
-            offset = font.getoffset(label)
-            c2 = c1[0] , c1[1] - t_size[1] - offset[1] - 3
-            c3= c1[0] + offset[0] + t_size[0]+3, c1[1]
+            t_size = draw.textsize(str(label), font=font)
+            offset = font.getoffset(str(label))
+            c2 = c1[0] , c1[1] - t_size[1] - 2*offset[1] - 3
+            c3= c1[0] + 2*offset[0] + t_size[0]+3, c1[1]
 
             draw.rectangle((c2, c3), fill=color,width=2)
-            draw.text((c1[0]+2, c1[1] - t_size[1] - offset[1] - 2), ' {0}'.format(label), fill=fontcolor, font=font)
+            draw.text((c1[0]+1, c1[1] - t_size[1] - offset[1] - 2), ' {0}'.format(label), fill=fontcolor, font=font)
     except Exception as e:
         print('image_size', img_shape,box)
         print(e)
@@ -560,13 +560,12 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
         new_zs = []
         max_frequency = 0
         for i in range(len(weights)):
-            if i % inteval == 0:
-                a, b = np.histogram(weights[i].reshape([-1]), bins)
-                ys = a
-                xs = b[:-1] + 0.001
-                new_zs.append(zs[i])
-                max_frequency = max(np.max(a), max_frequency)
-                verts.append(polygon_under_graph(xs, ys))
+            a, b = np.histogram(weights[i].reshape([-1]), bins)
+            ys = a
+            xs = b[:-1] + 0.001
+            new_zs.append(zs[i])
+            max_frequency = max(np.max(a), max_frequency)
+            verts.append(polygon_under_graph(xs, ys))
 
         poly = PolyCollection(verts, facecolors=['r', 'g', 'b', 'y'], alpha=.4)
         ax.add_collection3d(poly, zs=new_zs, zdir='y')
