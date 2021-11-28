@@ -1893,7 +1893,13 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
             module_idx = len(summary)
 
             m_key = module.relative_name if hasattr(module, 'relative_name') else module.name
+            if m_key in summary:
+                summary[m_key]["visits"]+=1
+                visit=summary[m_key]["visits"]
+                m_key=m_key+'_{0}'.format(visit)
+
             summary[m_key] = OrderedDict()
+            summary[m_key]["visits"]=0
             summary[m_key]["class_name"] = module.__class__.__name__
             if hasattr(module, 'keep_output'):
                 summary[m_key]["keep_output"] = module.keep_output
@@ -2491,7 +2497,8 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
         if mod != module:
             module.is_root = False
         mod._built = True
-        mod.built = True
+        if not hasattr(mod,'built'):
+            mod.built = True
         mod.relative_name = name
         mod.batch_index = 0
         mod.filter_index = 1
