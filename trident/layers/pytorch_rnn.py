@@ -110,8 +110,25 @@ class RNNBase(Layer):
             else:
                 self.batch_index = 0
 
+    def clear_state(self):
+        self.hx = None
+
     def initial_state(self,input) :
-        pass
+        max_batch_size = input.size(0) if self.batch_first else input.size(1)
+        num_directions = 2 if self.bidirectional else 1
+
+        h_zeros=torch.zeros(self.num_layers * num_directions,
+                                  max_batch_size, self.hidden_size,
+                                  dtype=input.dtype, device=input.device).to(get_device())
+        c_zeros= torch.zeros(self.num_layers * num_directions,
+                                  max_batch_size, self.hidden_size,
+                                  dtype=input.dtype, device=input.device).to(get_device())
+        if self.stateful:
+            self.hx = (h_zeros, c_zeros)
+            return self.hx
+        else:
+            return (h_zeros, c_zeros)
+
 
     def build(self, input_shape:TensorShape):
         if not self._built:
@@ -595,21 +612,8 @@ class LSTM(RNNBase):
         self.use_attention=use_attention
         self.attention_size=attention_size
 
-    def clear_state(self):
-        self.hx = None
 
-    def initial_state(self,input) :
-        max_batch_size = input.size(0) if self.batch_first else input.size(1)
-        num_directions = 2 if self.bidirectional else 1
 
-        h_zeros=torch.zeros(self.num_layers * num_directions,
-                                  max_batch_size, self.hidden_size,
-                                  dtype=input.dtype, device=input.device).to(get_device())
-        c_zeros= torch.zeros(self.num_layers * num_directions,
-                                  max_batch_size, self.hidden_size,
-                                  dtype=input.dtype, device=input.device).to(get_device())
-        self.hx = (h_zeros, c_zeros)
-        return self.hx
 
 
 
@@ -626,11 +630,13 @@ class LSTM(RNNBase):
     def check_forward_args(self, input: Tensor, hidden: Tuple[Tensor, Tensor], batch_sizes: Optional[Tensor]):
         self.check_input(input, batch_sizes)
         expected_hidden_size = self.get_expected_hidden_size(input, batch_sizes)
-
-        self.check_hidden_size(hidden[0], self.get_expected_hidden_size(input, batch_sizes),
-                               'Expected hidden[0] size {}, got {}')
-        self.check_hidden_size(hidden[1], self.get_expected_cell_size(input, batch_sizes),
-                               'Expected hidden[1] size {}, got {}')
+        try:
+            self.check_hidden_size(hidden[0], self.get_expected_hidden_size(input, batch_sizes),
+                                   'Expected hidden[0] size {}, got {}')
+            self.check_hidden_size(hidden[1], self.get_expected_cell_size(input, batch_sizes),
+                                   'Expected hidden[1] size {}, got {}')
+        except:
+            self.initial_state(input)
 
     def permute_hidden(self, hx: Tuple[Tensor, Tensor], permutation: Optional[Tensor]) -> Tuple[Tensor, Tensor]:
         if permutation is None:
@@ -679,17 +685,22 @@ class LSTM(RNNBase):
         else:
             if not self.batch_first:
                 x = x.transpose(1,0)
-            batch_sizes = None
+
+            batch_sizes = None #x.size(0) if self.batch_first else x.size(1)
             max_batch_size = x.size(0) if self.batch_first else x.size(1)
             sorted_indices = None
             unsorted_indices = None
 
-        if self.stateful and self.hx is not None:
-                hx=self.hx
-
-        if hx is None:
+        if not self.stateful:
             #if self.hidden_state is None or self.cell_state is None or max_batch_size!=int_shape(self.hidden_state)[1]:
             hx=self.initial_state(x)
+        elif self.stateful and self.hx is None and hx is None:
+            hx = self.initial_state(x)
+        elif self.stateful and self.hx is None and hx is not None:
+            self.hx=hx
+        elif self.stateful and self.hx is not None:
+            hx = self.hx
+
 
         hx = self.permute_hidden(hx, sorted_indices)
 
@@ -710,9 +721,6 @@ class LSTM(RNNBase):
         hidden = result[1:]
         if self.stateful:
             self.hx = hidden
-        # self.hidden_state=hidden[0]
-        # self.cell_state=hidden[1]
-
 
         # xxx: isinstance check needs to be in conditional for TorchScript to compile
         if is_packed_sequence:
