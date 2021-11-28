@@ -25,7 +25,7 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device,load
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive
-from trident.layers.pytorch_activations import get_activation, Identity
+from trident.layers.pytorch_activations import get_activation, Identity,Relu
 from trident.layers.pytorch_blocks import *
 from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization
@@ -51,7 +51,7 @@ if not os.path.exists(dirname):
 
 model_urls = {
     'resnet18': '156C4a0_nts8QbjCE8YWbA-QbvCnTrfb5',
-    'resnet50': '1dYlgpFtqi87KDG54_db4ALWKLARxCWMS',
+    'resnet50': '1R_Ae0DiElUX6yiLqbnq93Iw6vIhaA929',
     'resnet101': '17moUOsGynsWALLHyv3yprHWbbDMrdiOP',
     'resnet152': '1BIaHb7_qunUVvt4TDAwonSKI2jYg4Ybj',
 }
@@ -61,9 +61,9 @@ def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortc
     if strides>1 or conv_shortcut is True:
         shortcut =Conv2d_Block((1,1),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias)
 
-    return ShortCut2d(Sequential(Conv2d_Block((3,3),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias),
+    return ShortCut2d(Sequential(Conv2d_Block((3,3),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=Relu(inplace=True),use_bias=use_bias),
                                  Conv2d_Block((3,3),num_filters=num_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias)),
-                      shortcut,activation='relu')
+                      shortcut,activation=Relu(inplace=True))
 
 def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=False,name=''):
     #width = int(num_filters * (base_width / 64.)) * 1#groups'
@@ -72,10 +72,10 @@ def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bia
     if strides>1 or conv_shortcut is True:
         shortcut =Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias)
         shortcut_name = 'downsample'
-    return ShortCut2d({'branch1':Sequential(Conv2d_Block((1,1),num_filters=num_filters ,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',use_bias=use_bias),
-                                 Conv2d_Block((3, 3), num_filters=num_filters , strides=1, auto_pad=True,padding_mode='zero',normalization='batch', activation='relu',use_bias=use_bias),
+    return ShortCut2d({'branch1':Sequential(Conv2d_Block((1,1),num_filters=num_filters ,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=Relu(inplace=True),use_bias=use_bias),
+                                 Conv2d_Block((3, 3), num_filters=num_filters , strides=1, auto_pad=True,padding_mode='zero',normalization='batch', activation=Relu(inplace=True),use_bias=use_bias),
                                  Conv2d_Block((1,1),num_filters=num_filters*expansion,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias)),
-                      shortcut_name:shortcut},activation='relu')
+                      shortcut_name:shortcut},activation=Relu(inplace=True))
 
 
 # def _resnet(arch, block, layers, pretrained, progress, **kwargs):
@@ -130,7 +130,7 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
 
     flow_list=[]
     resnet = Sequential()
-    resnet.add_module('first_block',Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',name='first_block'))
+    resnet.add_module('first_block',Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation=Relu(inplace=True),name='first_block'))
     resnet.add_module('maxpool',(MaxPool2d((3,3),strides=2,auto_pad=True,padding_mode='zero')))
     resnet.add_module('layer1',(_make_layer(block, 64, layers[0],strides=1, dilate=None,use_bias=use_bias,layer_name='layer1' )))
     resnet.add_module('layer2',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='layer2' )))
@@ -140,6 +140,7 @@ def ResNet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
         resnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
         resnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
         resnet.add_module('softmax', SoftMax(name='softmax'))
+
     resnet.name=model_name
     model=ImageClassificationModel(input_shape=input_shape,output=resnet)
 
@@ -255,9 +256,10 @@ def ResNet50(include_top=True,
         download_model_from_google_drive(model_urls['resnet50'],dirname,'resnet50.pth')
         recovery_model=load(os.path.join(dirname,'resnet50.pth'))
         recovery_model = fix_layer(recovery_model)
-
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
-        resnet50.model = recovery_model
+        resnet50.model.load_state_dict(recovery_model.state_dict())
+        resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes,freeze_features=freeze_features)
+        #resnet50.model = recovery_model
     else:
         resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=True)
 
@@ -282,7 +284,10 @@ def ResNet101(include_top=True,
         recovery_model=load(os.path.join(dirname,'resnet101.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
-        resnet101.model = recovery_model
+        resnet101.model.load_state_dict(recovery_model.state_dict())
+        resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes,
+                                                          freeze_features=freeze_features)
+        # resnet50.model = recovery_model
     else:
         resnet101.model = _make_recovery_model_include_top(resnet101.model, include_top=include_top, classes=classes, freeze_features=True)
 
@@ -307,7 +312,9 @@ def ResNet152(include_top=True,
         recovery_model=load(os.path.join(dirname,'resnet152.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
-        resnet152.model = recovery_model
+        resnet152.model.load_state_dict(recovery_model.state_dict())
+        resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes,
+                                                           freeze_features=freeze_features)
     else:
         resnet152.model = _make_recovery_model_include_top(resnet152.model, include_top=include_top, classes=classes, freeze_features=True)
 
