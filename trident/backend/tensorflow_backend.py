@@ -962,7 +962,7 @@ class Layer(tf.Module):
         for arg in args:
             if 'cpu' in arg.lower() or 'gpu' in arg.lower() or 'cudu' in arg.lower():
                 device = arg
-            elif 'float' in arg.lower() or 'int' in arg.lower() or 'bool' in arg.lower():
+            elif arg.lower() in ['float', 'int', 'bool', 'half', 'long']:
                 dtype = arg
             elif isinstance(arg, bool):
                 non_blocking = arg
@@ -3253,13 +3253,110 @@ def fix_layer(layer: Layer):
 
 
 def fix_keras_module(module: tf.Module, input_tensor: Tensor = None, input_shape: (tuple, TensorShape) = None):
-    # module.is_root = True
-    # module.name=module.__class__.__name__
-    # module._nodes = OrderedDict()
-    # module._uid_prefixs = defaultdict(int)
-    # module._signature = get_signature(module)
-    # module.signature = get_signature(module)
-    #
+    import tensorflow.keras.backend as K
+    def named_modules(keras_model, memo=None, prefix=''):
+        if memo is None:
+            memo = set()
+        if keras_model not in memo:
+            memo.add(keras_model)
+            yield prefix, keras_model
+
+            layers=[keras_model]
+            if hasattr(keras_model,'layers'):
+                layers=keras_model.layers
+            for module in layers:
+                name = module.name
+                if module is None:
+                    continue
+                submodule_prefix = prefix + ('.' if prefix else '') + name
+                for m in named_modules(module, memo, submodule_prefix):
+                    yield m
+
+    def named_parameters(keras_model, memo=None, prefix=''):
+        return [(w.name,w) for w in keras_model.weights]
+
+    def to(keras_model, *args) -> T:
+        device = None
+        dtype = None
+        non_blocking = None
+        for arg in args:
+            if 'cpu' in arg.lower() or 'gpu' in arg.lower() or 'cudu' in arg.lower():
+                device = arg
+            elif  arg.lower()  in ['float','int', 'bool','half','long']:
+                dtype = arg
+            elif isinstance(arg, bool):
+                non_blocking = arg
+
+        if device is None:
+            device = get_device()
+        # if dtype is None and len(keras_model.weights) > 0:
+        #     dtype = keras_model.weights[0].dtype
+        if 'cpu' in device:
+            with tf.device('/cpu:0'):
+                for p in keras_model.weights:
+                    if dtype is None or dtype==p.dtype:
+                        p.assign(tf.identity(p.value()))
+                    else:
+                        p.assign(tf.identity(cast(p.value(), dtype)))
+        elif 'gpu' in device or 'cuda' in device:
+            if tf.test.is_gpu_available:
+                with tf.device( '/gpu:0'):
+                    for p in keras_model.weights:
+                        if dtype is None or dtype == p.dtype:
+                            p.assign(tf.identity(p.value()))
+                        else:
+                            p.assign(tf.identity(cast(p.value(), dtype)))
+        return keras_model
+
+    def train(keras_model):
+        #1 = train
+        K.set_learning_phase(1)
+        return keras_model
+
+    def eval(keras_model):
+        #0 = test, 1 = train
+        K.set_learning_phase(0)
+        return keras_model
+
+
+
+    module.is_root = True
+
+    module._nodes = OrderedDict()
+    for name, mod in named_modules(module):
+        module._nodes[id(mod)] = mod
+        mod.uuid = id(mod)
+        if not hasattr(mod, 'named_modules'):
+            setattr(mod, 'named_modules', MethodType(named_modules, mod))
+
+        if not hasattr(mod, 'named_parameters'):
+            setattr(mod, 'named_parameters', MethodType(named_parameters, mod))
+
+        if not hasattr(mod, 'train'):
+            setattr(mod, 'train', MethodType(train, mod))
+
+        if not hasattr(mod, 'eval'):
+            setattr(mod, 'eval', MethodType(eval, mod))
+
+        mod.relative_name = name
+    module.nodes=module._nodes
+    if not hasattr(module, 'to'):
+        setattr(module, 'to', MethodType(to, module))
+
+
+    module._uid_prefixs = defaultdict(int)
+    sig=Signature(name=module.name)
+    for inp in module.inputs:
+        sig.inputs[inp.name]=TensorSpec(shape=TensorShape(int_shape(inp)),dtype=DTYPE_MAPPING[inp.dtype],name=inp.name)
+    for k  in range(len(module.outputs)):
+        out=module.outputs[k]
+        out_name='output' if len(module.outputs)==1 else 'output_{0}'.format(k)
+        sig.outputs[out_name] = TensorSpec(shape=TensorShape(int_shape(out)), dtype=DTYPE_MAPPING[out.dtype],
+                                          name=out_name)
+
+    module._signature = sig
+    module.signature = sig
+
     # def get_uid(prefix=''):
     #     module._uid_prefixs[prefix] += 1
     #     return module._uid_prefixs[prefix]
@@ -3274,7 +3371,7 @@ def fix_keras_module(module: tf.Module, input_tensor: Tensor = None, input_shape
     #             if hasattr(node, 'default_name') and node.default_name == "sequential_1":
     #                 return node
     #         return module
-    #
+
     # for name, mod in module.named_modules():
     #     if mod != module:
     #         module.is_root = False
