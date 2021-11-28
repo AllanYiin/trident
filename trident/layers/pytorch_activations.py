@@ -108,9 +108,9 @@ class Relu6(Layer):
         if not hasattr(self,'inplace'):
             self.inplace=False
         if self.inplace and not x.is_leaf:
-            return torch.clip_(F.relu(x, self.alpha),max=6)
+            return torch.clip_(F.relu_(x),max=6)
         else:
-            return torch.clip(F._relu(x, self.alpha),max=6)
+            return torch.clip(F.relu(x),max=6)
 
 
 class LeakyRelu(Layer):
@@ -165,9 +165,10 @@ class LeakyRelu6(Layer):
 
     """
 
-    def __init__(self,inplace=False, keep_output=False,name=None):
+    def __init__(self,inplace=False, alpha=0.2, keep_output=False,name=None):
         super(LeakyRelu6, self).__init__(keep_output=keep_output,name=name)
         self._built = True
+        self.alpha = alpha
         self.inplace=inplace
 
     def forward(self, x, **kwargs):
