@@ -125,7 +125,7 @@ def set_device(device=None):
         for i in range(len(gcitems)):
             obj = gcitems[i]
             try:
-                if torch.is_tensor(obj) or (hasattr(obj, 'data') and torch.is_tensor(obj.data)):
+                if torch.is_tensor(obj) :
                     obj.to(device_)
                 elif isinstance(obj, nn.Module):
                     obj.to(device_)
@@ -1409,19 +1409,18 @@ class Sequential(Layer):
         for module in self._modules.values():
             # x = enforce_singleton(x)
             if isinstance(x, tuple):
-                arg_spec = get_args_spec(module.forward)
-                if len(arg_spec.args) == 2:  # self,x
+                if len(module.signature.inputs) == len(x):  # self,x
+                    x = module(*x, **kwargs)
+                else:
                     x = enforce_singleton(x)
                     x = module(x, **kwargs)
-                else:
-                    x = module(*x, **kwargs)
             else:
                 x = module(x, **kwargs)
-            class_name=module.__class__.__name__.lower()
-            if 'lstm' in class_name or 'gru' in class_name:
-                if isinstance(x,tuple):
-                    x,hx=x
-                    kwargs['hx']=hx
+            #class_name=module.__class__.__name__.lower()
+            # if 'lstm' in class_name or 'gru' in class_name:
+            #     if isinstance(x,tuple):
+            #         x,hx=x
+            #         kwargs['hx']=hx
 
         return x
 
@@ -2502,6 +2501,7 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
         mod.relative_name = name
         mod.batch_index = 0
         mod.filter_index = 1
+
         mod.in_sequence = False
         mod.uuid = uuid.uuid4().node
         prefix = mod.__class__.__name__

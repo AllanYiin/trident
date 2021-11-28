@@ -2279,17 +2279,16 @@ class Sequential(Layer):
         keys = [key for key in keys if not key.isdigit()]
         return keys
 
+
     def forward(self, *x, **kwargs):
         x = unpack_singleton(x)
         for module in self._modules.values():
-            # x = enforce_singleton(x)
             if isinstance(x, tuple):
-                arg_spec = get_args_spec(module.forward)
-                if len(arg_spec.args) == 2:  # self,x
+                if len(module.signature.inputs) == len(x):  # self,x
+                    x = module(*x, **kwargs)
+                else:
                     x = enforce_singleton(x)
                     x = module(x, **kwargs)
-                else:
-                    x = module(*x, **kwargs)
             else:
                 x = module(x, **kwargs)
         return x
