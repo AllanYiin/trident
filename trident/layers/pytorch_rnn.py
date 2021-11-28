@@ -699,15 +699,31 @@ class LSTM(RNNBase):
         elif self.stateful and self.hx is None and hx is not None:
             self.hx=hx
         elif self.stateful and self.hx is not None:
-            hx = self.hx
+            if batch_sizes is not None:
+                mini_batch = int(batch_sizes[0])
+            else:
+                mini_batch = x.size(0) if self.batch_first else x.size(1)
+            #mini_batch size changed need re-initial hidden cell
+            if  self.hx[0].size(1)!=mini_batch:
+                hx = self.initial_state(x)
+            else:
+                hx=self.hx
+
 
 
         hx = self.permute_hidden(hx, sorted_indices)
 
         self.check_forward_args(x, hx, batch_sizes)
 
-        if not isinstance(x, PackedSequence):
-            result = _VF.lstm(x,hx, self._flat_weights, self.use_bias, self.num_layers,
+        # if not isinstance(x, PackedSequence):
+        #     result = _VF.lstm(x,hx, self._flat_weights, self.use_bias, self.num_layers,
+        #                       self.dropout_rate, self.training, self.bidirectional, self.batch_first)
+        # else:
+        #     result = _VF.lstm(x, batch_sizes, hx, self._flat_weights, self.use_bias,
+        #                       self.num_layers, self.dropout_rate, self.training, self.bidirectional)
+        #
+        if batch_sizes is None:
+            result = _VF.lstm(x, hx, self._flat_weights, self.use_bias, self.num_layers,
                               self.dropout_rate, self.training, self.bidirectional, self.batch_first)
         else:
             result = _VF.lstm(x, batch_sizes, hx, self._flat_weights, self.use_bias,
@@ -719,6 +735,7 @@ class LSTM(RNNBase):
             output = self.attention(output)
 
         hidden = result[1:]
+        hidden=tuple([item.detach() for item in hidden])
         if self.stateful:
             self.hx = hidden
 
