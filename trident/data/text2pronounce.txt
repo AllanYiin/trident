@@ -39,7 +39,7 @@
 㑌	WANG1 KUANG1	ㄨㄤ1 ㄎㄨㄤ1
 㑍	LEI3 LEI4	ㄌㄟ3 ㄌㄟ4
 㑎	NAO3	ㄋㄠ3
-㑏	ZHU4	ㄓㄨ4
+㑏	ZHU4	ㄓㄡ4
 㑔	XU3	ㄒㄨ3
 㑘	JIE4	ㄐㄧㄝ4
 㑙	DIE2 YONG3	ㄉㄧㄝ2 ㄩㄥ3
@@ -6219,7 +6219,7 @@
 劲	JING4 JIN4	ㄐㄧㄥ4 ㄐㄧㄣ4
 劳	LAO2 LAO4	ㄌㄠ2 ㄌㄠ4
 労	LAO2	ㄌㄠ2
-劵	JUAN4 QUAN4	ㄐㄨㄢ4 ㄑㄨㄢ4
+劵	JUAN4 QUAN4	ㄐㄩㄢ4 ㄑㄩㄢ4
 劶	KOU3	ㄎㄡ3
 劷	YANG2	ㄧㄤ2
 劸	WA1	ㄨㄚ1
@@ -6476,7 +6476,7 @@
 厸	LIN2 MIAN3	ㄌㄧㄣ2 ㄇㄧㄢ3
 厹	QIU2	ㄑㄧㄡ2
 厺	QU4	ㄑㄨ4
-去	QU4	ㄑㄨ4
+去	QU4	ㄑㄩ4
 厽	LEI3	ㄌㄟ3
 厾	DU1	ㄉㄨ1
 县	XIAN4 XUAN2	ㄒㄧㄢ4 ㄒㄨㄢ2
@@ -6517,7 +6517,7 @@
 叢	CONG2	ㄘㄨㄥ2
 口	KOU3	ㄎㄡ3
 古	GU3	ㄍㄨ3
-句	JU4 GOU1	ㄐㄨ4 ㄍㄡ1
+句	JU4 GOU1	ㄐㄩ4 ㄍㄡ1
 另	LING4	ㄌㄧㄥ4
 叧	GUA3	ㄍㄨㄚ3
 叨	TAO1 DAO1	ㄊㄠ1 ㄉㄠ1
@@ -6534,7 +6534,7 @@
 右	YOU4	ㄧㄡ4
 叴	QIU2	ㄑㄧㄡ2
 叵	PO3	ㄆㄛ3
-叶	XIE2 YE4 SHE4	ㄒㄧㄝ2 ㄧㄝ4 ㄕㄜ4
+叶	XIE4 YE2 SHE4	ㄒㄧㄝ4 ㄧㄝ2 ㄕㄜ4
 号	HAO4 HAO2	ㄏㄠ4 ㄏㄠ2
 司	SI1	ㄙ1
 叹	TAN4	ㄊㄢ4
@@ -6654,7 +6654,7 @@
 呮	QI4	ㄑㄧ4
 呯	PING2	ㄆㄧㄥ2
 呰	ZI3	ㄗ3
-呱	GU1 GUA1	ㄍㄨ1 ㄍㄨㄚ1
+呱	GUA1 GU1	ㄍㄨㄚ1 ㄍㄨ1
 呲	ZI1	ㄗ1
 味	WEI4	ㄨㄟ4
 呴	XU1 HOU3 HOU1	ㄒㄨ1 ㄏㄡ3 ㄏㄡ1
@@ -15421,7 +15421,7 @@
 矦	HOU2	ㄏㄡ2
 矧	SHEN3	ㄕㄣ3
 矨	YING3	ㄧㄥ3
-矩	JU3	ㄐㄨ3
+矩	JU3	ㄐㄩ3
 矪	ZHOU1	ㄓㄡ1
 矫	JIAO3 JIAO2 JIAO1	ㄐㄧㄠ3 ㄐㄧㄠ2 ㄐㄧㄠ1
 矬	CUO2	ㄘㄨㄛ2
@@ -25259,7 +25259,7 @@
 齲	QU3	ㄑㄨ3
 齳	NEN3 KUN3 YUN3	ㄋㄣ3 ㄎㄨㄣ3 ㄩㄣ3
 齴	XIAN3 YAN3	ㄒㄧㄢ3 ㄧㄢ3
-齵	OU2 YU2	ㄡ2 ㄩ2
+齵	YU2 OU2	ㄩ2 ㄡ2
 齶	E4	ㄜ4
 齷	WO4	ㄨㄛ4
 齸	YI4	ㄧ4
@@ -25278,7 +25278,7 @@
 龅	PAO2	ㄆㄠ2
 龆	TIAO2	ㄊㄧㄠ2
 龇	ZI1	ㄗ1
-龈	KEN3 YIN2	ㄎㄣ3 ㄧㄣ2
+龈	YIN2 KEN3	ㄧㄣ2 ㄎㄣ3
 龉	YU3	ㄩ3
 龊	CHUO4	ㄔㄨㄛ4
 龋	QU3	ㄑㄨ3
