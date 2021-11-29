@@ -381,7 +381,7 @@ class VocabsMapping(TextTransform):
 
     """
 
-    def __init__(self, mapping_dict=None, sequence_length=None,output_type='list', unkown_token=None, pad_token=None, cls_token=None, sep_token=None, name='random_swap_char', **kwargs):
+    def __init__(self, mapping_dict=None, sequence_length=None,output_type='list', unkown_token=None, pad_token=None, cls_token=None, sep_token=None, name='vocab_mapping', **kwargs):
         super().__init__()
         if output_type in ['list', 'array', 'string']:
             self.output_type = output_type
@@ -398,6 +398,10 @@ class VocabsMapping(TextTransform):
             self.pad_token = '[PAD]'
         self.sequence_length=sequence_length
         self.name = name
+        self.mapping_dict[ '[CLS]']=self.cls_token
+        self.mapping_dict['[SEP]'] = self.sep_token
+        self.mapping_dict['[PAD]'] =self.pad_token
+        self.mapping_dict['[UNK]'] = self.unkown_token
 
     def _apply_corpus(self, corpus, spec: TensorSpec):
         out_str = []
