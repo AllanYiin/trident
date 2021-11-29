@@ -289,7 +289,8 @@ class Embedding(Layer):
             x = argmax(x, -1)
         elif not self.sparse and x.dtype != dtype.long and int_shape(x)[-1] != self.num_embeddings:
             x = x.long()
-
+        if self.weight.device!=x.device:
+            self.weight.to(x.device)
         embed = F.embedding(x, self.weight, self.padding_idx, self.max_norm, self.norm_type, self.scale_grad_by_freq, self.sparse)
         if self.add_noise == True and self.training == True:
             noise = self.noise_intensity * random_normal_like(embed, mean=embed.mean(), std=embed.std(), dtype=embed.dtype).detach().to(embed.device)
