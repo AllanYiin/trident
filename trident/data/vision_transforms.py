@@ -29,10 +29,11 @@ __all__ = ['Resize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 'RandomResca
            'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic','DetectionMixup']
 
 
+
 def randomize_with_validate(keep_prob=0.5,valid_range=None, no_change_value=None, **kwargs):
     def randomize_wrapper(cls):
         class Wrapper:
-            def __init__(self):
+            def __init__(self, **kwargs):
                 self._args=None
                 self.rangs=None
                 self.other_args=None
@@ -114,7 +115,7 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, no_change_value=None
 def randomize(keep_prob=0.5, **kwargs):
     def randomize_wrapper(cls):
         class Wrapper:
-            def __init__(self):
+            def __init__(self, **kwargs):
                 self.kwargs = kwargs
                 self.wrap = cls()
                 self.keep_prob = keep_prob
@@ -135,7 +136,6 @@ def randomize(keep_prob=0.5, **kwargs):
         Wrapper.__doc__ = cls.__doc__
         return Wrapper
     return randomize_wrapper
-
 
 class Resize(VisionTransform):
     r"""
