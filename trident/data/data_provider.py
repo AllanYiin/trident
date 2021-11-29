@@ -158,6 +158,8 @@ class ImageDataProvider(object):
             for ds in dss_t:
                 if isinstance(ds, ImageDataset):
                     ds.transform_funcs =value
+
+
     def image_transform(self, img_data):
         if img_data.ndim == 4:
             return np.asarray([self.image_transform(im) for im in img_data])
@@ -189,10 +191,11 @@ class ImageDataProvider(object):
         if len(self.reverse_image_transform_funcs) == 0:
             return reverse_image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
+            img_data = reverse_image_backend_adaption(img_data)
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 img_data = fc(img_data)
-            # img_data = reverse_image_backend_adaption(img_data)
+
 
         return img_data
 
@@ -467,7 +470,7 @@ class TextSequenceDataProvider(object):
 
     def __init__(self, dataset_name='', traindata=None, testdata=None, batch_size=8,sequence_length=64, mode='tuple', **kwargs):
         self.__name__ = dataset_name
-        self.sequence_length = sequence_length
+        self._sequence_length = sequence_length
         self.uuid = uuid.uuid4().node
         if mode in ['tuple', 'dict']:
             self.mode = mode
@@ -545,13 +548,19 @@ class TextSequenceDataProvider(object):
             return []
 
     @property
-    def batch_sampler(self):
-        if self.scenario == 'test' and self.testdata is not None:
-            return self.testdata.batch_sampler
-        elif self.traindata is not None:
-            return self.traindata.batch_sampler
-        else:
-            return []
+    def sequence_length(self):
+        return self._sequence_length
+
+    @sequence_length.setter
+    def sequence_length(self, value):
+        self._sequence_length=value
+        datasets=self.traindata.get_datasets()
+        for ds in datasets:
+            if isinstance(ds,TextSequenceDataset):
+                ds.sequence_length=value
+        for tm in self.text_transform_funcs:
+            if isinstance(tm,VocabsMapping):
+                tm.sequence_length=value
 
     @property
     def batch_size(self):
