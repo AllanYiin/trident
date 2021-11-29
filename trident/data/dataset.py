@@ -21,6 +21,7 @@ from trident import context
 from trident.backend import iteration_tools
 from trident.backend.common import *
 #from trident.backend.numpy_ops import DTYPE_MAPPING
+from trident.backend import dtype as Dtype
 from trident.backend.opencv_backend import file2array
 from trident.backend.tensorspec import TensorSpec,ObjectType
 from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, \
@@ -1015,7 +1016,7 @@ class TextSequenceDataset(Dataset):
                     if this_char in self.text2index:
                         arr[i] = self.text2index[this_char]
                     else:
-                        arr[i] = self.text2index['[UNK]']
+                        arr[i] = self.text2index['']
                 else:
                     arr[i] = self.text2index['[PAD]']
             arr = arr.astype(np.int64)
@@ -1105,7 +1106,7 @@ class Iterator(object):
         for k in range(len(datasets)):
             ds = datasets[k]
             if isinstance(ds, TextSequenceDataset):
-                ds.element_spec = TensorSpec(shape=TensorShape([None, ds.sequence_length]), dtype=dtype.long, object_type=ds.object_type, name=ds.symbol)
+                ds.element_spec = TensorSpec(shape=TensorShape([None, ds.sequence_length]), dtype=Dtype.long, object_type=ds.object_type, name=ds.symbol)
             elif ds.object_type == ObjectType.image_path:
                 ds.element_spec = TensorSpec(shape=TensorShape([None]), dtype=str, object_type=ds.object_type, name=ds.symbol)
             else:

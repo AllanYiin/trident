@@ -476,6 +476,12 @@ class TextSequenceDataProvider(object):
             self.mode = mode
         else:
             raise ValueError("Valid mode should be tuple or dict ")
+        self._text_transform_funcs = []
+        self._label_transform_funcs = []
+        self._paired_transform_funcs = []
+        self._batch_transform_funcs = []
+        cxt = context._context()
+        cxt.regist_data_provider(self)
 
         self.traindata = traindata
         if  isinstance(traindata,Iterator):
@@ -512,12 +518,7 @@ class TextSequenceDataProvider(object):
         self.tot_minibatch = 0
         self.tot_records = 0
         self.tot_epochs = 0
-        self._text_transform_funcs = []
-        self._label_transform_funcs = []
-        self._paired_transform_funcs = []
-        self._batch_transform_funcs = []
-        cxt = context._context()
-        cxt.regist_data_provider(self)
+
 
     @property
     def signature(self):
@@ -558,9 +559,10 @@ class TextSequenceDataProvider(object):
         for ds in datasets:
             if isinstance(ds,TextSequenceDataset):
                 ds.sequence_length=value
-        for tm in self.text_transform_funcs:
-            if isinstance(tm,VocabsMapping):
-                tm.sequence_length=value
+        if hasattr(self,'_text_transform_funcs') and len(self._text_transform_funcs)>0:
+            for tm in self._text_transform_funcs:
+                if isinstance(tm,VocabsMapping):
+                    tm.sequence_length=value
 
     @property
     def batch_size(self):
@@ -586,6 +588,7 @@ class TextSequenceDataProvider(object):
     @property
     def text_transform_funcs(self):
         return self._text_transform_funcs
+
 
     @text_transform_funcs.setter
     def text_transform_funcs(self, value):
