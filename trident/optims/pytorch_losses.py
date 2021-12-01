@@ -1154,7 +1154,7 @@ class L2Loss(_PairwiseLoss):
 
         """
         batch = int_shape(output)[0]
-        return 0.5 * F.mse_loss(output.view(batch, -1), target.view(batch, -1), reduction='none')
+        return 0.5 * ((output.view(batch, -1)-target.view(batch, -1))**2)
 
 
 class SmoothL1Loss(_PairwiseLoss):
@@ -1210,7 +1210,7 @@ class MSELoss(_PairwiseLoss):
 
         """
         batch = int_shape(output)[0]
-        return F.mse_loss(output.view(batch, -1), target.view(batch, -1), reduction='none')
+        return ((output.view(batch, -1)-target.view(batch, -1))**2)
 
 
 class WingLoss(_PairwiseLoss):
@@ -2014,8 +2014,6 @@ class EdgeLoss(_Loss):
         super(EdgeLoss, self).__init__()
 
         self.reduction = reduction
-
-        self.styleloss = StyleLoss()
         self.to(_device)
 
     def first_order(self, x, axis=2):
