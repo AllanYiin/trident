@@ -181,7 +181,7 @@ class TileImageCallback(VisualizationCallbackBase):
         plt.close()
 
     def on_batch_end(self, training_context):
-        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['current_batch'] + 1) % self.frequency == 0) or (
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                 self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
             self.plot_tile_image(training_context)
 
@@ -240,7 +240,7 @@ class GanTileImageCallback(VisualizationCallbackBase):
             plt.close()
 
     def on_batch_end(self, training_context):
-        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['current_batch'] + 1) % self.frequency == 0) or (
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                 self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0) or not self.sample_enough):
             if self.sample_enough:
                 self.tile_images_list = []
@@ -368,7 +368,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
         plt.close()
 
     def on_batch_end(self, training_context):
-        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['current_batch'] + 1) % self.frequency == 0) or (
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                 self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
             self.plot_tile_image(training_context)
 
@@ -430,7 +430,7 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
         plt.close()
 
     def on_batch_end(self, training_context):
-        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['current_batch'] + 1) % self.frequency == 0) or (
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                 self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
             self.plot_detection_image(training_context)
 
@@ -540,7 +540,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
     def on_optimization_step_start(self, training_context):
         if get_backend() == 'pytorch':
             with torch.no_grad():
-                if self.frequency > 0 and ((self.unit == 'batch' and (training_context['current_batch'] + 1) % self.frequency == 0) or (
+                if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                         self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0) or (
                                                    self.unit == 'epoch' and (training_context['current_epoch'] + 1) % self.frequency == 0)):
                     grad_dict = OrderedDict()
