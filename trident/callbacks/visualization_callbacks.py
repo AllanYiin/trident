@@ -1,38 +1,34 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import matplotlib.pyplot as plt
-import math
+
+import numbers
 import os
-import sys
-import warnings
 import time
+
+import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from trident.data.dataset import MaskDataset, ZipDataset
+from trident.backend.tensorspec import ObjectType
 
 from trident import context
-import numbers
 from trident.backend.common import *
-from trident.backend.load_backend import *
-from trident.backend.pillow_backend import image2array
 from trident.callbacks.callback_base import CallbackBase
+from trident.data.bbox_common import *
+from trident.data.dataset import MaskDataset, ZipDataset
 from trident.data.image_common import image_backend_adaption
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
-from trident.data.bbox_common import *
 
 if get_backend() == 'pytorch':
-    from trident.backend.pytorch_backend import try_map_args_and_call, Layer
-    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, argmax, softmax, any_abnormal_number, reduce_any, ndim, exp, \
-        concate, \
+    from trident.backend.pytorch_backend import try_map_args_and_call, Layer,Sequential
+    from trident.backend.pytorch_ops import to_numpy, arange, cast, clip, sqrt, int_shape, argmax, softmax, ndim, exp, \
         expand_dims
 
 elif get_backend() == 'tensorflow':
-    from trident.backend.tensorflow_backend import try_map_args_and_call, Layer
-    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like, argmax, softmax, concate, \
-        any_abnormal_number, ndim, exp, not_equal, reduce_any, expand_dims
+    from trident.backend.tensorflow_backend import try_map_args_and_call, Layer,Sequential
+    from trident.backend.tensorflow_ops import to_numpy, arange, cast, clip, sqrt, int_shape, zeros_like, ones_like, argmax, softmax, ndim, exp, not_equal, expand_dims
 
 if is_in_ipython() or is_in_colab():
     from IPython import display
@@ -55,7 +51,7 @@ class VisualizationCallbackBase(CallbackBase):
         else:
             print(red_color('Only [batch, step, epoch] are valid unit.', True))
         if save_path is None:
-            save_path = 'results'
+            save_path = 'Results'
         self.save_path = make_dir_if_need(save_path)
         self.imshow = imshow
         if imshow is None and self.is_in_ipython:
@@ -65,7 +61,7 @@ class VisualizationCallbackBase(CallbackBase):
 
 
 class TileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results',
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results',
                  name_prefix: str = 'tile_image_{0}.png', row=3, include_input=True, include_output=True, include_target=True,
                  include_mask=None, reverse_image_transform=None, imshow=False):
         super(TileImageCallback, self).__init__(frequency, unit, save_path, imshow)
@@ -73,7 +69,6 @@ class TileImageCallback(VisualizationCallbackBase):
         self.is_in_colab = is_in_colab()
         self.tile_image_name_prefix = name_prefix
         self.reverse_image_transform = reverse_image_transform
-
         self.row = row
 
         self.include_input = include_input
@@ -93,11 +88,11 @@ class TileImageCallback(VisualizationCallbackBase):
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
-        dataprovider = enforce_singleton(ctx.get_data_provider())
+        dataprovider =ctx.get_data_provider()[-1]
         if self.reverse_image_transform is None:
-            if len(ctx.get_data_provider()) == 1:
-                self.reverse_image_transform = dataprovider.reverse_image_transform
-                self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
+            self.reverse_image_transform = dataprovider.reverse_image_transform
+            #self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
+
 
         if self.include_input:
             input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
@@ -123,7 +118,7 @@ class TileImageCallback(VisualizationCallbackBase):
                         mask = to_numpy(data[ds.symbol])
 
         reverse_image_transform = self.reverse_image_transform
-        reverse_image_transform_funcs = self.reverse_image_transform_funcs
+        reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
         if self.include_input and input is not None:
             if len(reverse_image_transform_funcs) > 1:
                 input_arr = []
@@ -196,7 +191,7 @@ class TileImageCallback(VisualizationCallbackBase):
 
 
 class GanTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results',
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results',
                  name_prefix: str = 'tile_image_{0}.png', row=3,
                  include_mask=None, reverse_image_transform=None, imshow=False):
         super(GanTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
@@ -264,7 +259,7 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
 
 class SegTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results', reverse_image_transform=None,
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results', reverse_image_transform=None,
                  is_label_mask=False, palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False):
         super(SegTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
@@ -285,45 +280,52 @@ class SegTileImageCallback(VisualizationCallbackBase):
         background = np.reshape(to_numpy(self.background), new_shape)
         tile_images_list = []
         input = None
-        target = None
+        mask = None
         output = None
         is_label_mask = self.is_label_mask
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        if self.reverse_image_transform is None:
+            if len(ctx.get_data_provider()) == 1:
+                self.reverse_image_transform = dataprovider.reverse_image_transform
+                self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
 
-        # if len(data) >= 3:
-        for data_key in data.key_list:
-            if data_key == data_feed[model.signature.inputs.key_list[0]]:
-                input = data[data_feed[model.signature.inputs.key_list[0]]]
-                model.eval()
-                if is_label_mask:
-                    output = to_numpy(argmax(model(input), axis=axis))
-                else:
-                    output = to_numpy(expand_dims(cast(argmax(model(input), axis=axis), input.dtype), axis=axis))
-
-                model.train()
-
-            # elif data_key == data_feed[model.signature.outputs.key_list[0]]:
-            #     output = data[data_feed[model.signature.outputs.key_list[0]]]
-            #     if output.max() < 0:
-            #         output = exp(output)
-
-            elif (
-                    'target' in data_key or 'label' in data_key or 'mask' in data_key) and not 'output' in data_key and data_key in data_feed.value_list:
-                target = to_numpy(data[data_key])
-        output_arr = None
-        if 'alpha' not in data:
-            output_arr = output.copy()
-            if is_label_mask:
-                target = label2color(target, self.palette)
-                output = label2color(output, self.palette)
-        else:
+        input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
+        if 'tensor' in model.__class__.__name__.lower():
+            output = to_numpy(model.clone())
+        elif isinstance(model, Layer):
+            output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]].copy())
+        mask_type=None
+        output_arr=output.copy()
+        if isinstance(dataprovider.traindata.label, MaskDataset):
+            mask_type=dataprovider.traindata.label.object_type
+            mask = to_numpy(data[dataprovider.traindata.label.symbol])
+        elif isinstance(dataprovider.traindata.label, ZipDataset):
+            for ds in dataprovider.traindata.label._datasets:
+                if isinstance(ds, MaskDataset):
+                    mask_type =ds.object_type
+                    mask = to_numpy(data[ds.symbol])
+        if mask_type==ObjectType.label_mask:
+            mask = label2color(mask, self.palette)
+            if ndim(output)==4:
+                output=argmax(output,1)
+            output_arr = label2color(output, self.palette)
+        elif  mask_type==ObjectType.binary_mask:
+            if ndim(output)==4:
+                output=argmax(output,1)
+            output_arr=output
+        elif mask_type == ObjectType.alpha_mask:
             if get_backend() == 'tensorflow':
-                output = output[:, :, :, 1:2] * argmax(output, axis)
+                output_arr = output[:, :, :, 1:2] * argmax(output, axis)
             else:
-                output = (output[:, 1:2, :, :] * argmax(output, axis)).transpose(0, 2, 3, 1)
-            target = to_numpy(data['alpha'])
+                output_arr = (output[:, 1:2, :, :] * argmax(output, axis)).transpose(0, 2, 3, 1)
+        if  ndim(output)==4 and int_shape(output)[1 if get_backend() == 'pytorch' else -1]>4:
+            output  = argmax(output, 1 if get_backend() == 'pytorch' else -1)
+            output_arr = output
+
+
 
         input_arr = []
         input = to_numpy(input)
@@ -334,16 +336,21 @@ class SegTileImageCallback(VisualizationCallbackBase):
         tile_images_list.append(input_arr)
 
         if is_label_mask:
-            tile_images_list.append(target)
+            tile_images_list.append(mask)
             tile_images_list.append(output)
         else:
-            target_arr = target
+            target_arr = mask
 
-            if len(target.shape) < len(int_shape(input)):
+            if len(mask.shape) < len(int_shape(input)):
                 if get_backend() == 'tensorflow':
-                    target_arr = np.expand_dims(target, -1)
+                    target_arr = np.expand_dims(mask, -1)
                 else:
-                    target_arr = np.expand_dims(target, axis=axis)
+                    target_arr = np.expand_dims(mask, axis=axis)
+            if len(output_arr.shape) < len(int_shape(input)):
+                if get_backend() == 'tensorflow':
+                    output_arr = np.expand_dims(output_arr, -1)
+                else:
+                    output_arr = np.expand_dims(output_arr, axis=axis)
 
             if 'alpha' not in data:
                 target_arr[target_arr > 0] = 1
@@ -371,7 +378,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
 
 
 class DetectionPlotImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results', reverse_image_transform=None, labels=None,
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results', reverse_image_transform=None, labels=None,
                  palette=None, background=(120, 120, 120), name_prefix: str = 'detection_plot_image_{0}.png', imshow=False):
         super(DetectionPlotImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
@@ -433,7 +440,7 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
 
 
 class PlotLossMetricsCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'results', clean_ipython_output_frequency=5,
+    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results', clean_ipython_output_frequency=5,
                  name_prefix: str = 'loss_metric_curve_{0}.png', is_inplace=False, imshow=False):
         super(PlotLossMetricsCallback, self).__init__(frequency, unit, save_path, imshow)
         self.training_items = None
@@ -545,7 +552,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                         self.last_layer = OrderedDict()
 
                     if len(self.first_layer) == 0 and len(self.last_layer) == 0:
-                        if training_context['current_model'][-1].__class__.__name__ == 'ModuleDict':
+                        if  isinstance(training_context['current_model'],Sequential) and training_context['current_model'][-1].__class__.__name__ == 'ModuleDict':
                             self.is_modulefict = True
                             for k, v in training_context['current_model'][-1].items():
                                 last_layer_name = ''
