@@ -604,7 +604,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
 
 
         elif get_backend() == 'tensorflow':
-            if self.frequency > 0 and ((self.unit == 'batch' and (training_context['current_batch'] + 1) % self.frequency == 0) or (
+            if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                     self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0) or (
                                                self.unit == 'epoch' and training_context['current_batch'] == 0 and (training_context['current_epoch'] + 1) % self.frequency == 0)):
                 grad_dict = OrderedDict()
