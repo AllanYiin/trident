@@ -1031,10 +1031,12 @@ class Model(model.ModelBase):
                             'signature': self._model.signature
                         }, f)
 
-                    shutil.move(temppath, move_path)
                     if os.path.exists(save_path):
                         os.remove(save_path)
-                    os.rename(move_path, save_path)
+                        shutil.move(temppath, save_path)
+                        #os.rename(move_path, save_path)
+                    else:
+                        shutil.move(temppath, save_path)
 
                 except Exception as e:
                     ctx.print(e)
@@ -1053,10 +1055,13 @@ class Model(model.ModelBase):
                     with open(temppath2, 'wb') as f:
                         save(self._model, f)
 
-                    shutil.move(temppath2, move_path2)
+
                     if os.path.exists(save_path):
                         os.remove(save_path)
-                    os.rename(move_path2, save_path)
+                        shutil.move(temppath2, save_path)
+                        #os.rename(move_path2, save_path)
+                    else:
+                        shutil.move(temppath2, save_path)
 
                 except:
                     if not os.path.exists(save_path):
@@ -1167,10 +1172,12 @@ class Model(model.ModelBase):
 
                                   )
                 ctx.print('Export to onnx file finished! !')
-                shutil.move(temppath, move_path)
+
                 if os.path.exists(save_path):
                     os.remove(save_path)
-                os.rename(move_path, save_path)
+                    shutil.move(temppath, save_path)
+                else:
+                    shutil.move(temppath, save_path)
                 self._model.train()
 
             except Exception as e:
