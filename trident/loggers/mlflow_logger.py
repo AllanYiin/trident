@@ -9,7 +9,7 @@ import logging
 import os
 import re
 from argparse import Namespace
-from time import time
+import time
 from typing import Any, Dict, Optional, Union
 
 from trident.loggers.logger import BaseLogger
@@ -88,18 +88,26 @@ class MLFlowLogger(object):
 
                     # return the singleton instance
         return cls.__singleton_instance
-    def __init__(self):
+    def __init__(self,experiment_name="my-experiment"):
+        mlflow.set_tracking_uri('http://{0}:{1}'.format(ctx.mlflow_server, 4040))
+        self.client= MlflowClient()
+        make_dir_if_need('Log/images')
+        self.run=None
         self.file_writer=None
         self.all_writers=None
-
+        self.experiment_name=experiment_name
+        experiments = self.client.list_experiments()
+        experiment_ids=[e.experiment_id for e in experiments if e.name==self.experiment_name]
+        if len(experiment_ids)>0:
+            self.experiment_id =experiment_ids[-1]
+        else:
+            self.experiment_id = self.client.create_experiment(self.experiment_name,)
 
     def start_run(self,run_id=None,experiment_id=None,run_name=None):
-        # mlflow.set_tracking_uri("http://localhost:4040")
-        mlflow.set_experiment("my-experiment")
-        mlflow.start_run(run_id=run_id,experiment_id=experiment_id,run_name=run_name)
-
-
-
+        if experiment_id is None:
+            experiment_id=self.experiment_id
+        self.run= self.client.create_run(experiment_id)
+        mlflow.start_run(run_id=self.run.info.run_id,experiment_id=experiment_id,run_name=run_name)
 
     def add_hparams(
         self, hparam_dict, metric_dict, hparam_domain_discrete=None, run_name=None
@@ -131,7 +139,8 @@ class MLFlowLogger(object):
            :scale: 50 %
 
         """
-        mlflow.log_metric(key=tag, value=to_scalar(scalar_value), step=global_step)
+        self.client.log_metric(run_id=self.run.info.run_id,key=tag, value=to_scalar(scalar_value),timestamp=walltime if walltime is not None else int(time.time()), step=global_step)
+        #log_metric(run_id: str, key: str, value: float, timestamp: Optional[int] = None, step: Optional[int] = None) → None
 
 
     def add_scalars(self, main_tag, tag_scalar_dict, global_step=None, walltime=None):
@@ -146,14 +155,16 @@ class MLFlowLogger(object):
         pass
 
     def add_image(self, img_path):
-        pass
+
+        self.client.log_image(run_id=self.run.info.run_id,image=image2array(img_path).astype(np.uint8),artifact_file='Log/images')
 
 
     def add_images(self, tag, img_tensor, global_step=None, walltime=None):
         pass
 
-    def add_figure(self, tag, figure, global_step=None, close=True, walltime=None):
-        pass
+    def add_figure(self, tag, figure, artifact_file=None):
+        self.client.log_figure(run_id=self.run.info.run_id,figure=figure,artifact_file=artifact_file)
+        #log_figure(run_id: str, figure: Union[matplotlib.figure.Figure, plotly.graph_objects.Figure], artifact_file: str)
 
 
 
@@ -178,6 +189,7 @@ class MLFlowLogger(object):
             writer.flush()
             writer.close()
         self.file_writer = self.all_writers = None
+        self.client.set_terminated(self.run.info.run_id,end_time=time.time())
 
     def __enter__(self):
         return self
