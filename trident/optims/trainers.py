@@ -486,12 +486,15 @@ class TrainingPlan(object):
             item.save_model()
             item.eval()
 
-    def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
+    def start_now(self, collect_data_inteval=None, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
-
         data_provider = self._dataloaders.value_list[-1]
         data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'
+
+        if collect_data_inteval is None:
+            collect_data_inteval = self.print_progress_frequency*len(data_provider.batch_sampler) if self.print_progress_unit == 'epoch' else self.print_progress_frequency
+
         try:
             self.execution_id = get_time_suffix()
             exception_cnt = 0
