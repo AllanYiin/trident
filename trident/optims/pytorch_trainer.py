@@ -508,12 +508,14 @@ class Model(model.ModelBase):
                 self._losses[alias] = loss
             else:
                 self._losses[alias] = partial(loss, **kwargs)
-        args = get_signature(loss, alias) if signature is None else signature
+
+        signature = get_signature(loss, alias) if signature is None else signature
         for k, v in kwargs.items():
-            if k in args.inputs and v is not None:
-                args.inputs[k].default = v
-        if signature is None:
-            self._losses[alias].signature = args
+            if signature is not None:
+                if k in signature.inputs and v is not None:
+                    signature.inputs[k].default = v
+
+        self._losses[alias].signature = signature
         print(self._losses[alias].signature)
 
         self.loss_weights[alias] = float(loss_weight)
