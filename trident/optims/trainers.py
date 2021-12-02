@@ -63,7 +63,8 @@ elif _backend == 'tensorflow':
 
 
 class TrainingPlan(object):
-    def __init__(self):
+    def __init__(self,name=None):
+        self.name = name
         self.training_items = OrderedDict()
         self.training_names = OrderedDict()
         self._dataloaders = OrderedDict()
@@ -90,6 +91,7 @@ class TrainingPlan(object):
         # StoppingCriterionCallback) for cb in self.callbacks]):  #  #     self.callbacks.append(  #
         # NumberOfEpochsStoppingCriterionCallback(1))
         self.is_terminate = False
+
 
     @property
     def minibatch_size(self):
@@ -208,6 +210,13 @@ class TrainingPlan(object):
         self.training_items[n] = training_item
         training_item.training_context['training_name'] = self.training_names[n]
         self.training_items[n].start_epoch = start_epoch
+
+        if self.name is None and len(self.training_items)==1:
+            self.name='TrainingPlan_{0}'.format(self.training_names[0])
+        elif self.name=='TrainingPlan_{0}'.format(self.training_names[0]) and len(self.training_items)==1:
+            self.name ='TrainingPlan_{0}'.format(uuid.uuid4().node)
+
+
         # backward compatibility
         # for k, v in training_item.signature.inputs.items():
         #     if isinstance(v, tuple) and all([isinstance(item, numbers.Integral) for item in v]):
@@ -265,7 +274,7 @@ class TrainingPlan(object):
 
     def with_mlflow(self):
         from trident.loggers.mlflow_logger import MLFlowLogger
-        ctx.try_enable_mlflow(MLFlowLogger())
+        ctx.try_enable_mlflow(MLFlowLogger(experiment_name=self.name))
 
         return self
 
@@ -500,6 +509,8 @@ class TrainingPlan(object):
             exception_cnt = 0
             abnormal_num_count = 0
             # update callback
+
+            #enable tensorboard & mlflow
             if ctx.enable_tensorboard:
                 for idx, (item, item_name) in enumerate(zip(self.training_items.value_list, self.training_names.value_list)):
                     if hasattr(item, 'training_context'):
@@ -520,6 +531,9 @@ class TrainingPlan(object):
                 t2.start()
                 ctx.mlflow_logger.start_run()
                 open_browser('http://{0}:{1}/'.format(ctx.mlflow_server, ctx.mlflow_port), 5)
+
+
+
             if not is_resume or only_steps == True:
                 max_name_length = builtins.max([len(name) for name in self.training_names.value_list])
                 for item in self.training_items.values():
@@ -601,7 +615,10 @@ class TrainingPlan(object):
                                             iter_testdata[data_provider.traindata.data_template.key_list[i].name] = return_test[i]
 
                             # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
-
+                            num_epoch = self.num_epochs if only_steps == False else 1
+                            num_batches = len(data_provider.batch_sampler) if only_steps == False else max_batches
+                            current_batch = mbs if only_steps == False else self.steps
+                            current_epoch = epoch if only_steps == False else 0
                             for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
@@ -611,10 +628,7 @@ class TrainingPlan(object):
                                 start_epoch = 0 if not hasattr(trainitem, 'start_epoch') else trainitem.start_epoch
                                 if epoch < start_epoch:
                                     trainitem.training_context['stop_update'] = 1
-                                num_epoch = self.num_epochs if only_steps == False else 1
-                                num_batches = len(data_provider.batch_sampler) if only_steps == False else max_batches
-                                current_batch = mbs if only_steps == False else self.steps
-                                current_epoch = epoch if only_steps == False else 0
+
                                 if current_batch == 0:
                                     trainitem.do_on_epoch_start()
                                 trainitem.steps = self.steps
@@ -627,13 +641,14 @@ class TrainingPlan(object):
                                                       num_batches,
                                                       done=None,
                                                       is_collect_data=current_batch == 0 or current_batch % collect_data_inteval == 0,
-                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
+                                                      is_print_batch_progress=self.print_progress_unit == 'batch' and self.steps > 0 and (current_batch+1) % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
-                                                      accumulate_grads=(trainitem.training_context['steps'] + 1) % trainitem.accumulation_steps != 0,
+                                                      accumulate_grads=(self.steps +1)  % trainitem.accumulation_steps != 0,
                                                       is_out_sample_evaluation=need_out_sample_evaluation)
                                 if current_batch == num_batches - 1:
                                     trainitem.do_on_epoch_end()
+
                             self.steps += 1
 
                             if ctx.enable_tensorboard and len(self.training_items) > 1 and mbs % collect_data_inteval == 0:
@@ -652,7 +667,7 @@ class TrainingPlan(object):
                                 for k, v in compare_dict.items():
                                     ctx.summary_writer.add_scalars(k, v, step)
 
-                            if (self.print_progress_unit == 'batch' and mbs % self.print_progress_frequency == 0) or \
+                            if (self.print_progress_unit == 'batch' and (current_batch+1)% self.print_progress_frequency == 0) or \
                                     (self.print_progress_unit == 'epoch' and (epoch + 1) % self.print_progress_frequency == 0):
                                 if len(self.training_items) > 1:
                                     ctx.print(' \n', flush=True)
@@ -668,7 +683,7 @@ class TrainingPlan(object):
                                 if callback.is_shared:
                                     callback.on_overall_batch_end(self.__dict__)
 
-                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (self.steps + 1) % \
+                            if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (current_batch+ 1) % \
                                     self.save_model_frequency == 0:
                                 for k, trainitem in self.training_items.items():
                                     trainitem.save_model(trainitem.training_context['save_path'], )
@@ -685,7 +700,7 @@ class TrainingPlan(object):
                                 data_provider.mode = 'tuple'
                                 return True
 
-                            if only_steps == False and (mbs + 1) % len(data_provider.batch_sampler) == 0:
+                            if only_steps == False and (self.steps + 1) % len(data_provider.batch_sampler) == 0:
                                 break
 
                     except RuntimeError as runtime_e:
@@ -765,7 +780,7 @@ class GanTrainingPlan(TrainingPlan):
             generator.with_optimizer(Adam, 2e-4, betas=(0.5, 0.999))
         generator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
         if not any([isinstance(cb, TileImageCallback) for cb in generator.callbacks]):
-            generator.with_callbacks(GanTileImageCallback(batch_inteval=50))
+            generator.with_callbacks(GanTileImageCallback(frequency=50,unit='batch'))
 
         self.generator = generator
         return self.add_training_item(self.generator, name=name, start_epoch=0)
