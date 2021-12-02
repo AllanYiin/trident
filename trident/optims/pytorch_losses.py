@@ -1401,9 +1401,12 @@ def ssim(X, Y, window, data_range: float, use_padding: bool = False):
     K1 = 0.01
     K2 = 0.03
     compensation = 1.0
-
-    C1 = (K1 * data_range) ** 2
-    C2 = (K2 * data_range) ** 2
+    if data_range==2:
+        C1 = ((K1 * data_range)/data_range) ** 2
+        C2 = ((K2 * data_range)/data_range) ** 2
+    else:
+        C1 = (K1 * data_range) ** 2
+        C2 = (K2 * data_range) ** 2
 
     mu1 = _gaussian_filter(X, window, use_padding)
     mu2 = _gaussian_filter(Y, window, use_padding)
@@ -1432,7 +1435,7 @@ def ssim(X, Y, window, data_range: float, use_padding: bool = False):
 
 class MS_SSIMLoss(_PairwiseLoss):
     def __init__(self, window_size=11, window_sigma=1.5, data_range=255., channel=3, use_padding=False, weights=None, levels=4, eps=1e-8,input_names=None, output_names=None,name='ms_ssim'):
-        super(MS_SSIMLoss, self).__init__()
+        super(MS_SSIMLoss, self).__init__( input_names=input_names, output_names=output_names, name=name)
 
         self.window_size = window_size
         self.channel = channel
