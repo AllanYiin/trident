@@ -19,7 +19,7 @@ import numpy as np
 from trident.callbacks.callback_base import LambdaCallback, UnfreezeModelCallback
 
 from trident.backend.common import to_list, format_time, get_terminal_size, get_session, get_backend, \
-    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format,  cyan_color, get_class
+    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format,  cyan_color, get_class,camel2snake
 from trident.backend import dtype
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
@@ -115,8 +115,11 @@ class ModelBase(object):
             'best_model': None,  # current model
             'loss_history': None, 'metric_history': None, 'base_lr': None,  # current loss
             'current_lr': None,  # current loss
-            'save_path': os.path.join(working_directory, 'Models'), 'is_collect_data': True, 'callbacks': [],
-            'stop_update': 0, 'retain_graph': False,
+            'save_path': os.path.join(working_directory, 'Models'),
+            'is_collect_data': True,
+            'callbacks': [],
+            'stop_update': 0,
+            'retain_graph': False,
             'skip_generate_output': False,
             'skip_reset_total_loss': False}
         if name is not None:
@@ -478,7 +481,7 @@ class ModelBase(object):
     def with_optimizer(self, optimizer, **kwargs):
         return self
 
-    def with_loss(self, loss, loss_weight=1, start_epoch=0, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
         return self
 
     def with_metric(self, metric, name='', print_only=False, **kwargs):
@@ -704,6 +707,9 @@ class ModelBase(object):
                                 overall_loss = overall_loss + this_loss[i]
                         self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
 
+                        if hasattr(v, 'as_metric') and v.as_metric == True:
+                            self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(overall_loss))
+
                         if self.training_context['is_collect_data']:
                             self.training_context['losses'].collect(k, self.training_context['steps'], overall_loss)
 
@@ -713,8 +719,17 @@ class ModelBase(object):
                         else:
                             # a leaf Variable that requires grad connotused in an in-place operation.
                             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+
+                            if hasattr(v,'as_metric') and v.as_metric==True:
+                                self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(this_loss))
+
+
                         if self.training_context['is_collect_data']:
                             self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
+
+
+
+
                 except Exception as e:
                     ctx.print(e)
                     PrintException()
@@ -865,7 +880,7 @@ class ModelBase(object):
             else:
                 loss_value = to_numpy(loss_values).astype(np.float32).mean()
         step_time = self.training_context['time_batch_progress'] / builtins.min(self.steps + 1, print_batch_progress_frequency)
-        progress_bar(step_time, self.training_context['current_batch'], self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
+        progress_bar(step_time, self.training_context['current_batch']+1, self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
                      'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
                                                                             self.training_context['current_lr'],
                                                                             self.training_context['current_epoch']),
@@ -1091,7 +1106,7 @@ def progress_bar(step_time, current, total, msg=None, name=''):
     # cur_len = builtins.max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
     # rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
 
-    L = ['{0}'.format(name) + '   ', ' Step: {0:<8s}'.format(format_time(step_time))]
+    L = ['{0}'.format(name) + ' ', ' Step: {0:<8s}'.format(format_time(step_time))]
     # L.append(' | Tot: {0:<12s}'.format(format_time(tot_time)))
     if msg:
         L.append(' | ' + msg)
