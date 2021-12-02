@@ -140,6 +140,10 @@ class Loss(object):
             self._signature = get_signature(self)
         return self._signature
 
+    @signature.setter
+    def signature(self,value):
+        self._signature=value
+
     def update_signature(self,input_names,output_names):
         if self._signature is None:
             self._signature = get_signature(self)
