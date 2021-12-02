@@ -591,12 +591,11 @@ def get_signature(fn, name=None):
 
 
     base_fn = fn
-    base_signature = base_fn._signature if hasattr(fn, '_signature') else None
+    signature = base_fn._signature if hasattr(fn, '_signature') else  None
+    if signature is None:
+        signature=Signature()
     if hasattr(fn, 'forward'):
         base_fn = fn.forward
-
-    signature = Signature()
-
     sig = inspect.signature(base_fn)
     paras = list(sig.parameters.items())
 
