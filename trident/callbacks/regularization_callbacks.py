@@ -29,7 +29,8 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import get_device
     from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like
 
-working_directory = get_session().working_directory
+ctx=get_session()
+working_directory = ctx.working_directory
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']
 
 
@@ -67,6 +68,8 @@ class MixupCallback(RegularizationCallbacksBase):
         else:
             self.save_path = save_path
         make_dir_if_need(self.save_path)
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        self.reverse_image_transform = dataprovider.reverse_image_transform
 
     def on_loss_calculation_end(self, training_context):
         """Returns mixed inputs, pairs of targets, and lambda"""
@@ -110,13 +113,104 @@ class MixupCallback(RegularizationCallbacksBase):
         if training_context['current_batch'] == 0:
             for item in mixed_x:
                 if self.save_path is None and not is_in_colab():
+                    item = self.reverse_image_transform(to_numpy(item))
+                    array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+                    if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+
+                elif self.save_path is not None:
+                    item = self.reverse_image_transform(to_numpy(item))
+                    array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+                    if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+
+        mixed_x = None
+        x = None
+        y = None
+
+
+class DetectionMixupCallback(RegularizationCallbacksBase):
+    """ Implementation. of the mixup regularization
+     Mixup - a neural network regularization technique based on linear interpolation
+     of labeled sample pairs - has stood out by its capacity to improve model's robustness
+     and generalizability through a surprisingly simple formalism.
+
+    References:
+        mixup: BEYOND EMPIRICAL RISK MINIMIZATION
+        https://arxiv.org/pdf/1710.09412.pdf
+
+    """
+
+    def __init__(self, alpha=1, loss_criterion=None, loss_weight=1, save_path=None, **kwargs):
+        super(DetectionMixupCallback, self).__init__()
+        self.alpha = alpha
+        if loss_criterion is None:
+            loss_criterion = get_class('CrossEntropyLoss', 'trident.optims.pytorch_losses' if get_backend() == 'pytorch' else 'trident.optims.tensorflow_losses')
+
+        self.loss_criterion = loss_criterion()
+        self.loss_weight = loss_weight
+        if save_path is None:
+            self.save_path = os.path.join(working_directory, 'Results')
+        else:
+            self.save_path = save_path
+        make_dir_if_need(self.save_path)
+
+    def on_loss_calculation_end(self, training_context):
+        """Returns mixed inputs, pairs of targets, and lambda"""
+        model = training_context['current_model']
+        train_data = training_context['train_data']
+        x = None
+        y = None
+        x = train_data.value_list[0].copy().detach().to(model.device)  # input
+        y = train_data.value_list[1].copy().detach().to(model.device)  # label
+
+        lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.3), 0.7)
+
+        batch_size = int_shape(x)[0]
+        index = arange(batch_size)
+        index = cast(shuffle(index), 'long')
+        this_loss = None
+        mixed_x = None
+        if get_backend() == 'pytorch':
+            mixed_x = lam * x + (1 - lam) * x[index, :]
+            mixed_x=y+y[index]
+            pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+            #y_a, y_b = y, y[index]
+            this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+            training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+            if training_context['is_collect_data']:
+                training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
+        elif get_backend() == 'tensorflow':
+            with tf.device(get_device()):
+                x1 = tf.gather(x, index, axis=0)
+                y1 = tf.gather(y, index, axis=0)
+                mixed_x = lam * x + (1 - lam) * x1
+                pred = model(to_tensor(mixed_x, requires_grad=True))
+                y_a, y_b = y, y1
+
+                this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred, y_b)
+
+                training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+                if training_context['is_collect_data']:
+                    training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
+        if training_context['current_batch'] == 0:
+            for item in mixed_x:
+                if self.save_path is None and not is_in_colab():
                     item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = Unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+                    if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+
                 elif self.save_path is not None:
                     item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
                     item = Unnormalize(0, 255)(item)
                     array2image(item).save(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+                    if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'mixup_{0}.jpg'.format(get_time_suffix())))
+
         mixed_x = None
         x = None
         y = None
@@ -149,6 +243,8 @@ class CutMixCallback(RegularizationCallbacksBase):
         else:
             self.save_path = save_path
         make_dir_if_need(self.save_path)
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        self.reverse_image_transform = dataprovider.reverse_image_transform
 
     def rand_bbox(self, width, height, lam):
         """
@@ -230,15 +326,18 @@ class CutMixCallback(RegularizationCallbacksBase):
         if training_context['current_batch'] == 0:
             if self.save_path is None and not is_in_colab():
                 for item in x:
-                    item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                    item = Unnormalize(0, 255)(item)
+                    item = self.reverse_image_transform(to_numpy(item))
                     array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+                    if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
 
             elif self.save_path is not None:
                 for item in x:
-                    item = Unnormalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])(to_numpy(item))
-                    item = Unnormalize(0, 255)(item)
+                    item = self.reverse_image_transform(to_numpy(item))
                     array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+                    if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+
         x = None
         y = None
 
