@@ -1427,15 +1427,15 @@ def ssim(X, Y, window, data_range: float, use_padding: bool = False):
     cs_map = F.relu(cs_map)
     ssim_map = ((2 * mu1_mu2 + C1) / (mu1_sq + mu2_sq + C1)) * cs_map
 
-    ssim_val = ssim_map.mean(dim=(1, 2, 3))  # reduce along CHW
-    cs = cs_map.mean(dim=(1, 2, 3))
+    ssim_val = ssim_map.sum(dim=1,keepdim=True).mean(dim=(2, 3)).squeeze()  # reduce along CHW
+    cs = cs_map.sum(dim=1,keepdim=True).mean(dim=(2, 3)).squeeze()
 
     return ssim_val, cs
 
 
 class MS_SSIMLoss(_PairwiseLoss):
-    def __init__(self, window_size=11, window_sigma=1.5, data_range=255., channel=3, use_padding=False, weights=None, levels=4, eps=1e-8,input_names=None, output_names=None,name='ms_ssim'):
-        super(MS_SSIMLoss, self).__init__( input_names=input_names, output_names=output_names, name=name)
+    def __init__(self, window_size=11, window_sigma=1.5, data_range=255., channel=3, use_padding=False, weights=None, levels=4, eps=1e-8,reduction='mean', enable_ohem=False, ohem_ratio=3.5,input_names=None, output_names=None,name='ms_ssim'):
+        super(MS_SSIMLoss, self).__init__(reduction='mean', enable_ohem=False, ohem_ratio=3.5,input_names=input_names, output_names=output_names, name=name)
 
         self.window_size = window_size
         self.channel = channel
