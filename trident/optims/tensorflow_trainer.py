@@ -1190,7 +1190,7 @@ class Model(ModelBase):
                     self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
 
                 with tf.GradientTape() as grad_tape:
-                    #grad_tape.watch(self._model.trainable_variables)
+                    grad_tape.watch(self._model.trainable_variables)
 
                     if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
                         try:
@@ -1230,6 +1230,9 @@ class Model(ModelBase):
                                             overall_loss = overall_loss + this_loss[i]
                                     self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
 
+                                    if hasattr(v, 'as_metric') and v.as_metric == True:
+                                        self.training_context['tmp_metrics'].collect(camel2snake(k),self.training_context['steps'],to_numpy(overall_loss))
+
                                     if self.training_context['is_collect_data']:
                                         self.training_context['losses'].collect(k, self.training_context['steps'], overall_loss)
 
@@ -1240,6 +1243,10 @@ class Model(ModelBase):
                                     else:
                                         # a leaf Variable that requires grad connotused in an in-place operation.
                                         self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+
+                                    if hasattr(v, 'as_metric') and v.as_metric == True:
+                                        self.training_context['tmp_metrics'].collect(camel2snake(k),self.training_context['steps'],to_numpy(this_loss))
+
                                     if self.training_context['is_collect_data']:
                                         self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
                             except Exception as e:
@@ -1261,11 +1268,12 @@ class Model(ModelBase):
                             self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
                 vars = grad_tape.watched_variables()
-                grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.ZERO)
+                grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
                 # grads = tuple([where(is_nan(grad), zeros_like(grad), grad) for grad in grads])
 
                 self.training_context['grads_and_vars'] = zip(grads, vars)
-
+                # for g,v in enumerate(zip(grads, vars)):
+                #     ctx.print(v.name,v.shape,)
                 # self.optimizer.step(zip(grads,vars))
                 self.do_gradient_update(log_gradients and is_collect_data)
                 self.training_context['current_lr'] = self.optimizer.lr
