@@ -429,6 +429,8 @@ class Adam(Optimizer):
         group=self.param_groups[0]
 
         for grad,p in grads_and_vars:
+            # np_grad=to_numpy(grad)
+            # print(p.name,np_grad.shape,np_grad.mean(),np.abs(np_grad).mean())
             if grad is None or not p.trainable:
                 continue
 
@@ -461,7 +463,7 @@ class Adam(Optimizer):
                 grad = grad+p.value()*group['weight_decay']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(grad.size())) > 3:
+                if len(list(int_shape(grad))) > 3:
                     grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
 
 
@@ -482,8 +484,8 @@ class Adam(Optimizer):
             G_grad = true_divide(exp_avg, denom)
 
             if self.gradient_centralization in ['all', 'gc']:
-                if len(list(G_grad.size())) > 1:
-                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(G_grad.size())))), keepdims=True))
+                if len(list(int_shape(G_grad))) > 1:
+                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(int_shape(G_grad))))), keepdims=True))
 
 
             if any_abnormal_number(p_data):
@@ -821,7 +823,7 @@ class SGD(Optimizer):
 #                 grad = grad.coalesce()  # the update is non-linear so indices must be unique
 #                 grad_indices = grad._indices()
 #                 grad_values = grad._values()
-#                 size = grad.size()
+#                 size = int_shape(grad)
 #
 #                 def make_sparse(values):
 #                     constructor = grad.new
@@ -2264,8 +2266,8 @@ class AdaBelief(Optimizer):
             G_grad = true_divide(exp_avg, denom)
 
             if self.gradient_centralization in ['all', 'gc']:
-                if len(list(G_grad.size())) > 1:
-                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(G_grad.size())))), keepdims=True))
+                if len(list(int_shape(G_grad))) > 1:
+                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(int_shape(G_grad))))), keepdims=True))
 
             if any_abnormal_number(p_data):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
@@ -2570,7 +2572,7 @@ class DiffGrad(Optimizer):
             beta1, beta2 = group['betas']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(grad.size())) > 3:
+                if len(list(int_shape(grad))) > 3:
                     grad+=(-grad.mean(axis=tuple(range(1, grad.dim())), keepdims=True))
 
             state['step'] += 1
@@ -2599,8 +2601,8 @@ class DiffGrad(Optimizer):
             G_grad = true_divide(exp_avg1, denom)
 
             if self.gradient_centralization in ['all', 'gc']:
-                if len(list(G_grad.size())) > 1:
-                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(G_grad.size())))), keepdims=True))
+                if len(list(int_shape(G_grad))) > 1:
+                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(int_shape(G_grad))))), keepdims=True))
 
 
             if any_abnormal_number(p_data):
