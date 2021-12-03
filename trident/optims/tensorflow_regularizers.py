@@ -16,27 +16,30 @@ _epsilon=_session.epsilon
 def l1_reg(model:Layer,reg_weight=1e-6):
     loss=0.0
     for name, param in model.named_parameters():
-        if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
-            loss = loss + (reg_weight * reduce_sum(abs(param)))
+        if param.trainable:
+            if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
+                loss = loss + (reg_weight * reduce_sum(abs(param)))
     return loss
 
 
 def l2_reg(model:Layer ,reg_weight=1e-6):
     loss = 0.0
     for name, param in model.named_parameters():
-        if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
-            loss = loss +  reg_weight *reduce_sum(square(param))
+        if param.trainable:
+            if  'bias' not in name and not any_abnormal_number(param) and param.trainable:
+                loss = loss +  reg_weight *reduce_sum(square(param))
     return loss
 
 
 def orth_reg(model:tf.Module,reg_weight=1e-6):
     loss = 0.0
     for  param in model.trainable_weights:
-        if not any_abnormal_number(param) and param.trainable:
-            param_flat =tf.reshape(param,(param.int_shape[0], -1))
-            sym =tf.math.multiply(param_flat, tf.transpose(param_flat))
-            sym -= tf.eye(param_flat.int_shape[0])
-            loss = loss +reduce_sum(reg_weight * abs(sym))
+        if param.trainable:
+            if not any_abnormal_number(param) and param.trainable:
+                param_flat =tf.reshape(param,(param.int_shape[0], -1))
+                sym =tf.math.multiply(param_flat, tf.transpose(param_flat))
+                sym -= tf.eye(param_flat.int_shape[0])
+                loss = loss +reduce_sum(reg_weight * abs(sym))
     return loss
 
 def total_variation_norm_reg(output:tf.Tensor,reg_weight=1e-6):
