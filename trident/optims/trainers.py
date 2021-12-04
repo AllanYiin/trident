@@ -306,14 +306,13 @@ class TrainingPlan(object):
     def print_gradients_scheduling(self, frequency: int, unit='batch'):
 
         pg = PrintGradientsCallback(frequency=frequency, unit=unit, )
-        pg.is_shared = False
+        pg.is_shared = True
         self.callbacks.append(pg)
         return self
 
     def print_gpu_utilization(self, frequency: int, unit='batch'):
-
         pg = PrintGpuUtilizationCallback(frequency=frequency, unit=unit, )
-        pg.is_shared = True
+        pg.is_shared = False
         self.callbacks.append(pg)
         return self
 
@@ -362,6 +361,7 @@ class TrainingPlan(object):
         plot = PlotLossMetricsCallback(frequency=frequency, unit=unit,
                                        save_path=save_path, name_prefix=name_prefix.format(get_time_suffix()),
                                        clean_ipython_output_frequency=clean_ipython_output_frequency, imshow=imshow)
+        plot.is_shared=True
         self.callbacks.append(plot)
         return self
 
@@ -507,13 +507,11 @@ class TrainingPlan(object):
 
     def do_on_overall_epoch_end(self):
         for callback in self.callbacks:
-            if callback.is_shared:
-                callback.on_overall_epoch_end(self.__dict__)
+            callback.on_overall_epoch_end(self.__dict__)
 
     def do_on_overall_batch_end(self):
         for callback in self.callbacks:
-            if callback.is_shared:
-                callback.on_overall_batch_end(self.__dict__)
+            callback.on_overall_batch_end(self.__dict__)
 
     def start_now(self, collect_data_inteval=None, is_resume=False, only_steps=False, max_batches=np.inf,
             keep_weights_history=False, keep_gradient_history=False):

@@ -456,54 +456,58 @@ class PlotLossMetricsCallback(VisualizationCallbackBase):
         self.counter = 0
         self.clean_ipython_output_frequency = clean_ipython_output_frequency
 
+
     def on_training_start(self, training_context):
         if not self.is_inplace:
             self.training_items = training_context['training_items']
 
     def on_overall_batch_end(self, training_context):
-        if not self.is_inplace and training_context['steps'] > 10:
-            if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
-                    self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
-                if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
-                    display.clear_output(wait=True)
-                    self.counter = 0
-                self.loss_history_list = []
-                self.metric_history_list = []
-                plotable_metric_names = OrderedDict()
-                for i in range(len(self.training_items.value_list)):
-                    trainitem = self.training_items.value_list[i]
-                    self.loss_history_list.append(trainitem.batch_loss_history)
-                    plotable_metric_names[i] = [k for k, v in trainitem._metrics.item_list if v.print_only == False]
-                    self.metric_history_list.append(trainitem.batch_metric_history)
-                self.counter += 1
-                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list, metrics_names=plotable_metric_names,
-                                        legend=training_context['training_names'].value_list, calculate_base='batch',
-                                        max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
-                                        imshow=self.imshow)
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
+                self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
+            if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
+                display.clear_output(wait=True)
+                self.counter = 0
+            self.loss_history_list = []
+            self.metric_history_list = []
+            plotable_metric_names = OrderedDict()
+            for i in range(len(self.training_items.value_list)):
+                trainitem = self.training_items.value_list[i]
+                self.loss_history_list.append(trainitem.batch_loss_history)
+                plotable_metric_names[i] = [k for k, v in trainitem._metrics.item_list if v.print_only == False]
+                self.metric_history_list.append(trainitem.batch_metric_history)
+            self.counter += 1
+            fig = loss_metric_curve(self.loss_history_list, self.metric_history_list, metrics_names=plotable_metric_names,
+                                    legend=training_context['training_names'].value_list, calculate_base='batch',
+                                    max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
+                                    imshow=self.imshow)
 
-                if ctx.enable_tensorboard and ctx.summary_writer is not None:
-                    ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
-                plt.close()
-            elif self.unit  == 'epoch' and (training_context['epochs']  + 1) % self.frequency == 0 and  self.training_items.value_list[0].training_context['current_batch'] +1==self.training_items.value_list[0].training_context['total_batch'] :
-                if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
-                    display.clear_output(wait=True)
-                    self.counter = 0
-                self.loss_history_list = []
-                self.metric_history_list = []
-                plotable_metric_names = OrderedDict()
-                for i in range(len(self.training_items.value_list)):
-                    trainitem = self.training_items.value_list[i]
-                    self.loss_history_list.append(trainitem.epoch_loss_history)
-                    plotable_metric_names[i] = [k for k, v in trainitem._metrics.item_list if v.print_only == False]
-                    self.metric_history_list.append(trainitem.epoch_metric_history)
-                self.counter += 1
-                fig = loss_metric_curve(self.loss_history_list, self.metric_history_list, metrics_names=plotable_metric_names,
-                                        legend=training_context['training_names'].value_list, calculate_base='epoch',
-                                        max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
-                                        imshow=self.imshow)
-                if ctx.enable_tensorboard and ctx.summary_writer is not None:
-                    ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
-                plt.close()
+            if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'], close=True, walltime=time.time())
+            plt.close()
+
+
+    def on_overall_epoch_end(self, training_context):
+        if self.unit == 'epoch' and (training_context['epochs'] + 1) % self.frequency == 0 :
+            if is_in_ipython() and self.counter == self.clean_ipython_output_frequency:
+                display.clear_output(wait=True)
+                self.counter = 0
+            self.loss_history_list = []
+            self.metric_history_list = []
+            plotable_metric_names = OrderedDict()
+            for i in range(len(self.training_items.value_list)):
+                trainitem = self.training_items.value_list[i]
+                self.loss_history_list.append(trainitem.epoch_loss_history)
+                plotable_metric_names[i] = [k for k, v in trainitem._metrics.item_list if v.print_only == False]
+                self.metric_history_list.append(trainitem.epoch_metric_history)
+            self.counter += 1
+            fig = loss_metric_curve(self.loss_history_list, self.metric_history_list, metrics_names=plotable_metric_names,
+                                    legend=training_context['training_names'].value_list, calculate_base='epoch',
+                                    max_iteration=None, save_path=os.path.join(self.save_path, self.name_prefix),
+                                    imshow=self.imshow)
+            if ctx.enable_tensorboard and ctx.summary_writer is not None:
+                ctx.summary_writer.add_figure('overall/plot/loss_metric_curve', fig, global_step=training_context['steps'],
+                                              close=True, walltime=time.time())
+            plt.close()
 
     # def on_batch_end(self, training_context):
     #     if self.is_inplace:
@@ -538,6 +542,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
         self.first_layer = OrderedDict()
         self.last_layer = OrderedDict()
         self.is_modulefict = False
+        self.is_shared = True
         self.lines = []
 
     def on_optimization_step_start(self, training_context):
@@ -677,22 +682,36 @@ class PrintGradientsCallback(VisualizationCallbackBase):
             for line in self.lines:
                 print(line)
             self.lines = []
+    def on_overall_epoch_end(self, training_context):
+        if len(self.lines) > 0:
+            for line in self.lines:
+                ctx.print(line)
+            self.lines = []
 
 class PrintGpuUtilizationCallback(VisualizationCallbackBase):
     def __init__(self, frequency=-1, unit='batch'):
         super(PrintGpuUtilizationCallback, self).__init__(frequency, unit)
-
+        self.lines = []
     def print_gpu_utilization(self):
         memory_map_list=get_gpu_memory_map()
         for map in memory_map_list:
-            print(str(map)[1:-1])
+            self.lines.append(blue_color('[{0}] {1} '.format(map.value_list[1],map.value_list[2]))+'|'+orange_color(' {0:>3}°C {1:>3}% '.format(int(map.value_list[-2]),int(map.value_list[3])))+'|'+blue_color(' {0} /{1} MB  {2:.2%}'.format(int(map.value_list[4]),map.value_list[6],map.value_list[-1])))
+
 
     def on_overall_batch_end(self, training_context):
         if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                 self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
             self.print_gpu_utilization()
+            if len(self.lines) > 0:
+                for line in self.lines:
+                    ctx.print(line)
+                self.lines = []
 
     def on_overall_epoch_end(self, training_context):
         if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (
                 training_context['current_epoch'] + 1) % self.frequency == 0):
             self.print_gpu_utilization()
+            if len(self.lines) > 0:
+                for line in self.lines:
+                    ctx.print(line)
+                self.lines = []
