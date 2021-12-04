@@ -501,30 +501,53 @@ def random_cosine_lr(max_lr=None, min_lr=1e-8,period=100,cosine_weight=0.2,noise
 
 
 class CosineLR(AdjustLRCallbackBase):
-    def __init__(self, max_lr=None, min_lr=1e-7,period=1000,cosine_weight=0.2,**kwargs):
+    def __init__(self, max_lr=None, min_lr=1e-7,period=1000,unit='batch',cosine_weight=0.5,**kwargs):
         super(CosineLR, self).__init__()
         self.max_lr = max_lr
         self.min_lr = min_lr
-        self.period=period
-        self.T_max=period/2
+        self.full_period=period*2
+        self.T_max=period
+        self.unit=unit
         self.T_current = 0
         self.cosine_weight=cosine_weight
     def on_batch_end(self, training_context):
-        if self.max_lr  is None:
-            self.max_lr= training_context['base_lr']
+        if self.unit in ['batch','step']:
+            if self.max_lr  is None:
+                self.max_lr= training_context['base_lr']
 
-        self.T_current=training_context['steps']% (2 * self.T_max)
+            self.T_current=float(training_context['steps'])#% self.period
 
-        if self.T_current == 0:
-            training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
-        elif (self.T_current - 1 - self.T_max) % (2 * self.T_max) == 0:
-            self.max_lr=self.max_lr*self.cosine_weight
-            training_context['optimizer'].adjust_learning_rate((self.min_lr+ (self.max_lr - self.min_lr)) *(1 - math.cos(math.pi / self.T_max)) / 2,verbose=False)
-        else:
-            training_context['optimizer'].adjust_learning_rate(
-                ((1 + math.cos(math.pi * (self.T_current / self.T_max))) * (self.max_lr - self.min_lr) * 0.5 + self.min_lr),
-                verbose=False)
+            if self.T_current == 0:
+                training_context['optimizer'].adjust_learning_rate(self.max_lr, verbose=False)
+            elif (self.T_current - 1 - self.T_max) % self.full_period == 0:
+                self.max_lr = self.max_lr * self.cosine_weight
+                training_context['optimizer'].adjust_learning_rate(
+                    training_context['optimizer'].lr + (self.max_lr - self.min_lr) * (
+                                1 - math.cos(math.pi / self.T_max)) / 2, verbose=False)
+            else:
+                training_context['optimizer'].adjust_learning_rate(
+                    (1 + math.cos(math.pi * self.T_current / self.T_max)) / (1 + math.cos(math.pi * (self.T_current - 1) / self.T_max)) * (
+                                training_context['optimizer'].lr - self.min_lr) + self.min_lr,
+                    verbose=False)
 
+    def on_epoch_end(self, training_context):
+        if self.unit in ['epoch']:
+            if self.max_lr is None:
+                self.max_lr = training_context['base_lr']
+            if self.full_period//2>training_context['total_epoch']:
+                self.full_period=training_context['total_epoch']*2
+
+            self.T_current = float(training_context['current_epoch'] ) # % self.period
+
+            if self.T_current == 0:
+                training_context['optimizer'].adjust_learning_rate(self.max_lr,verbose=False)
+            elif (self.T_current - 1 - self.T_max) % self.full_period== 0:
+                self.max_lr=self.max_lr*self.cosine_weight
+                training_context['optimizer'].adjust_learning_rate(training_context['optimizer'].lr+  (self.max_lr - self.min_lr)*(1 - math.cos(math.pi / self.T_max)) / 2,verbose=False)
+            else:
+                training_context['optimizer'].adjust_learning_rate(
+                    (1 + math.cos(math.pi * self.T_current / self.T_max)) /(1 + math.cos(math.pi * (self.T_current - 1) / self.T_max)) *(training_context['optimizer'].lr - self.min_lr)  + self.min_lr,
+                    verbose=False)
 
 def cosine_lr( max_lr=None, min_lr=1e-7,period=1000,cosine_weight=0.2,**kwargs):
    return CosineLR(max_lr=max_lr, min_lr=min_lr,period=period,cosine_weight=cosine_weight,**kwargs)
