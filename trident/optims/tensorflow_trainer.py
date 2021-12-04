@@ -662,9 +662,9 @@ class Model(ModelBase):
                 self.warmup = 0
         if self.training_context['current_batch'] == 0:
             temp = OrderedDict()
-            for k in self.training_context['losses'].key_list:
-                if k != 'epoch' and len(self.training_context['losses'][k]) > 0:
-                    temp[k] = self.training_context['losses'][k][-1][-1]
+            for k in self.training_context['tmp_losses'].key_list:
+                if k != 'epoch' and len(self.training_context['tmp_losses'][k]) > 0:
+                    temp[k] = self.training_context['tmp_losses'][k][-1][-1]
             if 'total_losses' not in temp:
                 temp['total_losses'] = to_numpy(self.training_context['current_loss']).mean()
             ctx.print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
@@ -868,8 +868,11 @@ class Model(ModelBase):
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
-        if self.training_context['is_collect_data']:
-            self.training_context['losses'].collect('total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
+        self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss']))
+        if self.training_context['is_collect_data'] :
+            steps, values =self.training_context['tmp_losses'].get_series('total_losses')
+            self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(values.mean()))
+            self.training_context['tmp_losses'].reset()
 
     def do_on_excution_exception(self):
         super().do_on_excution_exception()

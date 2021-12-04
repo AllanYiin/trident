@@ -88,6 +88,7 @@ class ModelBase(object):
             'epoch_losses': HistoryBase('epoch_losses'),
             'epoch_metrics': HistoryBase('epoch_metrics'),
             'grads_state': OrderedDict(),
+            'tmp_losses': HistoryBase('tmp_losses'),
             'tmp_metrics': HistoryBase('tmp_metrics'),
             'out_sample_metrics': HistoryBase('out_sample_metrics'),
             'print_progress_frequency': 10,
@@ -550,6 +551,7 @@ class ModelBase(object):
             'epoch_losses': HistoryBase('epoch_losses'),
             'epoch_metrics': HistoryBase('epoch_metrics'),
             'grads_state': OrderedDict(),
+            'tmp_losses': HistoryBase('tmp_losses'),
             'tmp_metrics': HistoryBase('tmp_metrics'),
             'out_sample_metrics': HistoryBase('out_sample_metrics'),
             'print_progress_frequency': 10,
@@ -720,12 +722,11 @@ class ModelBase(object):
                             # a leaf Variable that requires grad connotused in an in-place operation.
                             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
 
-                            if hasattr(v,'as_metric') and v.as_metric==True:
-                                self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(this_loss))
+                        if hasattr(v,'as_metric') and v.as_metric==True:
+                            self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(this_loss))
 
 
-                        if self.training_context['is_collect_data']:
-                            self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
+                        self.training_context['tmp_losses'].collect(k, self.training_context['steps'], this_loss)
 
 
 
@@ -750,8 +751,8 @@ class ModelBase(object):
                 # a leaf Variable that requires grad connotused in an in-place operation.
                 self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss  # self.training_context[
             # 'current_loss'] + this_loss
-            if self.training_context['is_collect_data']:
-                self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
+
+            self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
     def do_calculate_constraints(self):
         for k, v in self._constraints.items():
