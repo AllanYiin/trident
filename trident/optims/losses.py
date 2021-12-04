@@ -70,7 +70,7 @@ class Loss(object):
         self.axis = axis
         self.enable_ohem = enable_ohem
         self.ohem_ratio = ohem_ratio
-        self._signature = None
+        self._signature = get_signature(self)
         self.input_names=input_names
         self.output_names=output_names
         self.update_signature(input_names,output_names)
