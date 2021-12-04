@@ -216,12 +216,15 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
     plt.ion()  # is not None:
 
     loss_ax1 = fig.add_subplot(2, 2, 1)
-
+    losses=unpack_singleton(losses)
+    only_single_model=True
     if losses.__class__.__name__ == 'HistoryBase':
         steps, values = losses.get_series('total_losses')
+
         loss_ax1.plot(steps, values, label='total_losses')
 
     elif isinstance(losses, list):
+        only_single_model=False
         for n in range(len(losses)):
             item = losses[n]
             legend_label = 'total_losses' + str(n)
@@ -230,6 +233,7 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
 
             if item.__class__.__name__ == 'HistoryBase':
                 steps, values = item.get_series('total_losses')
+
                 p = loss_ax1.plot(steps, values, label=legend_label)
                 colors.append(p[-1].get_color())
 
@@ -254,19 +258,19 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
         second_axis_keys = []
         first_axis_limit = []
         second_axis_limit = []
+        metrics=unpack_singleton(metrics)
         if metrics.__class__.__name__ == 'HistoryBase':
             metrics_need_plot = metrics_names
             if 'epoch' in metrics_need_plot:
                 metrics_need_plot.remove('epoch')
             for n in range(len(metrics)):
                 k, v = list(metrics.items())[n]
-
-                legend_label = legend[n] if legend is not None else None
-
+                legend_label =None
                 if k in metrics_need_plot:
                     legend_label = if_none(legend_label, k)
 
                     steps, values = metrics.get_series(k)
+                    print(k, len(steps))
                     values_np = np.array(values)
                     if first_axis_range is None:
                         first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
@@ -321,6 +325,7 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                                 legend_label = legend[i]+' '+k
 
                             steps, values = item.get_series(k)
+
                             values_np = np.array(values)
                             if first_axis_range is None:
                                 first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
@@ -527,12 +532,14 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
         max_frequency = 0
 
         for i in range(len(grads)):
-            a, b = np.histogram(grads[i].reshape([-1]), bins)
-            ys = a
-            xs = b[:-1]
-            new_zs.append(zs[i])
-            max_frequency = max(np.max(a), max_frequency)
-            verts.append(polygon_under_graph(xs, ys))
+            if (i+1)%inteval==0:
+                a, b = np.histogram(grads[i].reshape([-1]), bins)
+                ys = a
+                xs = b[:-1]
+                new_zs.append(zs[i])
+                max_frequency = max(np.max(a), max_frequency)
+                verts.append(polygon_under_graph(xs, ys))
+
 
         poly = PolyCollection(verts, facecolors=['r', 'g', 'b', 'y'], alpha=.4)
         ax.add_collection3d(poly, zs=new_zs, zdir='y')
@@ -560,12 +567,13 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
         new_zs = []
         max_frequency = 0
         for i in range(len(weights)):
-            a, b = np.histogram(weights[i].reshape([-1]), bins)
-            ys = a
-            xs = b[:-1] + 0.001
-            new_zs.append(zs[i])
-            max_frequency = max(np.max(a), max_frequency)
-            verts.append(polygon_under_graph(xs, ys))
+            if (i + 1) % inteval == 0:
+                a, b = np.histogram(weights[i].reshape([-1]), bins)
+                ys = a
+                xs = b[:-1] + 0.001
+                new_zs.append(zs[i])
+                max_frequency = max(np.max(a), max_frequency)
+                verts.append(polygon_under_graph(xs, ys))
 
         poly = PolyCollection(verts, facecolors=['r', 'g', 'b', 'y'], alpha=.4)
         ax.add_collection3d(poly, zs=new_zs, zdir='y')
