@@ -1674,21 +1674,21 @@ def get_gpu_memory_map():
         ], encoding='utf-8')
     gpu_memory = [x.split(',') for x in result.strip().split('\n')]
 
-    header=gpu_memory[0]
+    header=[h.strip() for h in gpu_memory[0]]
     memory_map_list=[]
     for n in range(1,len(gpu_memory)):
         memory_map = OrderedDict()
         for i,(k,v) in enumerate(zip(header,gpu_memory[n])):
             if i==0:
-                memory_map[k.strip()]=datetime.datetime.strptime(v, "%Y/%m/%d %H:%M:%S.%f")
+                memory_map[k]=datetime.datetime.strptime(v, "%Y/%m/%d %H:%M:%S.%f")
             elif i == 1:
-                memory_map[k.strip()] =int(v)
+                memory_map[k] =int(v)
             elif i == 3:
-                memory_map[k.strip()] =float(v)/100
+                memory_map[k] =float(v)/100
             elif i > 3:
-                memory_map[k.strip()] = float(v)
-            memory_map['memory usage'] =memory_map['memory.used [MiB]']/memory_map['memory.total [MiB]']
-            memory_map_list.append(memory_map)
+                memory_map[k] = float(v)
+        memory_map['memory usage'] =memory_map['memory.used [MiB]']/memory_map['memory.total [MiB]']
+        memory_map_list.append(memory_map)
     return memory_map_list
 
 
