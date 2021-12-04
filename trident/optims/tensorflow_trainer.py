@@ -868,7 +868,8 @@ class Model(ModelBase):
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
-        self.training_context['losses'].collect('total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
+        if self.training_context['is_collect_data']:
+            self.training_context['losses'].collect('total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
 
     def do_on_excution_exception(self):
         super().do_on_excution_exception()

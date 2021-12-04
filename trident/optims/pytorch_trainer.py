@@ -511,7 +511,7 @@ class Model(model.ModelBase):
 
         signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
         self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
-        cxt.print(self._losses[alias].signature)
+        ctx.print(self._losses[alias].signature)
         # for k, v in kwargs.items():
         #     if signature is not None:
         #         if k in signature.inputs and v is not None:
@@ -959,8 +959,9 @@ class Model(model.ModelBase):
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
-        self.training_context['losses'].collect('total_losses', self.training_context['steps'],
-                                                to_scalar(self.training_context['current_loss']))
+        if self.training_context['is_collect_data'] :
+            self.training_context['losses'].collect('total_losses', self.training_context['steps'],
+                                                    to_scalar(self.training_context['current_loss']))
 
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
@@ -1024,7 +1025,6 @@ class Model(model.ModelBase):
 
                 try:
                     with open(temppath, 'wb') as f:
-                        tempfile.TemporaryFile()
                         torch.save({
                             'state_dict': self._model.state_dict(),
                             'backend': 'pytorch',
