@@ -220,21 +220,16 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
     only_single_model=True
     if losses.__class__.__name__ == 'HistoryBase':
         steps, values = losses.get_series('total_losses')
-
         loss_ax1.plot(steps, values, label='total_losses')
 
     elif isinstance(losses, list):
         only_single_model=False
         for n in range(len(losses)):
             item = losses[n]
-            legend_label = 'total_losses' + str(n)
-            if legend is not None and len(legend) == len(losses):
-                legend_label = legend[n]
-
             if item.__class__.__name__ == 'HistoryBase':
                 steps, values = item.get_series('total_losses')
 
-                p = loss_ax1.plot(steps, values, label=legend_label)
+                p = loss_ax1.plot(steps, values, label= 'total_losses' + str(n))
                 colors.append(p[-1].get_color())
 
     loss_ax1.set_title('model loss', fontsize=14, fontweight='bold')
@@ -260,17 +255,15 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
         second_axis_limit = []
         metrics=unpack_singleton(metrics)
         if metrics.__class__.__name__ == 'HistoryBase':
-            metrics_need_plot = metrics_names
+            metrics_need_plot = metrics_names[0] if isinstance(metrics_names,dict) else metrics_names
             if 'epoch' in metrics_need_plot:
                 metrics_need_plot.remove('epoch')
             for n in range(len(metrics)):
                 k, v = list(metrics.items())[n]
-                legend_label =None
                 if k in metrics_need_plot:
-                    legend_label = if_none(legend_label, k)
-
+                    legend_label = k
                     steps, values = metrics.get_series(k)
-                    print(k, len(steps))
+
                     values_np = np.array(values)
                     if first_axis_range is None:
                         first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
@@ -323,6 +316,7 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                             legend_label = k+str(i)
                             if legend is not None and len(legend) == len(metrics):
                                 legend_label = legend[i]+' '+k
+
 
                             steps, values = item.get_series(k)
 
