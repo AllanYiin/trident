@@ -410,7 +410,7 @@ class Model(ModelBase):
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
         alias = name
-        signature = getattr(loss, "signature", None)
+
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
 
@@ -454,13 +454,8 @@ class Model(ModelBase):
                 self._losses[alias] = partial(loss, **kwargs)
 
 
-        args = get_signature(loss, alias) if signature is None else signature
-        for k, v in kwargs.items():
-            if k in args.inputs and v is not None:
-                args.inputs[k].default = v
-        if signature is None:
-            self._losses[alias].signature = args
-
+        signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
+        self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
         ctx.print(self._losses[alias].signature)
 
         self.loss_weights[alias] = float(loss_weight)
@@ -588,6 +583,15 @@ class Model(ModelBase):
 
         """
         sys.stderr.write('automatic mixed precision training only enable when using pytorch 1.6 (or higher) as backend and cuda is available.')
+
+        #if ctx.amp_available:
+        # self.is_autocast_enabled = True
+        # self.gradscaler = torch.cuda.amp.GradScaler()
+        # sys.stdout.write('Automatic Mixed Precision:{0}.\n'.format('Turn On'))
+        # else:
+        #     print(
+        #         'automatic mixed precision training only enable when using pytorch 1.6 (or higher) as backend and cuda is available.')
+
 
         return self
 

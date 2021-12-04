@@ -464,7 +464,7 @@ class Model(model.ModelBase):
 
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         alias = name
-        signature = getattr(loss, "signature", None)
+
 
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
@@ -509,14 +509,13 @@ class Model(model.ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
 
-        signature = get_signature(loss, alias) if signature is None else signature
-        for k, v in kwargs.items():
-            if signature is not None:
-                if k in signature.inputs and v is not None:
-                    signature.inputs[k].default = v
-
-        self._losses[alias].signature = signature
-        print(self._losses[alias].signature)
+        signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
+        self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
+        cxt.print(self._losses[alias].signature)
+        # for k, v in kwargs.items():
+        #     if signature is not None:
+        #         if k in signature.inputs and v is not None:
+        #             signature.inputs[k].default = v
 
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
