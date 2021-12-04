@@ -962,7 +962,7 @@ class Model(model.ModelBase):
         self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss']))
         if self.training_context['is_collect_data'] :
             steps, values =self.training_context['tmp_losses'].get_series('total_losses')
-            self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(values.mean()))
+            self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(value).mean()))
             self.training_context['tmp_losses'].reset()
 
     def do_on_excution_exception(self):
