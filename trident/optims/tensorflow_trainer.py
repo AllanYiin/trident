@@ -829,14 +829,19 @@ class Model(ModelBase):
                     self.training_context['losses'].collect(signature.outputs.key_list[0], self.training_context['steps'], to_scalar(this_loss.copy()))
 
     def do_calculate_losses(self):
-      pass
+        pass
 
     def get_current_loss(self):
         return self.training_context['current_loss']
 
     def do_calculate_regularizations(self):
-        # regularizer
         pass
+
+    def do_calculate_constraints(self):
+        super().do_calculate_constraints()
+
+    def on_optimization_step_start(self):
+        super().on_optimization_step_start()
 
     def do_gradient_update(self, log_gradients=False):
         if isinstance(self._model, (Layer, tf.Module)):
@@ -872,7 +877,8 @@ class Model(ModelBase):
         if self.training_context['is_collect_data'] :
             steps, values =self.training_context['tmp_losses'].get_series('total_losses')
             self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
-            self.training_context['tmp_losses'].reset()
+            if self.training_context['current_batch']> 0:
+                self.training_context['tmp_losses'].reset()
 
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
@@ -1260,8 +1266,8 @@ class Model(ModelBase):
                                     if hasattr(v, 'as_metric') and v.as_metric == True:
                                         self.training_context['tmp_metrics'].collect(camel2snake(k),self.training_context['steps'],to_numpy(overall_loss))
 
-                                    if self.training_context['is_collect_data']:
-                                        self.training_context['losses'].collect(k, self.training_context['steps'], overall_loss)
+
+                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'], overall_loss)
 
                                 else:
                                     if any_abnormal_number(this_loss):
@@ -1274,8 +1280,8 @@ class Model(ModelBase):
                                     if hasattr(v, 'as_metric') and v.as_metric == True:
                                         self.training_context['tmp_metrics'].collect(camel2snake(k),self.training_context['steps'],to_numpy(this_loss))
 
-                                    if self.training_context['is_collect_data']:
-                                        self.training_context['losses'].collect(k, self.training_context['steps'], this_loss)
+
+                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'], this_loss)
                             except Exception as e:
                                 ctx.print(e)
                                 PrintException()
@@ -1291,8 +1297,8 @@ class Model(ModelBase):
                             # a leaf Variable that requires grad connotused in an in-place operation.
                             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss  # self.training_context[
                         # 'current_loss'] + this_loss
-                        if self.training_context['is_collect_data']:
-                            self.training_context['losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
+
+                        self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
 
                 vars = grad_tape.watched_variables()
                 grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
@@ -1326,8 +1332,8 @@ class Model(ModelBase):
 
                         # check
                         if len(steps) > 0:
-                            values = np.mean(to_numpy(values))
-                            self.training_context['metrics'].collect(k, self.training_context['steps'], values)
+
+                            self.training_context['metrics'].collect(k, self.training_context['steps'], to_numpy(values).mean())
                     self.training_context['tmp_metrics'].reset()
 
                 # ON_BATCH_END
