@@ -310,6 +310,13 @@ class TrainingPlan(object):
         self.callbacks.append(pg)
         return self
 
+    def print_gpu_utilization(self, frequency: int, unit='batch'):
+
+        pg = PrintGpuUtilizationCallback(frequency=frequency, unit=unit, )
+        pg.is_shared = True
+        self.callbacks.append(pg)
+        return self
+
     def save_model_scheduling(self, frequency: int, unit='batch'):
         self.save_model_frequency = frequency
         if unit not in ['batch', 'epoch']:
@@ -357,6 +364,9 @@ class TrainingPlan(object):
                                        clean_ipython_output_frequency=clean_ipython_output_frequency, imshow=imshow)
         self.callbacks.append(plot)
         return self
+
+
+
 
     def generate_datafeed(self, data_provider):
         if data_provider.signature is None:
@@ -495,8 +505,18 @@ class TrainingPlan(object):
             item.save_model()
             item.eval()
 
+    def do_on_overall_epoch_end(self):
+        for callback in self.callbacks:
+            if callback.is_shared:
+                callback.on_overall_epoch_end(self.__dict__)
+
+    def do_on_overall_batch_end(self):
+        for callback in self.callbacks:
+            if callback.is_shared:
+                callback.on_overall_batch_end(self.__dict__)
+
     def start_now(self, collect_data_inteval=None, is_resume=False, only_steps=False, max_batches=np.inf,
-                  keep_weights_history=False, keep_gradient_history=False):
+            keep_weights_history=False, keep_gradient_history=False):
         data_provider = self._dataloaders.value_list[-1]
         data_provider.batch_size = self.batch_size
         data_provider.mode = 'dict'
@@ -619,6 +639,7 @@ class TrainingPlan(object):
                             num_batches = len(data_provider.batch_sampler) if only_steps == False else max_batches
                             current_batch = mbs if only_steps == False else self.steps
                             current_epoch = epoch if only_steps == False else 0
+                            is_epoch_end = current_batch== num_batches - 1
                             for trainitem_name, trainitem in zip(self.training_names.value_list, self.training_items.value_list):
                                 train_data = copy.deepcopy(iter_data)
                                 test_data = copy.deepcopy(iter_testdata)
@@ -646,7 +667,8 @@ class TrainingPlan(object):
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,
                                                       accumulate_grads=(self.steps +1)  % trainitem.accumulation_steps != 0,
                                                       is_out_sample_evaluation=need_out_sample_evaluation)
-                                if current_batch == num_batches - 1:
+
+                                if is_epoch_end:
                                     trainitem.do_on_epoch_end()
 
                             self.steps += 1
@@ -672,16 +694,9 @@ class TrainingPlan(object):
                                 if len(self.training_items) > 1:
                                     ctx.print(' \n', flush=True)
 
-                            for k, trainitem in self.training_items.items():
-                                for callback in trainitem.training_context['callbacks']:
-                                    if not callback.is_shared:
-                                        try:
-                                            callback.on_overall_batch_end(trainitem.training_context)
-                                        except Exception as e:
-                                            ctx.print(e)
-                            for callback in self.callbacks:
-                                if callback.is_shared:
-                                    callback.on_overall_batch_end(self.__dict__)
+                            self.do_on_overall_batch_end()
+                            if is_epoch_end:
+                                self.do_on_overall_epoch_end()
 
                             if self.save_model_frequency > 0 and self.save_model_unit == 'batch' and (current_batch+ 1) % \
                                     self.save_model_frequency == 0:

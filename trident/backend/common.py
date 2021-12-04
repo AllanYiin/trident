@@ -499,7 +499,8 @@ class DeviceType(object):
 # class Device(object):
 #     '''
 #     Describes device type and device id
-#     syntax: device_type:device_id(optional)
+#     syntax: device_type:device_id(option
+#     al)
 #     example: 'CPU', 'CUDA', 'CUDA:1'
 #     '''
 #
@@ -761,12 +762,12 @@ class TensorShape(object):
                     return False
         return True
 
-    def get_dummy_tensor(self):
+    def get_dummy_tensor(self,batch_size=2):
         shape = [d for d in self._dims]
         if shape[0] is None:
-            shape[0] = 2
+            shape[0] = batch_size
         else:
-            shape = [2, ] + shape
+            shape = [batch_size, ] + shape
         return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1)
 
 
@@ -922,9 +923,9 @@ def import_or_install(package_name: str, install_package_name: str = None) -> No
     except ImportError:
         if install_package_name is None:
             install_package_name = package_name
-        if os.system('PIP --version') == 0:
+        if os.system('PIP --version') ==0:
             # No error from running PIP in the Command Window, therefor PIP.exe is in the %PATH%
-            os.system('PIP install {0}'.format(install_package_name))
+            os.system('PIP install {0}  --upgrade'.format(install_package_name))
             importlib.import_module(package_name)
         else:
             # Error, PIP.exe is NOT in the Path!! So I'll try to find it.
@@ -932,14 +933,15 @@ def import_or_install(package_name: str, install_package_name: str = None) -> No
             pip_location_attempt_2 = sys.executable.replace("python.exe", "") + "scripts\pip.exe"
             if os.path.exists(pip_location_attempt_1):
                 # The Attempt #1 File exists!!!
-                os.system(pip_location_attempt_1 + " install " + install_package_name)
+                os.system(pip_location_attempt_1 + " install " + install_package_name+'  --upgrade')
                 importlib.import_module(package_name)
             elif os.path.exists(pip_location_attempt_2):
                 # The Attempt #2 File exists!!!
-                os.system(pip_location_attempt_2 + " install " + install_package_name)
+                os.system(pip_location_attempt_2 + " install " + install_package_name+'  --upgrade')
                 importlib.import_module(package_name)
             else:
                 # Neither Attempts found the PIP.exe file, So i Fail...
+                print('Neither Attempts found the PIP.exe file, So i Fail...')
                 exit()
 
 
@@ -1667,12 +1669,27 @@ def get_gpu_memory_map():
     """
     result = subprocess.check_output(
         [
-            'nvidia-smi', '--query-gpu=memory.used',
-            '--format=csv,nounits,noheader'
+            'nvidia-smi', '--query-gpu=timestamp,index,name,utilization.gpu,memory.used,memory.free,memory.total,temperature.gpu',
+            '--format=csv,nounits'
         ], encoding='utf-8')
-    gpu_memory = [int(x) for x in result.strip().split('\n')]
-    gpu_memory_map = dict(zip(range(len(gpu_memory)), gpu_memory))
-    return gpu_memory_map
+    gpu_memory = [x.split(',') for x in result.strip().split('\n')]
+
+    header=gpu_memory[0]
+    memory_map_list=[]
+    for n in range(1,len(gpu_memory)):
+        memory_map = OrderedDict()
+        for i,(k,v) in enumerate(zip(header,gpu_memory[n])):
+            if i==0:
+                memory_map[k.strip()]=datetime.datetime.strptime(v, "%Y/%m/%d %H:%M:%S.%f")
+            elif i == 1:
+                memory_map[k.strip()] =int(v)
+            elif i == 3:
+                memory_map[k.strip()] =float(v)/100
+            elif i > 3:
+                memory_map[k.strip()] = float(v)
+            memory_map['memory usage'] =memory_map['memory.used [MiB]']/memory_map['memory.total [MiB]']
+            memory_map_list.append(memory_map)
+    return memory_map_list
 
 
 def map_function_arguments(params, params_dict, *args, **kwargs):

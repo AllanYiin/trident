@@ -37,7 +37,7 @@ ctx = context._context()
 _backend = get_backend()
 
 __all__ = ['VisualizationCallbackBase', 'TileImageCallback', 'PrintGradientsCallback', 'SegTileImageCallback',
-           'PlotLossMetricsCallback', 'DetectionPlotImageCallback', 'GanTileImageCallback']
+           'PlotLossMetricsCallback', 'DetectionPlotImageCallback', 'GanTileImageCallback','PrintGpuUtilizationCallback']
 
 
 class VisualizationCallbackBase(CallbackBase):
@@ -96,18 +96,19 @@ class TileImageCallback(VisualizationCallbackBase):
 
         if self.include_input:
             input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
+
         if 'tensor' in model.__class__.__name__.lower():
-            output = to_numpy(model.clone())
+            output = to_numpy(model)
         elif isinstance(model, Layer):
-            output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]].copy())
+            output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]])
         if self.include_target:
             candidate = [k for k in data_feed.keys() if 'target' in k]
             if len(candidate) == 1:
-                target = to_numpy(data[data_feed[candidate[0]]].copy())
+                target = to_numpy(data[data_feed[candidate[0]]])
             elif dataprovider.traindata.label is not None and not isinstance(dataprovider.traindata.label, ZipDataset):
-                target = to_numpy(data[data_feed[dataprovider.traindata.label.symbol]].copy())
+                target = to_numpy(data[data_feed[dataprovider.traindata.label.symbol]])
             elif dataprovider.traindata.label is not None and isinstance(dataprovider.traindata.label, ZipDataset):
-                target = to_numpy(data[data_feed[dataprovider.traindata.label.items[0].symbol]].copy())
+                target = to_numpy(data[data_feed[dataprovider.traindata.label.items[0].symbol]])
 
         if self.include_mask:
             if isinstance(dataprovider.traindata.label, MaskDataset):
@@ -178,6 +179,8 @@ class TileImageCallback(VisualizationCallbackBase):
         fig = tile_rgb_images(*tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=legend)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
+        if ctx.enable_mlflow and ctx.mlflow_logger is not None:
+            ctx.mlflow_logger.add_figure(tag=training_context['training_name'] + '/plot/tile_image', fig=fig, artifact_file=self.save_path)
         plt.close()
 
     def on_batch_end(self, training_context):
@@ -675,3 +678,21 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                 print(line)
             self.lines = []
 
+class PrintGpuUtilizationCallback(VisualizationCallbackBase):
+    def __init__(self, frequency=-1, unit='batch'):
+        super(PrintGpuUtilizationCallback, self).__init__(frequency, unit)
+
+    def print_gpu_utilization(self):
+        memory_map_list=get_gpu_memory_map()
+        for map in memory_map_list:
+            print(str(map)[1:-1])
+
+    def on_overall_batch_end(self, training_context):
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
+                self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
+            self.print_gpu_utilization()
+
+    def on_overall_epoch_end(self, training_context):
+        if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (
+                training_context['current_epoch'] + 1) % self.frequency == 0):
+            self.print_gpu_utilization()
