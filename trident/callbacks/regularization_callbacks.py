@@ -93,8 +93,8 @@ class MixupCallback(RegularizationCallbacksBase):
             y_a, y_b = y, y[index]
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-            if training_context['is_collect_data']:
-                training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
+            training_context['tmp_losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         elif get_backend() == 'tensorflow':
             with tf.device(get_device()):
@@ -107,8 +107,8 @@ class MixupCallback(RegularizationCallbacksBase):
                 this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred, y_b)
 
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-                if training_context['is_collect_data']:
-                    training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
+                training_context['tmp_losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
 
         if training_context['current_batch'] == 0:
             for item in mixed_x:
@@ -178,8 +178,7 @@ class DetectionMixupCallback(RegularizationCallbacksBase):
             #y_a, y_b = y, y[index]
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-            if training_context['is_collect_data']:
-                training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+            training_context['tmp_losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
         elif get_backend() == 'tensorflow':
             with tf.device(get_device()):
@@ -189,11 +188,10 @@ class DetectionMixupCallback(RegularizationCallbacksBase):
                 pred = model(to_tensor(mixed_x, requires_grad=True))
                 y_a, y_b = y, y1
 
-                this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred, y_b)
+                this_loss = lam * self.loss_criterion(pred, y_a.detach()) + (1 - lam) * self.loss_criterion(pred, y_b.detach())
 
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-                if training_context['is_collect_data']:
-                    training_context['losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+                training_context['tmp_losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
         if training_context['current_batch'] == 0:
             for item in mixed_x:
@@ -299,8 +297,8 @@ class CutMixCallback(RegularizationCallbacksBase):
             pred = model(to_tensor(x, requires_grad=True, device=model.device))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-            if training_context['is_collect_data']:
-                training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
+            training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
         elif get_backend() == 'tensorflow':
             with tf.device(get_device()):
@@ -320,8 +318,7 @@ class CutMixCallback(RegularizationCallbacksBase):
                 loss2 = self.loss_criterion(pred, y_b)
                 this_loss = lam * loss1 + (1 - lam) * loss2
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
-                if training_context['is_collect_data']:
-                    training_context['losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+                training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
         if training_context['current_batch'] == 0:
             if self.save_path is None and not is_in_colab():
