@@ -1022,9 +1022,10 @@ class Model(model.ModelBase):
                 temfolder = tempfile.gettempdir()
                 tempfilename = filename + '_' + str(uuid.uuid4().node)
                 temppath = os.path.join(temfolder, tempfilename + ext)
-                move_path = os.path.join(folder, tempfilename + ext)
+
                 try:
                     with open(temppath, 'wb') as f:
+                        tempfile.TemporaryFile()
                         torch.save({
                             'state_dict': self._model.state_dict(),
                             'backend': 'pytorch',
@@ -1042,21 +1043,20 @@ class Model(model.ModelBase):
 
                 except Exception as e:
                     ctx.print(e)
-                    if not os.path.exists(save_path):
-                        if os.path.exists(move_path):
-                            os.rename(move_path, save_path)
-                        elif os.path.exists(temppath):
-                            shutil.move(temppath, save_path)
+                    if os.path.exists(temppath):
+                        if os.path.exists(save_path):
+                            shutil.move(save_path, save_path+'._')
+                        shutil.move(temppath, save_path)
+
 
                 ext = '.pth'
                 save_path = save_path.replace('.pth.tar', '.pth')
                 tempfilename2 = filename + '_' + str(uuid.uuid4().node)
                 temppath2 = os.path.join(temfolder, tempfilename2 + ext)
-                move_path2 = os.path.join(folder, tempfilename2 + ext)
+
                 try:
                     with open(temppath2, 'wb') as f:
                         save(self._model, f)
-
 
                     if os.path.exists(save_path):
                         os.remove(save_path)
@@ -1064,21 +1064,22 @@ class Model(model.ModelBase):
                         #os.rename(move_path2, save_path)
                     else:
                         shutil.move(temppath2, save_path)
-
-                except:
-                    if not os.path.exists(save_path):
-                        if os.path.exists(move_path2):
-                            os.rename(move_path2, save_path)
-                        elif os.path.exists(temppath2):
-                            shutil.move(temppath2, save_path)
+                except Exception as e:
+                    ctx.print(e)
+                    if os.path.exists(temppath2):
+                        if os.path.exists(save_path):
+                            shutil.move(save_path, save_path+'._')
+                        shutil.move(temppath2, save_path)
 
                 self._model.to(get_device())
                 self._model.train()
+                gc.collect()
 
             except Exception as e:
                 self._model.train()
                 ctx.print(e)
                 PrintException()
+                gc.collect()
 
         elif is_tensor(self._model) and not is_abnormal:
             folder, filename, ext = split_path(save_path)
@@ -1089,27 +1090,26 @@ class Model(model.ModelBase):
             save_path = os.path.join(folder, filename + ext)
             make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
-            tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
-            _, tempfile_name, tempext = split_path(temppath)
-            move_path = os.path.join(folder, tempfile_name + tempext)
+
+            temfolder = tempfile.gettempdir()
+            tempfilename = filename + '_' + str(uuid.uuid4().node)
+            temppath = os.path.join(temfolder, tempfilename + ext)
             try:
                 numpy_model = to_numpy(self._model)
                 np.save(temppath, numpy_model)
-                os.close(tempfd)
-                shutil.move(temppath, move_path)
                 if os.path.exists(save_path):
                     os.remove(save_path)
-                os.rename(move_path, save_path)
-            except:
-                if not os.path.exists(save_path):
-                    if os.path.exists(move_path):
-                        os.rename(move_path, save_path)
-                    elif os.path.exists(temppath):
-                        shutil.move(temppath, save_path)
-
-            np.save(save_path, numpy_model)
-
-            # sys.stdout.write('Yor model is a Tensor not a nn.Module, it has saved as numpy array(*.npy) successfully. ')
+                    shutil.move(temppath, save_path)
+                    # os.rename(move_path, save_path)
+                else:
+                    shutil.move(temppath, save_path)
+                    sys.stdout.write('Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
+            except Exception as e:
+                ctx.print(e)
+                if os.path.exists(temppath):
+                    if os.path.exists(save_path):
+                        shutil.move(save_path, save_path + '._')
+                    shutil.move(temppath, save_path)
         else:
             raise ValueError(
                 'only Layer or nn.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
@@ -1159,7 +1159,6 @@ class Model(model.ModelBase):
             temfolder = tempfile.gettempdir()
             tempfilename = filename + '_' + str(uuid.uuid4().node)
             temppath = os.path.join(temfolder, tempfilename + ext)
-            move_path = os.path.join(folder, tempfilename + ext)
 
             try:
                 ctx.print('Export to onnx file starting!')
@@ -1184,14 +1183,10 @@ class Model(model.ModelBase):
 
             except Exception as e:
                 ctx.print(e)
-                PrintException()
-                if not os.path.exists(save_path):
-                    if os.path.exists(move_path):
-                        os.rename(move_path, save_path)
-                    elif os.path.exists(temppath):
-                        shutil.move(temppath, save_path)
                 if os.path.exists(temppath):
-                    os.remove(temppath)
+                    if os.path.exists(save_path):
+                        shutil.move(save_path, save_path + '._')
+                    shutil.move(temppath, save_path)
 
             import onnx
             from onnx import shape_inference

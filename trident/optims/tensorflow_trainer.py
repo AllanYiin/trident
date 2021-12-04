@@ -932,7 +932,7 @@ class Model(ModelBase):
                 temfolder = tempfile.gettempdir()
                 tempfilename = filename + '_' + str(uuid.uuid4().node)
                 temppath = os.path.join(temfolder, tempfilename + ext)
-                move_path = os.path.join(folder, tempfilename + ext)
+
                 try:
                     with open(temppath,'wb') as f:
                         with tf.device('/cpu:0'):
@@ -944,47 +944,51 @@ class Model(ModelBase):
                                 'signature': self._model.signature
                             },f,is_compressed=True)
 
-                    shutil.move(temppath, move_path)
                     if os.path.exists(save_path):
                         os.remove(save_path)
-                    os.rename(move_path, save_path)
+                        shutil.move(temppath, save_path)
+                        # os.rename(move_path, save_path)
+                    else:
+                        shutil.move(temppath, save_path)
 
                 except Exception as e:
                     ctx.print(e)
-                    if not os.path.exists(save_path):
-                        if os.path.exists(move_path):
-                            os.rename(move_path, save_path)
-                        elif os.path.exists(temppath):
-                            shutil.move(temppath, save_path)
+                    if os.path.exists(temppath):
+                        if os.path.exists(save_path):
+                            shutil.move(save_path, save_path + '._')
+                        shutil.move(temppath, save_path)
 
                 ext = '.pth'
                 save_path = save_path.replace('.pth.tar', '.pth')
                 tempfilename2 = filename + '_' + str(uuid.uuid4().node)
                 temppath2 = os.path.join(temfolder, tempfilename2 + ext)
-                move_path2 = os.path.join(folder, tempfilename2 + ext)
+
                 try:
                     with open(temppath2, 'wb') as f:
                         save(self._model, f)
 
-                    shutil.move(temppath2, move_path2)
                     if os.path.exists(save_path):
                         os.remove(save_path)
-                    os.rename(move_path2, save_path)
+                        shutil.move(temppath2, save_path)
+                        #os.rename(move_path2, save_path)
+                    else:
+                        shutil.move(temppath2, save_path)
+                except Exception as e:
+                    ctx.print(e)
+                    if os.path.exists(temppath2):
+                        if os.path.exists(save_path):
+                            shutil.move(save_path, save_path + '._')
+                        shutil.move(temppath2, save_path)
 
-                except:
-                    if not os.path.exists(save_path):
-                        if os.path.exists(move_path2):
-                            os.rename(move_path2, save_path)
-                        elif os.path.exists(temppath2):
-                            shutil.move(temppath2, save_path)
 
-                gc.collect()
-                with tf.device(device):
+                with tf.device(get_device()):
                     self._model.train()
+                gc.collect()
             except Exception as e:
                 self._model.train()
                 ctx.print(e)
                 PrintException()
+                gc.collect()
         elif self._model._is_keras:
             try:
                 folder, filename, ext = split_path(save_path)
@@ -998,27 +1002,26 @@ class Model(ModelBase):
                 save_path = sanitize_path(save_path)
 
 
-                # tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
                 temfolder = tempfile.gettempdir()
                 tempfilename = filename + '_' + str(uuid.uuid4().node)
                 temppath = os.path.join(temfolder, tempfilename + ext)
-                move_path = os.path.join(folder, tempfilename + ext)
 
                 try:
                     self._model.save(temppath)
 
-                    shutil.move(temppath, move_path)
                     if os.path.exists(save_path):
                         os.remove(save_path)
-                    os.rename(move_path, save_path)
+                        shutil.move(temppath, save_path)
+                        # os.rename(move_path, save_path)
+                    else:
+                        shutil.move(temppath, save_path)
 
                 except Exception as e:
                     ctx.print(e)
-                    if not os.path.exists(save_path):
-                        if os.path.exists(move_path):
-                            os.rename(move_path, save_path)
-                        elif os.path.exists(temppath):
-                            shutil.move(temppath, save_path)
+                    if os.path.exists(temppath):
+                        if os.path.exists(save_path):
+                            shutil.move(save_path, save_path + '._')
+                        shutil.move(temppath, save_path)
 
 
                 gc.collect()
@@ -1028,20 +1031,36 @@ class Model(ModelBase):
                 self._model.train()
                 ctx.print(e)
                 PrintException()
-
-
         elif is_tensor(self._model):
-            save_path = self.get_save_path(save_path, default_folder='Models',
-                                           default_file_name='{0}_epoch{1}.npy_'.format(self._model.name,
-                                                                                        self.training_context[
-                                                                                            'current_epoch']))
-            numpy_model = to_numpy(self._model)
+            folder, filename, ext = split_path(save_path)
+            if filename == '':
+                filenam = self.name
+
+            ext = '.npy'
+            save_path = os.path.join(folder, filename + ext)
+            make_dir_if_need(sanitize_path(save_path))
             save_path = sanitize_path(save_path)
-            self.current_save_path = save_path
-            np.save(save_path, numpy_model)
-            shutil.copy2(save_path, save_path.replace('.npy_', '.npy'))
-            os.remove(save_path)
-            sys.stdout.write('Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
+
+            temfolder = tempfile.gettempdir()
+            tempfilename = filename + '_' + str(uuid.uuid4().node)
+            temppath = os.path.join(temfolder, tempfilename + ext)
+            try:
+                numpy_model = to_numpy(self._model)
+                np.save(temppath, numpy_model)
+                if os.path.exists(save_path):
+                    os.remove(save_path)
+                    shutil.move(temppath, save_path)
+                    # os.rename(move_path, save_path)
+                else:
+                    shutil.move(temppath, save_path)
+                    sys.stdout.write( 'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
+            except Exception as e:
+                ctx.print(e)
+                if os.path.exists(temppath):
+                    if os.path.exists(save_path):
+                        shutil.move(save_path, save_path + '._')
+                    shutil.move(temppath, save_path)
+
         else:
             raise ValueError(
                 'only Layer or tf.Module as model can export to onnx, yours model is {0}'.format(type(self._model)))
