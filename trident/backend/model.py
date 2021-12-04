@@ -1010,8 +1010,7 @@ class ModelBase(object):
 
                     # check
                     if len(steps) > 0:
-                        values = to_scalar(values)
-                        self.training_context['metrics'].collect(k, self.training_context['steps'], values)
+                        self.training_context['metrics'].collect(k, self.training_context['steps'], to_scalar(to_numpy(values).mean()))
                 self.training_context['tmp_metrics'].reset()
 
             # ON_BATCH_END
