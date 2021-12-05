@@ -2,6 +2,7 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
+import gc
 import sys
 from functools import reduce
 import collections
@@ -145,17 +146,27 @@ class Optimizer(trackable.Trackable):
             differs between optimizer classes.
         * param_groups - a dict containing all parameter groups
         """
+        # Save order indices instead of Tensors
+        param_mappings = {}
+        start_index = 0
 
-        # Save ids instead of Tensors
         def pack_group(group):
+            nonlocal start_index
             packed = {k: v for k, v in group.items() if k != 'params'}
-            packed['params'] = [id(p) for p in group['params']]
+            param_mappings.update({id(p): i for i, p in enumerate(group['params'], start_index)
+                                   if id(p) not in param_mappings})
+            packed['params'] = [param_mappings[id(p)] for p in group['params']]
+            start_index += len(packed['params'])
             return packed
 
         param_groups = [pack_group(g) for g in self.param_groups]
-        # Remap state to use ids as keys
-        packed_state = {(id(k) if isinstance(k, tf.Variable) else k): v for k, v in self.state.items()}
-        return {'state': packed_state, 'param_groups': param_groups, }
+        # Remap state to use order indices as keys
+        packed_state = {(param_mappings[id(k)] if isinstance(k, tf.Variable) else k): v
+                        for k, v in self.state.items()}
+        return {
+            'state': packed_state,
+            'param_groups': param_groups,
+        }
 
     def load_state_dict(self, state_dict):
         """Loads the optimizer state.
@@ -186,19 +197,19 @@ class Optimizer(trackable.Trackable):
 
         def cast(param, value):
             r"""Make a deep copy of value, casting all tensors to device of param."""
-            if isinstance(value, tf.Tensor):
+            with tf.device(param.device):
                 # Floating-point types are a bit special here. They are the only ones
                 # that are assumed to always match the type of params.
-                if param.is_floating_point():
-                    value = value.to(param.dtype)
-                value = value.to(param.device)
-                return value
-            elif isinstance(value, dict):
-                return {k: cast(param, v) for k, v in value.items()}
-            elif isinstance(value,   collections.abc.Iterable):
-                return type(value)(cast(param, v) for v in value)
-            else:
-                return value
+                if isinstance(value, tf.Tensor):
+                    if value.dtype!=param.dtype:
+                        value=tf.cast(value,param.dtype)
+                    return value
+                elif isinstance(value, dict):
+                    return {k: cast(param, v) for k, v in value.items()}
+                elif isinstance(value,   collections.abc.Iterable):
+                    return type(value)(cast(param, v) for v in value)
+                else:
+                    return value
 
         # Copy state assigned to params (and cast tensors to appropriate types).
         # State that is not assigned to params is copied as is (needed for
@@ -223,8 +234,8 @@ class Optimizer(trackable.Trackable):
         r"""Clears the gradients of all optimized :class:`tf.Variable` s."""
         self.grad_tape.reset()
         if hasattr(self, 'grads_and_vars') and self.grads_and_vars is not None:
-            for g, p in self.grads_and_vars:
-                g = zeros_like(g)
+            self.grads_and_vars=None
+            gc.collect()
 
 
     def step(self, grads_and_vars=None, **kwargs):
@@ -403,11 +414,11 @@ class Adam(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
         if not 0.0 <= weight_decay:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
-        self.amsgrad = amsgrad
-        self.eps = eps
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
+
+        defaults = dict(lr=lr, betas=betas, eps=eps,
+                        weight_decay=weight_decay, amsgrad=amsgrad)
         super(Adam, self).__init__(params, defaults)
+        self.gradient_centralization = gradient_centralization
 
 
 
@@ -440,12 +451,12 @@ class Adam(Optimizer):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             amsgrad = group['amsgrad']
-            p_data=p.value().detach()
+            p_data=p.value()#.detach()
             state = self.state[p.ref()]
 
             # State initialization
             if len(state) == 0:
-                state['step'] = 0.0
+                state['step'] = 0
                 state['exp_avg'] = zeros_like(p_data)
                 state['exp_avg_sq'] =zeros_like(p_data)
                 state['max_exp_avg_sq'] = zeros_like(p_data)
@@ -717,7 +728,7 @@ class SGD(Optimizer):
                 lr = lr * (1. / (1. + group['weight_decay'] * state['step']))
 
             if group['weight_decay'] != 0:
-                grad = grad + p * group['weight_decay']
+                grad = grad +p.value() * group['weight_decay']
 
             if group['momentum'] != 0:
 
@@ -1233,6 +1244,7 @@ class RAdam(Optimizer):
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
 
         self.degenerated_to_sgd = degenerated_to_sgd
+        self.N_sma_threshhold = N_sma_threshhold
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
             for param in params:
                 if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
@@ -1241,7 +1253,6 @@ class RAdam(Optimizer):
                         buffer=[[None, None, None] for _ in range(10)])
         super(RAdam, self).__init__(params, defaults)
         self.gradient_centralization = gradient_centralization
-        self.buffer = self.param_groups[0]['buffer']
         self.N_sma_threshhold = N_sma_threshhold
 
     def __setstate__(self, state):
@@ -1267,7 +1278,7 @@ class RAdam(Optimizer):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
 
             state = self.state[p.ref()]
-            p_data=p.value().detach()
+            p_data=p.value()#.detach()
 
             # State initialization
             if len(state) == 0:
@@ -1275,11 +1286,12 @@ class RAdam(Optimizer):
                 state['exp_avg'] = zeros_like(p)
                 state['exp_avg_sq'] = zeros_like(p)
             else:
-                state['exp_avg'] = cast(state['exp_avg'], p.dtype)
-                state['exp_avg_sq'] = cast(state['exp_avg_sq'], p.dtype)
+                state['exp_avg'] = cast(state['exp_avg'], p_data.dtype)
+                state['exp_avg_sq'] = cast(state['exp_avg_sq'], p_data.dtype)
 
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
             beta1, beta2 = group['betas']
+
 
             # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
             # Decay the first and second moment running average coefficient
@@ -1290,13 +1302,12 @@ class RAdam(Optimizer):
             # v_t = beta2 * v + (1 - beta2) * (g_t * g_t)
             exp_avg_sq = beta2 * exp_avg_sq + (1 - beta2) * (grad * grad)
 
-            state['exp_avg_sq'] = exp_avg_sq
-            state['exp_avg'] = exp_avg
-
-            grad = gc_grads(grad, self.gradient_centralization)
+            # state['exp_avg_sq'] = exp_avg_sq
+            # state['exp_avg'] = exp_avg
             state['step'] += 1
+            #grad = gc_grads(grad, self.gradient_centralization)
 
-            buffered = self.buffer[int(state['step'] % 10)]
+            buffered = group['buffer'][int(state['step'] % 10)]
             if state['step'] == buffered[0]:
                 N_sma, step_size = buffered[1], buffered[2]
             else:
@@ -1306,26 +1317,27 @@ class RAdam(Optimizer):
                 N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
                 buffered[1] = N_sma
 
-                step_size = 1.0 / (1 - beta1 ** state['step'])
-                if N_sma >= 5:
+                if N_sma >= self.N_sma_threshhold:
                     step_size = math.sqrt(
                         (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
                                 N_sma_max - 2)) / (1 - beta1 ** state['step'])
                 elif self.degenerated_to_sgd:
                     step_size = 1.0 / (1 - beta1 ** state['step'])
                 else:
-                    step_size = 1.0
-
+                    step_size = -1
                 buffered[2] = step_size
 
-            p_data = p.value()
+
             if group['weight_decay'] != 0:
                 p_data = p_data - group['weight_decay'] * group['lr'] * p_data
 
-            p_t = where(N_sma > self.N_sma_threshhold,
-                        p_data - group['lr'] * step_size * exp_avg / (sqrt(exp_avg_sq) + group['eps']),
-                        p_data - group['lr'] * step_size * exp_avg)
-            p.assign(p_t)
+            if N_sma >= self.N_sma_threshhold:
+                denom = sqrt(exp_avg_sq) + group['eps']
+                p_data = p_data - group['lr'] * step_size * exp_avg /denom
+            elif step_size > 0:
+                p_data = p_data - group['lr'] * step_size * exp_avg
+
+            p.assign(p_data)
 
         return True
 
@@ -1723,33 +1735,31 @@ class Ranger(Optimizer):
             if any_abnormal_number(grad):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
-            p_data=p.value().detach()
+            p_data_fp32 =p.value().detach()
             state = self.state[p.ref()]
 
             # State initialization
             if len(state) == 0:
-                state['step'] = 0.0
-                state['exp_avg'] =zeros_like(p_data)
-                state['exp_avg_sq'] = zeros_like(p_data)
+                state['step'] = 0
+                state['exp_avg'] =zeros_like(p_data_fp32)
+                state['exp_avg_sq'] = zeros_like(p_data_fp32)
                 # look ahead weight storage now in state dict
-                state['slow_buffer'] = p_data.copy()
+                state['slow_buffer'] = p_data_fp32.copy()
             else:
-                state['exp_avg'] = cast(state['exp_avg'],p_data.dtype)
-                state['exp_avg_sq'] =  cast(state['exp_avg_sq'],p_data.dtype)
+                state['exp_avg'] = cast(state['exp_avg'],p_data_fp32.dtype)
+                state['exp_avg_sq'] =  cast(state['exp_avg_sq'],p_data_fp32.dtype)
 
 
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
             beta1, beta2 = group['betas']
-            state['step'] += 1.0
             if self.gradient_centralization in ['all', 'gcc']:
-                if grad.ndim > 1:
-                    grad+=(-grad.reduce_mean(axis=list(range(1, grad.ndim)),keepdims=True))
+                if grad.ndim > 3:
+                    grad += (-grad.reduce_mean(axis=list(range(1, grad.ndim)), keepdims=True))
 
+            state['step'] += 1
 
             exp_avg=beta1 * exp_avg + (1.0 - beta1) * grad
             exp_avg_sq=beta2 * exp_avg_sq + (1.0 - beta2) * (grad**2)
-
-
 
             buffered = self.radam_buffer[int(state['step'] % 10)]
 
@@ -1777,31 +1787,33 @@ class Ranger(Optimizer):
                     step_size = 1.0 / (1 - beta1 ** state["step"])
                 buffered[2] = step_size
 
+            if group['weight_decay'] != 0:
+                p_data_fp32=p_data_fp32+p_data_fp32*(-group['weight_decay'] * group['lr'])
 
+                # p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
+                #G_grad+=p_data_fp32*group['weight_decay']
 
-            if N_sma >= 5:
+            if N_sma> self.N_sma_threshhold:
                 denom = sqrt(exp_avg_sq) + group["eps"]
                 G_grad = exp_avg / denom
+
                 #p_data +=  (exp_avg / denom)*(-step_size * group['lr'])
             else:
                 #p_data +=  exp_avg*-step_size * group['lr']
-                G_grad = exp_avg
+                G_grad=exp_avg
 
-            if group['weight_decay'] != 0:
-                # p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
-                G_grad+=p_data*group['weight_decay']
 
             if self.gradient_centralization in ['all', 'gc']:
-                if G_grad.ndim > 3:
+                if G_grad.ndim > 1:
                     G_grad+=(-G_grad.reduce_mean(axis=list(range(1, G_grad.ndim)),keepdims=True))
 
-            if any_abnormal_number(p_data):
+            p_data_fp32 = p_data_fp32 + (-step_size * group['lr']) * G_grad
+
+            if any_abnormal_number(p_data_fp32):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                p_data = where(is_abnormal_number(p_data), p.value().detach(), p_data)
+                p_data_fp32 = where(is_abnormal_number(p_data_fp32), p.value(), p_data_fp32)
 
-
-            p_data+=G_grad*(-step_size * group['lr'])
-            p.assign(p_data, use_locking=False)
+            p.assign(p_data_fp32, use_locking=False)
 
             state['exp_avg'] =exp_avg
             state['exp_avg_sq'] = exp_avg_sq
@@ -1812,11 +1824,11 @@ class Ranger(Optimizer):
 
             if int(state['step'] %group['k']) == 0:
                 slow_p = state['slow_buffer']  # get access to slow param tensor
-                slow_p+=((p_data- slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
+                slow_p+=((p.value()- slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
                 if any_abnormal_number(slow_p):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                    slow_p = where(is_abnormal_number(slow_p), p_data, slow_p)
-                p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
+                    slow_p = where(is_abnormal_number(slow_p), p.value(), slow_p)
+                p.assign(slow_p, use_locking=False)  # copy interpolated weights to RAdam param tensor
                 state['slow_buffer']=slow_p
 
         return True
