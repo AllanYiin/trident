@@ -27,7 +27,7 @@ if get_backend() == 'pytorch':
 elif get_backend() == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_backend import get_device
-    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like,argmax
 
 ctx=get_session()
 working_directory = ctx.working_directory
@@ -276,25 +276,24 @@ class CutMixCallback(RegularizationCallbacksBase):
         """Returns mixed inputs, pairs of targets, and lambda"""
         model = training_context['current_model']
         train_data = training_context['train_data']
-        x = None
-        y = None
         x = train_data.value_list[0].copy().detach().to(model.device)  # input
         y = train_data.value_list[1].copy().detach().to(model.device)  # label
 
-        lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.1), 0.4)
+        lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.2), 0.4)
 
         batch_size = int_shape(x)[0]
         index = cast(arange(batch_size), 'int64')
         index = shuffle(index)
+        mixed_x=x.copy()
 
-        this_loss = None
+
         if get_backend() == 'pytorch':
             y_a, y_b = y, y[index]
             bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[3], x.shape[2], lam)
-            x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
+            mixed_x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
-            pred = model(to_tensor(x, requires_grad=True, device=model.device))
+            pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
             this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
             training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
 
@@ -303,37 +302,33 @@ class CutMixCallback(RegularizationCallbacksBase):
         elif get_backend() == 'tensorflow':
             with tf.device(get_device()):
                 y1 = tf.gather(y, index, axis=0)
-                x1 = tf.gather(x, index, axis=0)
+                x1= tf.gather(x, index, axis=0)
                 y_a, y_b = y, y1
                 bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
+                #eager tensor cannot assignment!!!
                 filter = np.zeros(int_shape(x))
                 filter[:, bbx1:bbx2, bby1:bby2, :] = 1
-                filter = to_tensor(x)
-                x = x * (1 - filter) + x1 * filter
-                # x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
+                filter = to_tensor(x).detach()
+                mixed_x = x * (1 - filter) + (x1 * filter)
+                #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
                 # adjust lambda to exactly match pixel ratio
                 lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
-                pred = model(to_tensor(x, requires_grad=True))
-                loss1 = self.loss_criterion(pred, y_a)
-                loss2 = self.loss_criterion(pred, y_b)
-                this_loss = lam * loss1 + (1 - lam) * loss2
+                pred = model(to_tensor(mixed_x, requires_grad=True))
+                this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred, y_b)
+
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
                 training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
         if training_context['current_batch'] == 0:
-            if self.save_path is None and not is_in_colab():
-                for item in x:
-                    item = self.reverse_image_transform(to_numpy(item))
-                    array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
-                    if ctx.enable_mlflow:
-                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+            if self.save_path is None:
+                self.save_path='Results'
 
-            elif self.save_path is not None:
-                for item in x:
-                    item = self.reverse_image_transform(to_numpy(item))
-                    array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
-                    if ctx.enable_mlflow:
-                        ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+            for item in mixed_x:
+                item = self.reverse_image_transform(to_numpy(item))
+                array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+                if ctx.enable_mlflow:
+                    ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+
 
         x = None
         y = None
