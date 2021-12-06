@@ -38,7 +38,7 @@ from tensorflow.python.training.tracking import layer_utils as trackable_layer_u
 from tensorflow.python.util import object_identity
 from trident.backend import iteration_tools
 from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException, TensorShape, \
-    get_args_spec
+    get_args_spec,is_instance
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
 from trident.backend import dtype
@@ -76,6 +76,8 @@ DTYPE_MAPPING = {
 
 }
 
+
+
 def get_device():
     """get current device
 
@@ -89,33 +91,25 @@ def get_device():
 
 def set_device(device='/cpu:0'):
     if device.lower() == 'cuda' or device.lower() == 'gpu':
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0'
         ctx.device = '/gpu:0'
     if device.lower() == 'cpu':
+        os.environ.pop("CUDA_VISIBLE_DEVICES")
         ctx.device = '/cpu:0'
     if 'gpu' in device and len(tf.config.list_physical_devices('GPU')) == 0:
         raise ValueError('Gpu is not available...')
     try:
 
-        if 'cpu' in ctx.device:
-            if len(tf.config.list_physical_devices('GPU')) > 0:
-                os.environ["CUDA_VISIBLE_DEVICES"] = '999'
-            if tf.test.gpu_device_name():
-                print('GPU found')
-            else:
-                print("No GPU found")
-        elif 'gpu' in device or 'cuda' in device:
-            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
-            os.environ["CUDA_VISIBLE_DEVICES"] = '0'
-
         gcitems = gc.get_objects()
         for i in range(len(gcitems)):
-            obj = gcitems[i]
+            item = gcitems[i]
             try:
-                if is_tensor(obj):
+                if is_tensor(item) :
                     with tf.device(ctx.device):
-                        obj = tf.identity(device)
-                elif isinstance(obj, Layer):
-                    obj.to(device)
+                        item = tf.identity(item)
+                elif is_instance(item, 'Layer'):
+                    item.to(device)
             except Exception as e:
                 print(e)
 
@@ -1145,8 +1139,7 @@ class Layer(tf.Module):
     #         return self._apply(lambda t: t)
     #     #return self._apply(lambda t: t.cuda(device))
 
-    def gpu(self, device=None):
-        return self.cuda(device)
+
 
     @property
     def device(self):

@@ -16,7 +16,7 @@ from tensorflow.python.training import moving_averages
 from tensorflow.python.eager import core as _core
 from tensorflow.python.eager import execute as _execute
 from tensorflow.python.eager import context
-from tensorflow.python.ops import array_ops
+from tensorflow.python.ops import array_ops,nn_ops
 from tensorflow.python.framework import ops, dtypes
 from tensorflow.python.framework.ops import EagerTensor
 from tensorflow.python.framework.ops  import composite_tensor
@@ -510,7 +510,7 @@ def str2dtype(dtype_str):
     return tf.float32
 
 @numpy_compatible
-def cast(x, cast_dtype):
+def cast(x:tf.Tensor, cast_dtype):
     """Casts a tensor to a new type.
 
     The operation casts `x` (in case of `Tensor`) or `x.values`
@@ -551,21 +551,21 @@ def cast(x, cast_dtype):
         return x
 
 
-def float(x):
+def float(x:tf.Tensor):
     return cast(x,tf.float32)
 
-def int(x):
+def int(x:tf.Tensor):
     return cast(x,tf.int32)
 
-def long(x):
+def long(x:tf.Tensor):
     return cast(x,tf.int64)
 
-def cpu(x):
-    with tf.device('/CPU:0'):
-        x_new=x
-        return x_new
+def cpu(x:tf.Tensor):
+    if x.device!= '/cpu:0':
+        with tf.device('/cpu:0'):
+            return tf.identity(x)
 
-def cuda(x, device=None):
+def cuda(x:tf.Tensor, device:int=None):
     r"""Moves all model parameters and buffers to the GPU.
 
     This also makes associated parameters and buffers different objects. So
@@ -581,11 +581,10 @@ def cuda(x, device=None):
         Module: self
     """
     if tf.test.is_gpu_available:
-        if device is None:
-            device = '/gpu:0'
-        with tf.device(device):
-            x_new = x
-            return x_new
+        if 'gpu' not in x.device:
+            _device='/gpu:{0}'.format(0 if device is None else int(device))
+            with tf.device(_device):
+                return tf.identity(x)
     else:
         return x
 
@@ -608,7 +607,7 @@ def to(x, *args):
 ## check operation
 ###########################
 
-def is_nan(x):
+def is_nan(x:tf.Tensor):
     if isinstance(x, tf.Variable):
         x = x.value()
     if is_tensor(x):
@@ -623,7 +622,7 @@ def is_nan(x):
         raise NotImplementedError
 
 
-def is_inf(x):
+def is_inf(x:tf.Tensor):
     if isinstance(x, tf.Variable):
         x = x.value()
     if is_tensor(x):
@@ -638,11 +637,11 @@ def is_inf(x):
         raise NotImplementedError
 
 
-def is_abnormal_number(x):
+def is_abnormal_number(x:tf.Tensor):
     return cast(greater(cast(is_nan(x), tf.int8) + cast(is_inf(x), tf.int8), 0),tf.bool)
 
 
-def any_nan(x):
+def any_nan(x:tf.Tensor):
     if isinstance(x,tf.Variable):
         x=x.value()
     if is_tensor(x):
@@ -662,7 +661,7 @@ def any_nan(x):
     else:
         raise NotImplementedError
 
-def any_inf(x):
+def any_inf(x:tf.Tensor):
     if isinstance(x, tf.Variable):
         x = x.value()
     if is_tensor(x):
@@ -683,7 +682,7 @@ def any_inf(x):
     else:
         raise NotImplementedError
 
-def any_abnormal_number(x):
+def any_abnormal_number(x:tf.Tensor):
     return any_nan(x) |any_inf(x)
 
 ############################
@@ -691,7 +690,7 @@ def any_abnormal_number(x):
 ###########################
 
 
-def logical_and(left, right,name='logical_and'):
+def logical_and(left:tf.Tensor, right:tf.Tensor,name='logical_and'):
     """Element-wise `logical and: x && y`.
     Args:
         left (Tensor): input boolean tensor
@@ -716,7 +715,7 @@ def logical_not(x:Tensor, name='logical_not'):
     return tf.math.logical_not(x, name=name)
 
 
-def logical_or(left, right, name='logical_or'):
+def logical_or(left:tf.Tensor, right:tf.Tensor, name='logical_or'):
     """Element-wise `logical or: x || y`.
     Args:
         left (Tensor): input boolean tensor
@@ -728,7 +727,7 @@ def logical_or(left, right, name='logical_or'):
     return tf.math.logical_or(left, right, name=name)
 
 
-def logical_xor(left, right, name='logical_xor'):
+def logical_xor(left:tf.Tensor, right:tf.Tensor, name='logical_xor'):
     """Element-wise `logical xor: x ^ y`.
     Args:
         left (Tensor): input boolean tensor
@@ -1581,7 +1580,7 @@ def prod(x: Tensor):
     return tf.math.reduce_prod(x,axis=None,keepdims=False)
 
 @numpy_compatible
-def clip(x: Tensor, min=FLOAT32MIN, max=FLOAT32MAX):
+def clip(x: Tensor, min=tf.float32.min, max=tf.float32.max):
     """Clips tensor values to a specified min and max.
 
     Given a tensor `t`, this operation returns a tensor of the same type and
@@ -2353,7 +2352,8 @@ def tanh(x:Tensor,name='tanh'):
     return tf.nn.tanh(x,name=name)
 
 @numpy_compatible
-def relu(x:Tensor, upper_limit=None,name='relu'):
+@tf.function
+def relu(x:Tensor, name='relu'):
     """Rectified Linear Unit activation function.
 
     With default values, it returns element-wise `max(x, 0)`.
@@ -2364,10 +2364,6 @@ def relu(x:Tensor, upper_limit=None,name='relu'):
         f(x) = negative_slope * (x - threshold) otherwise
 
     """
-    if upper_limit is not None and upper_limit <= 0:
-        raise ValueError('Upper limit should greater than 0!')
-    elif upper_limit is not None:
-        return clip(tf.nn.relu(x,name=name), 0, upper_limit)
     return tf.nn.relu(x,name=name)
 
 @numpy_compatible
@@ -2383,10 +2379,11 @@ def relu6(x:Tensor,name='relu6'):
 
 
     """
-    return relu(x,6)
+    return tf.clip_by_value(relu(x,name=name),0,6)
 
 @numpy_compatible
-def leaky_relu(x:Tensor, alpha:float=0.02, upper_limit:Optional[float]=None,name='leaky_relu'):
+@tf.function
+def leaky_relu(x:Tensor, alpha:float=0.02, name='leaky_relu'):
     """Leaky version of a Rectified Linear Unit.
 
     It allows a small gradient when the unit is not active:
@@ -2399,8 +2396,7 @@ def leaky_relu(x:Tensor, alpha:float=0.02, upper_limit:Optional[float]=None,name
         alpha (float):multiplier
         upper_limit (float):upper limit
     """
-    if upper_limit is not None:
-        return clip(tf.nn.leaky_relu(x, alpha,name=name), -np.inf, upper_limit)
+
     return tf.nn.leaky_relu(x, alpha,name=name)
 
 @numpy_compatible
@@ -2670,10 +2666,11 @@ def log_log(x:Tensor,name='log_log'):
 
 @numpy_compatible
 def softmax(x:Tensor, axis=-1,name='softmax'):
-    return tf.nn.softmax(x, axis=axis)
+    return tf.nn.softmax(x, axis=axis,name=name)
 
 @numpy_compatible
-def log_softmax(x:Tensor, axis=-1, keepdims=False,name='log_softmax'):
+@tf.function
+def log_softmax(x:Tensor, axis=-1, name='log_softmax'):
     """Activation function for computing log_sum_exp while determining
     This will be used to determine unaveraged confidence loss across
     all examples in a batch.
@@ -2683,7 +2680,7 @@ def log_softmax(x:Tensor, axis=-1, keepdims=False,name='log_softmax'):
         x : input tensor
     """
 
-    return x - reduce_logsumexp(x, axis=axis, keepdims=True)
+    return nn_ops.log_softmax_v2(x, axis=axis, name=name)
 
 @numpy_compatible
 def mish(x:Tensor,name='mish'):
@@ -3853,7 +3850,7 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
     """
     return tf.random.normal(to_list(int_shape(x)),mean=mean,stddev=std,dtype=str2dtype(dtype))
 
-def random_uniform(shape, min_value=0.0, max_value=None, dtype='float32', seed=None):
+def random_uniform(shape, min_value=0.0, max_value=1.0, dtype='float32', seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3926,7 +3923,7 @@ def random_uniform(shape, min_value=0.0, max_value=None, dtype='float32', seed=N
     name = 'random_uniform')
 
 @numpy_compatible
-def random_uniform_like(x,  min_value=0.0, max_value=None, dtype='float32', seed=None):
+def random_uniform_like(x,  min_value=0.0, max_value=1.0, dtype='float32', seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
