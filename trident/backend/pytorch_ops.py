@@ -833,11 +833,10 @@ def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dt
 
     """
     if isinstance(right,numbers.Number):
-        right=to_tensor(builtins.float(right))
-
+        right=cast(to_tensor(right),left.dtype).to(left.device)
     if isinstance(right, np.ndarray):
-        right = to_tensor(right)
-    return cast(left.eq(right),left.dtype)
+        right = cast(to_tensor(right),left.dtype).to(left.device)
+    return cast(left.eq(right),dtype)
 
 
 
@@ -863,7 +862,7 @@ def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
-    return cast(left.gt(right),left.dtype)
+    return cast(left.gt(right),dtype)
 
 
 @numpy_compatible
@@ -889,7 +888,7 @@ def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
-    return cast(left.ge(right),left.dtype)
+    return cast(left.ge(right),dtype)
 
 
 @numpy_compatible
@@ -915,7 +914,7 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtyp
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
-    return 1 - (cast(left.eq(right),left.dtype))
+    return 1 - (cast(left.eq(right),dtype))
 
 
 @numpy_compatible
@@ -941,7 +940,7 @@ def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dty
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
-    return cast(left.le(right),left.dtype)
+    return cast(left.le(right),dtype)
 
 
 @numpy_compatible
