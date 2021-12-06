@@ -914,7 +914,7 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtyp
         right=to_tensor(builtins.float(right))
     if isinstance(right, np.ndarray):
         right = to_tensor(right)
-    return 1 - (cast(left.eq(right),dtype))
+    return cast(left.ne(right),dtype)
 
 
 @numpy_compatible
