@@ -470,13 +470,13 @@ class Adam(Optimizer):
             bias_correction1 = 1 - beta1 ** state['step']
             bias_correction2 = 1 - beta2 ** state['step']
 
-            if group['weight_decay'] != 0:
-                grad = grad+p.value()*group['weight_decay']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(int_shape(grad))) > 3:
-                    grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
+            if group['weight_decay'] != 0:
+                grad = grad + p_data * group['weight_decay']
 
             # Decay the first and second moment running average coefficient
             # m_t = beta1 * m + (1 - beta1) * g_t
@@ -491,19 +491,22 @@ class Adam(Optimizer):
             else:
                 denom = (sqrt(exp_avg_sq)/sqrt(bias_correction2))+ group['eps']
 
+
+
+
             step_size = group['lr'] / bias_correction1
-            G_grad = true_divide(exp_avg, denom)
+            G_grad = exp_avg/denom
 
             if self.gradient_centralization in ['all', 'gc']:
                 if len(list(int_shape(G_grad))) > 1:
-                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(int_shape(G_grad))))), keepdims=True))
+                    G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
 
 
-            if any_abnormal_number(p_data):
+            if any_abnormal_number(G_grad):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                G_grad = where(is_abnormal_number(G_grad), zeros_like(p_data), G_grad)
+                G_grad = where(is_abnormal_number(G_grad),grad, G_grad)
 
-            p.assign_add(-step_size * G_grad)
+            p.assign_add(-step_size*G_grad)
             state['exp_avg'] = exp_avg
             state['exp_avg_sq'] = exp_avg_sq
             state['max_exp_avg_sq'] = exp_avg_sq
@@ -555,7 +558,7 @@ class RMSprop(Optimizer):
             raise ValueError("Invalid alpha value: {}".format(alpha))
         self.weight_decay = weight_decay
         self.eps = eps
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+        self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, momentum=momentum, alpha=alpha, eps=eps, centered=centered, weight_decay=weight_decay)
         super(RMSprop, self).__init__(params, defaults)
 
@@ -582,17 +585,17 @@ class RMSprop(Optimizer):
 
             if is_sparse(grad):
                 raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-
+            p_data=p.value()
             state = self.state[p.ref()]
 
             # State initialization
             if len(state) == 0:
                 state['step'] = 0.0
-                state['square_avg'] = zeros_like(p)
+                state['square_avg'] = zeros_like(p_data)
                 if group['momentum'] > 0:
-                    state['momentum_buffer'] = zeros_like(p)
+                    state['momentum_buffer'] = zeros_like(p_data)
                 if group['centered']:
-                    state['grad_avg'] = zeros_like(p)
+                    state['grad_avg'] = zeros_like(p_data)
 
             state['step'] += 1
             lr = group['lr']
@@ -685,7 +688,7 @@ class SGD(Optimizer):
             raise ValueError("Invalid momentum value: {}".format(momentum))
         if weight_decay < 0.0:
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+        self.gradient_centralization = gradient_centralization
         defaults = dict(lr=lr, momentum=momentum, dampening=dampening, weight_decay=weight_decay, nesterov=nesterov)
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
@@ -724,11 +727,17 @@ class SGD(Optimizer):
             else:
                 state['step'] += 1
             lr = group['lr']
-            if group['weight_decay'] > 0:
-                lr = lr * (1. / (1. + group['weight_decay'] * state['step']))
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
+            # if group['weight_decay'] > 0:
+            #     lr = lr * (1. / (1. + group['weight_decay'] * state['step']))
 
             if group['weight_decay'] != 0:
                 grad = grad +p.value() * group['weight_decay']
+
+
 
             if group['momentum'] != 0:
 
@@ -1292,6 +1301,10 @@ class RAdam(Optimizer):
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
             beta1, beta2 = group['betas']
 
+            if self.gradient_centralization in ['all', 'gcc']:
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
+
 
             # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
             # Decay the first and second moment running average coefficient
@@ -1393,6 +1406,10 @@ class PlainRAdam(Optimizer):
 
             m, v = state['m'], state['v']
             beta1, beta2 = group['betas']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
             # Decay the first and second moment running average coefficient
@@ -1497,6 +1514,10 @@ class AdamW(Optimizer):
 
             m, v = state['m'], state['v']
             beta1, beta2 = group['betas']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             # exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
             # Decay the first and second moment running average coefficient
@@ -1735,7 +1756,7 @@ class Ranger(Optimizer):
             if any_abnormal_number(grad):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
-            p_data_fp32 =p.value().detach()
+            p_data_fp32 =p.value()#.detach()
             state = self.state[p.ref()]
 
             # State initialization
@@ -1753,8 +1774,8 @@ class Ranger(Optimizer):
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
             beta1, beta2 = group['betas']
             if self.gradient_centralization in ['all', 'gcc']:
-                if grad.ndim > 3:
-                    grad += (-grad.reduce_mean(axis=list(range(1, grad.ndim)), keepdims=True))
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             state['step'] += 1
 
@@ -1787,25 +1808,20 @@ class Ranger(Optimizer):
                     step_size = 1.0 / (1 - beta1 ** state["step"])
                 buffered[2] = step_size
 
-            if group['weight_decay'] != 0:
-                p_data_fp32=p_data_fp32+p_data_fp32*(-group['weight_decay'] * group['lr'])
-
-                # p_data_fp32.add_(p_data_fp32, alpha=-group['weight_decay'] * group['lr'])
-                #G_grad+=p_data_fp32*group['weight_decay']
 
             if N_sma> self.N_sma_threshhold:
                 denom = sqrt(exp_avg_sq) + group["eps"]
                 G_grad = exp_avg / denom
-
-                #p_data +=  (exp_avg / denom)*(-step_size * group['lr'])
             else:
-                #p_data +=  exp_avg*-step_size * group['lr']
                 G_grad=exp_avg
 
+            if group['weight_decay'] != 0:
+                G_grad=G_grad+p_data_fp32*group['weight_decay']
 
             if self.gradient_centralization in ['all', 'gc']:
-                if G_grad.ndim > 1:
-                    G_grad+=(-G_grad.reduce_mean(axis=list(range(1, G_grad.ndim)),keepdims=True))
+                if ndim(G_grad)> 1:
+                    G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
+
 
             p_data_fp32 = p_data_fp32 + (-step_size * group['lr']) * G_grad
 
@@ -1824,7 +1840,7 @@ class Ranger(Optimizer):
 
             if int(state['step'] %group['k']) == 0:
                 slow_p = state['slow_buffer']  # get access to slow param tensor
-                slow_p+=((p.value()- slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
+                slow_p=slow_p+((p.value()- slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
                 if any_abnormal_number(slow_p):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                     slow_p = where(is_abnormal_number(slow_p), p.value(), slow_p)
@@ -1932,7 +1948,7 @@ class LARS(Optimizer):
                 continue
 
 
-            param = p.value().detach()
+            param = p.value()
 
             param_state = self.state[p.ref()]
 
@@ -2065,7 +2081,7 @@ class RangerLars(Optimizer):
             if any_abnormal_number(grad):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
-            p_data = p.value().detach()
+            p_data = p.value()
             state = self.state[p.ref()]
 
             # State initialization
@@ -2085,8 +2101,8 @@ class RangerLars(Optimizer):
             state['step'] += 1.0
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if grad.ndim > 3:
-                    grad += (-grad.reduce_mean(axis=list(range(1, grad.ndim)), keepdims=True))
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             exp_avg = beta1 * exp_avg + (1.0 - beta1) * grad
             exp_avg_sq = beta2 * exp_avg_sq + (1.0 - beta2) * square(grad)
@@ -2134,7 +2150,7 @@ class RangerLars(Optimizer):
                     var_t+=(-var_t.mean(axis=tuple(range(1, var_t.ndim)), keepdims=True))
 
             radam_norm =  norm(var_t,axis=None)
-            weight_norm = norm(p.value().detach(),axis=None)
+            weight_norm = norm(p.value(),axis=None)
             if weight_norm == 0 or radam_norm == 0:
                 trust_ratio = 1.0
             else:
@@ -2146,7 +2162,7 @@ class RangerLars(Optimizer):
 
             if any_abnormal_number(var_t):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                var_t=(where(is_abnormal_number(var_t), p.value().detach(), var_t))
+                var_t=(where(is_abnormal_number(var_t), p.value(), var_t))
 
             p.assign_add(var_t*trust_ratio* (-step_size * group['lr']), use_locking=False)
             state['exp_avg'] = exp_avg
@@ -2158,10 +2174,10 @@ class RangerLars(Optimizer):
             # we do it at the param level instead of group level
             if math_ops.floor_mod(state['step'] ,group['k']) == 0:
                 slow_p = state['slow_buffer']  # get access to slow param tensor
-                slow_p+= ((p.value().detach()- slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
+                slow_p+= ((p.value()- slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
                 if any_abnormal_number(slow_p):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                    slow_p = where(is_abnormal_number(slow_p), p.value().detach(), slow_p)
+                    slow_p = where(is_abnormal_number(slow_p), p.value(), slow_p)
                 p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
                 state['slow_buffer']=slow_p
         return True
@@ -2194,7 +2210,7 @@ class AdaBelief(Optimizer):
     """
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-6, weight_decay=0, amsgrad=False,
-                 gradient_centralization=None):
+                 gradient_centralization=None, degenerated_to_sgd=True,weight_decouple=True, fixed_decay=False, rectify=True):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2207,9 +2223,18 @@ class AdaBelief(Optimizer):
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
         self.amsgrad = amsgrad
         self.eps = eps
-        defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay, amsgrad=amsgrad)
+        if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
+            for param in params:
+                if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
+                    param['buffer'] = [[None, None, None] for _ in range(10)]
+        defaults = dict(lr=lr, betas=betas, eps=eps,
+                        weight_decay=weight_decay, amsgrad=amsgrad, buffer=[[None, None, None] for _ in range(10)])
         super(AdaBelief, self).__init__(params, defaults)
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+        self.degenerated_to_sgd = degenerated_to_sgd
+        self.weight_decouple = weight_decouple
+        self.rectify = rectify
+        self.fixed_decay = fixed_decay
+        self.gradient_centralization = gradient_centralization
 
     def __setstate__(self, state):
         super(AdaBelief, self).__setstate__(state)
@@ -2226,7 +2251,7 @@ class AdaBelief(Optimizer):
         # grads_and_vars=zip(new_grads, new_vars)
         #grads_and_vars = self._filter_grads(grads_and_vars)
         group = self.param_groups[0]
-        for grad, p in grads_and_vars:
+        for grad,p in grads_and_vars:
             if grad is None or not p.trainable:
                 continue
 
@@ -2236,57 +2261,102 @@ class AdaBelief(Optimizer):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
             amsgrad = group['amsgrad']
-            p_data = p.value().detach()
+            p_data=p.value()#.detach()
             state = self.state[p.ref()]
 
             # State initialization
             if len(state) == 0:
-                state['step'] = 0.0
+                state['step'] = 0
                 state['exp_avg'] = zeros_like(p_data)
-                state['exp_avg_sq'] = zeros_like(p_data)
-                if amsgrad:
-                    # Maintains max of all exp. moving avg. of sq. grad. values
-                    state['max_exp_avg_sq'] = zeros_like(p_data)
+                state['exp_avg_sq'] =zeros_like(p_data)
+                state['max_exp_avg_sq'] = zeros_like(p_data)
+
+            if self.weight_decouple:
+                if not self.fixed_decay:
+                    p_data=p_data*(1.0 - group['lr'] * group['weight_decay'])
+
+                else:
+                    p_data=p_data*(1.0 - group['weight_decay'])
+            else:
+                if group['weight_decay'] != 0:
+                    grad=grad+p_data*group['weight_decay']
+
 
             exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
-
+            max_exp_avg_sq = state['max_exp_avg_sq']
             beta1, beta2 = group['betas']
 
             state['step'] += 1
-            bias_correction1 = 1 - pow(beta1, state['step'])
-            bias_correction2 = 1 - pow(beta2, state['step'])
+            bias_correction1 = 1 - beta1 ** state['step']
+            bias_correction2 = 1 - beta2 ** state['step']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             # Decay the first and second moment running average coefficient
             # m_t = beta1 * m + (1 - beta1) * g_t
             exp_avg = beta1 * exp_avg + (1.0 - beta1) * grad
-            grad_residual=grad-exp_avg
-            exp_avg_sq = beta2 * exp_avg_sq + (1.0 - beta2) * square(grad_residual)
+            grad_residual = grad - exp_avg
+            exp_avg_sq=beta2*exp_avg_sq+ (1.0 - beta2) * (grad_residual*grad_residual)
+
+
 
             # exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
             if amsgrad:
-                max_exp_avg_sq = state['max_exp_avg_sq']
-                # Maintains the maximum of all 2nd moment running avg. till now
-                max_exp_avg_sq = maximum(max_exp_avg_sq, exp_avg_sq)
-                denom = sqrt(max_exp_avg_sq/bias_correction2) + group['eps']
+                max_exp_avg_sq=maximum(max_exp_avg_sq, exp_avg_sq)
+                denom =(sqrt(max_exp_avg_sq)/sqrt(bias_correction2)) +group['eps']
+
             else:
-                denom = sqrt(exp_avg_sq/bias_correction2) + group['eps']
+                denom = (sqrt(exp_avg_sq)/sqrt(bias_correction2))+ group['eps']
 
-            if group['weight_decay'] != 0:
-                grad = grad + p_data * group['weight_decay']
+            G_grad = exp_avg / denom
+            if not self.rectify:
+                # Default update
+                step_size = group['lr'] / bias_correction1
 
-            step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
-            G_grad = true_divide(exp_avg, denom)
+            else:  # Rectified update, forked from RAdam
+                buffered = group['buffer'][int(state['step'] % 10)]
+                if state['step'] == buffered[0]:
+                    N_sma, step_size = buffered[1], buffered[2]
+                else:
+                    buffered[0] = state['step']
+                    beta2_t = beta2 ** state['step']
+                    N_sma_max = 2 / (1 - beta2) - 1
+                    N_sma = N_sma_max - 2 * state['step'] * beta2_t / (1 - beta2_t)
+                    buffered[1] = N_sma
+
+                    # more conservative since it's an approximated value
+                    if N_sma >= 5:
+                        step_size = math.sqrt(
+                            (1 - beta2_t) * (N_sma - 4) / (N_sma_max - 4) * (N_sma - 2) / N_sma * N_sma_max / (
+                                    N_sma_max - 2)) / (1 - beta1 ** state['step'])
+                    elif self.degenerated_to_sgd:
+                        step_size = 1.0 / (1 - beta1 ** state['step'])
+                    else:
+                        step_size = -1
+                    buffered[2] = step_size
+
+                if N_sma >= 5:
+                    denom = sqrt(exp_avg_sq)+group['eps']
+                    G_grad = exp_avg / denom
+
+                elif step_size > 0:
+                    G_grad = exp_avg
 
             if self.gradient_centralization in ['all', 'gc']:
                 if len(list(int_shape(G_grad))) > 1:
-                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(int_shape(G_grad))))), keepdims=True))
+                    G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
 
+            p_data = p_data - step_size * group['lr'] * G_grad
             if any_abnormal_number(p_data):
-                sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                G_grad = where(is_abnormal_number(G_grad), zeros_like(p_data), G_grad)
-            p.assign_add(-step_size * G_grad)
+                sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
+                p_data = where(is_abnormal_number(p_data), p.value(), p_data)
+
+            p.assign(p_data)
             state['exp_avg'] = exp_avg
             state['exp_avg_sq'] = exp_avg_sq
+            state['max_exp_avg_sq'] = exp_avg_sq
 
         return True
 
@@ -2354,7 +2424,7 @@ class RangerBelief(Optimizer):
 
         defaults = dict(lr=lr, alpha=alpha, k=k, step_counter=0, betas=betas, N_sma_threshhold=N_sma_threshhold,eps=eps, weight_decay=weight_decay)
         super(RangerBelief, self).__init__(params, defaults)
-        self.gradient_centralization = 'gc' if gradient_centralization == True else gradient_centralization
+        self.gradient_centralization = gradient_centralization
 
         # adjustable threshold
         self.N_sma_threshhold = N_sma_threshhold
@@ -2407,7 +2477,7 @@ class RangerBelief(Optimizer):
             if any_abnormal_number(grad):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
-            p_data = p.value().detach()
+            p_data = p.value()
             state = self.state[p.ref()]
 
             # State initialization
@@ -2424,8 +2494,8 @@ class RangerBelief(Optimizer):
             beta1, beta2 = group['betas']
             state['step']+=1
             if self.gradient_centralization in ['all', 'gcc']:
-                if grad.ndim > 3:
-                    grad += (-grad.reduce_mean(axis=list(range(1, grad.ndim)), keepdims=True))
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             exp_avg = beta1 * exp_avg + (1.0 - beta1) * grad
             grad_residual=grad-exp_avg
@@ -2461,8 +2531,7 @@ class RangerBelief(Optimizer):
                 buffered[2] = step_size
 
 
-            if group['weight_decay'] != 0:
-                var_t = var_t + p_data * group['weight_decay']
+
 
 
             diff = abs(previous_grad - grad_residual)
@@ -2474,19 +2543,22 @@ class RangerBelief(Optimizer):
 
             if N_sma >= 5:
 
-                var_t = (exp_avg1 / denom)
+                G_grad = (exp_avg1 / denom)
             else:
-                var_t =  exp_avg1
+                G_grad =  exp_avg1
+
+            if group['weight_decay'] != 0:
+                G_grad = G_grad + p_data* group['weight_decay']
 
             if self.gradient_centralization in ['all', 'gc']:
-                if var_t.ndim > 1:
-                    var_t += (-var_t.reduce_mean(axis=list(range(1, var_t.ndim)), keepdims=True))
+                if len(list(int_shape(G_grad))) > 1:
+                    G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
 
-            if any_abnormal_number(var_t):
+            if any_abnormal_number(G_grad):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                var_t = where(is_abnormal_number(var_t), p.value().detach(), var_t)
+                G_grad = where(is_abnormal_number(G_grad), p.value(), G_grad)
 
-            p.assign_sub(var_t *step_size* group['lr'], use_locking=False)
+            p.assign_sub(G_grad *step_size* group['lr'], use_locking=False)
             state['exp_avg'] = exp_avg
             state['exp_avg_sq'] = exp_avg_sq
 
@@ -2501,7 +2573,7 @@ class RangerBelief(Optimizer):
                 slow_p+= ((p.value() - slow_p)*self.alpha)  # (fast weights - slow weights) * alpha
                 if any_abnormal_number(slow_p):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
-                    slow_p = where(is_abnormal_number(slow_p), p.value().detach(), slow_p)
+                    slow_p = where(is_abnormal_number(slow_p), p.value(), slow_p)
                 p.assign(slow_p)  # copy interpolated weights to RAdam param tensor
                 state['slow_buffer']=slow_p
         return True
@@ -2565,7 +2637,7 @@ class DiffGrad(Optimizer):
             if any_abnormal_number(grad):
                 grad = where(is_abnormal_number(grad), zeros_like(grad), grad)
 
-            p_data = p.value().detach()
+            p_data = p.value()
             state = self.state[p.ref()]
 
 
@@ -2584,8 +2656,8 @@ class DiffGrad(Optimizer):
             beta1, beta2 = group['betas']
 
             if self.gradient_centralization in ['all', 'gcc']:
-                if len(list(int_shape(grad))) > 3:
-                    grad+=(-grad.mean(axis=tuple(range(1, grad.dim())), keepdims=True))
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             state['step'] += 1
             bias_correction1 = 1 - pow(beta1, state['step'])
@@ -2614,8 +2686,7 @@ class DiffGrad(Optimizer):
 
             if self.gradient_centralization in ['all', 'gc']:
                 if len(list(int_shape(G_grad))) > 1:
-                    G_grad += (-G_grad.mean(axis=tuple(range(1, len(list(int_shape(G_grad))))), keepdims=True))
-
+                    G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
 
             if any_abnormal_number(p_data):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))

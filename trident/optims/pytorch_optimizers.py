@@ -152,7 +152,9 @@ class Adam(Optimizer):
             raise ValueError("Invalid weight_decay value: {}".format(weight_decay))
         defaults = dict(lr=lr, betas=betas, eps=eps,
                         weight_decay=weight_decay, amsgrad=amsgrad)
+
         super(Adam, self).__init__(params, defaults)
+        self.gradient_centralization=gradient_centralization
 
     def __setstate__(self, state):
         super(Adam, self).__setstate__(state)
@@ -217,6 +219,7 @@ class Adam(Optimizer):
 
                 if group['weight_decay'] != 0:
                     grad = grad.add(p, alpha=group['weight_decay'])
+
                 if self.gradient_centralization in ['all', 'gcc']:
                     if len(list(grad.size())) > 3:
                         grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
@@ -1252,15 +1255,17 @@ class Ranger(Optimizer):
                 if group['weight_decay'] != 0:
                     G_grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
+
                 if self.gradient_centralization in ['all', 'gc']:
                     if len(list(G_grad.size())) > 1:
                         G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
 
+                p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
                 if any_abnormal_number(p_data_fp32):
                     sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
                     p_data_fp32 = where(is_abnormal_number(p_data_fp32),p.data.float(), p_data_fp32)
 
-                p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
+
                 p.data.copy_(p_data_fp32)
 
                 if state['step'] % group['k'] == 0:
@@ -1662,7 +1667,6 @@ class AdaBelief(Optimizer):
         if not 0.0 <= betas[1] < 1.0:
             raise ValueError("Invalid beta parameter at index 1: {}".format(betas[1]))
 
-        self.degenerated_to_sgd = degenerated_to_sgd
         if isinstance(params, (list, tuple)) and len(params) > 0 and isinstance(params[0], dict):
             for param in params:
                 if 'betas' in param and (param['betas'][0] != betas[0] or param['betas'][1] != betas[1]):
