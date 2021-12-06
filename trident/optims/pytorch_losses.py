@@ -203,15 +203,13 @@ class _ClassificationLoss(Loss):
         output_exp = exp(output)
         if ndim(output) >= 1 and 'float' in str(output.dtype) and reduce_min(output) >= 0 :
             self.is_logsoftmax = False
-            if reduce_max(output) > 1:
-                output=output/reduce_max(output)
-
             sum_output=reduce_sum(output,axis=self.axis,keepdims=True)
-            if reduce_max(abs(sum_output-1))<1e-3:
+            if reduce_max(output) > 1:
+                self.from_logits = False
+            elif reduce_max(abs(sum_output-1))<1e-3:
                 self.from_logits = True
             else:
-                output=output/clip(sum_output,1e-7,1-1e-7)
-                self.from_logits = True
+                self.from_logits = False
 
             if self.auto_balance and self.label_statistics is not None:
                 if self.num_classes== len(self.label_statistics):
@@ -219,7 +217,7 @@ class _ClassificationLoss(Loss):
                     new_shp[1] = len(self.label_statistics)
                     output = output * clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple(new_shp)),requires_grad=False), min=1e-7)
 
-            output = clip(output, min=1e-7, max=1)
+            #output = clip(output, min=1e-7, max=1)
 
         elif (ndim(output) >= 1 and 'float' in str(output.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
             self.is_logsoftmax = True
@@ -229,7 +227,7 @@ class _ClassificationLoss(Loss):
                     new_shp = [1] * len(int_shape(output))
                     new_shp[1] = len(self.label_statistics)
                     output = output - to_tensor(np.reshape(np.log(clip(self.label_statistics.copy(), min=1e-7)), tuple(new_shp)))
-            output = clip(output, max=- 1e-7)
+            #output = clip(output, max=- 1e-7)
         else:
             self.is_logsoftmax = False
             self.from_logits = False
@@ -251,7 +249,7 @@ class _ClassificationLoss(Loss):
         if target.dtype == str2dtype('long'):
             self.is_target_onehot = False
         elif target.dtype != str2dtype('long') and (target.min() >= 0 and target.max() <= 1 and abs(target.sum(self.axis)-1).mean() < 1e-4):
-            target = clip(target, min=1e-7, max=1- 1e-7)
+            #target = clip(target, min=1e-7, max=1- 1e-7)
             self.is_target_onehot = True
 
         # need target onehot but currently not
@@ -595,6 +593,19 @@ class CrossEntropyLoss(_ClassificationLoss):
 
         Returns:
 
+        Examples:
+        >>> output =  to_tensor([[0.3, 0.3, 0.2], [0, 1, 0.5], [1, 1, 0]],dtype=torch.float32)
+        >>> target = to_tensor([[0, 1, 0], [0, 1, 0], [1, 0, 0]],dtype=torch.float32)
+        >>> CrossEntropyLoss(reduction='mean')(output,target).cpu()
+        tensor(0.8695)
+        >>> CrossEntropyLoss(reduction='mean')(output,argmax(target,-1)).cpu()
+        tensor(0.8695)
+        >>> CrossEntropyLoss(reduction='mean')(log_softmax(output),target).cpu()
+        tensor(0.8695)
+        >>> CrossEntropyLoss(reduction='mean')(log_softmax(output),argmax(target,-1)).cpu()
+        tensor(0.8695)
+        >>> CrossEntropyLoss(reduction='mean', sample_weight=to_tensor([1,2,3]))(output,target).cpu()
+        tensor(1.4518)
         """
         loss = to_tensor(0.0)
 
@@ -602,10 +613,9 @@ class CrossEntropyLoss(_ClassificationLoss):
         if not self.need_target_onehot:
             if self.is_target_onehot and target.dtype != Dtype.long:
                 target = argmax(target, self.axis)
-            if not self.is_logsoftmax:
-                return torch.nn.functional.nll_loss(torch.nn.functional.log_softmax(output, dim=1), target, weight=sample_weight, reduction='none')
-            else:
-                return torch.nn.functional.nll_loss(output, target, weight=sample_weight, reduction='none')
+            if not self.is_logsoftmax or not self.from_logits:
+                output=log_softmax(output)
+            return nn.functional.nll_loss(output,target,sample_weight,reduction='none')
         else:
 
             if ndim(output) == 2:
@@ -616,10 +626,10 @@ class CrossEntropyLoss(_ClassificationLoss):
                 reshape_shape[self.axis] = self.num_classes
                 sample_weight = self.sample_weight.view(*reshape_shape) * self.ignore_index_weight.view(*reshape_shape)
 
-            if not self.is_logsoftmax:
-                return -reduce_sum(target * F.log_softmax(output, dim=self.axis) * sample_weight, axis=self.axis)
-            else:
-                return -reduce_sum(target * output * sample_weight, axis=self.axis)
+            if not self.is_logsoftmax or not self.from_logits:
+                output=log_softmax(output, axis=self.axis)
+
+            return -reduce_sum(target * output * sample_weight, axis=self.axis)
 
 
 
