@@ -29,7 +29,7 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import sigmoid
-from trident.optims.losses import Loss
+from trident.optims.losses import Loss,_check_logsoftmax_logit
 
 # from trident.optims.pytorch_trainer import Model
 
@@ -149,30 +149,31 @@ class _ClassificationLoss(Loss):
         ndim_target = ndim(target)
         if ndim(output) > 2:
             if self.axis == 1:
-                output = reshape(output, (output.size(0), output.size(1), -1))
-
-
+                output=output.view(output.size(0), output.size(1), -1)
             elif self.axis == -1:
-                output = reshape(output, (output.size(0), -1, output.size(-1)))
+                output=output.view(output.size(0), -1,output.size(-1))
+                output=output.transpose(2,1).continuous()
 
             if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
-                target = reshape(target, (target.size(0), -1))
+                if ndim_target>=2:
+                    target=target.view(target.size(0),  -1)
+
 
             elif ndim_target == ndim_output and target.dtype != Dtype.long:
                 if self.axis == 1:
-                    target = reshape(target, (target.size(0), target.size(1), -1))
-
-
+                    target=target.view(target.size(0), target.size(1), -1)
                 elif self.axis == -1:
-                    target = reshape(target, (-1, target.size(-1)))
+                    target=target.view(target.size(0), -1,target.size(-1))
+                    target = target.transpose(2, 1).continuous()
 
-            return output.contiguous(), target
-        elif ndim(output) <= 2 and len(output) == len(target):
             return output, target
-        elif ndim(output) <= 2 and ndim(output) == ndim(target) + 1:
+        elif ndim(output) <= 2:
+
             return output, target
         else:
-            raise ValueError('output and target have diffent elements.')
+
+            return output, target
+            #raise ValueError('output and target have diffent elements.')
 
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
@@ -185,6 +186,7 @@ class _ClassificationLoss(Loss):
         Returns:
 
         """
+        #print(2, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
         # check num_clases
         if len(output) == 0:
             return to_tensor(0.0)
@@ -193,47 +195,38 @@ class _ClassificationLoss(Loss):
 
         if self.sample_weight is None:
             self.sample_weight = ones(self.num_classes, requires_grad=False).to(get_device())
-        elif len(self.sample_weight) != self.num_classes:
+        else:
+            self.sample_weight=to_tensor(self.sample_weight ).detach().to(output.device)
+        if len(self.sample_weight) != self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
-        elif self.sample_weight.requires_grad != False or self.sample_weight.dtype != output.dtype or self.sample_weight.device != output.device:
-            self.sample_weight = to_tensor(self.sample_weight, requires_grad=False).to(get_device())
-        else:
-            pass
 
-        output_exp = exp(output)
-        if ndim(output) >= 1 and 'float' in str(output.dtype) and reduce_min(output) >= 0 :
-            self.is_logsoftmax = False
-            sum_output=reduce_sum(output,axis=self.axis,keepdims=True)
-            if reduce_max(output) > 1:
-                self.from_logits = False
-            elif reduce_max(abs(sum_output-1))<1e-3:
+
+        if not self.is_logsoftmax:
+            if reduce_min(output) >= 0 :
+                self.is_logsoftmax = False
+                sum_output=reduce_sum(output,axis=self.axis,keepdims=True)
+                if reduce_max(output) > 1:
+                    self.from_logits = False
+                elif reduce_max(abs(sum_output-1))<1e-2:
+                    self.from_logits = True
+                else:
+                    self.from_logits = False
+
+                output = clip(output, min=1e-7, max=1)
+
+            elif  _check_logsoftmax_logit(output,self.axis):
+                self.is_logsoftmax = True
                 self.from_logits = True
+                output = clip(output,min=-12 ,max=-1e-7)
+
             else:
+                self.is_logsoftmax = False
                 self.from_logits = False
 
-            if self.auto_balance and self.label_statistics is not None:
-                if self.num_classes== len(self.label_statistics):
-                    new_shp = [1] * len(int_shape(output))
-                    new_shp[1] = len(self.label_statistics)
-                    output = output * clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple(new_shp)),requires_grad=False), min=1e-7)
-
-            #output = clip(output, min=1e-7, max=1)
-
-        elif (ndim(output) >= 1 and 'float' in str(output.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
-            self.is_logsoftmax = True
-            self.from_logits = True
-            if self.auto_balance and self.label_statistics is not None:
-                if int_shape(output)[1] == len(self.label_statistics):
-                    new_shp = [1] * len(int_shape(output))
-                    new_shp[1] = len(self.label_statistics)
-                    output = output - to_tensor(np.reshape(np.log(clip(self.label_statistics.copy(), min=1e-7)), tuple(new_shp)))
-            #output = clip(output, max=- 1e-7)
+            if (ndim(target) == ndim(output) and 'float' in str(target.dtype) and target.min() >= 0 and target.max() <= 1):
+                self.is_target_onehot = True
         else:
-            self.is_logsoftmax = False
-            self.from_logits = False
-
-        if (ndim(target) == ndim(output) and 'float' in str(target.dtype) and target.min() >= 0 and target.max() <= 1):
-            self.is_target_onehot = True
+            output = clip(output, min=-12, max=-1e-7)
 
         self.ignore_index_weight = ones_like(self.sample_weight, requires_grad=False, dtype=output.dtype).to(get_device())
         # ignore_index
@@ -270,6 +263,8 @@ class _ClassificationLoss(Loss):
         # if self.cutoff is not None:
         #     mask = (output > self.cutoff).to(output.dtype)
         #     output = output * mask
+        #print(8, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
+
         return output, target
 
     calculate_loss: Callable[..., Any] = _calculate_loss_unimplemented
@@ -288,7 +283,7 @@ class _ClassificationLoss(Loss):
     def _handel_abnormal(self, loss):
         if any_abnormal_number(loss):
             sys.stderr.write('{0} has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.name))
-            loss = where(is_abnormal_number(loss), ones_like(loss, requires_grad=False) * 1e-7, loss)
+            loss = where(is_abnormal_number(loss), zeros_like(loss) , loss)
         return loss
 
     def forward(self, output: Tensor, target: Tensor, **kwargs) -> 'loss':
@@ -303,12 +298,15 @@ class _ClassificationLoss(Loss):
 
             """
         try:
-
+            #print(0,'output',output.shape,'abnormal:',any_abnormal_number(output))
             output, target = self.flatten_check(output, target)
+            #print(1, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
             if self.auto_balance and self.label_statistics is None:
                 self._calculate_label_statistics()
             loss = self.calculate_loss(*self.preprocess(output, target.detach(), **kwargs))
+
             loss = self._handel_abnormal(loss)
+
             loss = self._get_reduction(loss)
             return loss
         except Exception as e:
@@ -607,29 +605,38 @@ class CrossEntropyLoss(_ClassificationLoss):
         >>> CrossEntropyLoss(reduction='mean', sample_weight=to_tensor([1,2,3]))(output,target).cpu()
         tensor(1.4518)
         """
-        loss = to_tensor(0.0)
 
         sample_weight = cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)
+
+
+
         if not self.need_target_onehot:
             if self.is_target_onehot and target.dtype != Dtype.long:
                 target = argmax(target, self.axis)
-            if not self.is_logsoftmax or not self.from_logits:
-                output=log_softmax(output)
-            return nn.functional.nll_loss(output,target,sample_weight,reduction='none')
+            #print(9, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
+
+            unbalance_weight = zeros(tuple([1]*(ndim(target)-1)+[ self.num_classes]))
+            if self.auto_balance and self.label_statistics is not None:
+                if int_shape(output)[self.axis] == len(self.label_statistics):
+                    unbalance_weight =to_tensor(np.log(clip(self.label_statistics.copy(), min=1e-7)))
+
+            target_shape=target.shape
+            gather_unbalance_weight=torch.index_select(unbalance_weight, -1, target.reshape((-1))).reshape(target_shape).detach()
+            #print(10, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
+            if not self.is_logsoftmax and reduce_min(output)>=0:
+                output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
+
+            return nn.functional.nll_loss(output,target,sample_weight,reduction='none')+gather_unbalance_weight
         else:
+            unbalance_weight=ones(tuple([1]*(ndim(output)-1)+[ self.num_classes]))
+            if self.auto_balance and self.label_statistics is not None:
+                if self.num_classes== len(self.label_statistics):
+                    unbalance_weight= clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple([1]*(ndim(output)-1)+[ self.num_classes])),requires_grad=False), min=1e-7)
 
-            if ndim(output) == 2:
-                if self.is_logsoftmax:
-                    sample_weight = self.sample_weight
-            else:
-                reshape_shape = [1] * ndim(output)
-                reshape_shape[self.axis] = self.num_classes
-                sample_weight = self.sample_weight.view(*reshape_shape) * self.ignore_index_weight.view(*reshape_shape)
-
-            if not self.is_logsoftmax or not self.from_logits:
-                output=log_softmax(output, axis=self.axis)
-
-            return -reduce_sum(target * output * sample_weight, axis=self.axis)
+            if not self.is_logsoftmax and reduce_min(output)>=0:
+                output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
+            sample_weight = expand_as(sample_weight, output)
+            return -reduce_sum(target * output * sample_weight*unbalance_weight, axis=1)
 
 
 
@@ -833,23 +840,28 @@ class F1ScoreLoss(_ClassificationLoss):
         self._built = True
 
     def calculate_loss(self, output, target, **kwargs):
+        sample_weight=(self.sample_weight * self.ignore_index_weight).detach()
+        n_ = ndim(target) - ndim(sample_weight)
+        for n in range(n_):
+            sample_weight = expand_dims(sample_weight, 0)
 
         if self.is_logsoftmax:
-            output = clip(exp(output), 1e-8, 1 - 1e-8)
-            self.from_logits = True
-        if not self.from_logits:
+            output =clip(exp(clip(output,max=0)),1e-7,1-1e-7)
+
+        elif not self.from_logits:
             output = softmax(output, self.axis)
         if target.dtype == Dtype.int64 or self.is_target_onehot == False:
-            target = make_onehot(target, self.num_classes, axis=1).to(output.dtype)
-        target.require_grads = False
+            target = make_onehot(target, self.num_classes, axis=self.axis).to(output.dtype)
+        target.detach()
 
-        tp = (target * output * self.sample_weight * self.ignore_index_weight).sum(axis=self.axis)
+
+        tp = reduce_sum(target * output*sample_weight ,axis=self.axis)
         tn = ((1 - target) * (1 - output))
         fp = ((1 - target) * output)
         fn = (target * (1 - output))
-        precision = true_divide(tp, reduce_sum(output, axis=self.axis))
-        recall = true_divide(tp, reduce_sum(target, axis=self.axis))
-        return 1 - (1 + self.beta ** 2) * precision * recall / (self.beta ** 2 * precision + recall)
+        precision = true_divide(tp, reduce_sum(output ,axis=self.axis))
+        recall = true_divide(tp,reduce_sum(target ,axis=self.axis))
+        return 1 - (1 + self.beta ** 2) * precision * recall/  (self.beta ** 2 * precision + recall)
 
 
 class FocalLoss(_ClassificationLoss):
@@ -908,33 +920,40 @@ class FocalLoss(_ClassificationLoss):
         Returns:
 
             """
+
+        sample_weight = cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)
+        sample_weight = sample_weight.reshape(tuple([1] * (ndim(output) - 1) + [self.num_classes])).detach()
         alpha = torch.zeros(self.num_classes).to(output.device)
         alpha[0] += self.alpha
         alpha[1:] += (1 - self.alpha)
-        if ndim(output) > 2 and self.axis==1:
-            output = output.view(output.size(0), output.size(1), -1)  # N,C,H,W => N,C,H*W
+        if ndim(output) > 2 and self.axis == 1:
             output = output.transpose(1, 2)  # N,C,H*W => N,H*W,C
             output = output.contiguous().view(-1, output.size(2))  # N,H*W,C => N*H*W,C
 
+        if not self.is_logsoftmax:
+            output=log_softmax(output)
+            output = clip(output, min=-12, max=-1e-7)
 
         if self.is_target_onehot and target.dtype != Dtype.long:
             target = argmax(target, self.axis)
-            self.is_target_onehot=False
         target = target.view(-1, 1)
 
-        if not self.is_logsoftmax:
-            output=log_softmax(output)
-            self.is_logsoftmax=True
+        unbalance_weight = zeros(tuple([1] * (ndim(target) - 1) + [self.num_classes]))
+        if self.auto_balance and self.label_statistics is not None:
+            if int_shape(output)[self.axis] == len(self.label_statistics):
+                unbalance_weight = to_tensor(np.log(clip(self.label_statistics.copy(), min=1e-7)))
 
-        logpt=output
+        target_shape = target.shape
+        gather_unbalance_weight = torch.index_select(unbalance_weight, -1, target.reshape((-1))).reshape(target_shape).detach()
+
+        logpt = output
         logpt = logpt.gather(1, target)
         pt = logpt.data.exp()
-        #
-        loss=-1 *  ((1 - pt) ** self.gamma) * logpt
-        alpha=alpha.gather(0, target.view(-1))
-        loss=loss*(alpha.view(-1,1))
-        return loss
 
+        loss = -1 * ((1 - pt) ** self.gamma) * logpt
+        alpha = alpha.gather(0, target.view(-1))
+        loss = loss * (alpha.view(-1, 1))
+        return loss
 
 
         # - \alpha(1 - softmax(x)[class ]) ^ gamma \log(softmax(x)[class])
@@ -986,7 +1005,7 @@ class BCELoss(_ClassificationLoss):
 
         """
         if self.is_logsoftmax:
-            output = exp(output)
+            output = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
 
         loss = binary_cross_entropy(output, target, from_logits=self.from_logits)
         return loss
@@ -1066,22 +1085,31 @@ class DiceLoss(_ClassificationLoss):
         Returns:
 
         """
+        # if any_abnormal_number(output):
+        #     print('{0} calculate starting'.format(self.name))
         if self.is_logsoftmax:
-            output = exp(output)
-        reduce_axes = list(range(target.ndim))
-        axis = self.axis if self.axis >= 0 else target.ndim + self.axis
-        reduce_axes.remove(0)
-        sample_weight = expand_dims(self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device()), 0)
-        n_ = ndim(output) - ndim(sample_weight)
-        for n in range(n_):
-            sample_weight = expand_dims(sample_weight, -1)
+            output =clip(exp(clip(output,max=0)),1e-7,1-1e-7)
 
-        # for k in range(target.ndim-self.loss_weights.ndim):
-        #     loss_weights=loss_weights.expand_dims(0)
-        intersection = reduce_sum(target * output * sample_weight, axis=reduce_axes)
-        den1 = reduce_sum(output * sample_weight, axis=reduce_axes)
-        den2 = reduce_sum(target * sample_weight, axis=reduce_axes)
-        dice = 1.0 - (2.0 * intersection + self.smooth) / (den1 + den2 + self.smooth)
+        # if any_abnormal_number(output):
+        #     print('{0} after exp'.format(self.name))
+        #print(11, 'output_exp', output_exp.shape, 'abnormal:', any_abnormal_number(output_exp))
+        sample_weight = self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device())
+
+        intersection = reduce_sum(target * output, axis=-1)
+        # if any_abnormal_number(intersection):
+        #     print('{0} after intersection'.format(self.name))
+        den1 = reduce_sum(output, axis=-1)
+        # if any_abnormal_number(den1):
+        #     print('{0} after den1'.format(self.name))
+        den2 = reduce_sum(target, axis=-1)
+        # if any_abnormal_number(den2):
+        #     print('{0} after den2'.format(self.name))
+
+        sample_weight = expand_as(sample_weight, intersection).detach()
+        dice = 1.0 -( (2.0 * (intersection*sample_weight).sum(1) + self.smooth) / (den1.sum(1)  + den2.sum(1)  + self.smooth)).mean()
+        # if any_abnormal_number(den2):
+        #     print('{0} after dice {1}'.format(self.name,dice))
+        #print(12, 'dice', dice.shape, 'abnormal:', any_abnormal_number(dice))
         return dice
 
 

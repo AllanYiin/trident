@@ -22,7 +22,7 @@ from trident.backend.common import camel2snake, get_class, epsilon, PrintExcepti
 from trident.backend.tensorspec import *
 from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
-from trident.optims.losses import Loss
+from trident.optims.losses import Loss,_check_logsoftmax_logit
 
 from trident.backend import dtype as Dtype
 from trident.backend.tensorspec import TensorSpec,TensorShape
@@ -234,16 +234,11 @@ class _ClassificationLoss(Loss,tracking.AutoTrackable):
                 #output = output / clip(sum_output, 1e-7, 1 - 1e-7)
                 self.from_logits = False
 
-            if self.auto_balance and self.label_statistics is not None:
-                output = output * to_tensor(self.label_statistics.copy())
-            output = clip(output, min=1e-8, max=1 - 1e-8)
 
-        elif (ndim(output) >= 1 and 'float' in str(output.dtype) and  reduce_max(output) <=0):
+
+        elif _check_logsoftmax_logit(output):
             self.is_logsoftmax = True
             self.from_logits = True
-            if self.auto_balance and self.label_statistics is not None:
-                output = output + to_tensor(np.log(self.label_statistics.copy()))
-
         else:
             self.is_logsoftmax = False
             self.from_logits = False
@@ -752,22 +747,33 @@ class F1ScoreLoss(_ClassificationLoss):
             sample_weight = array_ops.stop_gradient(
                 cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype),
                 name="sample_weight")
+            n_ = ndim(target) - ndim(sample_weight)
+            for n in range(n_):
+                sample_weight = expand_dims(sample_weight, 0)
+
 
             if self.is_logsoftmax:
-                output = clip(exp(output), 1e-8, 1 - 1e-8)
+                output = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
                 self.from_logits = True
             if not self.from_logits:
                 output = softmax(output, self.axis)
             if target.dtype == Dtype.int64 or self.is_target_onehot == False:
                 target = cast(make_onehot(target, self.num_classes, axis=1), output.dtype)
 
-            tp = (target * output * self.sample_weight * self.ignore_index_weight).sum(axis=self.axis)
+            tp = (target * output)
             # tn = ((1 - target) * (1 - output))
             # fp = ((1 - target) * output)
             # fn = (target * (1 - output))
-            precision = true_divide(tp, reduce_sum(output, axis=self.axis))
-            recall = true_divide(tp, reduce_sum(target, axis=self.axis))
-            return 1 - (1 + self.beta ** 2) * precision * recall / (self.beta ** 2 * precision + recall)
+            #
+            #
+
+            # percision与recall，这里的K.epsilon代表一个小正数，用来避免分母为零
+            precision = tp / (output + epsilon())
+            recall= tp / (target + epsilon())
+
+            # 计算f1
+            return 1 - (1 + self.beta ** 2) * (precision * recall*sample_weight).sum(-1) / (self.beta ** 2 * precision + recall+epsilon()).sum(-1)
+
 
 
 class FocalLoss(_ClassificationLoss):
@@ -865,7 +871,7 @@ class BCELoss(_ClassificationLoss):
                 name="sample_weight")
 
             if self.is_logsoftmax:
-                output = exp(output)
+                output = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
             loss = binary_cross_entropy(output, target, from_logits=self.from_logits)
             return loss
 
@@ -952,7 +958,7 @@ class DiceLoss(_ClassificationLoss):
                 name="sample_weight")
 
             if self.is_logsoftmax:
-                output = exp(output)
+                output =clip(exp(clip(output,max=0)),1e-7,1-1e-7)
             reduce_axes = list(range(target.ndim))
             axis = self.axis if self.axis >= 0 else target.ndim + self.axis
             reduce_axes.remove(0)
