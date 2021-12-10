@@ -197,8 +197,8 @@ class Resize(VisionTransform):
         coords[:, 0] = np.round(coords[:, 0] * (float(tw) / w))
         coords[:, 1] = np.round(coords[:, 1] * (float(th) / h))
         if not self.align_corner:
-            coords[:, 0] += pad_horz // 2
-            coords[:, 1] += pad_vert // 2
+            coords[:, 0] += pad_vert // 2
+            coords[:, 1] += pad_horz // 2
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
@@ -372,9 +372,11 @@ class RandomRescaleCrop(VisionTransform):
         self.output_size = output_size
         if isinstance(self.output_size, numbers.Number):
             self.output_size = (output_size, output_size)
-        self.scale_range = scale_range
-        if isinstance(self.scale_range, numbers.Number):
+        scale_range =kwargs.get('scale',scale_range)
+        if isinstance(scale_range, numbers.Number):
             self.scale_range = (scale_range, scale_range)
+        else:
+            self.scale_range =scale_range
 
         self.interpolation = interpolation
 
@@ -461,9 +463,11 @@ class RandomCenterCrop(VisionTransform):
         self.output_size = output_size
         if isinstance(self.output_size, numbers.Number):
             self.output_size = (output_size, output_size)
-        self.scale_range = scale_range
-        if isinstance(self.scale_range, numbers.Number):
+        scale_range =kwargs.get('scale',scale_range)
+        if isinstance(scale_range, numbers.Number):
             self.scale_range = (scale_range, scale_range)
+        else:
+            self.scale_range =scale_range
         self.interpolation = interpolation
 
     def apply(self, input: Tuple, spec: TensorSpec):
@@ -769,7 +773,11 @@ class RandomMultiScaleImage(VisionTransform):
         self.output_size = output_size
         if isinstance(self.output_size, numbers.Number):
             self.output_size = (output_size, output_size)
-        self.scale_range = scale_range
+        scale_range = kwargs.get('scale', scale_range)
+        if isinstance(scale_range, numbers.Number):
+            self.scale_range = (scale_range, scale_range)
+        else:
+            self.scale_range = scale_range
         self.interpolation = interpolation
         self.idx = 0
         self.tmp_fun=None
