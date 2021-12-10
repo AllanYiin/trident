@@ -509,9 +509,31 @@ class Model(model.ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
 
+
         signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
         self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
         ctx.print(self._losses[alias].signature)
+
+        # check whether the model is end by SoftMax
+        if self._model is not None and isinstance(self._model,Layer):
+            print(alias,list(self._model.modules())[-1].__class__.__name__)
+            if isinstance(list(self._model.modules())[-1],SoftMax) and hasattr(self._losses[alias],'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax=True
+            elif isinstance(list(self._model.modules())[-1],Sequential) and isinstance(list(self._model.modules())[-1][-1],SoftMax) and hasattr(self._losses[alias],'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax=True
+            elif isinstance(list(self._model.modules())[-1],Dense) and list(self._model.modules())[-1].activation==log_softmax and hasattr(self._losses[alias],'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax=True
+            elif isinstance(list(self._model.modules())[-1],ModuleDict) and self._losses[alias].signature is not None and  hasattr(self._losses[alias],'is_logsoftmax'):
+                for k,v in list(self._model.modules())[-1].items():
+                    if isinstance(list(v.modules())[-1],SoftMax) and k in self._losses[alias].signature.inputs:
+                        self._losses[alias].is_logsoftmax = True
+                    elif isinstance(list(v.modules())[-1],Sequential) and  isinstance(list(v.modules())[-1][-1],SoftMax)  and k in self._losses[alias].signature.inputs:
+                        self._losses[alias].is_logsoftmax = True
+                    elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[-1].activation == log_softmax and k in self._losses[alias].signature.inputs:
+                        self._losses[alias].is_logsoftmax = True
+
+
+
         # for k, v in kwargs.items():
         #     if signature is not None:
         #         if k in signature.inputs and v is not None:

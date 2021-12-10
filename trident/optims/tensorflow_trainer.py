@@ -453,10 +453,27 @@ class Model(ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
 
-
         signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
         self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
         ctx.print(self._losses[alias].signature)
+
+        #check whether the model is end by SoftMax
+        if isinstance(list(self._model.modules())[-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
+            self._losses[alias].is_logsoftmax = True
+        elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(list(self._model.modules())[-1][-1], SoftMax) and hasattr(
+                self._losses[alias], 'is_logsoftmax'):
+            self._losses[alias].is_logsoftmax = True
+        elif isinstance(list(self._model.modules())[-1], Dense) and list(self._model.modules())[-1].activation == log_softmax and hasattr(self._losses[alias], 'is_logsoftmax'):
+            self._losses[alias].is_logsoftmax = True
+        elif isinstance(list(self._model.modules())[-1], ModuleDict) and self._losses[alias].signature is not None and hasattr(self._losses[alias], 'is_logsoftmax'):
+            for k, v in list(self._model.modules())[-1].items():
+                if isinstance(list(v.modules())[-1], SoftMax) and k in self._losses[alias].signature.inputs:
+                    self._losses[alias].is_logsoftmax = True
+                elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],SoftMax) and k in self._losses[
+                    alias].signature.inputs:
+                    self._losses[alias].is_logsoftmax = True
+                elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[-1].activation == log_softmax and k in self._losses[alias].signature.inputs:
+                    self._losses[alias].is_logsoftmax = True
 
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
@@ -647,7 +664,7 @@ class Model(ModelBase):
             self.training_context['time_epoch_progress'] = 0
         self.training_context['time_batch_start'] = time.time()
         if (self.training_context['steps'] + 1) % 100 == 0:
-            if self.model.device == 'cuda':
+            if 'gpu' in self.model.device:
                 gc.collect()
 
     def do_on_batch_end(self):
@@ -828,6 +845,12 @@ class Model(ModelBase):
                     self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
                     self.training_context['losses'].collect(signature.outputs.key_list[0], self.training_context['steps'], to_scalar(this_loss.copy()))
 
+    def do_on_loss_calculation_start(self):
+        super().do_on_loss_calculation_start()
+
+    def do_on_loss_calculation_end(self):
+        super().do_on_loss_calculation_end()
+
     def do_calculate_losses(self):
         pass
 
@@ -847,29 +870,27 @@ class Model(ModelBase):
         if isinstance(self._model, (Layer, tf.Module)):
             # double check!!!
             self._model.train()
-        if log_gradients:
-            self.log_gradient(self.training_context['grads_and_vars'])
-        # vars=self.training_context['vars']
-        # cal_grads=self.training_context['grads']
-        #
-        # if isinstance(self._model,Layer) and self.grad_clipping_by_norm:
-        #     cal_grads = [(tf.clip_by_norm(grad, -1.0*self.grad_clipping_threshold, 1.0*self.grad_clipping_threshold)) for grad in cal_grads]
-        #
 
         if self.training_context['stop_update'] < 1:
-
-            super().on_optimization_step_start()
+            self.on_optimization_step_start()
 
             if self.training_context['stop_update'] == 0:
                 self.optimizer.step(self.training_context['grads_and_vars'])
+                if log_gradients:
+                    self.log_gradient(self.training_context['grads_and_vars'])
                 self.do_on_optimization_step_end()
+
 
             elif 0 < self.training_context['stop_update'] < 1:
                 if random.random() <= self.training_context['stop_update']:
                     self.optimizer.step(self.training_context['grads_and_vars'])
+                    if log_gradients:
+                        self.log_gradient(self.training_context['grads_and_vars'])
                     self.do_on_optimization_step_end()
-            else:
-                self.training_context['stop_update'] = self.training_context['stop_update'] - 1
+        else:
+            self.training_context['stop_update'] = self.training_context['stop_update'] - 1
+
+
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
@@ -1287,6 +1308,7 @@ class Model(ModelBase):
                                 PrintException()
 
                     self.do_on_loss_calculation_end()
+
                     for k, v in self._regs.items():
                         this_loss = to_tensor(0.0, requires_grad=True)
                         if 'model' in v.signature.inputs:
