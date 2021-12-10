@@ -56,10 +56,10 @@ def normal(tensor, mean=0., std=1.):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad==True and 'bias' not in name:
-                init.normal(weight,mean=mean,std=std)
+                init.normal_(weight,mean=mean,std=std)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad:
-            init.normal(tensor,mean=mean,std=std)
+            init.normal_(tensor,mean=mean,std=std)
 
 
 
@@ -135,7 +135,7 @@ def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
-                kaiming_uniform(weight, a, mode, nonlinearity)
+                kaiming_uniform_(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad and tensor.dim()>=2:
             init.kaiming_uniform_(tensor, a, mode, nonlinearity)
@@ -174,7 +174,7 @@ def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
-                kaiming_normal(weight, a, mode, nonlinearity)
+                kaiming_normal_(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad and tensor.dim()>=2:
             init.kaiming_normal_(tensor, a, mode, nonlinearity)
@@ -208,10 +208,10 @@ def xavier_uniform(tensor, gain=1.):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad == True and 'bias' not in name and weight.dim()>=2:
-                init.xavier_uniform(weight,gain=gain)
+                init.xavier_uniform_(weight,gain=gain)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad and tensor.dim()>=2:
-            init.xavier_uniform(tensor, gain=gain)
+            init.xavier_uniform_(tensor, gain=gain)
 
 
 def xavier_normal(tensor, gain=1.):
