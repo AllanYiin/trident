@@ -1369,7 +1369,7 @@ def reduce_sum(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
-        return None
+        return np.sum(x)
     elif isinstance(axis, int):
         return np.sum(x,axis=axis, keepdims=keepdims)
     elif isinstance(axis, list):
@@ -1426,7 +1426,7 @@ def reduce_max(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
-        return None
+        return np.max(x)
     elif isinstance(axis, int):
         arr, idx = np.max(x,axis=axis, keepdims=keepdims)
         return arr
@@ -1486,7 +1486,7 @@ def reduce_min(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
-        return None
+        return np.min(x)
     elif isinstance(axis, int):
         arr, idx = np.min(x,axis=axis, keepdims=keepdims)
         return arr
@@ -1536,7 +1536,7 @@ def reduce_logsumexp(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     if  x.size== 0:
         return zeros(1).astype(np.float32)
     if axis is None:
-        return None
+        return log(exp(x).sum())
     else:
         return log(reduce_sum(exp(x), axis=axis, keepdims=keepdims))
 
