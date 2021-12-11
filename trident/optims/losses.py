@@ -5,15 +5,20 @@ from __future__ import print_function
 import sys
 from typing import Callable, Any
 
+import numpy as np
+import torch
+
 from trident.backend.common import get_session, OrderedDict
 from trident.backend.tensorspec import *
 
 _session = get_session()
 _backend = _session.backend
 if _backend == 'pytorch':
+    import torch
     from trident.backend.pytorch_ops import *
 
 elif _backend == 'tensorflow':
+    import tensorflow as tf
     from trident.backend.tensorflow_ops import *
 
 __all__ = ['Loss']
@@ -114,10 +119,10 @@ class Loss(object):
             return loss
         if ndim(loss) >= 2 and self.reduction == 'batch_sum':
             loss = reshape(loss, (int_shape(loss)[0], -1))
-            return loss.sum(1).mean()
+            return loss.sum(0).mean()
         elif ndim(loss) >= 2 and self.reduction == 'batch_mean':
             loss = reshape(loss, (int_shape(loss)[0], -1))
-            return loss.mean(1).mean()
+            return loss.mean(0).mean()
         elif self.reduction in ('mean', 'batch_mean'):
             return loss.mean()
         elif self.reduction in ('sum', 'batch_sum'):
@@ -167,4 +172,52 @@ class Loss(object):
            self._signature.outputs=new_output
 
 
+def _check_logsoftmax_logit(x:Tensor,axis=1):
+    if isinstance(x, np.ndarray):
+        if _backend == 'pytorch':
+            if axis is None:
+                axis = 1
+        elif _backend == 'tensorflow':
+            if axis is None:
+                axis = -1
+        if reduce_max(x) <= 0:
+            output_exp = exp(x)
+            return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
+        return False
+    elif _backend == 'pytorch':
+        with torch.no_grad():
+            if reduce_max(x)<=0:
+                output_exp=exp(x)
+                return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
+            return False
+    elif _backend == 'tensorflow':
+        if reduce_max(x)<=0:
+            output_exp=exp(x).copy().detach()
+            return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
+        return False
+
+def _check_logit(x:Tensor,axis=None):
+    if isinstance(x,np.ndarray):
+        if _backend == 'pytorch':
+            if axis is None:
+                axis = 1
+        elif _backend == 'tensorflow':
+            if axis is None:
+                axis = -1
+        if reduce_max(x) <= 0:
+            return abs(1 - reduce_mean(x.sum(axis=axis))) < 0.05
+        return False
+    elif _backend == 'pytorch':
+        if axis is None:
+            axis=1
+        with torch.no_grad():
+            if reduce_max(x)<=0:
+                return abs(1-reduce_mean(x.sum(axis=axis)))<0.05
+            return False
+    elif _backend == 'tensorflow':
+        if axis is None:
+            axis = -1
+        if reduce_max(x)<=0:
+            return abs(1-reduce_mean(x.sum(axis=axis)))<0.05
+        return False
 

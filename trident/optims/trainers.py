@@ -73,7 +73,7 @@ class TrainingPlan(object):
         self.steps = 0
         self.epochs = 0
         self.warmup = 0
-        self.default_collect_data_inteval = 1
+        self.default_collect_data_inteval = 10
         self.print_progress_frequency = 10
         self.print_progress_unit = 'batch'
         self.print_progress_on_epoch_end = False
@@ -292,9 +292,9 @@ class TrainingPlan(object):
         self.print_progress_on_epoch_end = on_epoch_end
         self.print_progress_frequency = frequency
 
-        self.default_collect_data_inteval = frequency
+        self.default_collect_data_inteval = frequency if unit in ['batch','step'] else 10
 
-        if unit not in ['batch', 'epoch']:
+        if unit not in ['batch', 'epoch','step']:
             raise ValueError('unit should be batch or epoch')
         else:
             self.print_progress_unit = unit
@@ -520,7 +520,7 @@ class TrainingPlan(object):
         data_provider.mode = 'dict'
 
         if collect_data_inteval is None:
-            collect_data_inteval = self.print_progress_frequency*len(data_provider.batch_sampler) if self.print_progress_unit == 'epoch' else self.print_progress_frequency
+            collect_data_inteval = self.default_collect_data_inteval if self.print_progress_unit == 'epoch' else self.print_progress_frequency
 
         try:
             self.execution_id = get_time_suffix()
@@ -653,13 +653,14 @@ class TrainingPlan(object):
                                 trainitem.steps = self.steps
                                 trainitem.current_epoch = current_epoch
                                 trainitem.current_batch = current_batch
+
                                 trainitem.train_model(train_data, test_data,
                                                       current_epoch,
                                                       current_batch,
                                                       num_epoch,
                                                       num_batches,
                                                       done=None,
-                                                      is_collect_data=current_batch == 0 or current_batch % collect_data_inteval == 0,
+                                                      is_collect_data=current_batch == 0 or (self.steps+1) % collect_data_inteval == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and self.steps > 0 and (current_batch+1) % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history, log_weights=keep_weights_history,

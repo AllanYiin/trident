@@ -21,12 +21,14 @@ from torch.nn.parameter import Parameter
 
 from trident.backend import dtype as Dtype
 from trident.backend.common import *
+from trident import context
 #from trident.backend.tensorspec import TensorShape
 
 version = torch.__version__
 pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
-
+ctx=context._context()
+_float_dtype=Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda' else Dtype.float32
 
 
 def is_gpu_available():
@@ -88,7 +90,7 @@ __all__ = ['Tensor','is_gpu_available','is_tpu_available','is_tensor', 'is_tenso
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth','pad', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'silu','lecun_tanh',
            'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax', 'log_softmax', 'gelu','reverse',
-           'gpt_gelu', 'moments','norm', 'l2_normalize', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
+           'gpt_gelu', 'moments','norm', 'l2_normalize','broadcast_to','expand_as', 'ones', 'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
            'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather', 'index_select','scatter_add','scatter_sub','scatter_max','scatter_min', 'gram_matrix', 'set_seed', 'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like','multinomial','random_bernoulli' ,'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy',
            'rgb2xyz','rgb2hsv','rgb2lab','rgb2gray','xyz2lab','xyz2rgb','lab2xyz','lab2rgb','bbox_iou','bbox_giou','bbox_ciou','bbox_diou']
@@ -337,29 +339,27 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         elif isinstance(x, numbers.Integral):
             if dtype is None:
                 dtype = Dtype.int64
-            t= torch.tensor([x]).int().to(device) if requires_grad is None else torch.tensor([x], requires_grad=requires_grad).int().to(get_session_value('device'))
-            if dtype is not None:
-                t=cast(t,dtype)
-            return t
+            return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
+
         elif isinstance(x, float):
             if dtype is None:
-                dtype = Dtype.float32
+                dtype = _float_dtype
             return torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype, requires_grad=requires_grad).to(device)
         elif isinstance(x, (list, tuple)):
             if all([isinstance(item,numbers.Integral) for item in x]):
                 if dtype is None:
                     dtype = Dtype.int64
-                x = torch.tensor(x).int().to(device) if requires_grad is None else torch.tensor(x, requires_grad=requires_grad).int().to(device)
+                x = torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x], dtype=dtype,requires_grad=requires_grad).to(device)
             elif len(x)==1:
                 x=unpack_singleton(x)
                 if dtype is None:
-                    dtype = Dtype.float32
-                x = torch.tensor(x,dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad).to(device)
+                    dtype =_float_dtype
+                x = torch.tensor([x],dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],dtype=dtype,requires_grad=requires_grad).to(device)
             else:
                 if dtype is None:
-                    dtype = Dtype.float32
+                    dtype = _float_dtype
                 x = torch.tensor(x,dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,dtype=dtype,requires_grad=requires_grad).to(device)
-            x = x.to(_get_device())
+            x = x.to(device)
             return x
         elif isinstance(x, np.ndarray):
             npdtype = x.dtype
@@ -368,7 +368,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
                 x = x.type(Dtype.int64)
             else:
                 if dtype is None:
-                    dtype = Dtype.float32
+                    dtype = _float_dtype
                 x = x.type(dtype)
             if not requires_grad:
                 x.requires_grad = False
@@ -729,7 +729,8 @@ def any_abnormal_number(x):
     Returns:
 
     """
-    return any_nan(x) |any_inf(x)
+    with torch.no_grad():
+        return any_nan(x) |any_inf(x)
 
 
 
@@ -790,7 +791,7 @@ def logical_xor(left, right):
 ###########################
 
 @numpy_compatible
-def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=None):
     """
     Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
@@ -808,12 +809,14 @@ def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dty
        tensor([1., 0., 0.])
 
     """
-    right = to_tensor(right)
-    return cast(left.lt(right),left.dtype)
+    if dtype is None:
+        dtype=Dtype.bool
+    right=to_tensor(right,dtype=left.dtype,device=left.device)
+    return cast(left.lt(right),cast_dtype=dtype)
 
 
 @numpy_compatible
-def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
     Args:
@@ -824,24 +827,26 @@ def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dt
         :Result is 1 if values are equal 0 otherwise
 
     Examples:
-        >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-        tensor([0., 1., 0.])
-        >>> equal(to_tensor([-1,0,1]), 1)
-        tensor([0., 0., 1.])
-        >>> equal(to_tensor([1,2,3]), 3)
-        tensor([0., 0., 1.])
+        >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.])).cpu()
+        tensor([False,  True, False])
+        >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.])).sum().cpu()
+        tensor(1)
+        >>> reduce_mean(equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))).cpu()
+        tensor([1])
+        >>> equal(to_tensor([-1,0,1]), 1).cpu()
+        tensor([False, False,  True])
+        >>> equal(to_tensor([1,2,3]), 3).cpu()
+        tensor([False, False,  True])
 
     """
-    if isinstance(right,numbers.Number):
-        right=cast(to_tensor(right),left.dtype).to(left.device)
-    if isinstance(right, np.ndarray):
-        right = cast(to_tensor(right),left.dtype).to(left.device)
-    return cast(left.eq(right),dtype)
+
+    right=to_tensor(right,dtype=left.dtype,device=left.device)
+    return cast(left.eq(right),cast_dtype=dtype)
 
 
 
 @numpy_compatible
-def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
     Args:
@@ -858,15 +863,13 @@ def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=
         tensor([0., 0., 1.])
 
     """
-    if isinstance(right,numbers.Number):
-        right=to_tensor(builtins.float(right))
-    if isinstance(right, np.ndarray):
-        right = to_tensor(right)
-    return cast(left.gt(right),dtype)
+
+    right=to_tensor(right,dtype=left.dtype,device=left.device)
+    return cast(left.gt(right),cast_dtype=dtype)
 
 
 @numpy_compatible
-def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool):
     """
     Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
@@ -884,15 +887,12 @@ def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],
         tensor([0., 1., 1.])
 
     """
-    if isinstance(right,numbers.Number):
-        right=to_tensor(builtins.float(right))
-    if isinstance(right, np.ndarray):
-        right = to_tensor(right)
-    return cast(left.ge(right),dtype)
+    right=to_tensor(right,dtype=left.dtype,device=left.device)
+    return cast(left.ge(right),cast_dtype=dtype)
 
 
 @numpy_compatible
-def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool):
     """
     Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
@@ -910,15 +910,12 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtyp
         tensor([1., 0., 1.])
 
     """
-    if isinstance(right,numbers.Number):
-        right=to_tensor(builtins.float(right))
-    if isinstance(right, np.ndarray):
-        right = to_tensor(right)
-    return cast(left.ne(right),dtype)
+    right=to_tensor(right,dtype=left.dtype,device=left.device)
+    return cast(left.ne(right),cast_dtype=dtype)
 
 
 @numpy_compatible
-def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32):
+def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool):
     """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
@@ -936,11 +933,8 @@ def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dty
         tensor([1., 1., 0.])
 
     """
-    if isinstance(right,numbers.Number):
-        right=to_tensor(builtins.float(right))
-    if isinstance(right, np.ndarray):
-        right = to_tensor(right)
-    return cast(left.le(right),dtype)
+    right=to_tensor(right,dtype=left.dtype,device=left.device)
+    return cast(left.le(right),cast_dtype=dtype)
 
 
 @numpy_compatible
@@ -1086,7 +1080,7 @@ def true_divide(x, y):
     return torch.true_divide(x, y)
 
 @numpy_compatible
-def matmul(a, b, transpose_a=False, transpose_b=False):
+def matmul(a:Tensor, b:Tensor, transpose_a=False, transpose_b=False):
     """Multiplies matrix `a` by matrix `b`, producing `a` * `b`.
 
      The inputs must, following any transpositions, be tensors of rank >= 2
@@ -1110,11 +1104,11 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
 
 
      >>> a =reshape(to_tensor([1, 2, 3, 4, 5, 6]),[2, 3])
-     >>> a  # 2-D tensor
+     >>> a
      tensor([[1, 2, 3],
             [4, 5, 6]])
      >>> b = reshape(to_tensor([7, 8, 9, 10, 11, 12]), [3, 2])
-     >>> b  # 2-D tensor
+     >>> b
      tensor([[ 7,  8],
             [ 9, 10],
             [11, 12]])
@@ -1126,13 +1120,13 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
      A batch matrix multiplication with batch shape [2]:
 
      >>> a =  reshape(to_tensor(np.arange(1, 13, dtype=np.int32)),[2, 2, 3])
-     >>> a  # 3-D tensor
+     >>> a
      tensor([[[ 1,  2,  3],
              [ 4,  5,  6]],
             [[ 7,  8,  9],
              [10, 11, 12]]])
      >>> b =  reshape(to_tensor(np.arange(13, 25, dtype=np.int32)),[2, 3, 2])
-     >>> b  # 3-D tensor
+     >>> b
      tensor([[[13, 14],
              [15, 16],
              [17, 18]],
@@ -1194,8 +1188,7 @@ def floor(x: (Tensor, float)):
       A `Tensor`. Has the same type as `x`.
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x)
+
     return x.floor()
 
 @numpy_compatible
@@ -1219,8 +1212,7 @@ def ceil(x: (Tensor, float)):
     Equivalent to np.ceil
     @end_compatibility
     """
-    if not is_tensor(x):
-        x = to_tensor(x)
+
     return x.ceil()
 
 @numpy_compatible
@@ -1252,8 +1244,7 @@ def round(x: (Tensor, float), digit: int = 0):
               dtype=float32)>
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
+
     if digit != 0:
         factor = to_tensor(float(math.pow(10, -1 * digit)))
         return (x / factor).round() * factor
@@ -1281,15 +1272,6 @@ def prod(x: Tensor):
     @end_compatibility
     """
 
-    if isinstance(x, (float, int)):
-        return math.prod(x)
-    elif isinstance(x, (np.ndarray)):
-        return np.prod(x).astype(np.float32)
-    else:
-        if not is_tensor(x):
-            x = cast(to_tensor(x), 'float32')
-        else:
-            x = cast(x, 'float32')
     return torch.prod(x)
 
 
@@ -1336,9 +1318,10 @@ def sqrt(x: Tensor):
       A `Tensor` of same size, type and sparsity as `x`.
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
-    return x.sqrt()
+    if x>0:
+        return x.sqrt()
+    else:
+        raise ValueError("Negative root")
 
 @numpy_compatible
 def rsqrt(x: Tensor):
@@ -1358,8 +1341,6 @@ def rsqrt(x: Tensor):
         numpy=array([0.707, inf, nan], dtype=float32)>
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
     return x.rsqrt()
 
 @numpy_compatible
@@ -1381,8 +1362,6 @@ def square(x: Tensor):
 
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
     return x ** 2
 
 @numpy_compatible
@@ -1414,8 +1393,6 @@ def abs(x: Tensor):
         with absolute values. Note, for `complex64` or `complex128` input, the
         returned `Tensor` will be of type `float32` or `float64`, respectively.
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
     return x.abs()
 
 @numpy_compatible
@@ -1440,8 +1417,8 @@ def pow(x: Tensor, y:(Tensor,float)):
 
     """
 
-    y = to_tensor(y, dtype=x.dtype)
-    return torch.pow(x,y).to(x.dtype)
+    y = to_tensor(y, dtype=x.dtype,device=x.device)
+    return torch.pow(x,y)
 
 @numpy_compatible
 def log(x: Tensor):
@@ -1467,9 +1444,10 @@ def log(x: Tensor):
 
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
-    return x.log()
+    if x>0:
+        return x.log()
+    else:
+        raise ValueError("Negative log")
 
 @numpy_compatible
 def exp(x: Tensor):
@@ -1511,8 +1489,6 @@ def exp(x: Tensor):
     @end_compatibility
 
     """
-    if not is_tensor(x):
-        x = to_tensor(x, dtype=Dtype.float32)
     return x.exp()
 
 @numpy_compatible
@@ -1868,6 +1844,8 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
+    if x.dtype==Dtype.bool:
+        x.to(Dtype.float)
     if axis is None:
         original_shape = int_shape(x)
         new_shape = tuple([1] * len(original_shape))
@@ -1917,6 +1895,8 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
+    if x.dtype==Dtype.bool:
+        x.to(Dtype.float)
     if axis is None:
         original_shape = int_shape(x)
         new_shape = tuple([1] * len(original_shape))
@@ -1981,6 +1961,8 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
+    if x.dtype==Dtype.bool:
+        x.to(Dtype.float)
     if axis is None:
         original_shape=int_shape(x)
         new_shape=tuple([1]*len(original_shape))
@@ -2047,6 +2029,8 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
+    if x.dtype==Dtype.bool:
+        x.to(Dtype.float)
     if axis is None:
         original_shape = int_shape(x)
         new_shape = tuple([1] * len(original_shape))
@@ -2103,6 +2087,8 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
     """
     if x.element_size() == 0:
         return x
+    if x.dtype==Dtype.bool:
+        x.to(Dtype.float)
     if axis is None:
         if ndim(x) == 1:
             axis = 0
@@ -2143,6 +2129,7 @@ def reduce_prod(x: Tensor, axis=None, keepdims=False, **kwargs):
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
+
     if axis is None:
         if ndim(x) == 1:
             axis = 0
@@ -2955,8 +2942,36 @@ def l2_normalize(x: Tensor,axis=1, keepdims=True, eps=epsilon()):
 ############################
 ## tensor shape operation
 ###########################
+
+
+def broadcast_to(x:Tensor, shape:Union[(List, Tuple, torch.Size,TensorShape) ]=None)-> Tensor:
+    if shape is None:
+        return x
+    elif isinstance(shape,TensorShape):
+        shape=shape.dims
+    if len(shape)>2 and int_shape(x)[-1]!=shape[-1] and int_shape(x)[-1]==shape[1]:
+        shape=to_list(shape)
+        new_shape=shape[0:1]+shape[2:]+shape[1:2]
+        x=torch.broadcast_to(x, new_shape)
+        return x.transpose(-1,1)
+    else:
+        return torch.broadcast_to(x,shape)
+
+
+def expand_as(left: Tensor, right:Tensor )-> Tensor:
+    left_shape=int_shape(left)
+    right_shape=int_shape(right)
+
+    if len(right_shape)>2 and left_shape[-1]!=right_shape[-1] and left_shape[-1]==right_shape[1]:
+        new_shape=right_shape[0:1]+right_shape[2:]+right_shape[1:2]
+        left=left.expand(new_shape)
+        return left.transpose(-1,1)
+    else:
+        return left.expand_as(right)
+
+
 @numpy_compatible
-def reshape(x, shape=None) -> Tensor:
+def reshape(x:Tensor, shape:Union[(List, Tuple, torch.Size,TensorShape) ]=None) -> Tensor:
     """
 
     Args:
@@ -2968,13 +2983,11 @@ def reshape(x, shape=None) -> Tensor:
     """
     if shape is None:
         return x
-    elif isinstance(shape, list):
-        return torch.reshape(x, to_list(shape))
-    elif isinstance(shape, tuple):
-        shape = to_list(shape)
-        return torch.reshape(x, shape)
-    else:
-        return x
+    elif isinstance(shape,TensorShape):
+        shape=shape.dims
+
+    return torch.reshape(x, shape)
+
 
 @numpy_compatible
 def transpose(x,dim0:int, dim1:int) -> Tensor:
@@ -2989,7 +3002,10 @@ def transpose(x,dim0:int, dim1:int) -> Tensor:
         transposed tensor
 
     """
-    return x.transpose(dim0,dim1)
+    x=x.transpose(dim0,dim1)
+    if not x.is_contiguous():
+        return x.contiguous()
+    return x
 
 @numpy_compatible
 def permute(x, *dims) -> Tensor:
@@ -3002,13 +3018,13 @@ def permute(x, *dims) -> Tensor:
     Returns:
 
     """
-    t=x.permute(*dims)
-    if not t.is_contiguous():
-        return t.contiguous()
-    return t
+    x=x.permute(*dims)
+    if not x.is_contiguous():
+        return x.contiguous()
+    return x
 
 @numpy_compatible
-def squeeze(x: Tensor, axis=0):
+def squeeze(x: Tensor, axis=None):
     """
 
     Args:
@@ -3018,11 +3034,11 @@ def squeeze(x: Tensor, axis=0):
     Returns:
 
     """
-    return x.squeeze(axis)
+    return x.squeeze(dim=axis)
 
 
 @numpy_compatible
-def expand_dims(x: Tensor, axis=0):
+def expand_dims(x: Tensor, axis):
     """
 
     Args:
@@ -3241,7 +3257,7 @@ def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
 ## tensor generation
 ###########################
 
-def ones(shape, dtype=Dtype.float32, requires_grad=False):
+def ones(shape:Union[(List, Tuple, torch.Size,TensorShape)] , dtype=None, requires_grad=False):
     """Instantiates an all-ones tensor and returns it.
 
     Args
@@ -3260,10 +3276,14 @@ def ones(shape, dtype=Dtype.float32, requires_grad=False):
 
     {{np_implementation}}
     """
+    if isinstance(shape,TensorShape):
+        shape=shape.dims
+    if dtype is None:
+        dtype= _float_dtype
     return torch.ones(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 @numpy_compatible
-def ones_like(a, dtype=Dtype.float32, requires_grad=False):
+def ones_like(a, dtype=None, requires_grad=False):
     """Instantiates an all-ones variable of the same shape as another tensor.
 
     Args
@@ -3282,10 +3302,12 @@ def ones_like(a, dtype=Dtype.float32, requires_grad=False):
 
     {{np_implementation}}
     """
+    if dtype is None:
+        dtype=a.dtype
     return torch.ones(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
-def zeros(shape, dtype=Dtype.float32, requires_grad=False):
+def zeros(shape:Union[(List, Tuple, torch.Size,TensorShape)], dtype=None, requires_grad=False):
     """Instantiates an all-zeros tensor and returns it.
 
     Args
@@ -3304,10 +3326,14 @@ def zeros(shape, dtype=Dtype.float32, requires_grad=False):
 
     {{np_implementation}}
     """
+    if isinstance(shape,TensorShape):
+        shape=shape.dims
+    if dtype is None:
+        dtype= _float_dtype
     return torch.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 @numpy_compatible
-def zeros_like(a, dtype=Dtype.float32, requires_grad=False):
+def zeros_like(a, dtype=None, requires_grad=False):
     """Instantiates an all-zeros variable of the same shape as another tensor.
 
     Args
@@ -3326,10 +3352,12 @@ def zeros_like(a, dtype=Dtype.float32, requires_grad=False):
 
     {{np_implementation}}
     """
+    if dtype is None:
+        dtype=a.dtype
     return torch.zeros(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
 
 
-def eye(shape, dtype=Dtype.float32, requires_grad=None):
+def eye(shape:Union[(List, Tuple, torch.Size,TensorShape)], dtype=None, requires_grad=None):
     """Instantiate an identity matrix and returns it.
 
     Args
@@ -3347,13 +3375,18 @@ def eye(shape, dtype=Dtype.float32, requires_grad=None):
             [0., 0., 1., 0.]])
 
     """
+    if isinstance(shape,TensorShape):
+        shape=shape.dims
+    if dtype is None:
+        dtype= _float_dtype
+
     if len(shape) == 2:
         return torch.eye(shape[0], shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     else:
         raise ValueError('input tensor must have exactly two axe.')
 
 @numpy_compatible
-def eye_like(a, dtype=Dtype.float32, requires_grad=False):
+def eye_like(a, dtype=None, requires_grad=False):
     """
     Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
     matrix, ``x`` must have exactly two axes (counting both dynamic and static axes).
@@ -3373,6 +3406,8 @@ def eye_like(a, dtype=Dtype.float32, requires_grad=False):
             [0., 0., 1., 0.]])
 
     """
+    if dtype is None:
+        dtype = a.dtype
     if a.ndim == 2:
         return torch.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
     else:
@@ -3616,7 +3651,7 @@ def index_select(x:Tensor, axis:int, indices:Tensor):
 
     """
     num_class=int_shape(x)[axis]
-    if reduce_sum(greater_equal(indices,num_class,dtype=dtype.float32)):
+    if reduce_sum(greater_equal(indices,num_class,dtype=_float_dtype)):
         raise  ValueError('Number of class are {0}, indices should not out of the range.'.format(num_class))
     return torch.index_select(x, dim=axis, index=indices)
 
@@ -3723,7 +3758,7 @@ def random_choice(x: Tensor,n:int=1):
 
 
 
-def random_normal(shape, mean=0.0, std=1.0, dtype=Dtype.float32, seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype=None, seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3762,9 +3797,10 @@ def random_normal(shape, mean=0.0, std=1.0, dtype=Dtype.float32, seed=None):
         set_seed(seed)
         if dtype is not None:
             dtype = str2dtype(dtype)
-    if dtype is not None:
-        return cast(torch.normal(mean=mean, std=std, size=shape), cast_dtype=dtype)
-    return cast(torch.normal(mean=mean, std=std, size=shape), cast_dtype=torch.float32)
+    if dtype is None:
+        dtype=_float_dtype
+    return cast(torch.normal(mean=mean, std=std, size=shape), cast_dtype=dtype)
+
 
 
 @numpy_compatible
@@ -3820,7 +3856,7 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=None, seed=None):
 
 
 
-def random_uniform(shape, min_value=0.0, max_value=None, dtype=Dtype.float32, seed=None):
+def random_uniform(shape, min_value=0.0, max_value=None, dtype=None, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3888,18 +3924,15 @@ def random_uniform(shape, min_value=0.0, max_value=None, dtype=Dtype.float32, se
         set_seed(seed)
         if dtype is not None:
             dtype = str2dtype(dtype)
-    if dtype is not None:
-        t=zeros(shape=shape,dtype=torch.float32)
-        t.uniform_(min_value, max_value)
-        return t.to(dtype)
-    else:
-        t = zeros(shape=shape, dtype=torch.float32)
-        t.uniform_(min_value, max_value)
-        return t
+    if dtype is None:
+        dtype=_float_dtype
+    t=zeros(shape=shape,dtype=dtype)
+    t.uniform_(min_value, max_value)
+    return t
 
 
 @numpy_compatible
-def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=Dtype.float32, seed=None):
+def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=None, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3967,15 +4000,11 @@ def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=Dtype.float32, se
         set_seed(seed)
         if dtype is not None:
             dtype = str2dtype(dtype)
-    if dtype is not None:
-        t=torch.zeros(int_shape(x),dtype=torch.float32)
-        t.uniform_(min_value, max_value)
-        return t.to(dtype)
-    else:
-        t = torch.zeros(int_shape(x), dtype=torch.float32)
-        t.uniform_(min_value, max_value)
-
-        return t
+    if dtype is None:
+        dtype=x.dtype
+    t=torch.zeros(int_shape(x),dtype=dtype)
+    t.uniform_(min_value, max_value)
+    return t
 
 
 @numpy_compatible
@@ -4131,7 +4160,7 @@ def rgb2hsv(rgb:Tensor):
 
     # -- H channel
     # red is max
-    maxc_tmp = equal(out_v, rgb, dtype=Dtype.float32)
+    maxc_tmp = equal(out_v, rgb, dtype=_float_dtype)
     _, max_indices = rgb.copy().max(dim=axis)
     out_h = None
     if ndim(rgb) == 3:
@@ -5315,6 +5344,7 @@ _FUN_NAMES = [
 for target_fun_name, source_fun in _FUN_NAMES:
     if not hasattr(Tensor, target_fun_name):
         setattr(Tensor, target_fun_name, source_fun)
-    elif target_fun_name=="to":
+    elif target_fun_name in["to","float","int","long","sum","mean"]:
         setattr(Tensor, target_fun_name, source_fun)
 del _FUN_NAMES
+

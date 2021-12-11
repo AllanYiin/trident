@@ -241,8 +241,8 @@ class Adam(Optimizer):
 
                 G_grad = exp_avg / denom
                 if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(G_grad.size())) > 1:
-                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
+                    if ndim(G_grad) > 1:
+                        G_grad.add_(-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True))
 
                 p.data.add_(G_grad, alpha=-step_size)
                 if half_precision:
@@ -1411,18 +1411,20 @@ class RangerLars(Optimizer):
                 update = zeros_like(p_data)
                 if N_sma >= 5:
                     denom = exp_avg_sq.sqrt().add_(group['eps'])
-                    update.addcdiv_(exp_avg, denom, value=step_size)
+
+                    G_grad = (exp_avg/denom) * step_size
                 else:
-                    update.add_(exp_avg, alpha=step_size)
+                    G_grad=exp_avg*step_size
+
 
                 # if group['weight_decay'] != 0:
                 #     update.add_(group['weight_decay'], p_data)
                 if group['weight_decay'] != 0:
-                    grad = grad.add(p, alpha=group['weight_decay'])
+                    G_grad = G_grad.add(p, alpha=group['weight_decay'])
 
                 if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(grad.size())) > 1:
-                        grad.add_(-grad.mean(dim=tuple(range(1, len(list(grad.size())))), keepdim=True))
+                    if ndim(G_grad)> 1:
+                        G_grad=G_grad-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
                 radam_norm = update.pow(2.0).sum().sqrt()
                 weight_norm = p.data.pow(2.0).sum().sqrt()
@@ -1655,7 +1657,7 @@ class AdaBelief(Optimizer):
     reference: AdaBelief Optimizer, adapting stepsizes by the belief in observed gradients, NeurIPS 2020
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-16,
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7,
                  weight_decay=0, amsgrad=False, weight_decouple=True, fixed_decay=False, rectify=True,
                  degenerated_to_sgd=True, gradient_centralization=None,**kwargs):
         if not 0.0 <= lr:
@@ -1769,8 +1771,8 @@ class AdaBelief(Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
 
                 if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                    if ndim(grad)> 3:
+                        grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
 
                 state['step'] += 1
                 bias_correction1 = 1 - beta1 ** state['step']
@@ -1829,8 +1831,9 @@ class AdaBelief(Optimizer):
 
 
                     if self.gradient_centralization in ['all', 'gc']:
-                        if len(list(G_grad.size())) > 1:
-                            G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
+                        if ndim(G_grad) > 1:
+                            G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
+
 
                     if any_abnormal_number(p_data_fp32):
                         sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
@@ -1993,8 +1996,8 @@ class RangerAdaBelief(Optimizer):
                 # if grad.dim() > self.gc_gradient_threshold:
                 #    grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
                 if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                    if ndim(grad)> 3:
+                        grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
 
                 state['step'] += 1
 
@@ -2046,8 +2049,8 @@ class RangerAdaBelief(Optimizer):
                 # GC operation
 
                 if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(G_grad.size())) > 1:
-                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
+                    if ndim(G_grad)> 1:
+                        G_grad=G_grad-G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
 
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
@@ -2092,7 +2095,7 @@ class DiffGrad(Optimizer):
         https://openreview.net/forum?id=ryQu7f-RZ
     """
 
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, gradient_centralization=None):
+    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-7, weight_decay=0, gradient_centralization=None):
         if not 0.0 <= lr:
             raise ValueError("Invalid learning rate: {}".format(lr))
         if not 0.0 <= eps:
@@ -2153,8 +2156,9 @@ class DiffGrad(Optimizer):
 
 
                 if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                    if ndim(grad)> 3:
+                        grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
+
                 state['step'] += 1
 
                 if group['weight_decay'] != 0:
@@ -2259,8 +2263,8 @@ class Lamb(Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
                 if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                    if ndim(grad)> 3:
+                        grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
 
                 state['step'] += 1
 

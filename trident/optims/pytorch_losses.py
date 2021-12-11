@@ -606,7 +606,7 @@ class CrossEntropyLoss(_ClassificationLoss):
         tensor(1.4518)
         """
 
-        sample_weight = cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)
+        sample_weight = (cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
 
 
 
@@ -625,7 +625,7 @@ class CrossEntropyLoss(_ClassificationLoss):
             #print(10, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
             if not self.is_logsoftmax and reduce_min(output)>=0:
                 output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
-
+            target = target.detach()
             return nn.functional.nll_loss(output,target,sample_weight,reduction='none')+gather_unbalance_weight
         else:
             unbalance_weight=ones(tuple([1]*(ndim(output)-1)+[ self.num_classes]))
@@ -636,6 +636,7 @@ class CrossEntropyLoss(_ClassificationLoss):
             if not self.is_logsoftmax and reduce_min(output)>=0:
                 output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
             sample_weight = expand_as(sample_weight, output)
+            target=target.detach()
             return -reduce_sum(target * output * sample_weight*unbalance_weight, axis=1)
 
 
@@ -1089,11 +1090,11 @@ class DiceLoss(_ClassificationLoss):
         #     print('{0} calculate starting'.format(self.name))
         if self.is_logsoftmax:
             output =clip(exp(clip(output,max=0)),1e-7,1-1e-7)
-
+        #
         # if any_abnormal_number(output):
         #     print('{0} after exp'.format(self.name))
-        #print(11, 'output_exp', output_exp.shape, 'abnormal:', any_abnormal_number(output_exp))
-        sample_weight = self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device())
+        target=target.detach()
+        sample_weight = (self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device())).detach()
 
         intersection = reduce_sum(target * output, axis=-1)
         # if any_abnormal_number(intersection):
@@ -1106,10 +1107,16 @@ class DiceLoss(_ClassificationLoss):
         #     print('{0} after den2'.format(self.name))
 
         sample_weight = expand_as(sample_weight, intersection).detach()
-        dice = 1.0 -( (2.0 * (intersection*sample_weight).sum(1) + self.smooth) / (den1.sum(1)  + den2.sum(1)  + self.smooth)).mean()
+
+        if output.shape[1]==2:
+            dice = (1.0 - (2.0 * (intersection * sample_weight)[:,1:].sum(1) + self.smooth) / (den1[:,1:].sum(1) + den2[:,1:].sum(1) + self.smooth))
+        else:
+
+            dice = 1.0 -  torch.div((2.0 * (intersection * sample_weight).sum(1) + self.smooth) , (den1.sum(1) + den2.sum(1) + self.smooth))
+
         # if any_abnormal_number(den2):
         #     print('{0} after dice {1}'.format(self.name,dice))
-        #print(12, 'dice', dice.shape, 'abnormal:', any_abnormal_number(dice))
+
         return dice
 
 
@@ -1544,30 +1551,25 @@ class IoULoss(_ClassificationLoss):
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_ratio=3.5,  input_names=None, output_names=None,name='lou_loss'):
         super(IoULoss, self).__init__(raxis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
-                                      label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, name=name)
-        self.need_target_onehot = False
+                                      label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,input_names=input_names ,output_names=output_names,name=name)
+        self.need_target_onehot = True
         self.is_multiselection = False
         self.is_logsoftmax = False
         self._built = True
 
     def calculate_loss(self, output, target, **kwargs):
-        _dtype = output.dtype
         if self.is_logsoftmax:
-            output = clip(exp(output), 1e-8, 1 - 1e-8)
-            self.from_logits = True
-        if not self.from_logits:
-            output = softmax(output, self.axis)
-        if target.dtype != Dtype.int64 or self.is_target_onehot == True:
-            target = argmax(target, axis=self.axis)
-        batch_size = int_shape(output)[0]
-        output = argmax(output, axis=self.axis)
+            output =clip(exp(clip(output,max=0)),1e-7,1-1e-7)
 
-        output_flat = output.reshape((batch_size, -1))
-        target_flat = target.reshape((batch_size, -1))
-        intersection = equal(output_flat, target_flat, dtype=_dtype).sum()
-        union = greater(greater(output_flat, 0, dtype=_dtype) + greater(target_flat, 0, dtype=_dtype), 0, dtype=_dtype).sum().clamp(min=1)
-        loss = 1 - (intersection / union)
-        return loss
+        sample_weight = (self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device()))
+        target=target.detach()
+        sample_weight = expand_as(sample_weight, output).detach()
+        intersection = reduce_sum(target * output*sample_weight, axis=-1)
+        union = reduce_sum(output*sample_weight, axis=-1)+reduce_sum(target, axis=-1)-intersection
+
+
+        iou=( intersection).sum(1) / (union + 1e-7).sum(1)
+        return (1-iou).mean()
 
 
 class SoftIoULoss(Loss):

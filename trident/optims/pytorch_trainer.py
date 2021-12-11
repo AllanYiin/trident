@@ -40,7 +40,6 @@ from trident.backend.pytorch_ops import *
 from trident.backend import model
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
-from trident.callbacks import UnfreezeModelCallback, LambdaCallback
 from trident.backend.opencv_backend import array2image, image2array
 
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
@@ -347,41 +346,42 @@ class Model(model.ModelBase):
         else:
             return []
 
-    def complie(self, optimizer="Adam",
+    def complie(self, optimizer="AdaBelief",
                 loss=None,
                 metrics=None,
                 loss_weights=None,
                 **kwargs
                 ):
         self.with_optimizer(optimizer, lr=2e-3, betas=(0.9, 0.999))
-        if loss is not None:
-            if isinstance(loss, str) or callable(loss) or inspect.isfunction(loss) or inspect.isclass(loss):
-                loss_weights = 1.0 if loss_weights is None or not isinstance(loss, numbers.Number) else loss_weights
-                self.with_loss(loss, loss_weight=loss_weights)
-            elif isinstance(loss, list):
-                if loss_weights is not None and isinstance(loss_weights, list) and len(loss_weights) == len(loss):
-                    for k in range(len(loss)):
-                        loss_item = loss[k]
-                        weight = loss_weights[k] if isinstance(loss_weights[k], numbers.Number) else 1.0
-                        self.with_loss(loss_item, loss_weight=weight)
-                else:
-                    for loss_item in loss:
-                        self.with_loss(loss_item)
+        if loss is not None and (isinstance(loss, str) or callable(loss) or inspect.isfunction(loss) or inspect.isclass(loss)):
+            self.with_loss(loss, loss_weight=loss_weights)
+        else:
+            if loss is None:
+                loss = [CrossEntropyLoss]
+            elif not  isinstance(loss, (tuple, list, dict) ):
+                loss=[loss]
+
+            if loss_weights is None :
+                loss_weights=[1]*len(loss)
+            elif isinstance(loss_weights,numbers.Number):
+                loss_weights = [loss_weights] * len(loss)
+            elif len(loss_weights)!=len(loss):
+                loss_weights = [1] * len(loss)
+
+            if isinstance(loss,  (list, tuple) ):
+                for l,w in zip(loss,loss_weights):
+                    self.with_loss(l, loss_weight=w)
 
             elif isinstance(loss, dict):
-                if loss_weights is not None and isinstance(loss_weights, dict):
-                    for k, v in loss.items():
-                        if k in loss_weights:
-                            weight = loss_weights[k] if isinstance(loss_weights[k], numbers.Number) else 1.0
-                            self.with_loss(v, loss_weight=weight, name=k)
-                        else:
-                            self.with_loss(v, loss_weight=1.0, name=k)
-                else:
-                    for k, v in loss.items():
-                        self.with_loss(v, loss_weight=1., name=k)
-        if metrics is not None:
-            if isinstance(metrics, str) or callable(metrics) or inspect.isfunction(metrics) or inspect.isclass(metrics):
-                self.with_metric(metrics)
+                for k,v,w in zip(loss.items(),loss_weights):
+                    self.with_loss(v, loss_weight=w,name=k)
+
+
+        if metrics is not None and (isinstance(metrics, str) or callable(metrics) or inspect.isfunction(metrics) or inspect.isclass(metrics)):
+            self.with_metric(metrics)
+        else:
+            if metrics is None:
+                pass
             elif isinstance(metrics, list):
                 for metric in metrics:
                     self.with_metric(metric)
@@ -1044,56 +1044,57 @@ class Model(model.ModelBase):
                 self._model.eval()
                 self._model.cpu()
 
-                temfolder = tempfile.gettempdir()
-                tempfilename = filename + '_' + str(uuid.uuid4().node)
-                temppath = os.path.join(temfolder, tempfilename + ext)
+                #temfolder = tempfile.gettempdir()
+                with tempfile.TemporaryDirectory() as temfolder:
+                    tempfilename = filename + '_' + str(uuid.uuid4().node)
+                    temppath = os.path.join(temfolder, tempfilename + ext)
 
-                try:
-                    with open(temppath, 'wb') as f:
-                        torch.save({
-                            'state_dict': self._model.state_dict(),
-                            'backend': 'pytorch',
-                            'trident_version': __version__,
-                            'pytorch_version': torch.__version__,
-                            'signature': self._model.signature
-                        }, f)
+                    try:
+                        with open(temppath, 'wb') as f:
+                            torch.save({
+                                'state_dict': self._model.state_dict(),
+                                'backend': 'pytorch',
+                                'trident_version': __version__,
+                                'pytorch_version': torch.__version__,
+                                'signature': self._model.signature
+                            }, f)
 
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        shutil.move(temppath, save_path)
-                        #os.rename(move_path, save_path)
-                    else:
-                        shutil.move(temppath, save_path)
-
-                except Exception as e:
-                    ctx.print(e)
-                    if os.path.exists(temppath):
                         if os.path.exists(save_path):
-                            shutil.move(save_path, save_path+'._')
-                        shutil.move(temppath, save_path)
+                            os.remove(save_path)
+                            shutil.move(temppath, save_path)
+                            #os.rename(move_path, save_path)
+                        else:
+                            shutil.move(temppath, save_path)
+
+                    except Exception as e:
+                        ctx.print(e)
+                        if os.path.exists(temppath):
+                            if os.path.exists(save_path):
+                                shutil.move(save_path, save_path+'._')
+                            shutil.move(temppath, save_path)
 
 
-                ext = '.pth'
-                save_path = save_path.replace('.pth.tar', '.pth')
-                tempfilename2 = filename + '_' + str(uuid.uuid4().node)
-                temppath2 = os.path.join(temfolder, tempfilename2 + ext)
+                    ext = '.pth'
+                    save_path = save_path.replace('.pth.tar', '.pth')
+                    tempfilename2 = filename + '_' + str(uuid.uuid4().node)
+                    temppath2 = os.path.join(temfolder, tempfilename2 + ext)
 
-                try:
-                    with open(temppath2, 'wb') as f:
-                        save(self._model, f)
+                    try:
+                        with open(temppath2, 'wb') as f:
+                            save(self._model, f)
 
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        shutil.move(temppath2, save_path)
-                        #os.rename(move_path2, save_path)
-                    else:
-                        shutil.move(temppath2, save_path)
-                except Exception as e:
-                    ctx.print(e)
-                    if os.path.exists(temppath2):
                         if os.path.exists(save_path):
-                            shutil.move(save_path, save_path+'._')
-                        shutil.move(temppath2, save_path)
+                            os.remove(save_path)
+                            shutil.move(temppath2, save_path)
+                            #os.rename(move_path2, save_path)
+                        else:
+                            shutil.move(temppath2, save_path)
+                    except Exception as e:
+                        ctx.print(e)
+                        if os.path.exists(temppath2):
+                            if os.path.exists(save_path):
+                                shutil.move(save_path, save_path+'._')
+                            shutil.move(temppath2, save_path)
 
                 self._model.to(get_device())
                 self._model.train()
@@ -1180,37 +1181,38 @@ class Model(model.ModelBase):
             #     dynamic_axes[inp] = [0]
             # for out in self.outputs.key_list:
             #     dynamic_axes[out] = [0]
-            temfolder = tempfile.gettempdir()
-            tempfilename = filename + '_' + str(uuid.uuid4().node)
-            temppath = os.path.join(temfolder, tempfilename + ext)
+            #temfolder = tempfile.gettempdir()
+            with tempfile.TemporaryDirectory() as temfolder:
+                tempfilename = filename + '_' + str(uuid.uuid4().node)
+                temppath = os.path.join(temfolder, tempfilename + ext)
 
-            try:
-                ctx.print('Export to onnx file starting!')
-                torch.onnx.export(self._model,  # model being run
-                                  dummy_input,  # model input (or a tuple for multiple inputs)
-                                  f=temppath,  # where to save the model (can be a file or file-like object)
-                                  input_names=self.signature.inputs.key_list,  # the model's input names
-                                  output_names=self.signature.outputs.key_list,  # the model's output names
-                                  # _retain_param_name=True,  # store the trained parameter weights inside the model file
-                                  # enable_onnx_checker=True,
-                                  opset_version=9  # the ONNX version to export the model to
+                try:
+                    ctx.print('Export to onnx file starting!')
+                    torch.onnx.export(self._model,  # model being run
+                                      dummy_input,  # model input (or a tuple for multiple inputs)
+                                      f=temppath,  # where to save the model (can be a file or file-like object)
+                                      input_names=self.signature.inputs.key_list,  # the model's input names
+                                      output_names=self.signature.outputs.key_list,  # the model's output names
+                                      # _retain_param_name=True,  # store the trained parameter weights inside the model file
+                                      # enable_onnx_checker=True,
+                                      opset_version=11  # the ONNX version to export the model to
 
-                                  )
-                ctx.print('Export to onnx file finished! !')
+                                      )
+                    ctx.print('Export to onnx file finished! !')
 
-                if os.path.exists(save_path):
-                    os.remove(save_path)
-                    shutil.move(temppath, save_path)
-                else:
-                    shutil.move(temppath, save_path)
-                self._model.train()
-
-            except Exception as e:
-                ctx.print(e)
-                if os.path.exists(temppath):
                     if os.path.exists(save_path):
-                        shutil.move(save_path, save_path + '._')
-                    shutil.move(temppath, save_path)
+                        os.remove(save_path)
+                        shutil.move(temppath, save_path)
+                    else:
+                        shutil.move(temppath, save_path)
+                    self._model.train()
+
+                except Exception as e:
+                    ctx.print(e)
+                    if os.path.exists(temppath):
+                        if os.path.exists(save_path):
+                            shutil.move(save_path, save_path + '._')
+                        shutil.move(temppath, save_path)
 
             import onnx
             from onnx import shape_inference

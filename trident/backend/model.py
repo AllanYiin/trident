@@ -5,6 +5,7 @@ from __future__ import print_function
 
 import builtins
 # import pysnooper
+from torch import autograd
 import copy
 import inspect
 import json
@@ -351,7 +352,7 @@ class ModelBase(object):
     def _initial_graph(self, inputs=None, input_shape=None, output=None):
         pass
 
-    def complie(self, optimizer="Ranger",
+    def complie(self, optimizer="AdaBelief",
                 loss=None,
                 metrics=None,
                 loss_weights=None,
@@ -382,8 +383,31 @@ class ModelBase(object):
             ):
         raise NotImplementedError
 
+
+    def fit_generator(self,
+            generator,
+            batch_size=None,
+            epochs=1,
+            verbose=1,
+            callbacks=None,
+            validation_split=0.0,
+            validation_data=None,
+            shuffle=True,
+            class_weight=None,
+            sample_weight=None,
+            initial_epoch=0,
+            steps_per_epoch=None,
+            validation_steps=None,
+            validation_batch_size=None,
+            validation_freq=1,
+            max_queue_size=10,
+            workers=1,
+            use_multiprocessing=False,
+            ):
+        raise NotImplementedError
+
     def __getattr__(self, name):
-        if name in ['_input_shape', '_output_shape', '_class_names', 'class_names', 'output_fn', 'optimizer']:
+        if name in ['training_context','_input_shape', '_output_shape', '_class_names', 'class_names', 'output_fn', 'optimizer']:
             return self.__dict__[name]
         elif name in ['reverse_preprocess_flow']:
             return self.__getattribute__(name)
@@ -395,7 +419,7 @@ class ModelBase(object):
                 elif is_tensor(_model):
                     object.__setattr__(self, name, 'model_' + str(uuid.uuid4().node))
                     return self.__dict__[name]
-        if name == 'signature' or name == '_signature':
+        elif name == 'signature' or name == '_signature':
             _model = self.__dict__['_model']
             if _model is not None and hasattr(_model, '_signature'):
                 return _model._signature
@@ -654,8 +678,11 @@ class ModelBase(object):
                 model.train()
 
             signature = model.signature
-
+            # if any_abnormal_number(data['image']):
+            #     print('{0} before calculate forward'.format(''))
             output = try_map_args_and_call(model, data, data_feed, self.is_autocast_enabled)
+            # if any_abnormal_number(output):
+            #     print('{0} after calculate forward'.format(''))
             if isinstance(output, (list, tuple)):
                 for i in range(len(output)):
                     data[signature.outputs.key_list[i]] = output[i]
@@ -679,13 +706,12 @@ class ModelBase(object):
             callback.on_loss_calculation_start(self.training_context)
 
     def do_on_loss_calculation_end(self):
+
         for callback in self.callbacks:
             callback.on_loss_calculation_end(self.training_context)
 
     def do_calculate_losses(self):
         self.do_on_loss_calculation_start()
-        # confirm singleton
-        # output=unpack_singleton(output)
 
         # losss
         for k, v in self._losses.items():
@@ -696,6 +722,8 @@ class ModelBase(object):
                     if k in self.loss_weights:
                         loss_weight = self.loss_weights[k]
                     loss_weight = to_tensor(loss_weight, 'float32')
+                    #print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
+                    #print(self.train_data.value_list[-1])
                     this_loss = loss_weight * try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
                                                                     self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
 
@@ -712,8 +740,8 @@ class ModelBase(object):
                         if hasattr(v, 'as_metric') and v.as_metric == True:
                             self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(overall_loss))
 
-                        if self.training_context['is_collect_data']:
-                            self.training_context['losses'].collect(k, self.training_context['steps'], overall_loss)
+
+                        self.training_context['tmp_losses'].collect(k, self.training_context['steps'], overall_loss)
 
                     else:
                         if any_abnormal_number(this_loss):
@@ -911,10 +939,11 @@ class ModelBase(object):
 
         self.do_on_progress_end()
 
-    # @pysnooper.snoop()
+    #@pysnooper.snoop()
     def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch=None, done=False,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
                     is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False, is_out_sample_evaluation=False, **kwargs):
+        #with autograd.detect_anomaly():
         try:
 
             self.training_context['current_epoch'] = current_epoch
@@ -952,13 +981,14 @@ class ModelBase(object):
             self.batch_loss_history.collect('epoch', self.training_context['steps'], current_epoch)
             self.batch_metric_history.collect('epoch', self.training_context['steps'], current_epoch)
             is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if self.training_context['total_batch'] is not None else done
-
+            # print('step:{0}'.format(self.training_context['steps']))
             self.do_on_batch_start()
             for callback in self.callbacks:
                 callback.on_batch_start(self.training_context)
 
             train_data, test_data = self.do_on_data_received(train_data, test_data)
-
+            # if any_abnormal_number(train_data.value_list[0]):
+            #     print('{0} after data_received'.format(''))
             for callback in self.callbacks:
                 callback.on_data_received(self.training_context)
 
@@ -977,7 +1007,10 @@ class ModelBase(object):
                     PrintException()
 
             # write output in to data
+            #print(-1, 'output',self.training_context['train_data'].value_list[-1].shape, 'abnormal:', any_abnormal_number(self.training_context['train_data'].value_list[-1]))
 
+            # if any_abnormal_number(train_data['output']):
+            #     print('{0} before calculate loss'.format(''))
             self.do_calculate_losses()
             self.do_calculate_regularizations()
 
@@ -1106,7 +1139,7 @@ def progress_bar(step_time, current, total, msg=None, name=''):
     # cur_len = builtins.max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
     # rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
 
-    L = ['{0}'.format(name) + ' ', ' Step: {0:<8s}'.format(format_time(step_time))]
+    L = ['{0}'.format(name) , ' Step: {0:<8s}'.format(format_time(step_time))]
     # L.append(' | Tot: {0:<12s}'.format(format_time(tot_time)))
     if msg:
         L.append(' | ' + msg)

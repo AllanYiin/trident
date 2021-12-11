@@ -139,7 +139,9 @@ if torch.cuda.is_available() and get_device() == 'cuda':
     torch.backends.cudnn.enabled = True
     torch.backends.cudnn.benchmark = True
     torch.backends.cudnn.deterministic = False
+    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
     os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+
 
 
 def load(f):
@@ -1095,8 +1097,20 @@ class Layer(nn.Module):
             bw_hook = hooks.BackwardHook(self, full_backward_hooks)
             input = bw_hook.setup_input_hook(input)
 
+        # orig_input=[inp.copy().detach() for inp in input]
+        # is_abnormal=any([any_abnormal_number(inp)for inp in orig_input])
+        # if len(self.weights)>0 and self.weights[0] is not None and not self.weights[0].requires_grad:
+        #     print(self.relative_name,'weights requires_grad',self.weights[0].requires_grad)
 
         result = forward_call(*input, **kwargs)
+        # if not is_abnormal and any([any_abnormal_number(inp)for inp in result]):
+        #     print('abnormal_number',self.relative_name,'before:',is_abnormal)
+        #     print('orig_input',[inp[0,:] for inp in orig_input])
+        #     print('result', [inp[0,:] for inp in result])
+        #     print('weight',list(self.named_parameters()))
+        #     print('activation',self.activation)
+        #     out=forward_call(*orig_input, **kwargs)
+
         result = unpack_singleton(result)
 
 

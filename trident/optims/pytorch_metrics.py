@@ -15,7 +15,7 @@ from torch.autograd import Variable
 from trident.backend.common import get_session, addindent, get_time_suffix, get_class, get_function, camel2snake
 from trident.backend.pytorch_ops import *
 from trident.data.mask_common import mask2trimap
-
+from trident.optims.losses import _check_logsoftmax_logit
 __all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
 # def accuracy(input, target,axis=1):
@@ -53,12 +53,12 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1,axis:int=1,ignore_index:Un
     if (ndim(output_tensor) >= 1 and 'float' in str(output_tensor.dtype) and output_tensor.min() >= 0 and output_tensor.max() <= 1):
         is_logsoftmax = False
         from_logits = True
-        output_tensor = clip(output_tensor, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_tensor, min=1e-7, max=1 - 1e-7)
 
     elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
         is_logsoftmax = True
         from_logits = True
-        output_tensor =  clip(output_exp, min=1e-8, max=1 - 1e-8)
+        output_tensor =  clip(output_exp, min=1e-7, max=1 - 1e-7)
     else:
         is_logsoftmax = False
         from_logits = False
@@ -109,12 +109,12 @@ def recall(output:Tensor, target:Tensor, axis=1,ignore_index=0):
     if (ndim(output_tensor) >= 1 and 'float' in str(output_tensor.dtype) and output_tensor.min() >= 0 and output_tensor.max() <= 1):
         is_logsoftmax = False
         from_logits = True
-        output_tensor = clip(output_tensor, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_tensor, min=1e-7, max=1 - 1e-7)
 
     elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
         is_logsoftmax = True
         from_logits = True
-        output_tensor =  clip(output_exp, min=1e-8, max=1 - 1e-8)
+        output_tensor =  clip(output_exp, min=1e-7, max=1 - 1e-7)
     else:
         is_logsoftmax = False
         from_logits = False
@@ -248,11 +248,18 @@ def alpha_pixel_accuracy(output, alpha):
 
 @torch.no_grad()
 def iou(output:Tensor, target:Tensor):
-    output_tensor = output.clone().detach()
-    target_tensor = target.clone().detach()
+    output_tensor = output.clone().detach().view(output.size(0),output.size(1),-1)
+    target_tensor=None
+    if ndim(output)==ndim(target)+1:
+        target_tensor = target.clone().detach().view(target.size(0),-1)
+    elif ndim(output)==ndim(target):
+        target_tensor = target.clone().detach().view(target.size(0),target.size(1),-1)
+        target_tensor=argmax(target_tensor,1)
+
+    if _check_logsoftmax_logit(output_tensor):
+        output_tensor=exp(output_tensor)
     if output_tensor.dtype != torch.int64:
         output_tensor = argmax(output_tensor, axis=1).squeeze()
-
     intersection =( (output_tensor > 0) * (output_tensor == target_tensor)).sum().float()
     union=((output_tensor+target_tensor)>0).sum().float()
 
