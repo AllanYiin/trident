@@ -29,17 +29,19 @@ from trident.backend.common import *
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import sigmoid
-from trident.optims.losses import Loss,_check_logsoftmax_logit
+from trident.optims.losses import Loss,_check_logsoftmax_logit,_check_logit
 
 # from trident.optims.pytorch_trainer import Model
 
-_session = get_session()
+
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 __all__ = ['_ClassificationLoss', 'MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
-           'ExponentialLoss', 'ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss', 'WingLoss', 'AdaptiveWingLoss',
+           'ExponentialLoss', 'ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss', 'WingLoss', 'AdaptiveWingLoss','KLDivergenceLoss',
            'IoULoss', 'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss', 'TripletMarginLoss',
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
+ctx=context._context()
+_float_dtype=Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda' else Dtype.float32
 
 def _calculate_loss_unimplemented(self, output: Tensor, target: Tensor) -> None:
     raise NotImplementedError
@@ -88,7 +90,7 @@ class _ClassificationLoss(Loss):
         self.is_multiselection = False
         self.is_target_onehot = False
         self.from_logits = from_logits
-        self.is_logsoftmax = False
+        self.is_logsoftmax =None
         self.ignore_index = ignore_index
         self.ignore_index_weight = None
         self.auto_balance = auto_balance
@@ -129,10 +131,9 @@ class _ClassificationLoss(Loss):
                     unique = to_list(to_numpy(unique))
                     counts = to_numpy(counts)
                     if len(unique) != builtins.max(unique) + 1:
-                        counts = np.array([counts[unique.index(i)] if i in unique else 0 for i in range(builtins.max(unique) + 1)])
-                    reweights = np.clip(counts, 1, np.inf) / np.sum(counts).astype(np.float32)
+                        counts = np.array([counts[unique.index(i)] if i in unique else 1 for i in range(len(unique))])
+                    reweights =counts / np.sum(counts).astype(np.float32)
                     reweights1 = np.max(reweights) / reweights
-                    reweights1[reweights == 1] = 1
                     self.label_statistics = reweights1
 
                 elif ds is not None and ds.__class__.__name__ == 'TextSequenceDataset':
@@ -201,7 +202,7 @@ class _ClassificationLoss(Loss):
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
 
 
-        if not self.is_logsoftmax:
+        if output.max()>0 or self.is_logsoftmax is None or not self.is_logsoftmax:
             if reduce_min(output) >= 0 :
                 self.is_logsoftmax = False
                 sum_output=reduce_sum(output,axis=self.axis,keepdims=True)
@@ -249,12 +250,11 @@ class _ClassificationLoss(Loss):
         if target.dtype == Dtype.long and self.need_target_onehot == True and self.is_target_onehot == False:
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(get_device())
 
-            target.require_grads = False
+
             self.is_target_onehot = True
             if self.label_smooth:
                 target = clip(target + random_uniform_like(target,-0.2,0.2).to(target.device),1e-7,1.1)
-                self.is_target_onehot = True
-            target.require_grads = False
+        target = target.detach()
 
         if self.enable_ohem:
             output, target = self._do_ohem(output, target)
@@ -613,29 +613,30 @@ class CrossEntropyLoss(_ClassificationLoss):
         if not self.need_target_onehot:
             if self.is_target_onehot and target.dtype != Dtype.long:
                 target = argmax(target, self.axis)
-            #print(9, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
 
             unbalance_weight = zeros(tuple([1]*(ndim(target)-1)+[ self.num_classes]))
             if self.auto_balance and self.label_statistics is not None:
                 if int_shape(output)[self.axis] == len(self.label_statistics):
-                    unbalance_weight =to_tensor(np.log(clip(self.label_statistics.copy(), min=1e-7)))
+                    unbalance_weight =to_tensor(np.log(self.label_statistics.copy())).to(_float_dtype).detach()
 
             target_shape=target.shape
             gather_unbalance_weight=torch.index_select(unbalance_weight, -1, target.reshape((-1))).reshape(target_shape).detach()
-            #print(10, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
+
             if not self.is_logsoftmax and reduce_min(output)>=0:
                 output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
             target = target.detach()
             return nn.functional.nll_loss(output,target,sample_weight,reduction='none')+gather_unbalance_weight
+
         else:
             unbalance_weight=ones(tuple([1]*(ndim(output)-1)+[ self.num_classes]))
             if self.auto_balance and self.label_statistics is not None:
                 if self.num_classes== len(self.label_statistics):
-                    unbalance_weight= clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple([1]*(ndim(output)-1)+[ self.num_classes])),requires_grad=False), min=1e-7)
+                    unbalance_weight= clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple([1]*(ndim(output)-1)+[ self.num_classes]))), min=1).to(_float_dtype).detach()
 
             if not self.is_logsoftmax and reduce_min(output)>=0:
                 output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
             sample_weight = expand_as(sample_weight, output)
+            unbalance_weight= expand_as(unbalance_weight, output)
             target=target.detach()
             return -reduce_sum(target * output * sample_weight*unbalance_weight, axis=1)
 
@@ -832,7 +833,7 @@ class F1ScoreLoss(_ClassificationLoss):
     """
 
     def __init__(self, beta=1, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean',
-                 enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='CrossEntropyLoss'):
+                 enable_ohem=False, ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='F1ScoreLoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
                          label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self.beta = beta
@@ -922,39 +923,31 @@ class FocalLoss(_ClassificationLoss):
 
             """
 
-        sample_weight = cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)
-        sample_weight = sample_weight.reshape(tuple([1] * (ndim(output) - 1) + [self.num_classes])).detach()
-        alpha = torch.zeros(self.num_classes).to(output.device)
-        alpha[0] += self.alpha
-        alpha[1:] += (1 - self.alpha)
-        if ndim(output) > 2 and self.axis == 1:
-            output = output.transpose(1, 2)  # N,C,H*W => N,H*W,C
-            output = output.contiguous().view(-1, output.size(2))  # N,H*W,C => N*H*W,C
 
-        if not self.is_logsoftmax:
-            output=log_softmax(output)
-            output = clip(output, min=-12, max=-1e-7)
 
-        if self.is_target_onehot and target.dtype != Dtype.long:
-            target = argmax(target, self.axis)
-        target = target.view(-1, 1)
+        p=None
+        if self.is_logsoftmax and output.max()<=0:
+            p = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
+        elif not _check_logit(output):
+            p = torch.sigmoid(output)
+        else:
+            p=output
 
-        unbalance_weight = zeros(tuple([1] * (ndim(target) - 1) + [self.num_classes]))
-        if self.auto_balance and self.label_statistics is not None:
-            if int_shape(output)[self.axis] == len(self.label_statistics):
-                unbalance_weight = to_tensor(np.log(clip(self.label_statistics.copy(), min=1e-7)))
+        if not self.is_target_onehot or target.dtype == Dtype.long:
+            target = make_onehot(target,self.num_classes,1)
 
-        target_shape = target.shape
-        gather_unbalance_weight = torch.index_select(unbalance_weight, -1, target.reshape((-1))).reshape(target_shape).detach()
 
-        logpt = output
-        logpt = logpt.gather(1, target)
-        pt = logpt.data.exp()
+        ce_loss =binary_cross_entropy(p, target,from_logits=True)
+        p_t = p * target + (1 - p) * (1 - target)
+        loss = ce_loss * ((1 - p_t) **self.gamma)
 
-        loss = -1 * ((1 - pt) ** self.gamma) * logpt
-        alpha = alpha.gather(0, target.view(-1))
-        loss = loss * (alpha.view(-1, 1))
-        return loss
+        if self.alpha >= 0:
+            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
+            loss = alpha_t * loss
+        if ndim(loss)>=2:
+            return loss.sum(1)
+        else:
+            return loss
 
 
         # - \alpha(1 - softmax(x)[class ]) ^ gamma \log(softmax(x)[class])
@@ -990,7 +983,7 @@ class BCELoss(_ClassificationLoss):
                          label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self._built = True
         self.num_classes = None
-        self.is_logsoftmax = False
+        self.is_logsoftmax =None
         self.need_target_onehot = True
         self.is_target_onehot = False
 
@@ -1005,11 +998,31 @@ class BCELoss(_ClassificationLoss):
         Returns:
 
         """
+        sample_weight = (cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
+
+        unbalance_weight = ones(tuple([1] * (ndim(output) - 1) + [self.num_classes]))
+        if self.auto_balance and self.label_statistics is not None:
+            if self.num_classes == len(self.label_statistics):
+                unbalance_weight = clip(to_tensor(np.reshape(self.label_statistics.copy(), tuple([1] * (ndim(output) - 1) + [self.num_classes]))), min=1).to(_float_dtype).detach()
+
+
+
         if self.is_logsoftmax:
             output = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
+        elif _check_logit(output,axis=1):
+            pass
+        else:
+            output=torch.sigmoid(output)
+        loss= binary_cross_entropy(output, target, from_logits=True)
 
-        loss = binary_cross_entropy(output, target, from_logits=self.from_logits)
-        return loss
+        sample_weight = expand_as(sample_weight, loss)
+        unbalance_weight= expand_as(unbalance_weight, loss)
+        loss=loss*unbalance_weight*sample_weight
+        if ndim(loss)>=2:
+            return loss.sum(1)
+        else:
+            return loss
+
 
 
 class DiceLoss(_ClassificationLoss):
@@ -1070,7 +1083,7 @@ class DiceLoss(_ClassificationLoss):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
                          label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self.smooth = smooth
-        self.is_logsoftmax = False
+        self.is_logsoftmax =None
         self.need_target_onehot = True
         self.is_multiselection = False
         self._built = True
@@ -1097,22 +1110,19 @@ class DiceLoss(_ClassificationLoss):
         sample_weight = (self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device())).detach()
 
         intersection = reduce_sum(target * output, axis=-1)
-        # if any_abnormal_number(intersection):
-        #     print('{0} after intersection'.format(self.name))
+
         den1 = reduce_sum(output, axis=-1)
-        # if any_abnormal_number(den1):
-        #     print('{0} after den1'.format(self.name))
+
         den2 = reduce_sum(target, axis=-1)
-        # if any_abnormal_number(den2):
-        #     print('{0} after den2'.format(self.name))
+
 
         sample_weight = expand_as(sample_weight, intersection).detach()
 
         if output.shape[1]==2:
-            dice = (1.0 - (2.0 * (intersection * sample_weight)[:,1:].sum(1) + self.smooth) / (den1[:,1:].sum(1) + den2[:,1:].sum(1) + self.smooth))
+            dice = (1.0 - (2.0 * (intersection * sample_weight)[:,1:].sum(1) + self.smooth) / clip(den1[:,1:].sum(1) + den2[:,1:].sum(1) + self.smooth,min=1e-7))
         else:
 
-            dice = 1.0 -  torch.div((2.0 * (intersection * sample_weight).sum(1) + self.smooth) , (den1.sum(1) + den2.sum(1) + self.smooth))
+            dice = 1.0 -  torch.div((2.0 * (intersection * sample_weight).sum(1) + self.smooth) , clip(den1.sum(1) + den2.sum(1) + self.smooth,min=1e-7))
 
         # if any_abnormal_number(den2):
         #     print('{0} after dice {1}'.format(self.name,dice))
@@ -1120,14 +1130,14 @@ class DiceLoss(_ClassificationLoss):
         return dice
 
 
-class KLDivergenceLoss(_ClassificationLoss):
+class KLDivergenceLoss(_PairwiseLoss):
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_ratio=3.5, binding_dataset_symbol=None, input_names=None, output_names=None, name='KLDivergenceLoss'):
         super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
                          label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio, binding_dataset_symbol=binding_dataset_symbol ,  input_names=input_names, output_names=output_names, name=name)
         self._built = True
-        self.num_classes = 1
-        self.is_logsoftmax = False
+        self.num_classes =None
+        self.is_logsoftmax = None
         self.need_target_onehot = True
         self.is_target_onehot = False
 
@@ -1142,8 +1152,28 @@ class KLDivergenceLoss(_ClassificationLoss):
         Returns:
 
         """
+        sample_weight = (cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
 
-        return nn.functional.kl_div(output, target, reduction='none', log_target=False)
+        if not self.is_logsoftmax and reduce_min(output) >= 0:
+            output = clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
+
+
+        if ndim(output)==ndim(target)+1:
+            target=make_onehot(target,self.num_classes,axis=1)
+        #print(9, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
+
+        unbalance_weight = zeros(tuple([1]*(ndim(target)-1)+[ self.num_classes]))
+        if self.auto_balance and self.label_statistics is not None:
+            if int_shape(output)[self.axis] == len(self.label_statistics):
+                unbalance_weight =to_tensor(np.log(self.label_statistics.copy())).to(_float_dtype).detach()
+
+        target = target.detach()
+        sample_weight= expand_as(sample_weight, output)
+        unbalance_weight = expand_as(unbalance_weight, output)
+        loss=nn.functional.kl_div(output,target,reduction='none')*sample_weight*unbalance_weight
+
+        return loss.sum(1)
+
 
 
 class L1Loss(_PairwiseLoss):
@@ -1171,6 +1201,7 @@ class L1Loss(_PairwiseLoss):
 
         """
         batch = int_shape(output)[0]
+        target=target.detach()
         return F.l1_loss(output.view(batch, -1), target.view(batch, -1), reduction='none')
 
 
@@ -1199,6 +1230,7 @@ class L2Loss(_PairwiseLoss):
 
         """
         batch = int_shape(output)[0]
+        target = target.detach()
         return 0.5 * ((output.view(batch, -1)-target.view(batch, -1))**2)
 
 
@@ -1227,6 +1259,7 @@ class SmoothL1Loss(_PairwiseLoss):
 
         """
         batch = int_shape(output)[0]
+        target = target.detach()
         return F.smooth_l1_loss(output.view(batch, -1), target.view(batch, -1), reduction='none')
 
 
@@ -1255,6 +1288,7 @@ class MSELoss(_PairwiseLoss):
 
         """
         batch = int_shape(output)[0]
+        target = target.detach()
         return ((output.view(batch, -1)-target.view(batch, -1))**2)
 
 
@@ -1276,9 +1310,9 @@ class WingLoss(_PairwiseLoss):
         Returns:
 
         """
+        target = target.detach()
         delta_y = (target - output).abs()
         c = self.omega * (1.0 - log(1.0 + self.omega / self.epsilon))
-
         losses = where(
             greater(delta_y, self.omega),
             self.omega * log(1.0 + delta_y / self.epsilon),
@@ -1308,6 +1342,7 @@ class AdaptiveWingLoss(_PairwiseLoss):
         Returns:
 
         """
+        target = target.detach()
         lossMat = torch.zeros_like(output,dtype=output.dtype).to(output.device)
         A = self.omega * (1 / (1 + (self.theta / self.epsilon) ** (self.alpha - target))) * (self.alpha - target) * ((self.theta / self.epsilon) ** (self.alpha - target - 1)) / self.epsilon
         C = self.theta * A - self.omega * torch.log(1 + (self.theta / self.epsilon) ** (self.alpha - target))
@@ -1335,7 +1370,7 @@ class ExponentialLoss(_PairwiseLoss):
         Returns:
 
         """
-
+        target = target.detach()
         if output.shape == target.shape:
             error = (output - target) ** 2
             loss = 1 - (-1 * error / np.pi).exp()
@@ -1362,6 +1397,7 @@ class ItakuraSaitoLoss(_PairwiseLoss):
 
         """
         #  y_true/(y_pred+1e-12) - log(y_true/(y_pred+1e-12)) - 1;
+        target = target.detach()
         if output.shape == target.shape:
             if -1 <= output.min() < 0 and -1 <= target.min() < 0:
                 output = output + 1
@@ -1388,6 +1424,7 @@ class CosineSimilarityLoss(_PairwiseLoss):
         Returns:
 
         """
+        target = target.detach()
         return 1.0 - torch.cosine_similarity(output, target)
 
 
@@ -1548,13 +1585,13 @@ class MS_SSIMLoss(_PairwiseLoss):
 
 
 class IoULoss(_ClassificationLoss):
-    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
+    def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=0, cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
                  ohem_ratio=3.5,  input_names=None, output_names=None,name='lou_loss'):
         super(IoULoss, self).__init__(raxis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
                                       label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio,input_names=input_names ,output_names=output_names,name=name)
         self.need_target_onehot = True
         self.is_multiselection = False
-        self.is_logsoftmax = False
+        self.is_logsoftmax = None
         self._built = True
 
     def calculate_loss(self, output, target, **kwargs):
@@ -1563,12 +1600,16 @@ class IoULoss(_ClassificationLoss):
 
         sample_weight = (self.sample_weight.to(get_device()) * self.ignore_index_weight.to(get_device()))
         target=target.detach()
-        sample_weight = expand_as(sample_weight, output).detach()
-        intersection = reduce_sum(target * output*sample_weight, axis=-1)
-        union = reduce_sum(output*sample_weight, axis=-1)+reduce_sum(target, axis=-1)-intersection
 
 
-        iou=( intersection).sum(1) / (union + 1e-7).sum(1)
+
+        tp = output * target
+        fp = output * (1 - target)
+        fn = (1 - output) * target
+        intersection = reduce_sum(tp , axis=-1)
+        union = reduce_sum(tp + fp + fn , axis=-1 )
+        sample_weight = expand_as(sample_weight, intersection).detach()
+        iou=( intersection*sample_weight).sum(1) / clip((union*sample_weight).sum(1) ,min=1e-7)
         return (1-iou).mean()
 
 
