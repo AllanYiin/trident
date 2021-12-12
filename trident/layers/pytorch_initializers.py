@@ -135,7 +135,7 @@ def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
-                kaiming_uniform_(weight, a, mode, nonlinearity)
+                init.kaiming_uniform_(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad and tensor.dim()>=2:
             init.kaiming_uniform_(tensor, a, mode, nonlinearity)
@@ -174,7 +174,7 @@ def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     if isinstance(tensor,nn.Module):
         for name,weight in tensor.named_parameters():
             if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
-                kaiming_normal_(weight, a, mode, nonlinearity)
+                init.kaiming_normal_(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad and tensor.dim()>=2:
             init.kaiming_normal_(tensor, a, mode, nonlinearity)
