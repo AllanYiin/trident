@@ -193,9 +193,10 @@ def EfficientNet(width_coefficient,
         default_size=(default_size[0],default_size[0],3)
     model=ImageClassificationModel(input_shape=default_size,output=efficientnet)
 
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
-        labels = [l.rstrip() for l in f]
-        model.class_names=labels
+    if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt')):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
+            labels = [l.rstrip() for l in f]
+            model.class_names=labels
     model.preprocess_flow=[Resize((default_size[0],default_size[1]),keep_aspect=True),Normalize(0,255),Normalize([0.485, 0.456, 0.406],[0.229, 0.224, 0.225])]
     return model
 

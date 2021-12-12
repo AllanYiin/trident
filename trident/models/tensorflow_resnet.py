@@ -44,7 +44,7 @@ if not os.path.exists(dirname):
 
 
 
-def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortcut=False,use_bias=False,name=None):
+def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortcut=False,use_bias=True,name=None):
     shortcut = Identity()
     if strides>1 or conv_shortcut is True:
         shortcut =Conv2d_Block((1,1),num_filters=num_filters,strides=strides,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_downsample')
@@ -53,7 +53,7 @@ def basic_block(num_filters=64,base_width=64,strides=1,expansion = 4,conv_shortc
                                  Conv2d_Block((3,3),num_filters=num_filters,strides=1,auto_pad=True,padding_mode='zero',normalization='batch',activation=None,use_bias=use_bias,name=name + '_1_conv')),
                       shortcut,activation='relu',name=name)
 
-def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=False,name=None):
+def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bias=True,name=None):
     #width = int(num_filters * (base_width / 64.)) * 1#groups'
     shortcut = Identity()
     shortcut_name='0'
@@ -69,7 +69,7 @@ def bottleneck(num_filters=64,strides=1,expansion = 4,conv_shortcut=True,use_bia
 
 
 
-def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=False,  include_top=True, model_name='',
+def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=True,  include_top=True, model_name='',
            **kwargs):
     """Instantiates the ResNet, ResNetV2, and ResNeXt architecture.
 
@@ -126,10 +126,11 @@ def ResNet(block, layers, input_shape=(224, 224,3), num_classes=1000, use_bias=F
     resnet._name=model_name
     model=ImageClassificationModel(input_shape=input_shape,output=resnet)
 
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
-        labels = [l.rstrip() for l in f]
-        model.class_names=labels
-        input_np_shape=to_numpy(input_shape)
+    if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt')):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)) ,'imagenet_labels1.txt'), 'r', encoding='utf-8-sig') as f:
+            labels = [l.rstrip() for l in f]
+            model.class_names=labels
+            input_np_shape=to_numpy(input_shape)
     model.preprocess_flow=[Resize((input_np_shape[0],input_np_shape[1]),keep_aspect=True), to_bgr(), Normalize([103.939, 116.779, 123.68], [1, 1, 1])]
     #model.summary()
     return model
@@ -182,14 +183,19 @@ def ResNet50(include_top=True,
         input_shape=tuple(input_shape)
     else:
         input_shape=(224, 224,3)
-    resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top, model_name='resnet50')
+    resnet50 =ResNet(bottleneck, [3, 4, 6, 3], input_shape,num_classes=classes,include_top=include_top,use_bias=True, model_name='resnet50')
     with tf.device(get_device()):
         if pretrained:
             download_model_from_google_drive('1vReSW_l8fldyYQ6ay5HCYFGoMaGbdW2T',dirname,'resnet50_tf.pth')
             recovery_model=load(os.path.join(dirname,'resnet50_tf.pth'))
             recovery_model = fix_layer(recovery_model)
             recovery_model = _make_recovery_model_include_top(recovery_model, include_top=include_top, classes=classes, freeze_features=freeze_features)
-            resnet50.model = recovery_model
+            resnet50.model.load_state_dict(recovery_model.state_dict())
+            resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes,
+                                                              freeze_features=freeze_features)
+
+        # resnet50.model.load_state_dict(recovery_model.state_dict())
+            # resnet50.model.fc.trainable=True
         else:
             resnet50.model = _make_recovery_model_include_top(resnet50.model, include_top=include_top, classes=classes, freeze_features=True)
 

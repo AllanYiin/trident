@@ -65,8 +65,8 @@ def DenseLayer(growth_rate,name=''):
     """
     items = OrderedDict()
     items['norm']=BatchNorm2d()
-    items['relu']=Relu()
-    items['conv1']=Conv2d_Block((1,1),4 * growth_rate,strides=1,activation='relu',auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
+    items['relu']=Relu(inplace=True)
+    items['conv1']=Conv2d_Block((1,1),4 * growth_rate,strides=1,activation=Relu(inplace=True),auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
     items['conv2']=Conv2d((3,3),growth_rate,strides=1,auto_pad=True,padding_mode='zero',use_bias=False)
     return  Sequential(items)
 
@@ -117,7 +117,7 @@ def Transition(reduction,name=''):
     """
     items=OrderedDict()
     items['norm']=BatchNorm2d()
-    items['relu']=Relu()
+    items['relu']=Relu(inplace=True)
     items['conv1']=Conv2d((1, 1),num_filters=None, depth_multiplier=reduction, strides=1, auto_pad=True,padding_mode='zero',use_bias=False)
     items['pool']=AvgPool2d(2,2,auto_pad=True)
     return Sequential(items,name=name)
@@ -173,7 +173,7 @@ def DenseNet(blocks,
 
     """
     densenet=Sequential()
-    densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
+    densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation=Relu(inplace=True),normalization='batch', name='conv1/conv'))
     densenet.add_module('maxpool', (MaxPool2d((3, 3), strides=2, auto_pad=True, padding_mode='zero')))
     densenet.add_module('denseblock1', DenseBlock(blocks[0],growth_rate=growth_rate))
     densenet.add_module('transitiondown1', Transition(0.5))
@@ -193,9 +193,10 @@ def DenseNet(blocks,
     model=ImageClassificationModel(input_shape=input_shape,output=densenet)
 
     #model.model.to(_device)
-    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',encoding='utf-8-sig') as f:
-        labels = [l.rstrip() for l in f]
-        model.class_names = labels
+    if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt')):
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',encoding='utf-8-sig') as f:
+            labels = [l.rstrip() for l in f]
+            model.class_names = labels
     model.preprocess_flow = [Resize((input_shape[2], input_shape[1]), keep_aspect=True), Normalize(0, 255),  Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
     # model.summary()
     return model
@@ -260,13 +261,13 @@ class _DenseNetFcn2(Layer):
         self.name=name
         self.initial_filters=initial_filters
         self.first_layer=Conv2d_Block((3, 3), num_filters=self.initial_filters, strides=2, use_bias=False, auto_pad=True,
-                                                    padding_mode='zero', activation='relu', normalization='batch',
+                                                    padding_mode='zero', activation=Relu(inplace=True), normalization='batch',
                                                     name='first_layer')
         for i in range(len(self.blocks)-1):
             num_filters=self.initial_filters+self.blocks[i+1]*self.growth_rate
             self.add_module('denseblock_down{0}'.format(i+1),DenseBlock(self.blocks[i], growth_rate=self.growth_rate, name='denseblock_down{0}'.format(i+1)))
             self.add_module('transition_down{0}'.format(i+1),TransitionDown(0.5,name='transition_down{0}'.format(i+1)))
-            self.add_module('transition_up{0}'.format(i + 1), TransConv2d_Block((3,3),num_filters=num_filters,strides=2,auto_pad=True,activation='relu',normalization='batch',name='transition_up{0}'.format(i + 1)))
+            self.add_module('transition_up{0}'.format(i + 1), TransConv2d_Block((3,3),num_filters=num_filters,strides=2,auto_pad=True,activation=Relu(inplace=True),normalization='batch',name='transition_up{0}'.format(i + 1)))
             self.add_module('denseblock_up{0}'.format(i + 1),DenseBlock(self.blocks[i], growth_rate=self.growth_rate, name='denseblock_up{0}'.format(i + 1)))
 
         self.bottleneck=DenseBlock(self.blocks[4], growth_rate=self.growth_rate, name='bottleneck')
