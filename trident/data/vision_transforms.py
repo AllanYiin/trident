@@ -719,8 +719,9 @@ class RandomTransformAffine(VisionTransform):
             mask = mask.astype(np.float32)
 
             mask = cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0),flags=cv2.INTER_NEAREST)  # , borderMode=cv2.BORDER_REPLICATE
-            mask[mask>=0.5]=1
-            mask[mask < 0.5] =0
+            if spec.object_type==ObjectType.binary_mask:
+                mask[mask>=0.5]=1
+                mask[mask < 0.5] =0
             mask = mask.astype(mask_dtype)
             if is_flip:
                 return np.fliplr(mask)
@@ -780,7 +781,7 @@ class RandomMultiScaleImage(VisionTransform):
             self.scale_range = scale_range
         self.interpolation = interpolation
         self.idx = 0
-        self.tmp_fun=None
+        #self.tmp_fun=None
         self.resize_funs = [Resize(output_size, True, align_corner=True, interpolation=interpolation),
                             Resize(output_size, True, align_corner=False, interpolation=interpolation),
                             Resize(output_size, False, interpolation=interpolation),
@@ -797,9 +798,9 @@ class RandomMultiScaleImage(VisionTransform):
     def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], **kwargs):
         self._shape_info = self._get_shape()
         idx = self._shape_info
-        self.tmp_fun=copy.deepcopy(self.resize_funs[idx])
+        #self.tmp_fun=self.resize_funs[idx]
         spec = kwargs.get('spec')
-        return self.tmp_fun.apply_batch(inputs, spec)
+        return self.resize_funs[idx].apply_batch(inputs, spec)
     def _get_shape(self,image=None):
         idx=random.choice(range(len(self.resize_funs)))
         return idx
@@ -1632,8 +1633,7 @@ class RandomLighting(Lighting):
 
 
 class CLAHE(VisionTransform):
-
-    def __init__(self, clipLimit=5, gridsize=8, name='clahe', **kwargs):
+    def __init__(self, clipLimit=2, gridsize=3, name='clahe', **kwargs):
         super().__init__(name)
         self.gridsize = gridsize
         self.clipLimit = clipLimit
@@ -2184,9 +2184,12 @@ class ImageMosaic(VisionTransform):
         if keep:
             return image
         height, width = self.output_size
-        p1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety + center[0], img1_offsetx:img1_offsetx + width - center[1], :]
-        p2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety + height - center[0], img2_offsetx:img2_offsetx + center[1], :]
-        p3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety + height - center[0], img3_offsetx:img3_offsetx + width - center[1], :]
+        p1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety + center[0],
+             img1_offsetx:img1_offsetx + width - center[1], :]
+        p2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety + height - center[0],
+             img2_offsetx:img2_offsetx + center[1], :]
+        p3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety + height - center[0],
+             img3_offsetx:img3_offsetx + width - center[1], :]
         # print('p2',p2.shape)
         # print('p3',p3.shape)
 
@@ -2211,138 +2214,173 @@ class ImageMosaic(VisionTransform):
             pass
         else:
             location0 = box0[:, :4].reshape(box0.shape[0], 2, 2)
+            area0_old = clip(box_area(clip(box0[:, :4], min=0)), min=1)
             location0[:, :, 0] = np.clip(location0[:, :, 0], 0, center[1])
             location0[:, :, 1] = np.clip(location0[:, :, 1], 0, center[0])
+            area0_new = box_area(location0.reshape(-1, 4)) / area0_old
+            location0 = location0[area0_new >= 0.05, :, :]
+            box0 = box0[area0_new >= 0.05, :]
 
-            class_info0 = box0[:, 4:5] if box0.shape[-1] > 4 else None
-            keypoints0 = box0[:, 5:] if box0.shape[-1] > 5 else None
-            if box0.shape[-1] > 5:
-                keypoints0 = box0[:, 5:].reshape(box0.shape[0], -1, 2)
-                invisible_keypoints0 = np.less_equal(keypoints0, 0).astype(np.bool)
-                keypoints0[:, :, 0] = np.clip(keypoints0[:, :, 0], 0, center[1])
-                keypoints0[:, :, 1] = np.clip(keypoints0[:, :, 1], 0, center[0])
-                keypoints0[invisible_keypoints0] = -1
-            else:
-                pass
-            concate_list0 = None
-            if keypoints0 is None:
-                # print('concate_list0',location0.reshape((box0.shape[0], 4)).shape,class_info0.shape)
-                concate_list0 = [location0.reshape((box0.shape[0], 4)), class_info0]
-            else:
-                concate_list0 = [location0.reshape((box0.shape[0], 4)), class_info0, keypoints0.reshape((box0.shape[0], -1))]
+            if len(box0) > 0:
+                class_info0 = box0[:, 4:5] if box0.shape[-1] > 4 else None
+                keypoints0 = box0[:, 5:] if box0.shape[-1] > 5 else None
+                if box0.shape[-1] > 5:
+                    keypoints0 = box0[:, 5:].reshape(box0.shape[0], -1, 2)
+                    invisible_keypoints0 = np.less_equal(keypoints0, 0).astype(np.bool)
+                    keypoints0[:, :, 0] = np.clip(keypoints0[:, :, 0], 0, center[1])
+                    keypoints0[:, :, 1] = np.clip(keypoints0[:, :, 1], 0, center[0])
+                    keypoints0[invisible_keypoints0] = -1
 
-            box0 = np.concatenate(concate_list0, axis=-1)
-            concate_list_all.append(box0)
+                else:
+                    pass
+                concate_list0 = None
+                if keypoints0 is None:
+                    # print('concate_list0',location0.reshape((box0.shape[0], 4)).shape,class_info0.shape)
+                    concate_list0 = [location0.reshape((box0.shape[0], 4)), class_info0]
+                else:
+                    concate_list0 = [location0.reshape((box0.shape[0], 4)), class_info0,
+                                     keypoints0.reshape((box0.shape[0], -1))]
 
-        box1 =self.memory_cache[other_idxes[0]][spec].copy() if  self.memory_cache[other_idxes[0]][spec] is not None else None
+                box0 = np.concatenate(concate_list0, axis=-1)
+                concate_list_all.append(box0)
+
+        box1 = self.memory_cache[other_idxes[0]][spec].copy() if self.memory_cache[other_idxes[0]][
+                                                                     spec] is not None else None
         if box1 is None or len(box1) == 0:
             pass
         else:
             location1 = box1[:, :4].reshape(box1.shape[0], 2, 2)
+            area1_old = clip(box_area(clip(box1[:, :4], min=0)), min=1)
             location1[:, :, 0] = np.clip(location1[:, :, 0] - img1_offsetx + center[1], center[1], width)
             location1[:, :, 1] = np.clip(location1[:, :, 1] - img1_offsety, 0, center[0])
+            area1_new = box_area(location1.reshape(-1, 4)) / area1_old
+            location1 = location1[area1_new >= 0.05, :, :]
+            box1 = box1[area1_new >= 0.05, :]
 
-            class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
-            keypoints1 = None
-            if box1.shape[-1] > 5:
-                keypoints1 = box1[:, 5:].reshape(box1.shape[0], -1, 2)
-                invisible_keypoints1 = np.less_equal(keypoints1, 0).astype(np.bool)
-                keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0] - img1_offsetx + center[1], center[1], width)
-                keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1] - img1_offsety, 0, center[0])
-                keypoints1[invisible_keypoints1] = -1
+            if len(box1) > 0:
+                class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
+                keypoints1 = None
+                if box1.shape[-1] > 5:
+                    keypoints1 = box1[:, 5:].reshape(box1.shape[0], -1, 2)
+                    invisible_keypoints1 = np.less_equal(keypoints1, 0).astype(np.bool)
+                    keypoints1[:, :, 0] = np.clip(keypoints1[:, :, 0] - img1_offsetx + center[1], center[1], width)
+                    keypoints1[:, :, 1] = np.clip(keypoints1[:, :, 1] - img1_offsety, 0, center[0])
+                    keypoints1[invisible_keypoints1] = -1
 
-            else:
-                pass
-            concate_list1 = None
-            if keypoints1 is None:
-                # print('concate_list1',location1.reshape((box1.shape[0], 4)).shape,class_info1.shape)
-                concate_list1 = [location1.reshape((box1.shape[0], 4)), class_info1]
-            else:
-                concate_list1 = [location1.reshape((box1.shape[0], 4)), class_info1, keypoints1.reshape((box1.shape[0], -1))]
-            box1 = np.concatenate(concate_list1, axis=-1)
-            concate_list_all.append(box1)
+                else:
+                    pass
+                concate_list1 = None
+                if keypoints1 is None:
+                    # print('concate_list1',location1.reshape((box1.shape[0], 4)).shape,class_info1.shape)
+                    concate_list1 = [location1.reshape((box1.shape[0], 4)), class_info1]
+                else:
+                    concate_list1 = [location1.reshape((box1.shape[0], 4)), class_info1,
+                                     keypoints1.reshape((box1.shape[0], -1))]
+                box1 = np.concatenate(concate_list1, axis=-1)
+                concate_list_all.append(box1)
 
-        box2 = self.memory_cache[other_idxes[1]][spec].copy() if  self.memory_cache[other_idxes[1]][spec] is not None else None
+        box2 = self.memory_cache[other_idxes[1]][spec].copy() if self.memory_cache[other_idxes[1]][
+                                                                     spec] is not None else None
         if box2 is None or len(box2) == 0:
             pass
         else:
             location2 = box2[:, :4].reshape(box2.shape[0], 2, 2)
+            area2_old = clip(box_area(clip(box2[:, :4], min=0)), min=1)
             location2[:, :, 0] = np.clip(location2[:, :, 0] - img2_offsetx, 0, center[1])
             location2[:, :, 1] = np.clip(location2[:, :, 1] - img2_offsety + center[0], center[0], height)
+            area2_new = box_area(location2.reshape(-1, 4)) / area2_old
+            location2 = location2[area2_new >= 0.05, :, :]
+            box2 = box2[area2_new >= 0.05, :]
 
-            class_info2 = box2[:, 4:5] if box2.shape[-1] > 4 else None
-            keypoints2 = None
-            if box2.shape[-1] > 5:
-                keypoints2 = box2[:, 5:].reshape(box2.shape[0], -1, 2)
-                invisible_keypoints2 = np.less_equal(keypoints2, 0).astype(np.bool)
-                keypoints2[:, :, 0] = np.clip(keypoints2[:, :, 0] - img2_offsetx, 0, center[1])
-                keypoints2[:, :, 1] = np.clip(keypoints2[:, :, 1] - img2_offsety + center[0], center[0], height)
-                keypoints2[invisible_keypoints2] = -1
+            if len(box2) > 0:
+
+                class_info2 = box2[:, 4:5] if box2.shape[-1] > 4 else None
+                keypoints2 = None
+                if box2.shape[-1] > 5:
+                    keypoints2 = box2[:, 5:].reshape(box2.shape[0], -1, 2)
+                    invisible_keypoints2 = np.less_equal(keypoints2, 0).astype(np.bool)
+                    keypoints2[:, :, 0] = np.clip(keypoints2[:, :, 0] - img2_offsetx, 0, center[1])
+                    keypoints2[:, :, 1] = np.clip(keypoints2[:, :, 1] - img2_offsety + center[0], center[0], height)
+                    keypoints2[invisible_keypoints2] = -1
 
 
-            else:
-                pass
-            concate_list2 = None
-            if keypoints2 is None:
-                # print('concate_list2',location2.reshape((box2.shape[0], 4)).shape,class_info2.shape)
-                concate_list2 = [location2.reshape((box2.shape[0], 4)), class_info2]
-            else:
-                concate_list2 = [location2.reshape((box2.shape[0], 4)), class_info2, keypoints2.reshape((box2.shape[0], -1))]
+                else:
+                    pass
+                concate_list2 = None
+                if keypoints2 is None:
+                    # print('concate_list2',location2.reshape((box2.shape[0], 4)).shape,class_info2.shape)
+                    concate_list2 = [location2.reshape((box2.shape[0], 4)), class_info2]
+                else:
+                    concate_list2 = [location2.reshape((box2.shape[0], 4)), class_info2,
+                                     keypoints2.reshape((box2.shape[0], -1))]
 
-            box2 = np.concatenate(concate_list2, axis=-1)
-            concate_list_all.append(box2)
+                box2 = np.concatenate(concate_list2, axis=-1)
+                concate_list_all.append(box2)
 
-        box3 = self.memory_cache[other_idxes[2]][spec].copy() if  self.memory_cache[other_idxes[2]][spec] is not None else None
+        box3 = self.memory_cache[other_idxes[2]][spec].copy() if self.memory_cache[other_idxes[2]][
+                                                                     spec] is not None else None
         if box3 is None or len(box3) == 0:
             pass
         else:
+            # print('box3',box3)
             location3 = box3[:, :4].reshape(box3.shape[0], 2, 2)
+            area3_old = clip(box_area(clip(box3[:, :4], min=0)), min=1)
             location3[:, :, 0] = np.clip(location3[:, :, 0] - img3_offsetx + center[1], center[1], width)
             location3[:, :, 1] = np.clip(location3[:, :, 1] - img3_offsety + center[0], center[0], height)
+            area3_new = box_area(location3.reshape(-1, 4)) / area3_old
+            location3 = location3[area3_new >= 0.05, :, :]
+            box3 = box3[area3_new >= 0.05, :]
 
-            class_info3 = box3[:, 4:5] if box3.shape[-1] > 4 else None
-            keypoints3 = None
-            if box3.shape[-1] > 5:
-                keypoints3 = box3[:, 5:].reshape(box3.shape[0], -1, 2)
-                invisible_keypoints3 = np.less_equal(keypoints3, 0).astype(np.bool)
-                keypoints3[:, :, 0] = np.clip(keypoints3[:, :, 0] - img3_offsetx + center[1], center[1], width)
-                keypoints3[:, :, 1] = np.clip(keypoints3[:, :, 1] - img3_offsety + center[0], center[0], height)
-                keypoints3[invisible_keypoints3] = -1
+            if len(box3) > 0:
+
+                class_info3 = box3[:, 4:5] if box3.shape[-1] > 4 else None
+                keypoints3 = None
+                if box3.shape[-1] > 5:
+                    keypoints3 = box3[:, 5:].reshape(box3.shape[0], -1, 2)
+                    invisible_keypoints3 = np.less_equal(keypoints3, 0).astype(np.bool)
+                    keypoints3[:, :, 0] = np.clip(keypoints3[:, :, 0] - img3_offsetx + center[1], center[1], width)
+                    keypoints3[:, :, 1] = np.clip(keypoints3[:, :, 1] - img3_offsety + center[0], center[0], height)
+                    keypoints3[invisible_keypoints3] = -1
 
 
-            else:
-                pass
-            concate_list3 = None
-            if keypoints3 is None:
-                # print('concate_list3',location3.reshape((box3.shape[0], 4)).shape,class_info3.shape)
-                concate_list3 = [location3.reshape((box3.shape[0], 4)), class_info3]
-            else:
-                concate_list3 = [location3.reshape((box3.shape[0], 4)), class_info3, keypoints3.reshape((box3.shape[0], -1))]
-            box3 = np.concatenate(concate_list3, axis=-1)
-            concate_list_all.append(box3)
-
-        trans_boxes = np.concatenate(concate_list_all, axis=0)
-
-        hw = clip(trans_boxes[:, :4][..., 2:] - trans_boxes[:, :4][..., :2], 0.0, None)
-        area = hw[..., 0] * hw[..., 1]
-        area_mask = area >= 1
-        trans_boxes = trans_boxes[area_mask, :]
-
-        return trans_boxes
+                else:
+                    pass
+                concate_list3 = None
+                if keypoints3 is None:
+                    # print('concate_list3',location3.reshape((box3.shape[0], 4)).shape,class_info3.shape)
+                    concate_list3 = [location3.reshape((box3.shape[0], 4)), class_info3]
+                else:
+                    concate_list3 = [location3.reshape((box3.shape[0], 4)), class_info3,
+                                     keypoints3.reshape((box3.shape[0], -1))]
+                box3 = np.concatenate(concate_list3, axis=-1)
+                concate_list_all.append(box3)
+        if len(concate_list_all) > 0:
+            trans_boxes = np.concatenate(concate_list_all, axis=0)
+            hw = clip(trans_boxes[:, :4][..., 2:] - trans_boxes[:, :4][..., :2], 0.0, None)
+            area = hw[..., 0] * hw[..., 1]
+            area_mask = area >= 1
+            trans_boxes = trans_boxes[area_mask, :]
+            return trans_boxes
+        else:
+            return None
 
     def _apply_mask(self, mask, spec: TensorSpec):
         keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety = self._shape_info
         height, width = self.output_size
         if keep:
             return mask
-        mp1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety + center[0], img1_offsetx:img1_offsetx + width - center[1], :]
-        mp2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety + height - center[0], img2_offsetx:img2_offsetx + center[1], :]
-        mp3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety + height - center[0], img3_offsetx:img3_offsetx + width - center[1], :]
+
+        mp1 = self.memory_cache[other_idxes[0]][spec].copy()[img1_offsety:img1_offsety + center[0],
+              img1_offsetx:img1_offsetx + width - center[1]]
+        mp2 = self.memory_cache[other_idxes[1]][spec].copy()[img2_offsety:img2_offsety + height - center[0],
+              img2_offsetx:img2_offsetx + center[1]]
+        mp3 = self.memory_cache[other_idxes[2]][spec].copy()[img3_offsety:img3_offsety + height - center[0],
+              img3_offsetx:img3_offsetx + width - center[1]]
 
         base_msk = mask.copy()
-        base_msk[:mp1.shape[0], center[1]:center[1] + mp1.shape[1], :] = mp1
-        base_msk[center[0]:center[0] + mp2.shape[0], :mp2.shape[1], :] = mp2
-        base_msk[center[0]:center[0] + mp3.shape[0], center[1]:center[1] + mp3.shape[1]:] = mp3
+        base_msk[:mp1.shape[0], center[1]:center[1] + mp1.shape[1]] = mp1
+        base_msk[center[0]:center[0] + mp2.shape[0], :mp2.shape[1]] = mp2
+        base_msk[center[0]:center[0] + mp3.shape[0], center[1]:center[1] + mp3.shape[1]] = mp3
         return base_msk
 
     def _get_shape(self, image):
@@ -2363,15 +2401,24 @@ class ImageMosaic(VisionTransform):
             center = (int(height * rs[0] / 2), int(width * rs[1] / 2))
 
             img1 = self.memory_cache[other_idxes[0]].value_list[0]
-            img1_offsetx = img1.shape[1] if img1.shape[1] - 1 < (width - center[1]) else np.random.choice(np.arange(0, img1.shape[1] - (width - center[1]), 1))
-            img1_offsety = img1.shape[0] if img1.shape[0] - 1 < center[0] else np.random.choice(np.arange(0, img1.shape[0] - center[0], 1))
+            img1_offsetx = img1.shape[1] if img1.shape[1] - 1 < (width - center[1]) else np.random.choice(
+                np.arange(0, img1.shape[1] - (width - center[1]), 1))
+            img1_offsety = img1.shape[0] if img1.shape[0] - 1 < center[0] else np.random.choice(
+                np.arange(0, img1.shape[0] - center[0], 1))
 
             img2 = self.memory_cache[other_idxes[1]].value_list[0]
-            img2_offsetx = img2.shape[1] if img2.shape[1] - 1 < center[1] else np.random.choice(np.arange(0, img2.shape[1] - center[1], 1))
-            img2_offsety = img2.shape[0] if img2.shape[0] - 1 < (height - center[0]) else np.random.choice(np.arange(0, img2.shape[0] - (height - center[0]), 1))
+            img2_offsetx = img2.shape[1] if img2.shape[1] - 1 < center[1] else np.random.choice(
+                np.arange(0, img2.shape[1] - center[1], 1))
+            img2_offsety = img2.shape[0] if img2.shape[0] - 1 < (height - center[0]) else np.random.choice(
+                np.arange(0, img2.shape[0] - (height - center[0]), 1))
 
             img3 = self.memory_cache[other_idxes[2]].value_list[0]
-            img3_offsetx = img3.shape[1] if img3.shape[1] - 1 < (width - center[1]) else np.random.choice(np.arange(0, img3.shape[1] - (width - center[1]), 1))
-            img3_offsety = img3.shape[0] if img3.shape[0] - 1 < (height - center[0]) else np.random.choice(np.arange(0, img3.shape[0] - (height - center[0]), 1))
+            img3_offsetx = img3.shape[1] if img3.shape[1] - 1 < (width - center[1]) else np.random.choice(
+                np.arange(0, img3.shape[1] - (width - center[1]), 1))
+            img3_offsety = img3.shape[0] if img3.shape[0] - 1 < (height - center[0]) else np.random.choice(
+                np.arange(0, img3.shape[0] - (height - center[0]), 1))
 
-        return keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety
+        return (
+        keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety)
+
+
