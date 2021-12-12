@@ -21,7 +21,7 @@ elif _backend == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_ops import *
 
-__all__ = ['Loss']
+__all__ = ['Loss','_check_logit','_check_logsoftmax_logit']
 
 
 class Loss(object):
@@ -173,13 +173,14 @@ class Loss(object):
 
 
 def _check_logsoftmax_logit(x:Tensor,axis=1):
+    if _backend == 'pytorch':
+        if axis is None:
+            axis = 1
+    elif _backend == 'tensorflow':
+        if axis is None:
+            axis = -1
     if isinstance(x, np.ndarray):
-        if _backend == 'pytorch':
-            if axis is None:
-                axis = 1
-        elif _backend == 'tensorflow':
-            if axis is None:
-                axis = -1
+
         if reduce_max(x) <= 0:
             output_exp = exp(x)
             return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
@@ -197,27 +198,25 @@ def _check_logsoftmax_logit(x:Tensor,axis=1):
         return False
 
 def _check_logit(x:Tensor,axis=None):
-    if isinstance(x,np.ndarray):
-        if _backend == 'pytorch':
-            if axis is None:
-                axis = 1
-        elif _backend == 'tensorflow':
-            if axis is None:
-                axis = -1
-        if reduce_max(x) <= 0:
-            return abs(1 - reduce_mean(x.sum(axis=axis))) < 0.05
-        return False
-    elif _backend == 'pytorch':
+    if _backend == 'pytorch':
         if axis is None:
-            axis=1
-        with torch.no_grad():
-            if reduce_max(x)<=0:
-                return abs(1-reduce_mean(x.sum(axis=axis)))<0.05
-            return False
+            axis = 1
     elif _backend == 'tensorflow':
         if axis is None:
             axis = -1
-        if reduce_max(x)<=0:
-            return abs(1-reduce_mean(x.sum(axis=axis)))<0.05
+    if isinstance(x,np.ndarray):
+        if 0 <= x.min()<= x.max() <= 1:
+            return abs(1 - x.sum(axis=axis)).mean() < 0.05
         return False
+    elif _backend == 'pytorch':
+        with torch.no_grad():
+            if 0<=reduce_min(x)<=reduce_max(x)<=1 :
+                return abs(1 - x.sum(axis=axis)).mean() < 0.05
+            return False
+    elif _backend == 'tensorflow':
+        if 0<=reduce_min(x)<=reduce_max(x)<=1 :
+            return abs(1 - x.sum(axis=axis)).mean() < 0.05
+        return False
+
+
 
