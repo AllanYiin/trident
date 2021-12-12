@@ -22,7 +22,7 @@ PACKAGES = find_packages(exclude= ["tests","tests.*","sphinx_docs","sphinx_docs.
 print(PACKAGES)
 
 setup(name=NAME,
-      version='0.7.3',
+      version='0.7.4',
       description='Make pytorch and tensorflow two become one.',
       # long_description=long_description,
       # long_description_content_type="text/markdown",
@@ -73,6 +73,9 @@ setup(name=NAME,
       python_requires='>=3.5',
       keywords=['deep learning', 'machine learning', 'pytorch', 'tensorflow', 'AI'],
       packages= find_packages(exclude= ["tests","tests.*","sphinx_docs","sphinx_docs.*", "examples","examples.*","internal_tool","internal_tool.*"]),
+      package_data={
+          'trident': ['data/*.txt','models/*.txt'],
+       },
       include_package_data=True,
       scripts=[],
 
