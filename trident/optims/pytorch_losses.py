@@ -124,6 +124,18 @@ class _ClassificationLoss(Loss):
                     reweights1[reweights == 1] = 1
                     self.label_statistics = reweights1
 
+                elif ds is not None and ds.__class__.__name__ == 'BboxDataset' and dp.traindata.label.object_type in [ObjectType.absolute_bbox, ObjectType.relative_bbox]:
+                    print('Start retrive label class distribution for auto-balance in loss function.')
+                    unique, counts = torch.unique(to_tensor(np.concatenate([dp.traindata.label[i][:,5] for i in tqdm(range(len(dp.traindata.label)))],axis=0), dtype=Dtype.long, device='cpu'),
+                                                  return_counts=True)
+                    unique = to_list(to_numpy(unique))
+                    counts = to_numpy(counts)
+                    if len(unique) != builtins.max(unique) + 1:
+                        counts = np.array([counts[unique.index(i)] if i in unique else 1 for i in range(len(unique))])
+                    reweights =counts / np.sum(counts).astype(np.float32)
+                    reweights1 = np.max(reweights) / reweights
+                    self.label_statistics = reweights1
+
                 elif ds is not None and ds.__class__.__name__ == 'MaskDataset' and dp.traindata.label.object_type in [ObjectType.label_mask, ObjectType.color_mask]:
                     print('Start retrive label class distribution for auto-balance in loss function.')
                     unique, counts = torch.unique(to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]), dtype=Dtype.long, device='cpu'),
@@ -617,15 +629,17 @@ class CrossEntropyLoss(_ClassificationLoss):
             unbalance_weight = zeros(tuple([1]*(ndim(target)-1)+[ self.num_classes]))
             if self.auto_balance and self.label_statistics is not None:
                 if int_shape(output)[self.axis] == len(self.label_statistics):
-                    unbalance_weight =to_tensor(np.log(self.label_statistics.copy())).to(_float_dtype).detach()
+                    unbalance_weight =to_tensor(np.log(self.label_statistics.copy())).unsqueeze(0).to(_float_dtype).detach()
 
             target_shape=target.shape
-            gather_unbalance_weight=torch.index_select(unbalance_weight, -1, target.reshape((-1))).reshape(target_shape).detach()
+            #gather_unbalance_weight=unbalance_weight.gather(1,target).unsqueeze(1)
+            gather_unbalance_weight=torch.index_select(unbalance_weight, -1, target.reshape((-1))).reshape(target_shape).unsqueeze(1).detach()
 
             if not self.is_logsoftmax and reduce_min(output)>=0:
                 output=clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
             target = target.detach()
-            return nn.functional.nll_loss(output,target,sample_weight,reduction='none')+gather_unbalance_weight
+
+            return nn.functional.nll_loss((output+gather_unbalance_weight),target,sample_weight,reduction='none')
 
         else:
             unbalance_weight=ones(tuple([1]*(ndim(output)-1)+[ self.num_classes]))
@@ -907,7 +921,9 @@ class FocalLoss(_ClassificationLoss):
         self.gamma = gamma
         self.threshold = threshold
         self.normalized = normalized
-        self.need_target_onehot = False
+        self.is_logsoftmax = None
+        self.need_target_onehot = True
+        self.is_target_onehot = False
 
     def calculate_loss(self, output, target, **kwargs):
         """
@@ -923,27 +939,23 @@ class FocalLoss(_ClassificationLoss):
 
             """
 
-
-
-        p=None
-        if self.is_logsoftmax and output.max()<=0:
-            p = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
-        elif not _check_logit(output):
-            p = torch.sigmoid(output)
+        if self.is_logsoftmax:
+            output = clip(exp(clip(output,max=0)),1e-7,1-1e-7)
+        elif _check_logit(output,axis=1):
+            pass
         else:
-            p=output
+            output=torch.sigmoid(output)
+        alpha = torch.zeros(self.num_classes,dtype=output.dtype,device=output.device)
+        alpha[0] += self.alpha
+        alpha[1:] += (1 -  self.alpha)  # α  will be [ α, 1-α, 1-α, 1-α, 1-α, ...] size:[num_classes]
+        alpha=alpha.unsqueeze(0)
 
-        if not self.is_target_onehot or target.dtype == Dtype.long:
-            target = make_onehot(target,self.num_classes,1)
-
-
-        ce_loss =binary_cross_entropy(p, target,from_logits=True)
-        p_t = p * target + (1 - p) * (1 - target)
-        loss = ce_loss * ((1 - p_t) **self.gamma)
-
-        if self.alpha >= 0:
-            alpha_t = self.alpha * target + (1 - self.alpha) * (1 - target)
-            loss = alpha_t * loss
+        ce_loss = binary_cross_entropy(output, target, from_logits=True)
+        pt=output
+        loss = ce_loss * ((1 - pt) **self.gamma)
+        if ndim(loss)==ndim(alpha)+1:
+            alpha=alpha.unsqueeze(-1)
+        loss=loss*alpha
         if ndim(loss)>=2:
             return loss.sum(1)
         else:
@@ -1609,8 +1621,10 @@ class IoULoss(_ClassificationLoss):
         intersection = reduce_sum(tp , axis=-1)
         union = reduce_sum(tp + fp + fn , axis=-1 )
         sample_weight = expand_as(sample_weight, intersection).detach()
-        iou=( intersection*sample_weight).sum(1) / clip((union*sample_weight).sum(1) ,min=1e-7)
-        return (1-iou).mean()
+        iou=( intersection*sample_weight).sum() / clip((union*sample_weight).sum() ,min=1e-7)
+        return  1-iou
+
+
 
 
 class SoftIoULoss(Loss):
