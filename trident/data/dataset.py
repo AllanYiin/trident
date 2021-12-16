@@ -87,8 +87,9 @@ class Dataset(DatasetBase):
         if args is not None and hasattr(args, '__iter__'):
             self.items.extend(args)
         self._element_spec = None
+        self.parent = None
 
-        if symbol == None:
+        if symbol is None:
             prefix = camel2snake(symbol) if symbol is not None else camel2snake(self.__class__.__name__.replace("Dataset", ""))
             uid = _get_global_uid(camel2snake(prefix))
             if uid == 0:
@@ -214,7 +215,7 @@ class ZipDataset(Dataset):
         raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
 
     def __setattr__(self, name: str, value) -> None:
-        if name.endswith('transform_funcs'):
+        if name.endswith('transform_funcs') or name=='parent':
             if 'items' in self.__dict__:
                 items = self.__dict__['items']
                 for ds in items:
@@ -314,46 +315,50 @@ class ImageDataset(Dataset):
         self.is_paired_process = False
 
     def __getitem__(self, index: int):
-        if index >= len(self.items):
-            index = index % len(self.items)
-        img = self.items[index]  # self.pop(index)
+        try:
+            if index >= len(self.items):
+                index = index % len(self.items)
+            img = self.items[index]  # self.pop(index)
 
-        if isinstance(img, str) and self.object_type == ObjectType.image_path:
-            return img
-        elif isinstance(img, np.ndarray) and self.object_type != ObjectType.image_path:
-            return img
-        else:
-            img = file2array(img)
-
-        if not isinstance(img, np.ndarray):
-            raise ValueError('image data should be ndarray')
-        elif isinstance(img, np.ndarray) and img.ndim not in [2, 3]:
-            raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(img.ndim))
-        elif self.object_type == ObjectType.gray:
-            if img.ndim == 2:
-                img = np.expand_dims(img, -1)
-            elif (img.ndim == 3 and img.shape[-1] == 1):
-                pass
+            if isinstance(img, str) and self.object_type == ObjectType.image_path:
+                return img
+            elif isinstance(img, np.ndarray) and self.object_type != ObjectType.image_path:
+                return img
             else:
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-                img = np.expand_dims(img, -1)
-        elif self.object_type == ObjectType.rgb and img.ndim == 2:
-            img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
-        elif self.object_type == ObjectType.rgb and img.ndim == 3:
-            if img.shape[-1] == 1:
-                img = cv2.cvtColor(img[:, :, 0], cv2.COLOR_GRAY2RGB)
-            elif img.shape[-1] == 4:
-                img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
-            img = img[:, :, :3]
+                img = file2array(img)
 
-        elif self.object_type == ObjectType.rgba:
-            if img.ndim == 2:
-                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGBA)
-            if img.shape[2] == 3:
-                img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
-        elif self.object_type == ObjectType.multi_channel:
-            img = img.astype(np.float32)
-        return img
+            if not isinstance(img, np.ndarray):
+                raise ValueError('image data should be ndarray')
+            elif isinstance(img, np.ndarray) and img.ndim not in [2, 3]:
+                raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(img.ndim))
+            elif self.object_type == ObjectType.gray:
+                if img.ndim == 2:
+                    img = np.expand_dims(img, -1)
+                elif (img.ndim == 3 and img.shape[-1] == 1):
+                    pass
+                else:
+                    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+                    img = np.expand_dims(img, -1)
+            elif self.object_type == ObjectType.rgb and img.ndim == 2:
+                img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+            elif self.object_type == ObjectType.rgb and img.ndim == 3:
+                if img.shape[-1] == 1:
+                    img = cv2.cvtColor(img[:, :, 0], cv2.COLOR_GRAY2RGB)
+                elif img.shape[-1] == 4:
+                    img = cv2.cvtColor(img, cv2.COLOR_RGBA2RGB)
+                img = img[:, :, :3]
+
+            elif self.object_type == ObjectType.rgba:
+                if img.ndim == 2:
+                    img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGBA)
+                if img.shape[2] == 3:
+                    img = cv2.cvtColor(img, cv2.COLOR_RGB2RGBA)
+            elif self.object_type == ObjectType.multi_channel:
+                img = img.astype(np.float32)
+            return img
+        except Exception as e:
+            print(e)
+            PrintException()
 
     def data_transform(self, img_data):
         if self.object_type == ObjectType.image_path:
@@ -362,7 +367,7 @@ class ImageDataset(Dataset):
             return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self.transform_funcs:
-                if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
+                if (callable(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
                     img_data = fc(img_data, spec=self.element_spec)
             img_data = image_backend_adaption(img_data)
             return img_data
@@ -393,7 +398,9 @@ class ImageDataset(Dataset):
     def reverse_image_transform(self, img_data):
         if len(self.reverse_image_transform_funcs) == 0:
             return reverse_image_backend_adaption(img_data)
-        if isinstance(img_data, np.ndarray):
+        if self.object_type==ObjectType.image_path:
+            return img_data
+        elif isinstance(img_data, np.ndarray):
             # if img_data.ndim>=2:
             for fc in self.reverse_image_transform_funcs:
                 if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not reverse_image_backend_adaption:
@@ -465,19 +472,22 @@ class MaskDataset(Dataset):
         return mask
 
     def mask_transform(self, mask_data):
-        if len(self.transform_funcs) == 0:
-            return mask_backend_adaptive(mask_data, label_mapping=self.class_names, object_type=self.object_type)
-        else:
-            if isinstance(mask_data, np.ndarray):
-                for fc in self.transform_funcs:
-                    mask_data = fc(mask_data, spec=self.element_spec)
-                mask_data = mask_backend_adaptive(mask_data, label_mapping=self.class_names, object_type=self.object_type)
-                return mask_data
-            else:
-                return mask_data
+        return self.data_transform(mask_data)
 
     def data_transform(self, data):
-        return self.mask_transform(data)
+        if len(self.transform_funcs) == 0:
+            return mask_backend_adaptive(data, label_mapping=self.class_names, object_type=self.object_type)
+        else:
+            if isinstance(data, np.ndarray):
+                for fc in self.transform_funcs:
+                    if hasattr(fc,'_apply_mask'):
+                        data = fc._apply_mask(data, spec=self.element_spec)
+                    else:
+                        data=fc(data)
+                data = mask_backend_adaptive(data, label_mapping=self.class_names, object_type=self.object_type)
+                return data
+            else:
+                return data
 
     @property
     def reverse_image_transform_funcs(self):
@@ -1016,7 +1026,7 @@ class TextSequenceDataset(Dataset):
                     if this_char in self.text2index:
                         arr[i] = self.text2index[this_char]
                     else:
-                        arr[i] = self.text2index['']
+                        arr[i] = self.text2index['[UNK]']
                 else:
                     arr[i] = self.text2index['[PAD]']
             arr = arr.astype(np.int64)
@@ -1051,7 +1061,8 @@ class TextSequenceDataset(Dataset):
 
 
 class Iterator(object):
-    def __init__(self, data=None, label=None, mask=None, unpair=None, sample_filter=None, batch_size=8, mode='tuple', is_shuffle=True, buffer_size=None, workers=2, **kwargs):
+    def __init__(self, data=None, label=None, unpair=None, sample_filter=None, batch_size=8, mode='tuple', is_shuffle=True, buffer_size=None, workers=2, **kwargs):
+        self.parent =None
         self.is_paired_process = False
         self._data = None
         self._label = None
@@ -1137,6 +1148,7 @@ class Iterator(object):
     @data.setter
     def data(self, value):
         self._data = value
+        self._data.parent=self
 
         if self._label is not None and isinstance(self._label, (MaskDataset, BboxDataset, ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(
                 self._data):
@@ -1155,7 +1167,7 @@ class Iterator(object):
     @label.setter
     def label(self, value):
         self._label = value
-
+        self._label.parent = self
         if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(self._data):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
 
@@ -1172,7 +1184,7 @@ class Iterator(object):
     @unpair.setter
     def unpair(self, value):
         self._unpair = value
-
+        self._unpair.parent = self
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
@@ -1206,7 +1218,6 @@ class Iterator(object):
             return self._signature
         else:
             self._signature = Signature(name='data_provider')
-
             for ds in datasets:
                 spec = ds.element_spec
                 self.data_template[spec] = None
@@ -1226,6 +1237,8 @@ class Iterator(object):
             except:
                 PrintException()
         return datadict
+
+
 
     def batch_transform(self, datadict: Dict[TensorSpec, np.ndarray]):
         if len(self.batch_transform_funcs) > 0:
@@ -1304,16 +1317,15 @@ class Iterator(object):
         start_time = time.time()
 
         try:
-            bbox = None
-            mask = None
 
             returnData = OrderedDict()  # copy.deepcopy(self.data_template)
 
-            data = self.data.__getitem__(index) if self.data is not None and len(self.data) > 0 else None
+            data = self.data.__getitem__(index ) if self.data is not None and len(self.data) > 0 else None
             label = self.label.__getitem__(index) if self.label is not None and len(self.label) > 0 else None
-
-            unpair = self.unpair.__getitem__(index) if self.unpair is not None and len(self.unpair) > 0 else None
+            unpair = self.unpair.__getitem__(index%len(self.unpair)) if self.unpair is not None and len(self.unpair) > 0 else None
+            #((x1,x2),(x3),(x4,x5))=>(x1,x2,x3,x4,x5)
             results = iteration_tools.flatten((data, label, unpair), iterable_types=(tuple))
+            #remove none
             results = tuple([item for item in results if item is not None])
 
             if len(returnData) > 0 and len(returnData) != len(self.get_datasets()):
@@ -1335,19 +1347,20 @@ class Iterator(object):
                 if len(self.memory_cache) > self._batch_size // 2:
                     returnData = self.batch_transform(returnData)
 
-            # for i in range(len(returnData)):
-            #     ds = self.get_datasets()[i]
-            #     returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
-            def process_data_transform(i):
+            for i in range(len(returnData)):
                 ds = self.get_datasets()[i]
                 returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
+            # def process_data_transform(i):
+            #     ds = self.get_datasets()[i]
+            #     returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
+            #
+            # threads = []
+            # for i in range(len(returnData)):
+            #     threads.append(threading.Thread(target=process_data_transform, args=(i,)))
+            #     threads[i].start()
+            # for i in range(len(returnData)):
+            #     threads[i].join()
 
-            threads = []
-            for i in range(len(returnData)):
-                threads.append(threading.Thread(target=process_data_transform, args=(i,)))
-                threads[i].start()
-            for i in range(len(returnData)):
-                threads[i].join()
 
             if self.signature is None or len(self.signature.outputs) == 0:
                 self._signature = Signature(name='data_provider')

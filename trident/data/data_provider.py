@@ -12,7 +12,7 @@ import random
 import string
 import uuid
 import warnings
-from typing import List
+from typing import List, Iterable
 
 import numpy as np
 from trident import context
@@ -145,13 +145,19 @@ class ImageDataProvider(object):
 
     @image_transform_funcs.setter
     def image_transform_funcs(self, value):
+        value=[] if value is None else value
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
-
             dss = self.traindata.get_datasets()
             for ds in dss:
                 if isinstance(ds, ImageDataset):
                     ds.transform_funcs =value
+                if value is not None and hasattr(value, '__getitem__') and isinstance(ds,(BboxDataset,MaskDataset,LandmarkDataset)):
+                    ds.transform_funcs=[t for t in ds.transform_funcs if not hasattr(t,'is_spatial') or t. is_spatial==False]
+                    for t in list(range(len(value)))[::-1]:
+                        if isinstance(value[t],Transform) and hasattr(value[t],'is_spatial') and value[t].is_spatial:
+                            ds.transform_funcs.insert(0,value[t])
+
 
         if self.testdata is not None and len(self.testdata.data) > 0 and hasattr(self.testdata.data, 'transform_funcs'):
             dss_t = self.testdata.get_datasets()
@@ -448,6 +454,11 @@ class ImageDataProvider(object):
 
     def __setattr__(self, name: str, value) -> None:
         object.__setattr__(self, name, value)
+        if name=='traindata' or name=='testdata':
+            if isinstance(value, Iterator):
+                object.__getattribute__(self, name).parent=self
+                self.traindata.parent=self
+
         if name == 'mode':
             if isinstance(self.traindata, Iterator):
                 self.traindata.mode = value
