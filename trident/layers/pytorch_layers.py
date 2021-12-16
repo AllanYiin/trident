@@ -784,7 +784,7 @@ class _ConvNd(Layer):
                 if self.separable:
                     self.pointwise = Parameter(torch.Tensor(int(self.input_filters * self.depth_multiplier), int(self.num_filters), 1, 1))
 
-            kaiming_uniform(self.weight, a=math.sqrt(5))
+            xavier_uniform(self.weight, gain=1)
 
             if self.use_bias:
                 self.bias = Parameter(torch.Tensor(int(self.num_filters)))
@@ -1080,7 +1080,7 @@ class Conv2d(_ConvNd):
         else:
             x = F.pad(x, self.padding, mode='constant' if self.padding_mode == 'zero' else self.padding_mode)
 
-        return F.conv2d(x, self.weight, self.bias, self.strides, _pair(0), self.dilation, self.groups)
+        return F.conv2d(x, self.weight, self.bias, self.strides,0, self.dilation, self.groups)
 
     def forward(self, x, **kwargs):
 
