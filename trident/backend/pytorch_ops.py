@@ -8,7 +8,7 @@ import gc
 import math
 import numbers
 import random
-from collections import Sized, Iterable
+from collections import Sized, Iterable,namedtuple
 from distutils.version import LooseVersion
 from functools import wraps
 from typing import Tuple, List, Optional, Union, Sequence
@@ -315,7 +315,7 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
     elif dtype is None and not is_tensor(x) and isinstance(x, collections.Iterable) and all([isinstance(item, numbers.Integral) for item in x]):
         dtype = Dtype.int64
     elif dtype is None:
-        dtype = Dtype.float32
+        dtype = _float_dtype
     elif isinstance(dtype, str):
         dtype = str2dtype(dtype)
     if device is None:
@@ -521,7 +521,7 @@ def str2dtype(dtype_str:(str,torch.dtype)):
         elif 'float16' in dtype_str.lower() or 'half' in dtype_str.lower():
             return Dtype.float16
         elif 'float' in dtype_str.lower():
-            return Dtype.float32
+            return _float_dtype
         elif 'int64' in dtype_str.lower() or 'long' in dtype_str.lower():
             return Dtype.int64
         elif 'int16' in dtype_str.lower() or 'short' in dtype_str.lower():
@@ -534,7 +534,7 @@ def str2dtype(dtype_str:(str,torch.dtype)):
             return Dtype.int32
         elif 'bool' in dtype_str.lower():
             return Dtype.bool
-    return Dtype.float32
+    return _float_dtype
 
 
 
@@ -1444,10 +1444,8 @@ def log(x: Tensor):
 
 
     """
-    if x>0:
-        return x.log()
-    else:
-        raise ValueError("Negative log")
+    return torch.log(x)
+
 
 @numpy_compatible
 def exp(x: Tensor):
@@ -1489,10 +1487,10 @@ def exp(x: Tensor):
     @end_compatibility
 
     """
-    return x.exp()
+    return torch.exp(x)
 
 @numpy_compatible
-def clip(x: Tensor, min=-np.inf, max=np.inf):
+def clip(x: Tensor, min=None, max=None):
     """
 
     Args:
@@ -1503,14 +1501,7 @@ def clip(x: Tensor, min=-np.inf, max=np.inf):
     Returns:
 
     """
-    if min!=-np.inf and  max!=np.inf:
-        return x.clamp(min, max)
-    elif min!=-np.inf :
-        return x.clamp(min=min)
-    elif max!=np.inf:
-        return x.clamp(max=max)
-    else:
-        return x
+    return torch.clamp(x,min=min,max=max)
 
 @numpy_compatible
 def sin(x: Tensor):
@@ -1845,7 +1836,7 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype==Dtype.bool:
-        x.to(Dtype.float)
+        x.to(_float_dtype)
     if axis is None:
         original_shape = int_shape(x)
         new_shape = tuple([1] * len(original_shape))
@@ -1896,7 +1887,7 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype==Dtype.bool:
-        x.to(Dtype.float)
+        x.to(_float_dtype)
     if axis is None:
         original_shape = int_shape(x)
         new_shape = tuple([1] * len(original_shape))
@@ -1962,25 +1953,17 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype==Dtype.bool:
-        x.to(Dtype.float)
-    if axis is None:
-        original_shape=int_shape(x)
-        new_shape=tuple([1]*len(original_shape))
-        if ndim(x)==1:
-            axis=0
-        elif  ndim(x)>1:
-            axis =0
-            x=x.view(-1)
-        arr, idx =torch.max(x,dim=axis,keepdim=keepdims)
-        if keepdims:
-            arr=reshape(arr,new_shape)
-        return arr
-    elif isinstance(axis, int):
-        arr, idx = torch.max(x,dim=axis,keepdim=keepdims)
-        return arr
-    elif isinstance(axis, list):
-        arr, idx = torch.max(x,dim=tuple(axis),keepdim=keepdims)
-        return arr
+        x.to(_float_dtype)
+    if axis is None or isinstance(axis, (int, list, tuple)):
+        result = torch.max(x, dim=axis, keepdim=keepdims)
+        if is_tensor(result):
+            return result
+        elif isinstance(result, namedtuple):  # (values, indices)
+            #RuntimeError: Please look up dimensions by name, got: name = None.
+            return result['values']
+    else:
+        return torch.max(x)
+
 
 @numpy_compatible
 def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -2030,25 +2013,17 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype==Dtype.bool:
-        x.to(Dtype.float)
-    if axis is None:
-        original_shape = int_shape(x)
-        new_shape = tuple([1] * len(original_shape))
-        if ndim(x) == 1:
-            axis = 0
-        elif ndim(x) > 1:
-            axis = 0
-            x = x.view(-1)
-        arr, idx = torch.min(x, dim=axis, keepdim=keepdims)
-        if keepdims:
-            arr=reshape(arr,new_shape)
-        return arr
-    elif isinstance(axis, int):
-        arr, idx = torch.min(x,dim=axis,keepdim=keepdims)
-        return arr
-    elif isinstance(axis, list):
-        arr, idx = torch.min(x,dim=tuple(axis),keepdim=keepdims)
-        return arr
+        x.to(_float_dtype)
+    if axis is None or isinstance(axis, (int, list,tuple)):
+        result = torch.min(x, dim=axis, keepdim=keepdims)
+        if is_tensor(result):
+            return result
+        elif isinstance(result, namedtuple):  # (values, indices)
+            #RuntimeError: Please look up dimensions by name, got: name = None.
+            return result['values']
+    else:
+        return torch.min(x)
+
 
 @numpy_compatible
 def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -2088,13 +2063,10 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype==Dtype.bool:
-        x.to(Dtype.float)
-    if axis is None:
-        if ndim(x) == 1:
-            axis = 0
-        elif ndim(x) > 1:
-            axis =tuple(list(range(ndim(x))))
-        return  log(torch.sum(x, dim=axis, keepdim=keepdims))
+        x.to(_float_dtype)
+    if axis is None or isinstance(axis, (int, list,tuple)):
+
+        return  torch.logsumexp(x, dim=axis, keepdim=keepdims)
 
     else:
         return log(reduce_sum(exp(x), axis=axis, keepdims=keepdims))
@@ -3002,7 +2974,7 @@ def transpose(x,dim0:int, dim1:int) -> Tensor:
         transposed tensor
 
     """
-    x=x.transpose(dim0,dim1)
+    x=torch.transpose(x,dim0,dim1)
     if not x.is_contiguous():
         return x.contiguous()
     return x
@@ -3018,7 +2990,7 @@ def permute(x, *dims) -> Tensor:
     Returns:
 
     """
-    x=x.permute(*dims)
+    x= torch.permute(x,*dims)
     if not x.is_contiguous():
         return x.contiguous()
     return x
@@ -5330,7 +5302,6 @@ _FUN_NAMES = [
     ('meshgrid', meshgrid),
     ('reverse', reverse),
     ('reshape', reshape),
-    ('permute', permute),
     ('transpose', transpose),
     ('squeeze', squeeze),
     ('expand_dims', expand_dims),
