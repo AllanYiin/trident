@@ -1837,23 +1837,13 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
         return x
     if x.dtype==Dtype.bool:
         x.to(_float_dtype)
-    if axis is None:
-        original_shape = int_shape(x)
-        new_shape = tuple([1] * len(original_shape))
-        if ndim(x) == 1:
-            axis = 0
-        elif ndim(x) > 1:
-            axis = 0
-            x = x.view(-1)
-        arr= torch.mean(x, dim=axis, keepdim=keepdims)
-        if keepdims:
-            arr=reshape(arr,new_shape)
-        return arr
-    elif isinstance(axis, int):
-        return torch.mean(x,dim=[axis],keepdim=keepdims)
-    elif isinstance(axis, list):
-        x = torch.mean(x,dim=tuple(axis),keepdim=keepdims)
-        return x
+    if axis is None or isinstance(axis, (int, list, tuple)) :
+        if axis is None and keepdims ==False:
+            return torch.mean(x)
+        else:
+            return torch.mean(x,axis,keepdim=keepdims)
+    else:
+        return torch.mean(x)
 
 @numpy_compatible
 def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -1888,24 +1878,13 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
         return x
     if x.dtype==Dtype.bool:
         x.to(_float_dtype)
-    if axis is None:
-        original_shape = int_shape(x)
-        new_shape = tuple([1] * len(original_shape))
-        if ndim(x) == 1:
-            axis = 0
-        elif ndim(x) > 1:
-            axis = 0
-            x = x.view(-1)
-
-        arr= torch.sum(x,dim=axis,keepdim=keepdims)
-        if keepdims:
-            arr=reshape(arr,new_shape)
-        return arr
-    elif isinstance(axis, int):
-        return torch.sum(x,dim=axis,keepdim=keepdims)
-    elif isinstance(axis, list):
-        x =torch.sum(x,dim=tuple(axis),keepdim=keepdims)
-        return x
+    if axis is None or isinstance(axis, (int, list, tuple)):
+        if axis is None and keepdims == False:
+            return torch.sum(x)
+        else:
+            return torch.sum(x, axis, keepdim=keepdims)
+    else:
+        return torch.sum(x)
 
 @numpy_compatible
 def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -1955,12 +1934,17 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.dtype==Dtype.bool:
         x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
-        result = torch.max(x, dim=axis, keepdim=keepdims)
+        if axis is None and keepdims ==False:
+            result = x.max()
+        elif keepdims == False:
+            result = x.max(axis)
+        else:
+            result = x.max(axis, keepdims)
         if is_tensor(result):
             return result
         elif isinstance(result, namedtuple):  # (values, indices)
-            #RuntimeError: Please look up dimensions by name, got: name = None.
-            return result['values']
+            # RuntimeError: Please look up dimensions by name, got: name = None.
+            return result[0]
     else:
         return torch.max(x)
 
@@ -2015,12 +1999,18 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.dtype==Dtype.bool:
         x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list,tuple)):
-        result = torch.min(x, dim=axis, keepdim=keepdims)
+
+        if axis is None and keepdims ==False:
+            result = x.min()
+        elif keepdims ==False:
+            result = x.min(axis)
+        else:
+            result = x.min(axis, keepdims)
         if is_tensor(result):
             return result
         elif isinstance(result, namedtuple):  # (values, indices)
             #RuntimeError: Please look up dimensions by name, got: name = None.
-            return result['values']
+            return result[0]
     else:
         return torch.min(x)
 
