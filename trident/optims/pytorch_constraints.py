@@ -16,7 +16,7 @@ __all__ = ['max_norm', 'non_neg_norm', 'unit_norm', 'min_max_norm', 'maxnorm', '
 _session=get_session()
 _epsilon=_session.epsilon
 @torch.no_grad()
-def max_norm(model, max_value=3,axis=0):
+def max_norm(model, max_value=2,axis=0):
     """
     MaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have a norm less than or equal to a desired value.
@@ -26,11 +26,12 @@ def max_norm(model, max_value=3,axis=0):
         axis (int):axis along which to calculate weight norms.
 
     """
-    for name, param in model.named_parameters():
-        if 'bias' not in name and param is not None  and param.requires_grad==True:
-            norm = param.data.norm(2, dim=axis, keepdim=True)
-            desired = torch.clamp(norm, 0, max_value)
-            param.data.copy_(param.data * (desired / (epsilon() + norm)))
+    with torch.no_grad():
+        for name, param in model.named_parameters():
+            if 'bias' not in name and param is not None  and param.requires_grad==True:
+                norm = param.data.norm(2, dim=axis, keepdim=True)
+                desired = torch.clamp(norm, 0, max_value)
+                param.data.copy_(param.data * (desired / (epsilon() + norm)))
 
 @torch.no_grad()
 def non_neg_norm(model):
@@ -40,9 +41,10 @@ def non_neg_norm(model):
         model : the model contains  weights need to setting the constraints.
 
     """
-    for name, param in model.named_parameters():
-        if 'bias' not in name and param is not None  and param.requires_grad==True:
-            param.data.copy_(clip(param.data, 0, np.inf))
+    with torch.no_grad():
+        for name, param in model.named_parameters():
+            if 'bias' not in name and param is not None  and param.requires_grad==True:
+                param.data.copy_(clip(param.data, 0, np.inf))
 
 @torch.no_grad()
 def unit_norm(model,axis=0):
@@ -53,18 +55,19 @@ def unit_norm(model,axis=0):
         model : the model contains  weights need to setting the constraints.
 
     """
-    if isinstance(model,Layer):
-        for name, param in model.named_parameters():
-            if 'bias' not in name and param is not None  and param.requires_grad==True:
-                norm = param.data.norm(2, dim=axis, keepdim=True)
-                param.data.copy_(param.data / (epsilon() + norm))
-    elif is_tensor(model):
-        if  model is not None and model.requires_grad == True:
-            norm = model.data.norm(2, dim=axis, keepdim=True)
-            model.data.copy_(model.data / (epsilon() + norm))
+    with torch.no_grad():
+        if isinstance(model,Layer):
+            for name, param in model.named_parameters():
+                if 'bias' not in name and param is not None  and param.requires_grad==True:
+                    norm = param.data.norm(2, dim=axis, keepdim=True)
+                    param.data.copy_(param.data / (epsilon() + norm))
+        elif is_tensor(model):
+            if  model is not None and model.requires_grad == True:
+                norm = model.data.norm(2, dim=axis, keepdim=True)
+                model.data.copy_(model.data / (epsilon() + norm))
 
 @torch.no_grad()
-def min_max_norm(model,min_value=0, max_value=1, rate=2.0, axis=0):
+def min_max_norm(model,min_value=0, max_value=1, rate=1.0, axis=0):
     """
     MinMaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have the norm between a lower bound and an upper bound.
@@ -78,11 +81,12 @@ def min_max_norm(model,min_value=0, max_value=1, rate=2.0, axis=0):
 
 
     """
-    for name, param in model.named_parameters():
-        if 'bias' not in name and param is not None  and param.requires_grad==True:
-            norm = param.data.norm(2, dim=axis, keepdim=True)
-            desired = rate *clip(norm, min_value, max_value)+ (1 - rate) * norm
-            param.data.copy_(param.data * (desired / (epsilon() + norm)))
+    with torch.no_grad():
+        for name, param in model.named_parameters():
+            if 'bias' not in name and param is not None  and param.requires_grad==True:
+                norm = param.data.norm(2, dim=axis, keepdim=True)
+                desired = rate *clip(norm, min_value, max_value)+ (1 - rate) * norm
+                param.data.copy_(param.data * (desired / (epsilon() + norm)))
 
 
 

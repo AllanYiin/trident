@@ -16,7 +16,7 @@ _session=get_session()
 _epsilon=_session.epsilon
 
 
-def  max_norm(model,max_value=3, axis=0):
+def  max_norm(model,max_value=2, axis=0):
     """
     MaxNorm weight constraint.
     Constrains the weights incident to each hidden unit to have a norm less than or equal to a desired value.
