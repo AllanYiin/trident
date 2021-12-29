@@ -1765,9 +1765,9 @@ def element_cosine_distance(v1, v2, axis=-1):
     Returns:
 
     """
-    reduce_dim = -1
-    x_normalized=l2_normalize(v1,axis=-1, keepdims=True)
-    y_normalized =l2_normalize(v2,axis=-1, keepdims=True)
+
+    x_normalized=l2_normalize(v1,axis=axis, keepdims=True)
+    y_normalized =l2_normalize(v2,axis=axis, keepdims=True)
 
     cos=matmul(x_normalized,y_normalized,False,True)
 
@@ -1942,7 +1942,7 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
             result = x.max(axis, keepdims)
         if is_tensor(result):
             return result
-        elif isinstance(result, namedtuple):  # (values, indices)
+        elif isinstance(result, tuple) :  # (values, indices)
             # RuntimeError: Please look up dimensions by name, got: name = None.
             return result[0]
     else:
@@ -2008,7 +2008,7 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
             result = x.min(axis, keepdims)
         if is_tensor(result):
             return result
-        elif isinstance(result, namedtuple):  # (values, indices)
+        elif isinstance(result, tuple):  # (values, indices)
             #RuntimeError: Please look up dimensions by name, got: name = None.
             return result[0]
     else:
