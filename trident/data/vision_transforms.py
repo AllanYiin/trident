@@ -12,6 +12,7 @@ import numpy as np
 from skimage.filters import threshold_minimum, threshold_local, threshold_isodata, threshold_yen
 
 from trident.backend.common import *
+from trident.data.bbox_common import box_area
 from trident.backend.tensorspec import ObjectType, get_signature
 from trident.backend.tensorspec import TensorSpec
 
@@ -30,40 +31,62 @@ __all__ = ['Resize','Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', '
 
 
 
-def randomize_with_validate(keep_prob=0.5,valid_range=None, no_change_value=None, **kwargs):
+def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=None, **kwargs):
     def randomize_wrapper(cls):
         class Wrapper:
             def __init__(self, **kwargs):
                 self._args=None
-                self.rangs=None
+                self.rangs=OrderedDict()
                 self.other_args=None
                 self.keep_prob =keep_prob
                 self.valid_range = None
-                self.no_change_value = None
-
-                if isinstance(valid_range, (tuple, list)) and len(valid_range) == 2 and all([isinstance(t, numbers.Number) for t in valid_range]):
+                if isinstance(valid_range, (tuple, list)) and len(valid_range) == 2 and all(
+                        [isinstance(t, numbers.Number) for t in valid_range]):
                     self.valid_range = valid_range
-                if 'scale' in kwargs and len(kwargs[ 'scale'])==2 and len([k for k,v in kwargs.items() if len(v)==2 ])==1 :
-                    self.valid_range=kwargs[ 'scale']
-                    kwargs.pop('scale')
-
-                if isinstance(no_change_value, numbers.Number):
-                    self.no_change_value = float(no_change_value)
 
 
-                # argspec = inspect.getfullargspec(cls.__init__)
-                # _args = argspec.args
-                # _args.remove('self')
-                # _args.remove('name')
+                self.effectless_value = None
+                if isinstance(effectless_value, numbers.Number):
+                    self.effectless_value = float(effectless_value)
+
+
+
+
+                # if 'scale' in kwargs and len(kwargs[ 'scale'])==2 and len([k for k,v in kwargs.items() if len(v)==2 ])==1 :
+                #     self.valid_range=kwargs[ 'scale']
+                #     kwargs.pop('scale')
+                #
+
+
                 self._args = get_signature(cls.__init__,name=cls.__name__)
 
-                self.rangs = dict([(k.replace('_range', ''), v) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
-                for argname,arg in self._args.inputs.items():
-                    if argname not in ['self','name','keep_ratio'] and 'size' not in argname and 'shape' not in argname and argname not in self.rangs and isinstance(arg.default,numbers.Number):
-                        self.rangs[argname]=self.valid_range
+                candidate_ranges= dict([(k.replace('_range', '').replace('_scale', ''), v) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
+                for k,v in candidate_ranges.items():
+                    value_range=list(v)
+                    if value_range[0] < valid_range[0]:
+                        value_range[0] = valid_range[0]
+                    if value_range[1] > valid_range[1]:
+                        value_range[1] = valid_range[1]
+                    if value_range[1]==value_range[0]:
+                        value_range=valid_range
 
-                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in self.rangs.items()])
-                other_args = dict([(k, v.default) for k, v in self._args.inputs.items() if k.replace('_range', '') not in self.rangs ])
+                    if k in self._args.inputs:
+                        self.rangs[k] =tuple(value_range)
+                    elif len(candidate_ranges)==1 and 'value' in self._args.inputs:
+                        self.rangs[ 'value' ] = tuple(value_range)
+                    elif len(candidate_ranges) == 1 and 'scale' in self._args.inputs:
+                        self.rangs['scale'] = tuple(value_range)
+                    else:
+                        keys=[k for k in self._args.inputs.key_list if k not in ['self','name','keep_ratio'] and 'size' not in k and 'shape' not in k  and isinstance(self._args.inputs[k].default,numbers.Number)]
+                        if len(keys)>0:
+                         self.rangs[keys[0]] = tuple(value_range)
+
+
+                rangs = OrderedDict([(k, random.uniform(*v)) for k, v in self.rangs.items()])
+                other_args = OrderedDict([(k, v.default) for k, v in self._args.inputs.items() if  k not in self.rangs ])
+                if 'name' in other_args:
+                    other_args.pop( 'name' )
+
                 self.other_args = other_args
 
                 if len(rangs.values()) == 0 and self.valid_range is not None:
@@ -72,8 +95,8 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, no_change_value=None
                     else:
                         self.wrap = cls(random.uniform(*self.valid_range), **other_args)
                 else:
-
                     self.wrap = cls(*list(rangs.values()), **other_args)
+
                 self.rn = random.random()
 
             def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None, **kwargs):
@@ -98,12 +121,19 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, no_change_value=None
                 else:
                     return inputs
 
+            def _apply_image(self, image, spec: TensorSpec):
+                return self.wrap._apply_image( image, spec)
+
+            def _apply_coords(self, coords, spec: TensorSpec):
+                return self.wrap._apply_coords(coords, spec)
+            def _apply_mask(self, mask, spec: TensorSpec):
+                return self.wrap._apply_mask(mask, spec)
+            def _get_shape(self, image):
+                return self.wrap._get_shape(image)
             def set_random(self):
                 self.rn = random.random()
-                #self.rn = random.randint(0, 10)
-
-                rangs = dict([(k.replace('_range', ''), random.uniform(*v)) for k, v in self.rangs.items() if isinstance(v, tuple) and len(v) == 2])
-                other_args = dict([(k, v) for k, v in self.other_args.items() if not (isinstance(v, tuple) and len(v) == 2)])
+                rangs = dict([(k, random.uniform(*v)) for k, v in self.rangs.items() if isinstance(v, (tuple,list)) and len(v) == 2])
+                other_args = dict([(k, v) for k, v in self.other_args.items() if not (isinstance(v, (tuple,list))  and len(v) == 2)])
                 return rangs, other_args
 
         Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
@@ -533,7 +563,7 @@ class RandomRescaleCrop(VisionTransform):
             if cropped_mask.shape[0] == eh and cropped_mask.shape[1] == ew:
                 return cropped_mask
             else:
-                background = np.zeros(tuple(mask_shape))
+                background = np.zeros(tuple(mask_shape)).astype(mask.dtype)
                 background[builtins.max(eh - cropped_mask.shape[0], 0) // 2:builtins.max(eh - cropped_mask.shape[0], 0) // 2 + cropped_mask.shape[0],
                 builtins.max(ew - cropped_mask.shape[1], 0) // 2:builtins.max(ew - cropped_mask.shape[1], 0) // 2 + cropped_mask.shape[1]] = cropped_mask
                 return background
@@ -626,7 +656,7 @@ class RandomCenterCrop(VisionTransform):
         mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST)
         crop_mask = mask[y: builtins.min(y + eh, th), x:builtins.min(x + ew, tw)]
         if crop_mask.shape[0] < eh or crop_mask.shape[1] < ew:
-            background = np.zeros((eh, ew))
+            background = np.zeros((eh, ew)).astype(mask.dtype)
             background[builtins.max(eh - crop_mask.shape[0], 0) // 2:builtins.max(eh - crop_mask.shape[0], 0) // 2 + crop_mask.shape[0],
             builtins.max(ew - crop_mask.shape[1], 0) // 2:builtins.max(ew - crop_mask.shape[1], 0) // 2 + crop_mask.shape[1]] = crop_mask
             return background
@@ -699,12 +729,12 @@ class RandomCrop(VisionTransform):
     def _apply_mask(self, mask, spec: TensorSpec):
         h, w, eh, ew, offset_x, offset_y, offset_x1, offset_y1 = self._shape_info
         if mask.ndim == 2:
-            output = np.zeros(self.output_size)
+            output = np.zeros(self.output_size).astype(mask.dtype)
             crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w)]
             output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1]] = crop_mask
             return output
         elif mask.ndim == 3:
-            output = np.zeros((*self.output_size, 3))
+            output = np.zeros((*self.output_size, 3)).astype(mask.dtype)
             crop_mask = mask[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
             output[offset_y1:offset_y1 + crop_mask.shape[0], offset_x1:offset_x1 + crop_mask.shape[1], :] = crop_mask
             return output
@@ -918,12 +948,19 @@ class RandomMultiScaleImage(VisionTransform):
         if self.keep_aspect:
             self.resize_funs.pop(2)
 
-    def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], **kwargs):
+    def _apply_image(self, image, spec: TensorSpec):
         self._shape_info = self._get_shape()
+        idx= self._shape_info
+        return self.resize_funs[idx]._apply_image( image, spec)
+    def _apply_mask(self, mask, spec: TensorSpec):
         idx = self._shape_info
-        #self.tmp_fun=self.resize_funs[idx]
-        spec = kwargs.get('spec')
-        return self.resize_funs[idx].apply_batch(inputs, spec)
+        return self.resize_funs[idx]._apply_mask( mask, spec)
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        idx = self._shape_info
+        return self.resize_funs[idx]._apply_coords( coords, spec)
+
+
     def _get_shape(self,image=None):
         idx=random.choice(range(len(self.resize_funs)))
         return idx
@@ -1019,6 +1056,8 @@ class Normalize(VisionTransform):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
+        if image is None:
+            pass
         image = image.astype(np.float32)
         norm_mean = self.mean
         norm_std = self.std
@@ -1319,17 +1358,17 @@ class AdjustGamma(VisionTransform):
         return mask
 
 
-@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
+@randomize_with_validate(valid_range=(0., 3.), effectless_value=1.)
 class RandomAdjustBrightness(AdjustBrightness):
     pass
 
 
-@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
+@randomize_with_validate(valid_range=(0., 3.), no_change_value=0.)
 class RandomAdjustContrast(AdjustContrast):
     pass
 
 
-@randomize_with_validate(valid_range=(0., 3.), no_change_value=1.)
+@randomize_with_validate(valid_range=(0., 3.), no_change_value=0.)
 class RandomAdjustSaturation(AdjustSaturation):
     pass
 
@@ -1360,10 +1399,11 @@ class GrayMixRGB(VisionTransform):
 
         dtype = image.dtype
         image = image.astype(np.float32)
-        gray = cv2.cvtColor(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
-        gray0 = gray[:, :, 0]
-        min_rgb = image.mean(-1)
-        mask = np.expand_dims(np.greater(gray0, min_rgb), -1)
+        gray = cv2.cvtColor(cv2.cvtColor(image.copy(), cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
+        #gray0 = gray[:, :, 0]
+
+        min_rgb = image.mean(axis=-1,keepdims=True)
+        mask = np.greater(gray, min_rgb)
         image = mask * gray + (1 - mask) * image
 
         return image.clip(0, 255).astype(np.float32)
@@ -1716,32 +1756,28 @@ class AdaptiveBinarization(VisionTransform):
 
 class Lighting(VisionTransform):
 
-    def __init__(self, scale=0.0, name='lighting', **kwargs):
+    def __init__(self, value=0.0, name='lighting', **kwargs):
         super().__init__(name)
-        if scale < 0:
-            raise ValueError("lighting scale should be non-negative")
-        self.scale = scale
-        self.eigvec = np.array(
-            [
-                [-0.5836, -0.6948, 0.4203],
-                [-0.5808, -0.0045, -0.8140],
-                [-0.5675, 0.7192, 0.4009],
-            ]
-        )  # reverse the first dimension for BGR
+        if value < 0:
+            raise ValueError("lighting value should be non-negative")
+        self.value = value
+        self.eigvec = np.array([[-0.5675, 0.7192, 0.4009], [-0.5808, -0.0045, -0.8140], [-0.5836, -0.6948, 0.4203]])  # reverse the first dimension for BGR
         self.eigval = np.array([0.2175, 0.0188, 0.0045])
+
+
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
-        if self.scale == 0:
+        if self.value == 0:
             return image
 
         dtype = image.dtype
-        image = (image/255.0).astype(np.float32)
-        alpha = np.random.normal(scale=self.scale, size=3)
-        image = image + self.eigvec.dot(alpha * self.eigval)
-        return (image*255).clip(0, 255).astype(dtype)
+        image = image.astype(np.float32)
+        alpha = np.random.normal(scale=self.value * 255, size=3)
+        image = image +self.eigvec.dot(alpha * self.eigval)
+        return image.clip(0, 255).astype(dtype)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
@@ -1749,7 +1785,7 @@ class Lighting(VisionTransform):
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
 
-@randomize_with_validate(valid_range=(0, 3.), no_change_value=0.)
+@randomize_with_validate(valid_range=(0, 1.), effectless_value=0.)
 class RandomLighting(Lighting):
     pass
 
@@ -2157,8 +2193,6 @@ class RandomGridMask(VisionTransform):
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w, rr, keep = self._shape_info
-        height, width = self.output_size
         return mask
 
     def _get_shape(self, image):
