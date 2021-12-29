@@ -868,32 +868,34 @@ class Model(ModelBase):
 
     def do_gradient_update(self, log_gradients=False):
         accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
-        if isinstance(self._model, (Layer, tf.Module)):
-            # double check!!!
+        need_backward = self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[ 'stop_update'])
+        is_layer = isinstance(self._model, (Layer, tf.Module))
+        if is_layer:
             self._model.train()
+        if need_backward:
+            if not accumulate_grads:
+                super().on_optimization_step_start()
+                if self.accumulation_steps > 1:
+                    #vars,grads = map(None, * self.training_context['grads_and_vars'])
+                    self.training_context['grads_and_vars']=zip( self.training_context['accum_gradient'].key_list, self.training_context['accum_gradient'].value_list)
 
-        if self.training_context['stop_update'] < 1:
-            self.on_optimization_step_start()
-
-            if self.training_context['stop_update'] == 0:
-                self.optimizer.step(self.training_context['grads_and_vars'])
                 if log_gradients:
                     self.log_gradient(self.training_context['grads_and_vars'])
+                self.optimizer.step(self.training_context['grads_and_vars'])
+                if self.accumulation_steps > 1:
+                    self.training_context['accum_gradient']=OrderedDict()
                 self.do_on_optimization_step_end()
 
-
-            elif 0 < self.training_context['stop_update'] < 1:
-                if random.random() <= self.training_context['stop_update']:
-                    self.optimizer.step(self.training_context['grads_and_vars'])
-                    if log_gradients:
-                        self.log_gradient(self.training_context['grads_and_vars'])
-                    self.do_on_optimization_step_end()
         else:
-            self.training_context['stop_update'] = self.training_context['stop_update'] - 1
+            self.training_context['stop_update'] = self.training_context['stop_update'] - 1 \
+                if self.training_context['stop_update'] > 1 else self.training_context['stop_update']
+            if not self.training_context['retain_graph'] and not accumulate_grads:
+                if is_layer:
+                    self._model.zero_grad()
+
 
         if self.accumulation_steps > 1:
-            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
-                                                        to_scalar(self.training_context['current_loss'].copy()))
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss'].copy()))
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
@@ -1221,6 +1223,7 @@ class Model(ModelBase):
                     if self.training_context['current_epoch'] == 0:
                         # epoch is not the logical inteval for us to control the flow
                         self.training_context['steps'] = 0
+                        self.training_context['accum_gradient'] = OrderedDict()
 
                         self.training_context['grads_state'] = OrderedDict()
                         self.training_context['grads_state']['first_layer'] = []
@@ -1251,6 +1254,7 @@ class Model(ModelBase):
 
                 if (not self.training_context['skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
                     self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
+
 
                 with tf.GradientTape() as grad_tape:
                     grad_tape.watch(self._model.trainable_variables)
@@ -1333,9 +1337,14 @@ class Model(ModelBase):
 
                 vars = grad_tape.watched_variables()
                 grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
-                # grads = tuple([where(is_nan(grad), zeros_like(grad), grad) for grad in grads])
 
                 self.training_context['grads_and_vars'] = zip(grads, vars)
+                for this_grad,this_var in zip(grads, vars):
+                    if this_var.ref() not in   self.training_context['accum_gradient']:
+                        self.training_context['accum_gradient'][this_var.ref()]=this_grad
+                    else:
+                        assign_add(self.training_context['accum_gradient'][this_var.ref()],this_grad)
+
                 # for g,v in enumerate(zip(grads, vars)):
                 #     ctx.print(v.name,v.shape,)
                 # self.optimizer.step(zip(grads,vars))
