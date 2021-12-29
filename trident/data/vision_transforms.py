@@ -1308,11 +1308,17 @@ class AdjustHue(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self.value == 0:
             return image
-        image = image.astype(np.uint8)
-        hsv = cv2.cvtColor(image, cv2.COLOR_RGB2HSV_FULL)
-        hsv[..., 0] += np.uint8(self.value * 255)
-        image = cv2.cvtColor(hsv, cv2.COLOR_HSV2RGB_FULL)
-        return image.clip(0, 255).astype(np.float32)
+        image_dtype=image.dtype
+        image = np.clip(image,0,255).astype(np.uint8)
+        hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV_FULL)
+        h, s, v = np.split(hsv_image,3,axis=-1)
+        # uint8 addition take cares of rotation across boundaries
+        with np.errstate(over="ignore"):
+            h += np.uint8( self.value * 255)
+        hsv_image = cv2.merge([h, s, v])
+
+        image = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2RGB_FULL)
+        return image.clip(0, 255).astype(image_dtype)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         return coords
@@ -1761,8 +1767,8 @@ class Lighting(VisionTransform):
         if value < 0:
             raise ValueError("lighting value should be non-negative")
         self.value = value
-        self.eigvec = np.array([[-0.5675, 0.7192, 0.4009], [-0.5808, -0.0045, -0.8140], [-0.5836, -0.6948, 0.4203]])  # reverse the first dimension for BGR
-        self.eigval = np.array([0.2175, 0.0188, 0.0045])
+        self.eigvec = np.array([[0.4009, 0.7192, -0.5675], [-0.8140,-0.0045, -0.5808], [ 0.4203,-0.6948, -0.5836]])  # reverse the first dimension for BGR
+        self.eigval = np.array([ 0.0045,0.0188,0.2175])
 
 
 
@@ -1775,7 +1781,8 @@ class Lighting(VisionTransform):
 
         dtype = image.dtype
         image = image.astype(np.float32)
-        alpha = np.random.normal(scale=self.value * 255, size=3)
+        alpha=  np.random.normal(scale=self.value * 255, size=3)
+
         image = image +self.eigvec.dot(alpha * self.eigval)
         return image.clip(0, 255).astype(dtype)
 
