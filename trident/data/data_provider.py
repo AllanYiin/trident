@@ -164,6 +164,11 @@ class ImageDataProvider(object):
             for ds in dss_t:
                 if isinstance(ds, ImageDataset):
                     ds.transform_funcs =value
+                if value is not None and hasattr(value, '__getitem__') and isinstance(ds, (BboxDataset, MaskDataset, LandmarkDataset)):
+                    ds.transform_funcs = [t for t in ds.transform_funcs if not hasattr(t, 'is_spatial') or t.is_spatial == False]
+                    for t in list(range(len(value)))[::-1]:
+                        if isinstance(value[t], Transform) and hasattr(value[t], 'is_spatial') and value[t].is_spatial:
+                            ds.transform_funcs.insert(0, value[t])
 
 
     def image_transform(self, img_data):
@@ -184,9 +189,15 @@ class ImageDataProvider(object):
     @property
     def reverse_image_transform_funcs(self):
         return_list = [reverse_image_backend_adaption]
+        if self.image_transform_funcs is None or self.image_transform_funcs==[]:
+            dss=self.traindata.get_datasets()
+            for ds in dss:
+                if isinstance(ds,ImageDataset) and len(ds.transform_funcs)>0:
+                    self.image_transform_funcs=ds.transform_funcs
+                    break
         for i in range(len(self.image_transform_funcs)):
             fn = self.image_transform_funcs[-1 - i]
-            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (isinstance(fn, Transform) and fn.name == 'normalize'):
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or isinstance(fn, Normalize):
                 return_list.append(Unnormalize(fn.mean, fn.std))
         # return_list.append(array2image)
         return return_list
