@@ -5,7 +5,7 @@ from __future__ import print_function
 
 import builtins
 # import pysnooper
-from torch import autograd
+#from torch import autograd
 import copy
 import inspect
 import json
@@ -883,7 +883,7 @@ class ModelBase(object):
         if 'max_name_length' not in self.training_context:
             self.training_context['max_name_length'] = len(self.name) + 1
         metric_strings = []
-        slice_length = print_batch_progress_frequency // self.training_context['collect_data_inteval']
+
         for k in self.batch_metric_history.key_list:
             if k != 'epoch':
                 metric_value = None
@@ -892,26 +892,22 @@ class ModelBase(object):
                     batch_steps, batch_values = self.tmp_metrics.get_series(k)
                     metric_value = np.array(batch_values).mean()
                 else:
-                    if len(batch_values) > slice_length:
-                        metric_value = np.array(batch_values[-1 * slice_length:]).mean()
-                    else:
-                        metric_value = np.array(batch_values).mean()
-
+                    metric_value =batch_values[-1]
                 metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, batch_values, value_type='metric', name=k)))
 
-        loss_value = None
-        loss_steps, loss_values = self.batch_loss_history.get_series('total_losses')
-        if len(loss_values) == 0:
+        if len(self.training_context['losses']) == 0:
             loss_value = None
         else:
-            if len(loss_values) > slice_length:
-                loss_value = to_numpy(loss_values[-1 * slice_length:]).astype(np.float32).mean()
+            if len(self.training_context['losses'].get_series('total_losses')[0])>0:
+                loss_value =self.training_context['losses'].get_last('total_losses')[-1]
             else:
-                loss_value = to_numpy(loss_values).astype(np.float32).mean()
+                steps, values = self.tmp_losses.get_series('total_losses')
+                loss_value= np.array(values).mean()
+
         step_time = self.training_context['time_batch_progress'] / builtins.min(self.steps + 1, print_batch_progress_frequency)
         progress_bar(step_time, self.training_context['current_batch']+1, self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
                      'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
-                                                                            self.training_context['current_lr'],
+                                                                            self.optimizer.lr,
                                                                             self.training_context['current_epoch']),
                      name=self.training_context['model_name'].ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_batch_progress'] = 0

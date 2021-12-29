@@ -898,7 +898,7 @@ class Model(model.ModelBase):
 
     def do_gradient_update(self, log_gradients=False):
         try:
-            accumulate_grads = self.training_context['steps'] % self.accumulation_steps != 0
+            accumulate_grads = (self.training_context['steps']+1) % self.accumulation_steps != 0
             need_backward = self.training_context['stop_update'] == 0 or (
                         0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
                     'stop_update'])
@@ -975,15 +975,25 @@ class Model(model.ModelBase):
                         (self.training_context['current_loss'] / self.accumulation_steps).backward(
                             retain_graph=self.training_context['retain_graph'])
 
+            if self.accumulation_steps > 1:
+                self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss'].copy()))
+
+
         except Exception as e:
             ctx.print(e)
             PrintException()
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
-        self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss']))
-        if self.training_context['is_collect_data'] :
-            steps, values =self.training_context['tmp_losses'].get_series('total_losses')
+        if  self.accumulation_steps==1:
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss']))
+            if self.training_context['is_collect_data']  :
+                steps, values =self.training_context['tmp_losses'].get_series('total_losses')
+                self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
+                if self.training_context['current_batch']>0:
+                    self.training_context['tmp_losses'].reset()
+        else:
+            steps, values = self.training_context['tmp_losses'].get_series('total_losses')
             self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
             if self.training_context['current_batch'] > 0:
                 self.training_context['tmp_losses'].reset()

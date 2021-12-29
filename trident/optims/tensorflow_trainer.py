@@ -867,6 +867,7 @@ class Model(ModelBase):
         super().on_optimization_step_start()
 
     def do_gradient_update(self, log_gradients=False):
+        accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
         if isinstance(self._model, (Layer, tf.Module)):
             # double check!!!
             self._model.train()
@@ -890,17 +891,24 @@ class Model(ModelBase):
         else:
             self.training_context['stop_update'] = self.training_context['stop_update'] - 1
 
-
+        if self.accumulation_steps > 1:
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
+                                                        to_scalar(self.training_context['current_loss'].copy()))
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
-        self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss']))
-        if self.training_context['is_collect_data'] :
-            steps, values =self.training_context['tmp_losses'].get_series('total_losses')
+        if self.accumulation_steps == 1:
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
+            if self.training_context['is_collect_data']:
+                steps, values = self.training_context['tmp_losses'].get_series('total_losses')
+                self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
+                if self.training_context['current_batch'] > 0:
+                    self.training_context['tmp_losses'].reset()
+        else:
+            steps, values = self.training_context['tmp_losses'].get_series('total_losses')
             self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
-            if self.training_context['current_batch']> 0:
+            if self.training_context['current_batch'] > 0:
                 self.training_context['tmp_losses'].reset()
-
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
         self.save_model()
@@ -964,56 +972,57 @@ class Model(ModelBase):
                 self._model.cpu()
 
                 #tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
-                temfolder = tempfile.gettempdir()
-                tempfilename = filename + '_' + str(uuid.uuid4().node)
-                temppath = os.path.join(temfolder, tempfilename + ext)
+                #temfolder = tempfile.gettempdir()
+                with tempfile.TemporaryDirectory() as temfolder:
+                    tempfilename = filename + '_' + str(uuid.uuid4().node)
+                    temppath = os.path.join(temfolder, tempfilename + ext)
 
-                try:
-                    with open(temppath,'wb') as f:
-                        with tf.device('/cpu:0'):
-                            save({
-                                'state_dict': self._model.state_dict(),
-                                'backend': 'tensorflow',
-                                'trident_version': __version__,
-                                'tensorflow_version': tf.version.VERSION,
-                                'signature': self._model.signature
-                            },f,is_compressed=True)
+                    try:
+                        with open(temppath,'wb') as f:
+                            with tf.device('/cpu:0'):
+                                save({
+                                    'state_dict': self._model.state_dict(),
+                                    'backend': 'tensorflow',
+                                    'trident_version': __version__,
+                                    'tensorflow_version': tf.version.VERSION,
+                                    'signature': self._model.signature
+                                },f,is_compressed=True)
 
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        shutil.move(temppath, save_path)
-                        # os.rename(move_path, save_path)
-                    else:
-                        shutil.move(temppath, save_path)
-
-                except Exception as e:
-                    ctx.print(e)
-                    if os.path.exists(temppath):
                         if os.path.exists(save_path):
-                            shutil.move(save_path, save_path + '._')
-                        shutil.move(temppath, save_path)
+                            os.remove(save_path)
+                            shutil.move(temppath, save_path)
+                            # os.rename(move_path, save_path)
+                        else:
+                            shutil.move(temppath, save_path)
 
-                ext = '.pth'
-                save_path = save_path.replace('.pth.tar', '.pth')
-                tempfilename2 = filename + '_' + str(uuid.uuid4().node)
-                temppath2 = os.path.join(temfolder, tempfilename2 + ext)
+                    except Exception as e:
+                        ctx.print(e)
+                        if os.path.exists(temppath):
+                            if os.path.exists(save_path):
+                                shutil.move(save_path, save_path + '._')
+                            shutil.move(temppath, save_path)
 
-                try:
-                    with open(temppath2, 'wb') as f:
-                        save(self._model, f)
+                    ext = '.pth'
+                    save_path = save_path.replace('.pth.tar', '.pth')
+                    tempfilename2 = filename + '_' + str(uuid.uuid4().node)
+                    temppath2 = os.path.join(temfolder, tempfilename2 + ext)
 
-                    if os.path.exists(save_path):
-                        os.remove(save_path)
-                        shutil.move(temppath2, save_path)
-                        #os.rename(move_path2, save_path)
-                    else:
-                        shutil.move(temppath2, save_path)
-                except Exception as e:
-                    ctx.print(e)
-                    if os.path.exists(temppath2):
+                    try:
+                        with open(temppath2, 'wb') as f:
+                            save(self._model, f)
+
                         if os.path.exists(save_path):
-                            shutil.move(save_path, save_path + '._')
-                        shutil.move(temppath2, save_path)
+                            os.remove(save_path)
+                            shutil.move(temppath2, save_path)
+                            #os.rename(move_path2, save_path)
+                        else:
+                            shutil.move(temppath2, save_path)
+                    except Exception as e:
+                        ctx.print(e)
+                        if os.path.exists(temppath2):
+                            if os.path.exists(save_path):
+                                shutil.move(save_path, save_path + '._')
+                            shutil.move(temppath2, save_path)
 
 
                 with tf.device(get_device()):
