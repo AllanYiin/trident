@@ -277,6 +277,157 @@ class CutMixCallback(RegularizationCallbacksBase):
         train_data = training_context['train_data']
         x = train_data.value_list[0].copy().detach().to(model.device)  # input
         y = train_data.value_list[1].copy().detach().to(model.device)  # label
+        is_superresolution=False
+        scale=1
+        if ndim(x)==ndim(y) :
+            scale=int_shape(y)[2] / int_shape(x)[2]
+            if scale==int_shape(y)[3] / int_shape(x)[3] and scale in [2,4,8,16]:
+                is_superresolution=True
+
+
+        lam = builtins.max(np.random.beta(self.alpha, self.alpha)*0.3,0.1)
+
+        batch_size = int_shape(x)[0]
+        index = cast(arange(batch_size), 'int64')
+        index = shuffle(index)
+        mixed_x=x.copy()
+        mixed_y = y.copy()
+
+
+        if get_backend() == 'pytorch':
+
+            bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[3], x.shape[2], lam)
+            mixed_x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
+            if is_superresolution:
+                mixed_y[:, :, int(bbx1*scale):int(bbx2*scale), int(bby1*scale):int(bby2*scale)] = y[index, :, int(bbx1*scale):int(bbx2*scale), int(bby1*scale):int(bby2*scale)]
+                pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+                this_loss =SmoothL1Loss()(pred,mixed_y)
+                training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+                training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'],float(to_numpy(this_loss) * self.loss_weight))
+
+            else:
+                y_a, y_b = y, y[index]
+
+                # adjust lambda to exactly match pixel ratio
+                lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
+                pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
+                this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+                training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+                training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
+
+        elif get_backend() == 'tensorflow':
+            with tf.device(get_device()):
+                x1 = tf.gather(x, index, axis=0).copy().detach()
+                y1 = tf.gather(y, index, axis=0).copy().detach()
+
+                bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
+
+                #eager tensor cannot assignment!!!
+                filter = np.zeros_like(x,dtype=np.float32)
+
+                filter[:, bbx1:bbx2, bby1:bby2, :] = 1.0
+
+                filter = to_tensor(filter).detach()
+
+                mixed_x = x * (1 - filter) + (x1 * filter)
+                if is_superresolution:
+                    filter_y = np.zeros_like(y, dtype=np.float32)
+                    filter_y[:, int(bbx1 * scale):int(bbx2 * scale), int(bby1 * scale):int(bby2 * scale), :] = 1.0
+                    filter_y = to_tensor(filter_y).detach()
+                    mixed_y = y * (1 - filter_y) + (y1 * filter)
+                    pred = model(to_tensor(mixed_x, requires_grad=True))
+                    this_loss = SmoothL1Loss()(pred, mixed_y)
+                    training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+                    training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'],float(to_numpy(this_loss) * self.loss_weight))
+
+
+                else:
+                    #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
+                    # adjust lambda to exactly match pixel ratio
+                    lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
+                    pred = model(to_tensor(mixed_x, requires_grad=True))
+                    y_a, y_b = y, y1
+                    this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred, y_b)
+
+                    training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
+                    training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
+
+
+        if training_context['current_batch'] == 0:
+            if self.save_path is None:
+                self.save_path='Results'
+
+            for item in mixed_x:
+                item = self.reverse_image_transform(to_numpy(item))
+                array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+                if ctx.enable_mlflow:
+                    ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+
+
+class CutBlurCallback(RegularizationCallbacksBase):
+    """Implementation. of the cutblur regularization
+    CutBlur is a way to combine high resolution/ low resolution images. It comes from Cutout. In this
+    data augmentation technique:CutBlur cut and paste a low resolution (LR) image patch into its corresponding
+    ground-truth high resolution (HR) image patch (Figure 1). By having partially LR and partially HR pixel
+    distributions with a random ratio in a single image, CutBlur enjoys the regularization effect by encouraging a model
+    to learn both “how” and “where” to super-resolve the image.
+
+    References:
+        CutBlur: Rethinking Data Augmentation for Image Super-resolution: A Comprehensive Analysis and a New Strategy
+        https://arxiv.org/pdf/2004.00448.pdf
+
+
+
+    """
+
+    def __init__(self, alpha=1, loss_criterion=None, loss_weight=1, save_path=None, **kwargs):
+        super(CutBlurCallback, self).__init__()
+        self.alpha = alpha
+        if loss_criterion is None:
+            loss_criterion = get_class('CrossEntropyLoss', 'trident.optims.pytorch_losses' if get_backend() == 'pytorch' else 'trident.optims.tensorflow_losses')
+
+        self.loss_criterion = loss_criterion(reduction='mean')
+        self.loss_weight = loss_weight
+        if save_path is None:
+            self.save_path = os.path.join(working_directory, 'Results')
+        else:
+            self.save_path = save_path
+        make_dir_if_need(self.save_path)
+        dataprovider = enforce_singleton(ctx.get_data_provider())
+        self.reverse_image_transform = dataprovider.reverse_image_transform
+
+
+    def rand_bbox(self, width, height, lam):
+        """
+
+        Args:
+            width ():
+            height ():
+            lam ():
+
+        Returns:
+
+        """
+        W = width
+        H = height
+        cut_rat = math.sqrt(lam)
+        cut_w = int(W * cut_rat)
+        cut_h = int(H * cut_rat)
+
+        # uniform
+        bbx1 = np.random.choice(np.arange(W-cut_w))
+        bby1 = np.random.choice(np.arange(H-cut_h))
+        bbx2 = np.clip(bbx1 + cut_w, 0, W)
+        bby2 = np.clip(bby1 + cut_h, 0, H)
+
+        return bbx1, bby1, bbx2, bby2
+
+    def on_loss_calculation_end(self, training_context):
+        """Returns mixed inputs, pairs of targets, and lambda"""
+        model = training_context['current_model']
+        train_data = training_context['train_data']
+        x = train_data.value_list[0].copy().detach().to(model.device)  # low resolution input
+        y = train_data.value_list[1].copy().detach().to(model.device)  # high resolution label
 
         lam = builtins.max(np.random.beta(self.alpha, self.alpha)*0.3,0.1)
 
@@ -333,8 +484,6 @@ class CutMixCallback(RegularizationCallbacksBase):
                 array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
                 if ctx.enable_mlflow:
                     ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
-
-
 
 
 
