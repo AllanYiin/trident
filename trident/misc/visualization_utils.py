@@ -184,12 +184,13 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
         plt.ion()  # is not None:
 
         for m in range(distinct_row * len(imgs)):
-            plt.subplot(distinct_row, len(imgs), m + 1, constrained_layout=True)
+            plt.subplot(distinct_row, len(imgs), m + 1)
             if m < len(imgs) and legend is not None and  len(legend) == len(imgs):
                 plt.gca().set_title(legend[m])
             img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
             plt.imshow(img, interpolation="nearest", animated=True)
             plt.axis("off")
+        plt.tight_layout()
         fig.tight_layout()
         if save_path is not None:
             filename = save_path.format(suffix)

@@ -8,7 +8,7 @@ import warnings
 import builtins
 import numpy as np
 import os
-
+from IPython import display
 from trident.data.vision_transforms import Unnormalize
 
 from trident.backend.opencv_backend import array2image
@@ -75,8 +75,7 @@ class MixupCallback(RegularizationCallbacksBase):
         """Returns mixed inputs, pairs of targets, and lambda"""
         model = training_context['current_model']
         train_data = training_context['train_data']
-        x = None
-        y = None
+
         x = train_data.value_list[0].copy().detach().to(model.device)  # input
         y = train_data.value_list[1].copy().detach().to(model.device)  # label
 
@@ -85,7 +84,7 @@ class MixupCallback(RegularizationCallbacksBase):
         batch_size = int_shape(x)[0]
         index = arange(batch_size)
         index = cast(shuffle(index), 'long')
-        this_loss = None
+
         mixed_x = None
         if get_backend() == 'pytorch':
             mixed_x = lam * x + (1 - lam) * x[index, :]
@@ -109,6 +108,8 @@ class MixupCallback(RegularizationCallbacksBase):
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
 
                 training_context['tmp_losses'].collect('mixup_loss', training_context['steps'], float(to_numpy(this_loss * self.loss_weight)))
+
+
 
         if training_context['current_batch'] == 0:
             for item in mixed_x:
@@ -234,7 +235,7 @@ class CutMixCallback(RegularizationCallbacksBase):
         if loss_criterion is None:
             loss_criterion = get_class('CrossEntropyLoss', 'trident.optims.pytorch_losses' if get_backend() == 'pytorch' else 'trident.optims.tensorflow_losses')
 
-        self.loss_criterion = loss_criterion()
+        self.loss_criterion = loss_criterion(reduction='mean')
         self.loss_weight = loss_weight
         if save_path is None:
             self.save_path = os.path.join(working_directory, 'Results')
@@ -243,6 +244,7 @@ class CutMixCallback(RegularizationCallbacksBase):
         make_dir_if_need(self.save_path)
         dataprovider = enforce_singleton(ctx.get_data_provider())
         self.reverse_image_transform = dataprovider.reverse_image_transform
+
 
     def rand_bbox(self, width, height, lam):
         """
@@ -257,18 +259,15 @@ class CutMixCallback(RegularizationCallbacksBase):
         """
         W = width
         H = height
-        cut_rat = math.sqrt(1. - lam)
+        cut_rat = math.sqrt(lam)
         cut_w = int(W * cut_rat)
         cut_h = int(H * cut_rat)
 
         # uniform
-        cx = np.random.randint(W)
-        cy = np.random.randint(H)
-
-        bbx1 = np.clip(cx - cut_w // 2, 0, W)
-        bby1 = np.clip(cy - cut_h // 2, 0, H)
-        bbx2 = np.clip(cx + cut_w // 2, 0, W)
-        bby2 = np.clip(cy + cut_h // 2, 0, H)
+        bbx1 = np.random.choice(np.arange(W-cut_w))
+        bby1 = np.random.choice(np.arange(H-cut_h))
+        bbx2 = np.clip(bbx1 + cut_w, 0, W)
+        bby2 = np.clip(bby1 + cut_h, 0, H)
 
         return bbx1, bby1, bbx2, bby2
 
@@ -279,7 +278,7 @@ class CutMixCallback(RegularizationCallbacksBase):
         x = train_data.value_list[0].copy().detach().to(model.device)  # input
         y = train_data.value_list[1].copy().detach().to(model.device)  # label
 
-        lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.2), 0.4)
+        lam = builtins.max(np.random.beta(self.alpha, self.alpha)*0.3,0.1)
 
         batch_size = int_shape(x)[0]
         index = cast(arange(batch_size), 'int64')
@@ -290,6 +289,7 @@ class CutMixCallback(RegularizationCallbacksBase):
         if get_backend() == 'pytorch':
             y_a, y_b = y, y[index]
             bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[3], x.shape[2], lam)
+
             mixed_x[:, :, bbx1:bbx2, bby1:bby2] = x[index, :, bbx1:bbx2, bby1:bby2]
             # adjust lambda to exactly match pixel ratio
             lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
@@ -301,23 +301,28 @@ class CutMixCallback(RegularizationCallbacksBase):
 
         elif get_backend() == 'tensorflow':
             with tf.device(get_device()):
-                y1 = tf.gather(y, index, axis=0)
-                x1= tf.gather(x, index, axis=0)
-                y_a, y_b = y, y1
+                x1 = tf.gather(x, index, axis=0).copy().detach()
+                y1 = tf.gather(y, index, axis=0).copy().detach()
+
                 bbx1, bby1, bbx2, bby2 = self.rand_bbox(x.shape[2], x.shape[1], lam)
+
                 #eager tensor cannot assignment!!!
-                filter = np.zeros(int_shape(x))
-                filter[:, bbx1:bbx2, bby1:bby2, :] = 1
-                filter = to_tensor(x).detach()
+                filter = np.zeros_like(x,dtype=np.float32)
+
+                filter[:, bbx1:bbx2, bby1:bby2, :] = 1.0
+
+                filter = to_tensor(filter).detach()
                 mixed_x = x * (1 - filter) + (x1 * filter)
                 #x[:, bbx1:bbx2, bby1:bby2, :] = x1[:, bbx1:bbx2, bby1:bby2,:]
                 # adjust lambda to exactly match pixel ratio
                 lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[2] * x.shape[1]))
                 pred = model(to_tensor(mixed_x, requires_grad=True))
+                y_a, y_b = y, y1
                 this_loss = lam * self.loss_criterion(pred, y_a) + (1 - lam) * self.loss_criterion(pred, y_b)
 
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
                 training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
+
 
         if training_context['current_batch'] == 0:
             if self.save_path is None:
@@ -330,8 +335,7 @@ class CutMixCallback(RegularizationCallbacksBase):
                     ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
 
 
-        x = None
-        y = None
+
 
 
 class GradientClippingCallback(RegularizationCallbacksBase):
