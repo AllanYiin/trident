@@ -22,13 +22,14 @@ from trident.misc.ipython_utils import is_in_colab
 if get_backend() == 'pytorch':
     import torch.nn as nn
     from trident.backend.pytorch_backend import get_device
-    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape
+    from trident.backend.pytorch_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape,ndim
+    from trident.optims.pytorch_losses import SmoothL1Loss
 
 elif get_backend() == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_backend import get_device
-    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like,argmax
-
+    from trident.backend.tensorflow_ops import to_numpy, to_tensor, arange, shuffle, cast, clip, sqrt, int_shape, concate, zeros_like, ones_like,argmax,ndim
+    from trident.optims.tensorflow_losses import SmoothL1Loss
 ctx=get_session()
 working_directory = ctx.working_directory
 __all__ = ['RegularizationCallbacksBase', 'MixupCallback', 'CutMixCallback']
@@ -275,8 +276,8 @@ class CutMixCallback(RegularizationCallbacksBase):
         """Returns mixed inputs, pairs of targets, and lambda"""
         model = training_context['current_model']
         train_data = training_context['train_data']
-        x = train_data.value_list[0].copy().detach().to(model.device)  # input
-        y = train_data.value_list[1].copy().detach().to(model.device)  # label
+        x = train_data.value_list[0].cpu()  # input
+        y = train_data.value_list[1].cpu()  # label
         is_superresolution=False
         scale=1
         if ndim(x)==ndim(y) :
@@ -289,9 +290,9 @@ class CutMixCallback(RegularizationCallbacksBase):
 
         batch_size = int_shape(x)[0]
         index = cast(arange(batch_size), 'int64')
-        index = shuffle(index)
-        mixed_x=x.copy()
-        mixed_y = y.copy()
+        index = shuffle(index).cpu()
+        mixed_x=x.copy().cpu()
+        mixed_y = y.copy().cpu()
 
 
         if get_backend() == 'pytorch':
@@ -301,7 +302,8 @@ class CutMixCallback(RegularizationCallbacksBase):
             if is_superresolution:
                 mixed_y[:, :, int(bbx1*scale):int(bbx2*scale), int(bby1*scale):int(bby2*scale)] = y[index, :, int(bbx1*scale):int(bbx2*scale), int(bby1*scale):int(bby2*scale)]
                 pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
-                this_loss =SmoothL1Loss()(pred,mixed_y)
+
+                this_loss=SmoothL1Loss()(pred,mixed_y.to(model.device).detach())
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
                 training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'],float(to_numpy(this_loss) * self.loss_weight))
 
@@ -311,7 +313,7 @@ class CutMixCallback(RegularizationCallbacksBase):
                 # adjust lambda to exactly match pixel ratio
                 lam = 1 - ((bbx2 - bbx1) * (bby2 - bby1) / (x.shape[3] * x.shape[2]))
                 pred = model(to_tensor(mixed_x, requires_grad=True, device=model.device))
-                this_loss = lam * self.loss_criterion(pred, y_a.long()) + (1 - lam) * self.loss_criterion(pred, y_b.long())
+                this_loss = lam * self.loss_criterion(pred, y_a.to(model.device).long()) + (1 - lam) * self.loss_criterion(pred, y_b.to(model.device).long())
                 training_context['current_loss'] = training_context['current_loss'] + this_loss * self.loss_weight
                 training_context['tmp_losses'].collect('cutmix_loss', training_context['steps'], float(to_numpy(this_loss) * self.loss_weight))
 
@@ -362,6 +364,7 @@ class CutMixCallback(RegularizationCallbacksBase):
                 array2image(item).save(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
                 if ctx.enable_mlflow:
                     ctx.mlflow_logger.add_image(os.path.join(self.save_path, 'cutmix_{0}.jpg'.format(get_time_suffix())))
+            del mixed_x
 
 
 class CutBlurCallback(RegularizationCallbacksBase):
