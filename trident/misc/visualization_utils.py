@@ -177,18 +177,20 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
         return plt
     else:
         fig = plt.gcf()
-        figure, ax = plt.subplots(2, 2)
+
+        #figure, ax = plt.subplots(2, 2)
         # fig.set_size_inches(len(imgs) * 2, row * 2)
         plt.clf()
         plt.ion()  # is not None:
 
         for m in range(distinct_row * len(imgs)):
-            plt.subplot(distinct_row, len(imgs), m + 1)
+            plt.subplot(distinct_row, len(imgs), m + 1, constrained_layout=True)
             if m < len(imgs) and legend is not None and  len(legend) == len(imgs):
                 plt.gca().set_title(legend[m])
             img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
             plt.imshow(img, interpolation="nearest", animated=True)
             plt.axis("off")
+        fig.tight_layout()
         if save_path is not None:
             filename = save_path.format(suffix)
             plt.savefig(filename, bbox_inches='tight')
@@ -199,7 +201,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
             # fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
             if is_in_ipython():
                 plt.ioff()
-                display.display(plt.gcf())
+                display.display(fig)
             else:
                 plt.ioff()
                 plt.show(block=False)
@@ -369,6 +371,8 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
             if len(second_axis_keys) > 0:
                 metric_ax2.legend()
                 metric_ax2.set_ylim(second_axis_limit[0], second_axis_limit[1])
+            else:
+                metric_ax2.remove()
             #plt.legend(legend_list,loc='upper left')
 
         metric_ax1.set_title('model metrics', fontsize=14, fontweight='bold')

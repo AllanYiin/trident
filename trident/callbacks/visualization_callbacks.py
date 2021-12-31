@@ -20,7 +20,7 @@ from trident.data.image_common import image_backend_adaption
 from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
-
+from trident.optims.losses import _check_logsoftmax_logit
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call, Layer,Sequential
     from trident.backend.pytorch_ops import to_numpy, arange, cast, clip, sqrt, int_shape, argmax, softmax, ndim, exp, \
@@ -219,14 +219,18 @@ class GanTileImageCallback(VisualizationCallbackBase):
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model'].eval()
-        dataprovider = enforce_singleton(ctx.get_data_provider())
+
+        dataprovider =ctx.get_data_provider()[-1]
+        if self.reverse_image_transform is None:
+            self.reverse_image_transform = dataprovider.reverse_image_transform
+
         output = to_numpy(model(data[data_feed['input']])) if data_feed['input'] in data else to_numpy(data['output'])
         model.train()
-        reverse_image_transform = dataprovider.reverse_image_transform
 
-        if reverse_image_transform is not None:
+
+        if self.reverse_image_transform is not None:
             for i in range(len(output)):
-                self.output_arr.append(reverse_image_transform(output[i]))
+                self.output_arr.append(self.reverse_image_transform(output[i]))
                 if len(self.output_arr) == self.row:
                     self.tile_images_list.append(self.output_arr)
                     if len(self.tile_images_list) == self.row:
@@ -263,11 +267,11 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
 class SegTileImageCallback(VisualizationCallbackBase):
     def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results', reverse_image_transform=None,
-                 is_label_mask=False, palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False):
+                  palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False,**kwargs):
         super(SegTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
-        self.is_label_mask = is_label_mask
+
         self.palette = palette
         self.tile_image_name_prefix = name_prefix
         self.reverse_image_transform = reverse_image_transform
@@ -282,18 +286,17 @@ class SegTileImageCallback(VisualizationCallbackBase):
         new_shape[axis] = 3
         background = np.reshape(to_numpy(self.background), new_shape)
         tile_images_list = []
-        input = None
+
         mask = None
         output = None
-        is_label_mask = self.is_label_mask
+
         data_feed = training_context['data_feed']
         data = training_context['train_data']
         model = training_context['current_model']
-        dataprovider = enforce_singleton(ctx.get_data_provider())
+        dataprovider = ctx.get_data_provider()[-1]
         if self.reverse_image_transform is None:
-            if len(ctx.get_data_provider()) == 1:
-                self.reverse_image_transform = dataprovider.reverse_image_transform
-                self.reverse_image_transform_funcs = dataprovider.reverse_image_transform_funcs
+            self.reverse_image_transform = dataprovider.reverse_image_transform
+
 
         input = to_numpy(data[data_feed[model.signature.inputs.key_list[0]]])
         if 'tensor' in model.__class__.__name__.lower():
@@ -302,6 +305,8 @@ class SegTileImageCallback(VisualizationCallbackBase):
             output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]].copy())
         mask_type=None
         output_arr=output.copy()
+        if _check_logsoftmax_logit(output_arr) or reduce_max(output_arr)<=0:
+            output_arr=exp(output_arr)
         if isinstance(dataprovider.traindata.label, MaskDataset):
             mask_type=dataprovider.traindata.label.object_type
             mask = to_numpy(data[dataprovider.traindata.label.symbol])
@@ -310,37 +315,37 @@ class SegTileImageCallback(VisualizationCallbackBase):
                 if isinstance(ds, MaskDataset):
                     mask_type =ds.object_type
                     mask = to_numpy(data[ds.symbol])
-        if mask_type==ObjectType.label_mask:
-            mask = label2color(mask, self.palette)
-            if ndim(output)==4:
-                output=argmax(output,1)
-            output_arr = label2color(output, self.palette)
+        if mask_type==ObjectType.label_mask or mask_type==ObjectType.color_mask:
+            mask = label2color(mask, palette=self.palette).astype(np.uint8)
+            if ndim(output_arr)==4:
+                output_arr=argmax(output_arr,axis)
+            output_arr = label2color(output_arr, palette=self.palette).astype(np.uint8)
         elif  mask_type==ObjectType.binary_mask:
-            if ndim(output)==4:
-                output=argmax(output,1)
-            output_arr=output
+            if ndim(output_arr)==4:
+                output_arr=argmax(output_arr,1)
+
         elif mask_type == ObjectType.alpha_mask:
             if get_backend() == 'tensorflow':
-                output_arr = output[:, :, :, 1:2] * argmax(output, axis)
+                output_arr = output_arr[:, :, :, 1:2] * argmax(output_arr, axis)
             else:
-                output_arr = (output[:, 1:2, :, :] * argmax(output, axis)).transpose(0, 2, 3, 1)
-        if  ndim(output)==4 and int_shape(output)[1 if get_backend() == 'pytorch' else -1]>4:
-            output  = argmax(output, 1 if get_backend() == 'pytorch' else -1)
-            output_arr = output
+                output_arr = (output_arr[:, 1:2, :, :] * argmax(output_arr, axis)).transpose(0, 2, 3, 1)
+        # if  ndim(output_arr)==4 and int_shape(output_arr)[1 if get_backend() == 'pytorch' else -1]>4:
+        #     output_arr  = argmax(output_arr, 1 if get_backend() == 'pytorch' else -1)
+        #
 
 
 
         input_arr = []
         input = to_numpy(input)
         for i in range(len(input)):
-            input_arr.append(image_backend_adaption(self.reverse_image_transform(input[i])))
+            input_arr.append(self.reverse_image_transform(input[i]))
         input_arr = np.stack(input_arr, axis=0)
         # input_arr=np.asarray(input_arr)
         tile_images_list.append(input_arr)
 
-        if is_label_mask:
+        if mask_type==ObjectType.label_mask or mask_type==ObjectType.color_mask:
             tile_images_list.append(mask)
-            tile_images_list.append(output)
+            tile_images_list.append(output_arr)
         else:
             target_arr = mask
 
@@ -355,7 +360,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
                 else:
                     output_arr = np.expand_dims(output_arr, axis=axis)
 
-            if 'alpha' not in data:
+            if 'alpha' not  in data:
                 target_arr[target_arr > 0] = 1
 
             tile_images_list.append(target_arr * input_arr + (1 - target_arr) * background)
@@ -397,6 +402,9 @@ class DetectionPlotImageCallback(VisualizationCallbackBase):
         input = None
         target = None
         output = None
+        dataprovider = ctx.get_data_provider()[-1]
+        if self.reverse_image_transform is None:
+            self.reverse_image_transform = dataprovider.reverse_image_transform
 
         data_feed = training_context['data_feed']
         data = training_context['train_data']
