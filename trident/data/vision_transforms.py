@@ -1,6 +1,7 @@
 import builtins
 import inspect
 import math
+
 from PIL import Image
 import numbers
 import random
@@ -26,7 +27,7 @@ __all__ = ['Resize','Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', '
            'AdjustBrightness', 'AdjustContrast', 'AdjustSaturation', 'AddNoise', 'AdjustHue', 'RandomAdjustHue', 'RandomAdjustBrightness', 'RandomAdjustContrast',
            'RandomAdjustSaturation','AutoLevel','RandomLighting','GrayMixRGB',
            'Normalize', 'Unnormalize', 'CLAHE', 'Lighting','RandomLighting','HorizontalFlip', 'RandomMirror', 'AdjustGamma', 'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
-           'RandomInvertColor', 'GrayScale', 'RandomGrayScale','RandomGridMask','GridMask',
+           'RandomInvertColor', 'GrayScale', 'RandomGrayScale','RandomGridMask','GridMask','ToLowResolution',
            'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic','DetectionMixup']
 
 
@@ -810,15 +811,14 @@ class RandomTransformAffine(VisionTransform):
         H,W,C=int_shape(image)
         self.output_size = (H, W)
 
-
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        mat_img, height, width,angle, is_flip ,rr,shear_factor= self._shape_info
+        mat_img, height, width,angle, is_flip ,rr,shear_factor,background_color= self._shape_info
 
         if rr>self.keep_prob:
             image = np.clip(image.astype(np.float32), 0, 255)[:, :, :3]
             _borderMode=cv2.BORDER_CONSTANT
-            _borderValue = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            _borderValue = background_color
             if self.border_mode=='replicate':
                 _borderMode=cv2.BORDER_REPLICATE
             elif self.border_mode=='reflect':
@@ -844,7 +844,7 @@ class RandomTransformAffine(VisionTransform):
             return image
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        mat_img, height, width,angle, is_flip,rr,shear_factor = self._shape_info
+        mat_img, height, width,angle, is_flip,rr,shear_factor,background_color = self._shape_info
         if rr>self.keep_prob:
 
             coords = coords.transpose([1, 0])
@@ -866,7 +866,7 @@ class RandomTransformAffine(VisionTransform):
 
     def _apply_mask(self, mask, spec: TensorSpec):
         mask = unpack_singleton(mask)
-        mat_img, height, width,angle, is_flip,rr ,shear_factor= self._shape_info
+        mat_img, height, width,angle, is_flip,rr ,shear_factor,background_color= self._shape_info
         if rr>self.keep_prob:
             mask_dtype = mask.dtype
             mask = mask.astype(np.float32)
@@ -913,7 +913,9 @@ class RandomTransformAffine(VisionTransform):
         rr_flip= np.random.random()
         rr= np.random.random()
 
-        return np.array(mat[:2]).reshape((2, 3)), h, w,angle, rr_flip < self.random_flip,rr,shear_factor
+        background_color=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+        return np.array(mat[:2]).reshape((2, 3)), h, w,angle, rr_flip < self.random_flip,rr,shear_factor,background_color
 
 
 RandomTransform = RandomTransformAffine
@@ -949,7 +951,8 @@ class RandomMultiScaleImage(VisionTransform):
             self.resize_funs.pop(2)
 
     def _apply_image(self, image, spec: TensorSpec):
-        self._shape_info = self._get_shape()
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         idx= self._shape_info
         return self.resize_funs[idx]._apply_image( image, spec)
     def _apply_mask(self, mask, spec: TensorSpec):
@@ -2078,6 +2081,7 @@ class RandomGridMask(VisionTransform):
 
     def __init__(self, output_size=None, d1=None, d2=None, max_d1=None, rotate_range=(0.2, 1), ratio=0.2, mode=0, keep_prob=0.5, name='gridmask', **kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.output_size = output_size
         self.d1 = d1
         self.d2 = d2
@@ -2332,6 +2336,7 @@ class ImageMosaic(VisionTransform):
 
     def __init__(self, output_size=None, keep_prob=0.7, name='image_mosaic', **kwargs):
         super().__init__(name)
+        self.is_spatial = True
         self.output_size = output_size
         self.keep_prob = keep_prob
         self.memory_cache = []
@@ -2342,8 +2347,7 @@ class ImageMosaic(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         image = unpack_singleton(image)
 
-        if self._shape_info is None:
-            self._shape_info = self._get_shape(image)
+        self._shape_info = self._get_shape(image)
         keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety = self._shape_info
         if keep:
             return image
@@ -2551,7 +2555,7 @@ class ImageMosaic(VisionTransform):
         if self.output_size is None:
             self.output_size = image.shape[:2]
         rr = random.random()
-        keep = rr < self.keep_prob or len(self.memory_cache[:-1]) <= 3
+        keep = rr < self.keep_prob or len(self.memory_cache[:-1]) < 3
         other_idxes = None
         center = None
         img1_offsetx = img1_offsety = img2_offsetx = img2_offsety = img3_offsetx = img3_offsety = 0
@@ -2584,5 +2588,43 @@ class ImageMosaic(VisionTransform):
 
         return (
         keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety)
+
+
+
+
+class ToLowResolution(VisionTransform):
+    def __init__(self, scale=1/2,name='to_low_resolution', **kwargs):
+        super().__init__(name)
+        self.is_spatial=False
+        self.scale=scale
+
+    def apply(self, input: Tuple, spec: TensorSpec):
+        return super().apply(input, spec)
+
+    def _apply_image(self, image, spec: TensorSpec):
+        rnd = random.randint(0, 10)
+        if rnd == 0:
+            image = Rescale(scale=self.scale)(image)
+        elif rnd % 3 == 0:
+            image = Rescale(scale=math.pow(2, 3))(image)
+            image =  Rescale(scale=self.scale*math.pow(2,-3))(image)
+        elif rnd % 3 == 1:
+            image = RandomBlur(ksize_range=(1, 5))(image)
+            image =Rescale(scale=self.scale)(image)
+        elif rnd % 3 == 2:
+            image = Rescale(scale=math.pow(2, 2))(image)
+            image = Rescale(scale=math.pow(2, -2))(image)
+            image = RandomBlur(ksize_range=(1, 5))(image)
+            image = Rescale(scale=math.pow(2, 1))(image)
+            image = Rescale(scale=math.pow(2, -1))(image)
+            image = Rescale(scale=self.scale)(image)
+        return image
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        return coords
+
+    def _apply_mask(self, mask, spec: TensorSpec):
+        return mask
+
 
 
