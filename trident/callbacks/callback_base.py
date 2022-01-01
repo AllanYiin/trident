@@ -311,7 +311,7 @@ class LambdaCallback(CallbackBase):
     Objects of derived classes inject functionality in several points of the training process.
     """
 
-    def __init__(self,when='on_batch_end',frequency=None,unit='batch',action=None,is_shared=False):
+    def __init__(self,when='on_batch_end',frequency=1,unit='batch',action=None,is_shared=False):
         super(LambdaCallback, self).__init__(is_shared=is_shared)
         self.is_shared=is_shared
         self.action = None
