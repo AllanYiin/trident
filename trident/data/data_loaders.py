@@ -16,6 +16,9 @@ from xml.etree import ElementTree
 import numpy as np
 import copy
 import cv2
+import datetime
+from tqdm import tqdm
+from trident.backend.common import *
 from trident.data.text_transforms import ToHalfWidth, ChineseConvert,bpmf_phonetic
 
 from trident.data.utils import _delete_h
@@ -30,13 +33,16 @@ from trident.data.utils import *
 from trident.backend.common import floatx,OrderedDict,is_alphabet,is_punctuation, remove_nonprintable
 from trident.backend.tensorspec import *
 from trident.misc.ipython_utils import *
-
+from trident import context
 try:
     from urllib.request import urlretrieve
 except ImportError:
     from six.moves.urllib.request import urlretrieve
 
-_session = get_session()
+__all__ = ['load_mnist', 'load_lfw', 'load_text', 'load_cifar', 'load_kaggle', 'load_birdsnap', 'load_examples_data', 'load_stanford_cars', 'load_folder_images']
+
+
+_session = context._context()
 _trident_dir = os.path.join(_session.trident_dir, 'datasets')
 _backend = get_backend()
 
@@ -326,9 +332,9 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
 
     if label is not None:
         if isinstance(label, str):
-            output_corpus = data.splitlines()
+            output_corpus = label.splitlines()
         elif hasattr(label, "__iter__"):
-            output_corpus = data
+            output_corpus = label
         new_corpus = []
         for item in output_corpus:
             if len(item) > 0:
@@ -340,7 +346,7 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
     dataprovider=None
     if mode=='next_word':
         corpus1=copy.deepcopy(corpus)
-        corpus2= copy.deepcopy(corpus)
+        corpus2= copy.deepcopy(output_corpus)
         data_seq=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_onehot=is_onehot,symbol='input',sequence_offset=0,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         labels_seq =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_onehot=is_onehot,symbol='label',sequence_offset=1,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         traindata=Iterator(data=data_seq,label=labels_seq)
@@ -652,7 +658,6 @@ def load_examples_data(dataset_name):
                                           object_type=ObjectType.gray)
 
         dataset.testdata = dataset_test.traindata
-        dataset.class_names['zh-cn'] = dataset.class_names['en-us']
         return dataset
 
     elif dataset_name == 'examples_animals':
@@ -766,7 +771,7 @@ def load_examples_data(dataset_name):
                 return tuple(int(i) for i in b.split(' ')), a
 
         label_codes, label_names = zip(
-            *[parse_code(l) for l in open(os.path.join(dirname, "label_colors.txt")).readlines()])
+            *[parse_code(l) for l in open(os.path.join(dirname, "label_colors.txt"),encoding='utf-8-sig').readlines()])
         for i in range(len(label_codes)):
             mskdata.palette[label_names[i]] = label_codes[i]
 
