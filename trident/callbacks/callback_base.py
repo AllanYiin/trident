@@ -314,6 +314,8 @@ class LambdaCallback(CallbackBase):
     def __init__(self,when='on_batch_end',frequency=1,unit='batch',action=None,is_shared=False):
         super(LambdaCallback, self).__init__(is_shared=is_shared)
         self.is_shared=is_shared
+
+        self.frequency = frequency if frequency is not None else 1
         self.action = None
         if action is None:
             raise ValueError("action cannot be None")
@@ -327,18 +329,18 @@ class LambdaCallback(CallbackBase):
         else:
             raise ValueError("{0} is not valid event trigger.".format(when))
         self.unit=unit
-        self.frequency=frequency
+
 
         def on_trigger(self, training_context):
             steps=training_context['steps']
             epoch=training_context['current_epoch']
-            if self.unit=='epoch' and (epoch+1)%self.frequency==0:
+            if self.unit=='epoch' and (epoch+1)% (self.frequency )==0:
                 if ctx.amp_available== True and ctx.is_autocast_enabled  == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         self.action(training_context)
                 else:
                     self.action(training_context)
-            elif self.unit=='batch' and (steps+1)%self.frequency==0:
+            elif self.unit=='batch' and (steps+1)% (self.frequency)==0:
                 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda':
                     with torch.cuda.amp.autocast():
                         self.action(training_context)
