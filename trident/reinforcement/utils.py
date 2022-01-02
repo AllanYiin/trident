@@ -74,14 +74,14 @@ class SegmentTree:
     """Implementation of Segment Tree.
 
     The segment tree stores an array ``arr`` with size ``n``. It supports value
-    update and fast query of the sum for the interval ``[left, right)`` in
+    update and fast query of the sum for the interval ``(left, right)`` in
     O(log n) time. The detailed procedure is as follows:
 
     1. Pad the array to have length of power of 2, so that leaf nodes in the \
     segment tree have the same depth.
     2. Store the segment tree in a binary heap.
 
-    :param int size: the size of segment tree.
+    param int size: the size of segment tree.
     """
 
     def __init__(self, size: int) -> None:
@@ -109,12 +109,12 @@ class SegmentTree:
 
         Duplicate values in ``index`` are handled by numpy: later index
         overwrites previous ones.
-        ::
 
-            >>> a = np.array([1, 2, 3, 4])
-            >>> a[[0, 1, 0, 1]] = [4, 5, 6, 7]
-            >>> print(a)
-            [6 7 3 4]
+        Examples
+        >>> a = np.array([1, 2, 3, 4])
+        >>> a[[0, 1, 0, 1]] = [4, 5, 6, 7]
+        >>> print(a)
+        [6 7 3 4]
         """
         if isinstance(index, int):
             index, value = np.array([index]), np.array([value])
@@ -138,9 +138,9 @@ class SegmentTree:
         :math:`v \le \mathrm{sums}_i`, where
         :math:`\mathrm{sums}_i = \sum_{j = 0}^{i} \mathrm{arr}_j`.
 
-        .. warning::
+        warning::
 
-            Please make sure all of the values inside the segment tree are
+            Please make sure all of these values inside the segment tree are
             non-negative when using this function.
         """
         assert np.all(value >= 0.0) and np.all(value < self._value[1])

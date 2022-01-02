@@ -76,7 +76,7 @@ def xywh2xyxy(boxes,image_size=None):
         height, width = np.inf, np.inf
         if image_size is not None:
             height, width = image_size
-        boxes[:, :4] = np.round(boxes[:, :4], 0)
+        boxes[:, :4] = boxes[:, :4]
         boxes[:, 0] = np.clip(boxes[:, 0], a_min=0, a_max=width)
         boxes[:, 1] = np.clip(boxes[:, 1], a_min=0, a_max=height)
         boxes[:, 2] = np.clip(boxes[:, 2], a_min=0, a_max=width)
@@ -89,8 +89,8 @@ def xywh2xyxy(boxes,image_size=None):
         if boxes.shape[-1] >4:
             class_info = boxes[:, 4:]
             boxes = boxes[:, :4]
-        x1y1= clip(round(boxes[:, 0:2] -boxes[:, 2:4] /2,0),0)
-        x2y2=clip(round(x1y1+ boxes[:, 2:4],0),0)
+        x1y1= clip(boxes[:, 0:2] -boxes[:, 2:4] /2,0)
+        x2y2=clip(x1y1+ boxes[:, 2:4],0)
         if class_info is not None:
             boxes = concate([x1y1,x2y2, class_info], axis=-1)
         else:
@@ -114,10 +114,10 @@ def xyxy2xywh(boxes):
         if boxes.ndim==1:
             boxes=np.expand_dims(boxes,0)
         if boxes.shape[-1]>4:
-            return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+            return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2.0,  # cx, cy
                                    boxes[:, 2:4] - boxes[:, 0:2],boxes[:, 4:]], 1)  # w, h
         elif boxes.shape[-1]==4:
-            return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+            return np.concatenate([(boxes[:, 2:4] + boxes[:, 0:2]) / 2.0,  # cx, cy
                             boxes[:, 2:4] - boxes[:, 0:2]], 1)  # w, h
     elif is_tensor(boxes):
         if boxes.ndim==1:

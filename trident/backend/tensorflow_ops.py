@@ -33,7 +33,7 @@ __all__ = ['Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tenso
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
            'leaky_relu6', 'smooth_relu','crelu',  'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse','index_select',
-           'gpt_gelu','moments','norm','l2_normalize','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
+           'gpt_gelu','moments','norm','l2_normalize','broadcast_to','expand_as','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_cross_entropy']
 
@@ -742,7 +742,7 @@ def logical_xor(left:tf.Tensor, right:tf.Tensor, name='logical_xor'):
 ## comparison  operation
 ###########################
 @numpy_compatible
-def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less'):
+def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool,name='less'):
     """Elementwise 'less' comparison of two tensors. Result is 1 if left < right else 0.
 
     Args:
@@ -762,10 +762,10 @@ def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dty
 
     """
 
-    return tf.cast(tf.less(left, right,name=name), tf.float32,name='cast')
+    return tf.cast(tf.less(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='equal'):
+def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool,name='equal'):
     """
     Elementwise 'equal' comparison of two tensors. Result is 1 if values are equal 0 otherwise.
 
@@ -779,15 +779,20 @@ def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dt
 
     Examples:
         >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))
-        <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
-        >>> equal(to_tensor([-1,0,1]), 1)
-        <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
-
+        <tf.Tensor: shape=(3,), dtype=bool, numpy=array([False,  True, False])>
+        >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.])).sum()
+         <tf.Tensor: shape=(), dtype=float32, numpy=1.0>
+        >>> reduce_mean(equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.])))
+        <tf.Tensor: shape=(), dtype=float32, numpy=0.33333334>
+        >>> equal(to_tensor([-1,0,1]), 1).cpu()
+        <tf.Tensor: shape=(3,), dtype=bool, numpy=array([False, False,  True])>
+        >>> equal(to_tensor([1,2,3]), 3).cpu()
+        <tf.Tensor: shape=(3,), dtype=bool, numpy=array([False, False,  True])>
     """
     return tf.cast(tf.equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater'):
+def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool,name='greater'):
     """
     Elementwise 'greater' comparison of two tensors. Result is 1 if left > right else 0.
 
@@ -810,7 +815,7 @@ def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=
     return tf.cast(tf.greater(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
-def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='greater_equal'):
+def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool,name='greater_equal'):
     """Elementwise 'greater equal' comparison of two tensors. Result is 1 if left >= right else 0.
 
     Args:
@@ -832,7 +837,7 @@ def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],
     return tf.cast(tf.greater_equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
-def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='not_equal'):
+def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool,name='not_equal'):
     """Elementwise 'not equal' comparison of two tensors. Result is 1 if left != right else 0.
 
     Args:
@@ -854,7 +859,7 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtyp
     return tf.cast(tf.not_equal(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
-def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.float32,name='less_equal'):
+def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dtype.bool,name='less_equal'):
     """Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
     Args:
@@ -1933,6 +1938,8 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, name='reduce_mean'):
 
     @end_compatibility
     """
+    if x.dtype==Dtype.bool:
+        x=cast(x,Dtype.float)
     return tf.math.reduce_mean(x, axis=axis, keepdims=keepdims,name=name)
 
 @numpy_compatible
@@ -1995,6 +2002,8 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, name='reduce_sum'):
     int64 while tensorflow returns the same dtype as the input.
     @end_compatibility
     """
+    if x.dtype==Dtype.bool:
+        x=cast(x,Dtype.float)
     return tf.math.reduce_sum(x, axis=axis, keepdims=keepdims,name=name)
 
 @numpy_compatible
@@ -2124,6 +2133,8 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, name='reduce_logsumex
       The reduced tensor.
 
     """
+    if x.dtype==Dtype.bool:
+        x=cast(x,Dtype.float)
     return tf.math.reduce_logsumexp(x, axis=axis, keepdims=keepdims,name=name)
 
 @numpy_compatible
@@ -2352,7 +2363,6 @@ def tanh(x:Tensor,name='tanh'):
     return tf.nn.tanh(x,name=name)
 
 @numpy_compatible
-@tf.function
 def relu(x:Tensor, name='relu'):
     """Rectified Linear Unit activation function.
 
@@ -2382,7 +2392,6 @@ def relu6(x:Tensor,name='relu6'):
     return tf.clip_by_value(relu(x,name=name),0,6)
 
 @numpy_compatible
-@tf.function
 def leaky_relu(x:Tensor, alpha:float=0.02, name='leaky_relu'):
     """Leaky version of a Rectified Linear Unit.
 
@@ -2899,30 +2908,45 @@ def spectral_norm(module, n_iterations=1,axis=-1):
 ############################
 ## tensor shape operation
 ###########################
+
+def broadcast_to(x:Tensor, shape:Union[(List, Tuple, tf.TensorShape,TensorShape) ]=None, name='braodcast_to')-> Tensor:
+    if shape is None:
+        return x
+    elif isinstance(shape,TensorShape):
+        shape=shape.dims
+
+    return tf.broadcast_to(x,shape,name=name)
+
+
+def expand_as(left: Tensor, right:Tensor ,name='expand_as')-> Tensor:
+    return broadcast_to(left,right.shape,name=name)
+
+
+
 @numpy_compatible
-def reshape(x: Tensor, shape=None) -> Tensor:
+def reshape(x:Tensor, shape:Union[(List, Tuple, tf.TensorShape,TensorShape) ]=None, name='reshape') -> Tensor:
     if shape is None:
         return x
     elif isinstance(shape, tf.TensorShape):
-        return tf.reshape(x, shape.as_list())
+        return tf.reshape(x, shape.as_list(),name=name)
     elif isinstance(shape, TensorShape):
-        return tf.reshape(x, shape.dims)
+        return tf.reshape(x, shape.dims,name=name)
     elif isinstance(shape, (list, tuple)):
-        return tf.reshape(x, to_list(shape))
+        return tf.reshape(x, to_list(shape),name=name)
     else:
         shape = to_list(shape)
-        return tf.reshape(x, shape)
+        return tf.reshape(x, shape,name=name)
 
 @numpy_compatible
-def squeeze(x: Tensor, axis=None):
-    return tf.squeeze(x, axis=axis)
+def squeeze(x: Tensor, axis=None, name='squeeze'):
+    return tf.squeeze(x, axis=axis,name=name)
 
 @numpy_compatible
-def expand_dims(x: Tensor, axis=None):
-    return tf.expand_dims(x, axis=axis)
+def expand_dims(x: Tensor,axis, name='expand_dims'):
+    return tf.expand_dims(x, axis=axis,name=name)
 
 @numpy_compatible
-def transpose(x: Tensor, perm=None) -> Tensor:
+def transpose(x: Tensor, perm=None,name='transpose') -> Tensor:
     """
     Transposes a. Permutes the dimensions according to perm.
     The returned tensor's dimension i will correspond to the input dimension perm[i]. If perm is not given,
@@ -2959,10 +2983,10 @@ def transpose(x: Tensor, perm=None) -> Tensor:
         A transposed Tensor.
     """
     if isinstance(perm, (list, tuple)):
-        return tf.transpose(x, to_tensor(perm, dtype=tf.int32))
+        return tf.transpose(x, to_tensor(perm, dtype=tf.int32),name=name)
     elif perm is None:
-        return tf.transpose(x)
-    return tf.transpose(x, to_tensor(perm, dtype=tf.int32))
+        return tf.transpose(x,name=name)
+    return tf.transpose(x, to_tensor(perm, dtype=tf.int32),name=name)
 
 @numpy_compatible
 def permute(x: Tensor, perm=None) -> Tensor:
@@ -4041,8 +4065,386 @@ def binary_cross_entropy(output,target,from_logits=False):
     bce += (1 - target) * tf.math.log(1 - output)
     return -bce
 
+def cross_entropy(output,target, from_logits=False):
+    if not from_logits:
+        output = output.sigmoid()
+    output = output.clamp(epsilon(), 1.0 - epsilon())
+    target = target.clamp(epsilon(), 1.0 - epsilon())
+    loss = -target * torch.log(output) # (1.0 - target) * torch.log(1.0 - output)
+    return loss
+
+def binary_hinge(output, target, margin=1, pos_weight=1.0):
+    """
+    Implements Hinge loss.
+    Args:
+        output (torch.Tensor): of shape `Nx*` where * means any number
+             of additional dimensions
+        target (torch.Tensor): same shape as target
+        margin (float): margin for y_pred after which loss becomes 0.
+        pos_weight (float): weighting factor for positive class examples. Useful in case
+            of class imbalance.
+    """
+    target_shifted = 2 * target - 1  # [0, 1] -> [-1, 1]
+    hinge = (margin - output * target_shifted).relu()
+    hinge *= target * pos_weight + (1 - target)
+    return hinge  # reduction == mean
 
 
+
+
+def rgb2gray(rgb:Tensor,axis=-1):
+    """Compute grayscale of an RGB image.
+
+    Args:
+        rgb (tensor):  rgb image (shape:(H,W,C)), range [0,255]
+        axis(int): the channel axis
+    Returns:
+        gray(tensor):  gray-scale image(shape:(H,W)), range [0,255]
+
+    Examples:
+        >>> import cv2
+        >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
+        >>> gray_tensor=to_numpy(rgb2gray(to_tensor(img.copy()).float()))
+        >>> groundtruth_gray=cv2.cvtColor(img,cv2.COLOR_RGB2GRAY)
+        >>> abs(np.round(gray_tensor.astype(np.float32))-groundtruth_gray.astype(np.float32)).mean()<2
+        True
+        >>> print( groundtruth_gray.shape,groundtruth_gray)
+        >>> print( gray_tensor.shape,gray_tensor.astype(np.uint8))
+        >>> print( abs(np.round(gray_tensor.astype(np.float32))-groundtruth_gray.astype(np.float32)).mean())
+
+    """
+    rgb=rgb.copy().float()
+    if ndim(rgb) not in [3,4]:
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    if ndim(rgb) ==3:
+        r,g,b=split(rgb,3,axis=axis)
+        gray = clip((0.2125*r + 0.7154*g + 0.0721*b).squeeze(axis),0,255)
+        return gray
+    elif ndim(rgb) ==4:
+        shp=int_shape(rgb)
+        if shp[-1]==3:
+            axis=-1
+        elif shp[1]==3:
+            axis = 1
+        r, g, b = split(rgb, 3, axis=axis)
+        gray = clip((0.2125 * r + 0.7154 * g + 0.0721 * b).squeeze(axis),0,255)
+        return gray
+
+
+
+def rgb2hsv(rgb:Tensor):
+    """Compute luminance of an RGB image.
+
+    Args:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+    Returns:
+        gray(tensor):  gray-scale image(shape:(H,W))
+
+    Examples:
+         >>> import cv2
+        >>> img=cv2.cvtColor(cv2.imread('../../images/cat.jpg'),cv2.COLOR_BGR2RGB)
+        >>> hsv_tensor=to_numpy(rgb2hsv(to_tensor(img.copy()).float()))
+        >>> groundtruth_hsv=cv2.cvtColor(img,cv2.COLOR_RGB2HSV)
+        >>> abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean()<2
+        True
+        >>> print( groundtruth_hsv.shape,groundtruth_hsv)
+        >>> print( hsv_tensor.shape,hsv_tensor.astype(np.uint8))
+        >>> print(abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean())
+
+    """
+    rgb = rgb.float() / 255.0
+    if ndim(rgb) not in [3, 4]:
+        raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
+    # rgb=rgb[np.newaxis, ...]
+    out = zeros_like(rgb.copy())
+    axis = -1
+    if ndim(rgb) == 4:
+        axis = 1
+
+    # -- V channel
+    out_v = reduce_max(rgb.copy(), axis=axis, keepdims=True)
+
+    # -- S channel
+    delta = reduce_max(rgb.copy(), axis=axis, keepdims=True) - reduce_min(rgb.copy(), axis=axis, keepdims=True)
+    delta_zeros = zeros_like(delta, dtype=delta.dtype)
+    out_s = where(delta == 0, delta_zeros, delta / out_v)
+
+    # -- H channel
+    # red is max
+    maxc_tmp = equal(out_v, rgb, dtype=_float_dtype)
+    _, max_indices = rgb.copy().max(dim=axis)
+    out_h = None
+    if ndim(rgb) == 3:
+        rc, gc, bc = split(maxc_tmp.copy(), 3, axis=axis)
+
+        out_h = torch.cat([
+            bc - gc,
+            2.0 * delta + rc - bc,
+            4.0 * delta + gc - rc, ], dim=axis)
+        out_h = torch.gather(out_h, dim=axis, index=max_indices[:, :, None])
+
+
+    elif ndim(rgb) == 4:
+        rc, gc, bc = split(maxc_tmp.copy(), 3, axis=-3)
+        out_h = torch.cat([
+            bc - gc,
+            2.0 * delta + rc - bc,
+            4.0 * delta + gc - rc,
+        ], dim=-3)
+        out_h = torch.gather(out_h, dim=-3, index=max_indices[..., None, :, :])
+
+    #out_h = out_h / delta
+    out_h = (out_h / 6.0) % 1.0
+
+    # -- output
+    return torch.cat([out_h*255.0, out_s*255.0, out_v*255.0], dim=axis)
+
+
+def xyz2rgb(xyz:Tensor):
+    """
+    input xyz as pytorch tensor of size (batch_size,  h, w, 3) or (h, w,3)
+    """
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(0,3,1,2)
+        elif int_shape(xyz)[1]==3:
+            pass
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(2,0,1)
+        elif  int_shape(xyz)[0]==3:
+            pass
+    xyz=xyz/255.0
+    transform_tensor = to_tensor([[3.2404542, - 1.5371385, - 0.4985314],
+                                     [-0.9692660, 1.8760108, 0.0415560],
+                                     [0.0556434, - 0.2040259, 1.0572252]],dtype=xyz.dtype,requires_grad=False).to(_get_device())
+
+    transform_tensor.unsqueeze_(2).unsqueeze_(3)
+    convolved=None
+    if len(xyz.shape) == 4:
+        convolved = F.conv2d(xyz, transform_tensor)
+    else:
+        convolved = F.conv2d(xyz.unsqueeze(0), transform_tensor).squeeze(0)
+    # return convolved
+    rgb=convolved*255.0
+    if len(rgb.shape) == 4:
+        if int_shape(rgb)[-1] == 3:
+            return rgb
+        elif  int_shape(rgb)[1] == 3:
+            rgb = rgb.permute(0, 2, 3, 1)
+            return rgb
+
+    elif len(rgb.shape) == 3:
+        if int_shape(rgb)[-1] == 3:
+            return rgb
+        elif int_shape(rgb)[0] == 3:
+            rgb = rgb.permute(1, 2,0)
+            return rgb
+
+    raise ValueError('image should channel-last')
+
+
+def rgb2xyz(rgb:Tensor):
+    """
+    input rgb as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if len(rgb.shape) == 4:
+        if int_shape(rgb)[-1]==3:
+            rgb =rgb.permute(0,3,1,2)
+        elif int_shape(rgb)[1]==3:
+            pass
+    elif len(rgb.shape) == 3:
+        if int_shape(rgb)[-1]==3:
+            rgb =rgb.permute(2,0,1)
+        elif  int_shape(rgb)[0]==3:
+            pass
+    rgb=rgb/255.0
+    rgb = torch.where(rgb > 0.04045, ((rgb + 0.055) / 1.055).pow(2.4), rgb / 12.92)
+
+    transform_tensor = to_tensor([[0.4124564, 0.3575761, 0.1804375],
+                                     [0.2126729, 0.7151522, 0.0721750],
+                                     [0.0193339, 0.1191920, 0.9503041]],dtype=rgb.dtype,requires_grad=False).to(_get_device())
+
+    transform_tensor.unsqueeze_(2).unsqueeze_(3)
+    xyz=None
+    if len(rgb.shape) == 4:
+        xyz= F.conv2d(rgb, transform_tensor)
+    else:
+        xyz= F.conv2d(rgb.unsqueeze(0), transform_tensor).squeeze(0)
+    xyz=xyz*255.0
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[1] == 3:
+            xyz = xyz.permute(0, 2, 3, 1)
+            return xyz
+
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[0] == 3:
+            xyz = xyz.permute(1, 2, 0)
+            return xyz
+
+    raise ValueError('image should channel-last')
+
+
+
+# LAB
+# CIE-L*a*b*: A perceptually uniform color space,
+# i.e. distances are meaningful. L* in [0..1] and a*, b* almost in [-1..1].
+D65 = [0.95047, 1.00000, 1.08883]
+
+
+def lab_f(t:Tensor):
+    return where(t > 0.008856451679035631, cast(t.pow(1.0 / 3.0),cast_dtype=t.dtype).to(_get_device()), cast(t * 7.787037037037035 + 0.13793103448275862,cast_dtype=t.dtype).to(_get_device()))
+
+
+def lab_finv(t:Tensor):
+    return where(t > 0.20689655172413793, cast(t.pow(3.0),cast_dtype=t.dtype).to(_get_device()), cast(0.12841854934601665 * (t - 0.13793103448275862),cast_dtype=t.dtype).to(_get_device()))
+
+
+def lab2xyz(lab:Tensor, wref=None):
+    """
+    input lab as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    l
+    """
+    if len(lab.shape) == 4:
+        if int_shape(lab)[-1]==3:
+            lab =lab.permute(0,3,1,2)
+        elif int_shape(lab)[1]==3:
+            pass
+        lab[:,0, :, :] = lab[:,0, :, :] / 100.0
+        lab[:,1:, :, :] = (lab[:,1:, :, :] - 127) / 128
+    elif len(lab.shape) == 3:
+        if int_shape(lab)[-1]==3:
+            lab =lab.permute(2,0,1)
+        elif  int_shape(lab)[0]==3:
+            pass
+        lab[0,:,:]=lab[0,:,:]/100.0
+        lab[1:, :, :]=(lab[1:, :, :]-127)/128
+    if wref is None:
+        wref = D65
+    dim = 1 if len(lab.shape) == 4 else 0
+    l, a, b = lab.chunk(3, dim=dim)
+
+    l2 = (l + 0.16) / 1.16
+    x = wref[0] * lab_finv(l2 + a / 5)
+    y = wref[1] * lab_finv(l2)
+    z = wref[2] * lab_finv(l2 - b / 2)
+    xyz = torch.cat([x, y, z], dim=dim)
+    xyz=xyz*255.0
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[1] == 3:
+            xyz = xyz.permute(0, 2, 3, 1)
+            return xyz
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1] == 3:
+            return xyz
+        elif int_shape(xyz)[0] == 3:
+            xyz = xyz.permute(1, 2, 0)
+            return xyz
+
+    raise ValueError('image should channel-last')
+
+def xyz2lab(xyz:Tensor, wref=None):
+    """
+    input xyz as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if len(xyz.shape) == 4:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(0,3,1,2)
+        elif int_shape(xyz)[1]==3:
+            pass
+    elif len(xyz.shape) == 3:
+        if int_shape(xyz)[-1]==3:
+            xyz =xyz.permute(2,0,1)
+        elif  int_shape(xyz)[0]==3:
+            pass
+    xyz=xyz/255.0
+    if wref is None:
+        wref = D65
+    dim = 1 if len(xyz.shape) == 4 else 0
+    x, y, z = xyz.chunk(3, dim=dim)
+
+    fy = lab_f(y / wref[1])
+    l = 1.16 * fy - 0.16
+    a = 5.0 * (lab_f(x / wref[0]) - fy)
+    b = 2.0 * (fy - lab_f(z / wref[2]))
+    lab = torch.cat([clip(l,0,1)*100, clip(a,-1,1)*128+127, clip(b,-1,1)*128+127], dim=dim)
+
+    if len(lab.shape) == 4:
+        if int_shape(lab)[-1] == 3:
+            return lab
+        elif int_shape(lab)[1] == 3:
+            lab = lab.permute(0, 2, 3, 1)
+            return lab
+
+    elif len(lab.shape) == 3:
+        if int_shape(lab)[-1] == 3:
+            return lab
+        elif int_shape(lab)[0] == 3:
+            lab = lab.permute(1, 2, 0)
+            return lab
+
+    raise ValueError('image should channel-last')
+
+
+def lab2rgb(lab:Tensor):
+    """
+    input lab as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if ndim(lab)==4:
+        channel_idx=1
+        if int_shape(lab)[1]==3:
+            channel_idx = 1
+        elif  int_shape(lab)[-1]==3:
+            channel_idx = -1
+        rgb=xyz2rgb(lab2xyz(lab))
+        if channel_idx==1:
+            rgb=rgb.permute(0,3,1,2)
+        return rgb
+    else:
+        rgb=xyz2rgb(lab2xyz(lab))
+        return rgb
+
+
+def rgb2lab(rgb:Tensor):
+    """
+    input rgb as pytorch tensor of size (batch_size, 3, h, w) or (3, h, w)
+    """
+    if ndim(rgb)==4:
+        channel_idx=1
+        if int_shape(rgb)[1]==3:
+            channel_idx = 1
+        elif  int_shape(rgb)[-1]==3:
+            channel_idx = -1
+        xyz=xyz2lab(rgb2xyz(rgb))
+        if channel_idx==1:
+            xyz=xyz.permute(0,3,1,2)
+        return xyz
+    else:
+        xyz=xyz2lab(rgb2xyz(rgb))
+        return xyz
+
+def gray2rgb(gray:Tensor):
+    """Compute luminance of an RGB image.
+
+    Args:
+        gray(tensor):  gray-scale image(shape:(H,W))
+    Returns:
+        rgb (tensor):  rgb image (shape:(H,W,C))
+
+    """
+    gray=gray.copy().float()
+    if ndim(gray) == 3 and int_shape(gray)[-1]==1:
+        gray=gray[:,:,0]
+    if ndim(gray)!=2 :
+        raise ValueError('input gray image ndim should equal 2 but get {0}'.format(ndim(gray)))
+    rgb=stack([gray,gray,gray],axis=-1)
+    return rgb
 
 
 
@@ -4174,7 +4576,7 @@ _FUN_NAMES = [
 for target_fun_name,source_fun in _FUN_NAMES:
     if not hasattr(Tensor,target_fun_name):
         setattr(Tensor, target_fun_name, source_fun)
-    elif target_fun_name in ["float","int","long"]:
+    elif target_fun_name in ["to","float","int","long","sum","mean"]:
         setattr(Tensor, target_fun_name, source_fun)
 del _FUN_NAMES
 
