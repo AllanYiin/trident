@@ -2103,7 +2103,7 @@ class Lambda(Layer):
 
 
 class Reshape(Layer):
-    def __init__(self, target_shape, keep_output=False, name=None):
+    def __init__(self, target_shape, batch_size=None,keep_output=False, name=None):
         """
         Reshape the input volume
         Args:
@@ -2111,6 +2111,7 @@ class Reshape(Layer):
             dimension, as it will remain unchanged.
         """
         super(Reshape, self).__init__(keep_output=keep_output, name=name)
+        self.batch_size=batch_size
         if isinstance(target_shape, numbers.Integral):
             self.target_shape = (target_shape,)
         elif isinstance(target_shape, list):
@@ -2122,9 +2123,9 @@ class Reshape(Layer):
         x = enforce_singleton(x)
         shp = self.target_shape
         if -1 in shp:
-            return torch.reshape(x, (int_shape(x)[0],) + tuple(shp))
+            return torch.reshape(x, (int_shape(x)[0],) + tuple(shp)) if self.batch_size is None else torch.reshape(x, (self.batch_size,) + tuple(shp))
         else:
-            return torch.reshape(x, (-1,) + tuple(shp))
+            return torch.reshape(x, (-1,) + tuple(shp))if self.batch_size is None else torch.reshape(x, (self.batch_size,) + tuple(shp))
 
 
 class Permute(Layer):
