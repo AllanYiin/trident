@@ -384,7 +384,7 @@ class InstanceNorm(Layer):
         self.in_sequence = in_sequence
         if self.in_sequence:
             self.filter_index = -1
-        self.eps = _epsilon
+        self.eps = eps
         self.momentum = momentum
         self.affine = affine
         self.track_running_stats = track_running_stats
@@ -492,7 +492,7 @@ class LayerNorm(Layer):
     .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
 
     """
-    def __init__(self,eps=1e-5, elementwise_affine=True,in_sequence=False,keep_output=False,name=None, **kwargs):
+    def __init__(self,eps=1e-5, elementwise_affine=True,in_sequence=False,name=None, **kwargs):
         """
     Args:
         normalized_shape (int or list or torch.Size): input shape from an expected input
@@ -524,7 +524,7 @@ class LayerNorm(Layer):
         >>> output = m(input)
 
         """
-        super().__init__(keep_output=keep_output,name=name)
+        super().__init__(name=name)
         self.in_sequence=in_sequence
         self.filter_index = -1
         self.eps = eps
@@ -552,8 +552,8 @@ LayerNorm3d=LayerNorm
 
 
 class L2Norm(Layer):
-    def __init__(self,in_sequence=False, axis=1,keep_output=False,name=None, **kwargs):
-        super().__init__(keep_output=keep_output,name=name)
+    def __init__(self,in_sequence=False, axis=1,name=None, **kwargs):
+        super().__init__(name=name)
         self.in_sequence = in_sequence
         if self.in_sequence:
             self.filter_index = -1
