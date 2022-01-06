@@ -959,8 +959,7 @@ class Model(model.ModelBase):
 
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1 if \
-                self.training_context['stop_update'] > 1 else self.training_context[
-                    'stop_update']
+                self.training_context['stop_update'] > 1 else self.training_context['stop_update']
                 if not self.training_context['retain_graph'] and not accumulate_grads:
                     if is_layer:
                         self._model.zero_grad()
@@ -1041,9 +1040,13 @@ class Model(model.ModelBase):
         else:
             save_path = self.training_context['save_path']
 
+
+
         if isinstance(self._model, nn.Module) and not is_abnormal:
             try:
                 folder, filename, ext = split_path(save_path)
+                if not os.path.exists(folder):
+                    folder=os.path.join(get_trident_dir(),'models')
                 if filename == '':
                     filename = self.name
                 ext = '.pth.tar'
@@ -1118,6 +1121,8 @@ class Model(model.ModelBase):
 
         elif is_tensor(self._model) and not is_abnormal:
             folder, filename, ext = split_path(save_path)
+            if not os.path.exists(folder):
+                folder = os.path.join(get_trident_dir(), 'models')
             if filename == '':
                 filenam = self.name
 
@@ -1158,11 +1163,13 @@ class Model(model.ModelBase):
             import_or_install('onnx')
             self._model.eval()
             # if input_shape is None:
-
-            dummy_input = tuple([to_tensor(spec.shape.get_dummy_tensor(batch_size=batch_size)) for spec in
+            _dtype=list(self._model.parameters())[0].dtype
+            dummy_input = tuple([to_tensor(spec.shape.get_dummy_tensor(batch_size=batch_size)).to(_dtype) for spec in
                                  self.signature.inputs.value_list])
             dummy_input = unpack_singleton(dummy_input)
             folder, filename, ext = split_path(save_path)
+            if not os.path.exists(folder):
+                folder = os.path.join(get_trident_dir(), 'models')
             if filename == '':
                 filenam = self.name
 
@@ -1696,73 +1703,12 @@ class MuiltiNetwork(Model):
         pass
 
     def print_batch_progress(self, print_batch_progress_frequency):
-        if 'max_name_length' not in self.training_context:
-            self.training_context['max_name_length'] = len(self.name) + 1
-        metric_strings = []
-        slice_length = print_batch_progress_frequency // self.training_context['collect_data_inteval']
-        for k in self.batch_metric_history.key_list:
-            if k != 'epoch':
-                metric_value = None
-                batch_steps, batch_values = self.batch_metric_history.get_series(k)
-                if len(batch_values) == 0:
-                    batch_steps, batch_values = self.tmp_metrics.get_series(k)
-                    metric_value = np.array(batch_values).mean()
-                else:
-                    if len(batch_values) > slice_length:
-                        metric_value = np.array(batch_values[-1 * slice_length:]).mean()
-                    else:
-                        metric_value = np.array(batch_values).mean()
-
-                metric_strings.append(
-                    '{0}: {1} '.format(k, adaptive_format(metric_value, batch_values, value_type='metric', name=k)))
-
-        loss_value = None
-        loss_steps, loss_values = self.batch_loss_history.get_series('total_losses')
-        if len(loss_values) == 0:
-            loss_value = None
-        else:
-            if len(loss_values) > slice_length:
-                loss_value = to_numpy(loss_values[-1 * slice_length:]).astype(np.float32).mean()
-            else:
-                loss_value = to_numpy(loss_values).astype(np.float32).mean()
-        step_time = self.training_context['time_batch_progress']
-        model.progress_bar(step_time, self.training_context['current_batch'],
-                           self.training_context['total_batch'] if self.training_context[
-                                                                       'total_batch'] is not None else '*',
-                           'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(
-                               adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
-                               self.training_context['current_lr'],
-                               self.training_context['current_epoch']),
-                           name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
-        self.training_context['time_batch_progress'] = 0
+        for k in self._networks.keys():
+            self._networks[k].print_batch_progress(print_batch_progress_frequency)
 
     def print_epoch_progress(self, *args, **kwargs):
-        if 'max_name_length' not in self.training_context:
-            self.training_context['max_name_length'] = len(self.name) + 1
-        metric_strings = []
-        for net in self._networks.value_list:
-            for k in net.epoch_metric_history.key_list:
-                if k != 'epoch':
-                    metric_strings.append('{0}: {1}'.format(k, adaptive_format(net.epoch_metric_history.get_last(k)[-1],
-                                                                               net.batch_metric_history.get_series(k)[
-                                                                                   -1], 'metric', k)))
-
-        for k in self.epoch_metric_history.key_list:
-            if k != 'epoch':
-                metric_strings.append(
-                    '{0}: {1}'.format(k, adaptive_format(self.epoch_metric_history.get_last(k)[-1], None, 'metric', k)))
-
-        step_time = self.training_context['time_epoch_progress']
-        total_losses = 0
-        if 'total_losses' in self.epoch_loss_history:
-            total_losses = self.epoch_loss_history['total_losses'][-1][-1]
-        model.progress_bar(step_time, self.training_context['current_epoch'] + 1, self.training_context['total_epoch'],
-                           'Loss: {0}| {1} | lr: {2:<10.3e}'.format(adaptive_format(total_losses, value_type='loss'),
-                                                                    ', '.join(metric_strings),
-                                                                    self._networks.value_list[0].training_context[
-                                                                        'current_lr']),
-                           name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
-        self.training_context['time_epoch_progress'] = 0
+        for k in self._networks.keys():
+            self._networks[k].print_epoch_progress(*args, **kwargs)
 
 
 class ImageClassificationModel(Model):
