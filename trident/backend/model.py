@@ -479,7 +479,7 @@ class ModelBase(object):
 
             if 'training_context' in self.__dict__ and name in self.__dict__['training_context']:
                 self.__dict__['training_context'][name] = value
-            elif '_model' in self.__dict__ and self.__dict__['_model'] is not None:
+            elif '_model' in self.__dict__ and self.__dict__['_model'] is not None :
                 _model = self.__dict__['_model']
                 if isinstance(_model, Layer):
                     if _model is not None and name in _model.__dict__['_parameters']:
@@ -494,6 +494,8 @@ class ModelBase(object):
                         object.__setattr__(self.__dict__['_model'], "_" + name, value)
                     else:
                         object.__setattr__(self, name, value)
+                else:
+                    object.__setattr__(self, name, value)
             else:
                 object.__setattr__(self, name, value)
 
