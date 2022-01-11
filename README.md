@@ -27,7 +27,7 @@
 - 訓練計畫(Training Plan) 可以如同堆積木般彈性設計你想要的訓練流程，同時使用fluent style語法讓整體代碼易讀更容易管理。
 - 提供最新的優化器( Ranger,Lars, RangerLars, AdaBelief...)以及優化技巧(gradient centralization)。
 
-add: PrintGpuUtilizationCallback allan 2021/12/4 下午 01:03
+a
 
 ## New Release version 0.7.4
 - Experimental: Keras model (at tensorflow backend) and Primitive pytorch model (at pytorch backend) support in TrainingPlan
