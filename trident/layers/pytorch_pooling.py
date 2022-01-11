@@ -178,8 +178,6 @@ class MaxPool2d(_PoolNd):
 
     Examples:
 
-        >>> # pool of square window of size=3, stride=2
-        >>> m = nn.MaxPool2d(3, stride=2)
         >>> # pool of non-square window
         >>> m = nn.MaxPool2d((3, 2), stride=(2, 1))
         >>> input = torch.randn(20, 16, 50, 32)
@@ -234,7 +232,7 @@ class MaxPool2d(_PoolNd):
                             self.return_indices)
 
 
-class MaxPool3d(Layer):
+class MaxPool3d(_PoolNd):
     """Applies a 3D max pooling over an input signal composed of several input
     planes.
 
@@ -288,9 +286,6 @@ class MaxPool3d(Layer):
 
     Examples:
 
-        >>> # pool of square window of size=3, strides=2
-        >>> m = nn.MaxPool3d(3, strides=2)
-        >>> # pool of non-square window
         >>> m = nn.MaxPool3d((3, 2, 2), strides=(2, 1, 2))
         >>> input = torch.randn(20, 16, 50,44, 31)
         >>> output = m(input)
@@ -307,7 +302,6 @@ class MaxPool3d(Layer):
         self.padding = _triple(self.padding)
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.return_indices = kwargs.get('return_indices', False)
-
 
     def forward(self, x,**kwargs):
         return F.max_pool3d(x, self.kernel_size, self.strides, self.padding, self.dilation, self.ceil_mode,
@@ -466,7 +460,7 @@ class MaxUnpool3d(_PoolNd):
               sizes. Hence, the inversion process can get ambiguous.
               To accommodate this, you can provide the needed output size
               as an additional argument :attr:`output_size` in the forward call.
-              See the Inputs section below.
+              See the Input's section below.
 
     Args:
         kernel_size (int or tuple): Size of the max pooling window.
@@ -614,10 +608,6 @@ class AvgPool2d(_PoolNd):
                 \text{kernel\_size}[1]}{\text{stride}[1]} + 1\right\rfloor
 
     Examples:
-
-        >>> # pool of square window of size=3, strides=2
-        >>> m = nn.AvgPool2d(3, strides=2)
-        >>> # pool of non-square window
         >>> m = nn.AvgPool2d((3, 2), strides=(2, 1))
         >>> input = torch.randn(20, 16, 50, 32)
         >>> output = m(input)
@@ -628,7 +618,7 @@ class AvgPool2d(_PoolNd):
         super(AvgPool2d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
         self.kernel_size = _pair(kernel_size)
         self.strides = _pair(strides if strides is not None else kernel_size)
-        self.auto_pad == auto_pad
+        self.auto_pad = auto_pad
 
         self.ceil_mode = kwargs.get('ceil_mode', False)
         self.count_include_pad = kwargs.get('count_include_pad', True)
@@ -712,9 +702,6 @@ class AvgPool3d(_PoolNd):
 
     Examples:
 
-        >>> # pool of square window of size=3, strides=2
-        >>> m = nn.AvgPool3d(3, strides=2)
-        >>> # pool of non-square window
         >>> m = nn.AvgPool3d((3, 2, 2), strides=(2, 1, 2))
         >>> input = torch.randn(20, 16, 50,44, 31)
         >>> output = m(input)

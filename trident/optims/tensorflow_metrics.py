@@ -12,6 +12,7 @@ from tensorflow.python.framework import tensor_shape
 from tensorflow.python.ops import nn_ops
 from trident.backend.common import get_session,addindent,get_time_suffix,get_function,get_class,format_time,get_terminal_size,snake2camel,camel2snake
 from trident.backend.tensorflow_ops import *
+from trident.optims.losses import _check_logsoftmax_logit
 
 __all__ = ['accuracy','recall','pixel_accuracy','alpha_pixel_accuracy','iou','psnr','mean_absolute_error','mean_squared_error','mean_squared_logarithmic_error','mae','mse','rmse','msle','get_metric']
 
@@ -63,12 +64,12 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1, axis:int=-1,ignore_index:
     if (ndim(output_tensor) >= 1 and 'float' in str(output_tensor.dtype) and output_tensor.min() >= 0 and output_tensor.max() <= 1):
         is_logsoftmax = False
         from_logits = True
-        output_tensor = clip(output_tensor, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_tensor, min=1e-7, max=1 - 1e-7)
 
-    elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
+    elif _check_logsoftmax_logit(output_tensor):
         is_logsoftmax = True
         from_logits = True
-        output_tensor = clip(output_exp, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_exp, min=1e-7, max=1 - 1e-7)
     else:
         is_logsoftmax = False
         from_logits = False
@@ -120,12 +121,12 @@ def recall(output, target, axis=-1,ignore_index=-100):
     if (ndim(output_tensor) >= 1 and 'float' in str(output_tensor.dtype) and output_tensor.min() >= 0 and output_tensor.max() <= 1):
         is_logsoftmax = False
         from_logits = True
-        output_tensor = clip(output_tensor, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_tensor, min=1e-7, max=1 - 1e-7)
 
     elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
         is_logsoftmax = True
         from_logits = True
-        output_tensor = clip(output_exp, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_exp, min=1e-7, max=1 - 1e-7)
     else:
         is_logsoftmax = False
         from_logits = False
@@ -204,12 +205,12 @@ def iou(output, target,axis=-1):
     if (ndim(output_tensor) >= 1 and 'float' in str(output_tensor.dtype) and output_tensor.min() >= 0 and output_tensor.max() <= 1):
         is_logsoftmax = False
         from_logits = True
-        output_tensor = clip(output_tensor, min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(output_tensor, min=1e-7, max=1 - 1e-7)
 
     elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
         is_logsoftmax = True
         from_logits = True
-        output_tensor = clip(exp(output_tensor), min=1e-8, max=1 - 1e-8)
+        output_tensor = clip(exp(output_tensor), min=1e-7, max=1 - 1e-7)
     else:
         is_logsoftmax = False
         from_logits = False
@@ -217,7 +218,7 @@ def iou(output, target,axis=-1):
     if target_tensor.dtype == str2dtype('long'):
         is_target_onehot = False
     elif target_tensor.dtype != str2dtype('long') and (target_tensor.min() >= 0 and target_tensor.max() <= 1 and abs(target_tensor.sum(-1).mean() - 1) < 1e-4):
-        target_tensor = clip(target_tensor, min=1e-8, max=1 - 1e-8)
+        target_tensor = clip(target_tensor, min=1e-7, max=1 - 1e-7)
         is_target_onehot = True
 
     if target_tensor.dtype == tf.int64 and is_target_onehot == False:

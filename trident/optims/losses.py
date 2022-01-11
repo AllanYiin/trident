@@ -71,6 +71,7 @@ class Loss(object):
         assert reduction.lower() in ['mean', 'sum', 'batch_sum', 'batch_mean', 'none']
         self.reduction = reduction.lower()
         self.name = name
+        self._built = False
         self.sample_weight = sample_weight
         self.axis = axis
         self.enable_ohem = enable_ohem
@@ -80,12 +81,20 @@ class Loss(object):
         self.output_names=output_names
         self.update_signature(input_names,output_names)
 
+
+    @property
+    def built(self):
+        return self._built
+
+    def build(self, output,target,**kwargs):
+        pass
+
     def __call__(self, output: Tensor, target: Tensor, **kwargs):
         target.to(output.device)
         result = self.forward(output, target, **kwargs)
         return result
 
-    def _forward_unimplemented(self, *input: Any) -> None:
+    def _forward_unimplemented(self, output: Any, target: Any, **kwargs) -> None:
         r"""Defines the computation performed at every call.
 
         Should be overridden by all subclasses.

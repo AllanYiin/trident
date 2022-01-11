@@ -431,22 +431,24 @@ class LogLog(Layer):
 
 
 class Softmax(Layer):
-    def __init__(self):
-        super(Softmax, self).__init__()
+    def __init__(self,axis=-1,name=None):
+        super(Softmax, self).__init__(name=name)
         self._built = True
+        self.axis=axis
 
     def forward(self, x,**kwargs):
-        return tf.nn.softmax(x)
+        return tf.nn.softmax(x, axis=self.axis)
 
 
 
 
 class LogSoftmax(Layer):
-    def __init__(self):
-        super(LogSoftmax, self).__init__()
+    def __init__(self,axis=-1,name=None):
+        super(LogSoftmax, self).__init__(name=name)
         self._built = True
+        self.axis=axis
     def forward(self, x,**kwargs):
-        return reduce_logsumexp(x)
+        return reduce_logsumexp(x, axis=self.axis)
 
 
 

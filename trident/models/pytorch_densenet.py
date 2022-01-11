@@ -98,7 +98,7 @@ class DenseBlock(Layer):
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, x, **kwargs):
-        if self.is_upsample:
+        if hasattr(self,'is_upsample') and self.is_upsample:
             new_features = []
             # we pass all previous activations into each dense layer normally
             # But we only store each dense layer's output in the new_features array
@@ -282,7 +282,7 @@ class _DenseNetFcn2(Layer):
         for i in range(len(self.blocks)-1):
 
             self.down_block.append(DenseBlock(self.blocks[i], growth_rate=self.growth_rate, is_fcn=True,name='denseblock_down{0}'.format(i+1)))
-            self.down_block.append(TransitionDown(0.5,name='transition_down{0}'.format(i+1)))
+            self.down_block.append(TransitionDown(1,name='transition_down{0}'.format(i+1)))
 
             self.up_block.insert(0,DenseBlock(self.blocks[i], growth_rate=self.growth_rate, is_upsample=True ,is_fcn=True,name='denseblock_up{0}'.format(i + 1)))
             self.up_block.insert(0, TransConv2d_Block((3, 3), depth_multiplier=0.5, strides=2, auto_pad=True,

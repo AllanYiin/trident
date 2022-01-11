@@ -14,6 +14,7 @@ import numpy as np
 import torch
 from torch import  Tensor
 import torch.nn as nn
+
 import torch.nn.functional as F  # import torch functions
 import torch.utils.hooks as hooks
 from torch._jit_internal import List
@@ -62,6 +63,7 @@ class PositionalEmbedding(Layer):
         self.register_buffer('pe', pe)
 
     def forward(self, x, **kwargs):
+        self.pe.to(x.device)
         return self.pe[:, :x.size(1)]
 
 class PositionwiseFeedForward(Layer):
@@ -69,8 +71,8 @@ class PositionwiseFeedForward(Layer):
 
     def __init__(self, d_model, d_ff, dropout_rate=0.1):
         super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = nn.Linear(d_model, d_ff)
-        self.w_2 = nn.Linear(d_ff, d_model)
+        self.w_1 = Dense(num_filters= d_ff)
+        self.w_2 = Dense(num_filters= d_model)
         self.dropout = Dropout(dropout_rate)
         self.activation = Gelu()
 
@@ -179,19 +181,23 @@ class BERTEmbedding(Layer):
 
     def forward(self, x,segments_tensor=None):
         if segments_tensor is None:
-            segments_tensor_list=[]
-            B,N=int_shape(x)
-            sep_tuples=(x == self.sep_idx).nonzero()(as_tuple=True)
-            for i in range(B):
-                sep_tuple=sep_tuples[i]
-                if len(sep_tuple)<=1:
-                    segments_tensor_list.append(zeros_like(x[i]))
-                elif  sep_tuple==2:
-                    t=zeros_like([i]).detach()
-                    sep_tuple[:sep_tuple[0]+1]=1
-                    sep_tuple[sep_tuple[0]+1:sep_tuple[1] + 1] = 2
-                    segments_tensor_list.append(t)
-            segments_tensor=stack(segments_tensor_list,axis=0).to(get_device())
+            segments_tensor = zeros_like(x).to(x.device)
+            # if self.sep_idx not in x:
+            #
+            # else:
+            #     segments_tensor_list=[]
+            #     B,N=int_shape(x)
+            #     sep_tuples=(x == self.sep_idx).nonzero()(as_tuple=True)
+            #     for i in range(B):
+            #         sep_tuple=sep_tuples[i]
+            #         if len(sep_tuple)<=1:
+            #             segments_tensor_list.append(zeros_like(x[i]))
+            #         elif  sep_tuple==2:
+            #             t=zeros_like([i]).detach()
+            #             sep_tuple[:sep_tuple[0]+1]=1
+            #             sep_tuple[sep_tuple[0]+1:sep_tuple[1] + 1] = 2
+            #             segments_tensor_list.append(t)
+            #     segments_tensor=stack(segments_tensor_list,axis=0).to(get_device())
 
 
 
@@ -345,12 +351,12 @@ class BERT(Layer):
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate) )
 
-    def forward(self, x):
+    def forward(self, x,segments_tensor=None):
         if int_shape(x)[1]==2:
             x,segments_tensor=split(x,num_splits=2,axis=1)
             x=x.squeeze(1)
             segments_tensor=segments_tensor.squeeze(1)
-        else:
+        elif segments_tensor is None:
             segments_tensor = zeros_like(x, dtype=x.dtype).to(get_device())
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)

@@ -46,7 +46,7 @@ class _PoolNd(Layer):
     def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', dilation=1, name=None, **kwargs):
         super(_PoolNd, self).__init__(name=name)
         self.kernel_size = kernel_size
-        self.strides = strides or kernel_size
+        self.strides = strides
         self.auto_pad = auto_pad
         self.padding_mode = padding_mode
         self.padding = 0
@@ -104,7 +104,7 @@ class MaxPool1d(_PoolNd):
 
     """
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate', name='', **kwargs):
+    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='replicate', name=None, **kwargs):
         super(MaxPool1d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
         self.kernel_size = _single(kernel_size)
         self.strides = _single(strides if strides is not None else kernel_size)
@@ -117,7 +117,7 @@ class MaxPool1d(_PoolNd):
     def forward(self, x, **kwargs) :
 
         return tf.nn.max_pool1d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
-                                data_format="NWC", name=None)
+                                data_format="NWC", name=self.name)
 
 
 class MaxPool2d(_PoolNd):
@@ -180,7 +180,7 @@ class MaxPool2d(_PoolNd):
 
     """
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', name='', **kwargs):
+    def __init__(self, kernel_size, strides=None, auto_pad=True, padding_mode='zero', name=None, **kwargs):
         super(MaxPool2d, self).__init__(kernel_size, strides, auto_pad, padding_mode, 1, name, **kwargs)
         self.kernel_size = _pair(kernel_size)
         self.strides = _pair(strides if strides is not None else kernel_size)
@@ -196,7 +196,7 @@ class MaxPool2d(_PoolNd):
     def forward(self, x, **kwargs) :
 
         return tf.nn.max_pool2d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
-                                data_format="NHWC", name=None)
+                                data_format="NHWC", name=self.name)
 
 
 class MaxPool3d(_PoolNd):
@@ -264,7 +264,7 @@ class MaxPool3d(_PoolNd):
 
     """
 
-    def __init__(self, kernel_size, strides=None, auto_pad=True, name='', **kwargs):
+    def __init__(self, kernel_size, strides=None, auto_pad=True, name=None, **kwargs):
         super(MaxPool3d, self).__init__(kernel_size, strides, auto_pad, 1, name, **kwargs)
         self.kernel_size = _triple(kernel_size)
         self.strides = _triple(strides if strides is not None else kernel_size)
@@ -275,7 +275,7 @@ class MaxPool3d(_PoolNd):
 
     def forward(self, x,**kwargs):
         return tf.nn.max_pool3d(x, self.kernel_size, self.strides, 'SAME' if self.auto_pad else 'VALID',
-                                data_format="NDHWC", name=None)
+                                data_format="NDHWC", name=self.name)
 
 
 class MaxUnpool2d(_PoolNd):

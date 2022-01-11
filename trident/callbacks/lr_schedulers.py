@@ -2,6 +2,9 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import builtins
+
 import matplotlib.pyplot as plt
 import math
 import random
@@ -219,13 +222,30 @@ class StepLR(AdjustLRCallbackBase):
 
 
 class PolyLR(AdjustLRCallbackBase):
-    def __init__(self,max_lr=1e-3,  max_iter=10000):
+    def __init__(self,max_lr=1e-3, min_lr=1e-7, period=1000,unit='batch', power=1.0,cycle=False):
         super().__init__()
         self.max_lr = max_lr
-        self.max_iter=max_iter
+        self.min_lr=min_lr
+        self.period=period
+        self.unit=unit
+        self.power=power
+        self.cycle=cycle
     def on_batch_end(self, training_context):
+        base_lr=training_context['base_lr']
         current_step =training_context['steps']
-        lr = self.max_lr * (1 - (current_step/ self.max_iter)) * (1 - (current_step / self.max_iter))
+        decay_steps=self.period
+        if self.cycle:
+            # Find the first multiple of decay_steps that is bigger than global_step.
+            # If global_step is zero set the multiplier to 1
+            multiplier = 1.0 if  current_step==0 else math.ceil(current_step/decay_steps)
+            decay_steps = decay_steps*multiplier
+        else:
+            # Make sure that the global_step used is not bigger than decay_steps.
+            current_step = builtins.min(current_step, decay_steps)
+
+        p = current_step/decay_steps
+        lr = (self.max_lr - self.min_lr) * math.pow(1 - p, self.power) + self.min_lr
+
         if (lr < 1.0e-7):
             lr = 1.0e-7
         self.adjust_learning_rate(training_context, lr, verbose=False)

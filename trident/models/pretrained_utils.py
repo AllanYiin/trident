@@ -98,7 +98,6 @@ def _make_recovery_model_include_top(recovery_model:Layer,default_shape=None,inp
             module._output_shape = None
 
     recovery_model.to(get_device())
-    recovery_model.device=get_device()
     dummy_input=to_tensor(new_tensorshape.get_dummy_tensor()).to(recovery_model.device)
     print(dummy_input.device)
     out = recovery_model(dummy_input)

@@ -229,14 +229,14 @@ class _ClassificationLoss(Loss):
         if len(self.sample_weight) != self.num_classes:
             raise ValueError('weight should be 1-D tensor and length equal to numbers of filters')
 
-        self.ignore_index_weight = ones_like(self.sample_weight, requires_grad=False, dtype=output.dtype).to(get_device())
+        self.ignore_index_weight = ones(self.num_classes, requires_grad=False, dtype=output.dtype).to(get_device())
         # ignore_index
         with torch.no_grad():
             if isinstance(self.ignore_index, int) and 0 <= self.ignore_index < self.num_classes:
                 self.ignore_index_weight[self.ignore_index] = 0
             elif isinstance(self.ignore_index, (list, tuple)):
                 for idx in self.ignore_index:
-                    if isinstance(idx, int) and 0 <= idx < int_shape(output)[self.axis]:
+                    if isinstance(idx, int) and 0 <= idx <  self.num_classes:
                         self.ignore_index_weight[idx] = 0
 
         if self.label_smooth:
@@ -301,8 +301,8 @@ class _ClassificationLoss(Loss):
         if target.dtype == Dtype.long and self.need_target_onehot == True and (self.is_target_onehot == False or self.is_target_onehot is None):
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(get_device())
             self.is_target_onehot = True
-            if self.label_smooth:
-                target = clip(target + random_uniform_like(target,-0.2,0.2).to(target.device),1e-7,1.1)
+        if self.label_smooth:
+            target =target *random_uniform_like(target,0.8,1).to(target.device)
         target = target.detach()
 
         if self.enable_ohem:
@@ -663,12 +663,12 @@ class CrossEntropyLoss(_ClassificationLoss):
             if self.is_target_onehot and target.dtype != Dtype.long:
                 target = argmax(target, self.axis)
 
-            unbalance_weight = zeros([ self.num_classes]).to(_float_dtype)
+            unbalance_weight = ones([ self.num_classes]).to(_float_dtype)
             if self.auto_balance and self.label_statistics is not None:
                 if int_shape(output)[self.axis] == len(self.label_statistics):
                     unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
-                    sample_weight = where(unbalance_weight < 1e-7, ones([ self.num_classes]).to(_float_dtype),pow(1-clip(unbalance_weight, min=1e-7),3.5))
-
+                    unbalance_weight = where(unbalance_weight < 1e-7, ones([ self.num_classes]).to(_float_dtype),pow(1-clip(unbalance_weight, min=1e-7),3.5))
+            sample_weight=unbalance_weight
 
             target_shape=target.shape
 
@@ -687,13 +687,17 @@ class CrossEntropyLoss(_ClassificationLoss):
                 if self.num_classes== len(self.label_statistics):
                     unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
                     unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),pow(1 -  clip(unbalance_weight, min=1e-7),3.5))
+                    sample_weight=unbalance_weight
 
             if self.is_logsoftmax and  reduce_min(output)<=0:
                 output=clip(exp(output), min=1e-7, max=1)
-            sample_weight = expand_as(sample_weight, output)
-            unbalance_weight= expand_as(unbalance_weight, output)
+
+            new_shape=[1]*ndim(output)
+            new_shape[1]=int_shape(output)[1]
+
+            sample_weight = reshape(sample_weight, new_shape)
             target=target.detach()
-            return -reduce_sum(target * output * sample_weight*unbalance_weight, axis=self.axis)
+            return -reduce_sum(target * output * sample_weight, axis=self.axis)
 
 
 

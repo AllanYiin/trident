@@ -24,7 +24,8 @@ from torch.nn import init
 from torch.nn.parameter import Parameter
 
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList, fix_layer, load,get_device
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList, fix_layer, load, \
+    get_device
 from trident.backend.pytorch_ops import *
 from trident.data.bbox_common import xywh2xyxy, xyxy2xywh
 from trident.data.image_common import *
@@ -36,7 +37,8 @@ from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 from trident.models.pytorch_ssd import *
-from trident.data.vision_transforms import Resize,Normalize
+from trident.data.vision_transforms import Resize, Normalize
+
 __all__ = ['RfbNet', 'generate_priors']
 
 _session = get_session()
@@ -167,28 +169,37 @@ def basic_rfb(num_filters, scale=0.1):
     return ShortCut2d(Sequential(
         ShortCut2d(
             Sequential(
-                Conv2d_Block((1, 1), depth_multiplier=0.125, strides=1, groups=1, auto_pad=False, use_bias=False, activation=None,
+                Conv2d_Block((1, 1), depth_multiplier=0.125, strides=1, groups=1, auto_pad=False, use_bias=False,
+                             activation=None,
                              normalization='batch'),
-                Conv2d_Block((3, 3), depth_multiplier=2, strides=1, groups=1, padding=(1, 1), use_bias=False, activation='relu',
+                Conv2d_Block((3, 3), depth_multiplier=2, strides=1, groups=1, padding=(1, 1), use_bias=False,
+                             activation=Relu(inplace=True),
                              normalization='batch'),
-                Conv2d_Block((3, 3), depth_multiplier=1, strides=1, groups=1, padding=(2, 2), use_bias=False, dilation=2,
+                Conv2d_Block((3, 3), depth_multiplier=1, strides=1, groups=1, padding=(2, 2), use_bias=False,
+                             dilation=2,
                              activation=None, normalization='batch'), name='branch1'),
 
             Sequential(
-                Conv2d_Block((1, 1), depth_multiplier=0.125, strides=1, groups=1, auto_pad=False, use_bias=False, activation=None,
+                Conv2d_Block((1, 1), depth_multiplier=0.125, strides=1, groups=1, auto_pad=False, use_bias=False,
+                             activation=None,
                              normalization='batch'),
-                Conv2d_Block((3, 3), depth_multiplier=2, strides=1, groups=1, padding=(1, 1), use_bias=False, activation='relu',
+                Conv2d_Block((3, 3), depth_multiplier=2, strides=1, groups=1, padding=(1, 1), use_bias=False,
+                             activation=Relu(inplace=True),
                              normalization='batch'),
-                Conv2d_Block((3, 3), depth_multiplier=1, strides=1, groups=1, padding=(3, 3), use_bias=False, dilation=3,
+                Conv2d_Block((3, 3), depth_multiplier=1, strides=1, groups=1, padding=(3, 3), use_bias=False,
+                             dilation=3,
                              activation=None, normalization='batch'), name='branch2'),
             Sequential(
-                Conv2d_Block((1, 1), depth_multiplier=0.125, strides=1, groups=1, auto_pad=False, use_bias=False, activation=None,
+                Conv2d_Block((1, 1), depth_multiplier=0.125, strides=1, groups=1, auto_pad=False, use_bias=False,
+                             activation=None,
                              normalization='batch'),
-                Conv2d_Block((3, 3), depth_multiplier=1.5, strides=1, groups=1, padding=(1, 1), use_bias=False, activation='relu',
+                Conv2d_Block((3, 3), depth_multiplier=1.5, strides=1, groups=1, padding=(1, 1), use_bias=False,
+                             activation=Relu(inplace=True),
                              normalization='batch'),
                 Conv2d_Block((3, 3), depth_multiplier=1.33, strides=1, groups=1, padding=(1, 1), use_bias=False,
-                             activation='relu', normalization='batch'),
-                Conv2d_Block((3, 3), depth_multiplier=1, strides=1, groups=1, padding=(5, 5), use_bias=False, dilation=5,
+                             activation=Relu(inplace=True), normalization='batch'),
+                Conv2d_Block((3, 3), depth_multiplier=1, strides=1, groups=1, padding=(5, 5), use_bias=False,
+                             dilation=5,
                              activation=None, normalization='batch'), name='branch3')
             , mode='concate'),
 
@@ -200,16 +211,16 @@ def basic_rfb(num_filters, scale=0.1):
 
 def conv_dw(num_filters, strides):
     return Sequential(
-        DepthwiseConv2d_Block((3, 3), depth_multiplier=1, strides=strides, use_bias=False, activation='relu',
+        DepthwiseConv2d_Block((3, 3), depth_multiplier=1, strides=strides, use_bias=False, activation=Relu(inplace=True),
                               normalization='batch'),
         Conv2d_Block((1, 1), num_filters=num_filters, strides=1, groups=1, auto_pad=True, use_bias=False,
-                     activation='relu', normalization='batch'),
+                     activation=Relu(inplace=True), normalization='batch'),
     )
 
 
 def tiny_mobile_rfbnet(filter_base=16, num_classes=2):
     return Sequential(Conv2d_Block((3, 3), num_filters=filter_base, strides=2, groups=1, auto_pad=True, use_bias=False,
-                                   activation='relu', normalization='batch'),
+                                   activation=Relu(inplace=True), normalization='batch'),
                       conv_dw(filter_base * 2, 1),
                       conv_dw(filter_base * 2, 2),  # 80*60
                       conv_dw(filter_base * 2, 1),
@@ -226,9 +237,9 @@ def tiny_mobile_rfbnet(filter_base=16, num_classes=2):
                       conv_dw(filter_base * 16, 1))
 
 
-
 class RFBnet(Layer):
-    def __init__(self, *args, base_filters=16, num_classes=2, num_regressors=4,detection_threshold=0.7, nms_threshold=0.3, center_variance=0.1, size_variance=0.2,
+    def __init__(self, *args, base_filters=16, num_classes=2, num_regressors=4, detection_threshold=0.7,
+                 nms_threshold=0.3, center_variance=0.1, size_variance=0.2,
                  name='tiny_mobile_rfbnet', **kwargs):
         """
 
@@ -243,46 +254,50 @@ class RFBnet(Layer):
         self.backbond2 = Sequential(*backbond[8:11], name='backbond2')
         self.backbond3 = Sequential(*backbond[11:13], name='backbond3')
         self.detection_threshold = detection_threshold
-        self.nms_threshold =nms_threshold
+        self.nms_threshold = nms_threshold
         self.variance = (center_variance, size_variance)
+        self.softmax=SoftMax(-1)
+
 
         self.num_classes = num_classes
         self.num_regressors = num_regressors
         self.register_buffer("priors", None)
         self.define_img_size(640)
 
-        self.extra = Sequential(Conv2d((1, 1), num_filters=64, strides=1, activation='relu', use_bias=True),
-                                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=2, auto_pad=True, activation='relu',
+        self.extra = Sequential(Conv2d((1, 1), num_filters=64, strides=1, activation=Relu(inplace=True), use_bias=True),
+                                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=2, auto_pad=True, activation=Relu(inplace=True),
                                                 use_bias=True),
-                                Conv2d((1, 1), num_filters=256, strides=1, activation=None, use_bias=True), Relu(), name='extra')
-        self.regression_headers = ModuleList([Sequential(
-            DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation='relu', use_bias=True),
+                                Conv2d((1, 1), num_filters=256, strides=1, activation=None, use_bias=True), Relu(inplace=True),
+                                name='extra')
+        self.regression_headers = ModuleList([
+            Sequential(
+            DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
             Conv2d((1, 1), num_filters=3 * self.num_regressors, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation='relu', use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
                 Conv2d((1, 1), num_filters=2 * self.num_regressors, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation='relu', use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
                 Conv2d((1, 1), num_filters=2 * self.num_regressors, strides=1, activation=None, use_bias=True)),
 
-            Conv2d((3, 3), num_filters=3 * self.num_regressors, strides=1, auto_pad=True, activation=None), ], name='regression_headers')
+            Conv2d((3, 3), num_filters=3 * self.num_regressors, strides=1, auto_pad=True, activation=None) ],
+            name='regression_headers')
         self.classification_headers = ModuleList([
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation='relu', use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
                 Conv2d((1, 1), num_filters=3 * self.num_classes, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation='relu', use_bias=True),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
                 Conv2d((1, 1), num_filters=2 * self.num_classes, strides=1, activation=None, use_bias=True)),
 
             Sequential(
-                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation='relu', use_bias=True),
-                Conv2d((1, 1), num_filters=2 * self.num_classes, strides=1, activation=None, use_bias=True)),
+                DepthwiseConv2d((3, 3), depth_multiplier=1, strides=1, auto_pad=True, activation=Relu(inplace=True), use_bias=True),
+                Conv2d((1, 1), num_filters=2 * self.num_classes, strides=1, auto_pad=True, activation=None, use_bias=True)),
 
-            Conv2d((3, 3), num_filters=3 * self.num_classes, strides=1, auto_pad=True, activation=None,
-                   use_bias=True), ], name='classification_headers')
+            Conv2d((3, 3), num_filters=3 * self.num_classes, strides=1, auto_pad=True, activation=None, use_bias=True) ], name='classification_headers')
 
     def define_img_size(self, size=640):
         global image_size, feature_map_w_h_list, priors
@@ -301,7 +316,7 @@ class RFBnet(Layer):
             for k in range(0, len(feature_map_w_h_list[i])):
                 item_list.append(image_size[i] / feature_map_w_h_list[i][k])
             shrinkage_list.append(item_list)
-        self.register_buffer("priors",generate_priors(feature_map_w_h_list, shrinkage_list, image_size, min_boxes))
+        self.register_buffer("priors", generate_priors(feature_map_w_h_list, shrinkage_list, image_size, min_boxes))
 
     def compute_header(self, i, x):
         confidence = self.classification_headers[i](x)
@@ -310,8 +325,7 @@ class RFBnet(Layer):
 
         location = self.regression_headers[i](x)
         location = location.permute(0, 2, 3, 1).contiguous()
-        location = location.view(location.size(0), -1, 4)
-
+        location = location.view(location.size(0), -1, self.num_regressors)
         return confidence, location
 
     def area_of(self, left_top, right_bottom) -> torch.Tensor:
@@ -345,43 +359,47 @@ class RFBnet(Layer):
         area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
         return overlap_area / (area0 + area1 - overlap_area + eps)
 
-    def hard_nms(self, box_scores, iou_threshold, top_k=-1, candidate_size=200):
+    def hard_nms(self, box_scores, nms_threshold, top_k=-1, candidate_size=200):
         """
 
         Args:
             box_scores (N, 5): boxes in corner-form and probabilities.
-            iou_threshold: intersection over union threshold.
+            nms_threshold: intersection over union threshold.
             top_k: keep top_k results. If k <= 0, keep all the results.
             candidate_size: only consider the candidates with the highest scores.
         Returns:
              picked: a list of indexes of the kept boxes
         """
+        if box_scores is None or len(box_scores) == 0:
+            return None, None
         scores = box_scores[:, -1]
-        boxes = box_scores[:, :-1]
+        boxes = box_scores[:, :4]
         picked = []
-        _, indexes = scores.sort(descending=True)
-        indexes = indexes[:candidate_size]
+        # _, indexes = scores.sort(descending=True)
+        indexes = np.argsort(-scores)
+        # indexes = indexes[:candidate_size]
+        indexes = indexes[-candidate_size:]
         while len(indexes) > 0:
-            current = indexes[0]
-            picked.append(current.item())
+            # current = indexes[0]
+            current = indexes[-1]
+            picked.append(current)
             if 0 < top_k == len(picked) or len(indexes) == 1:
                 break
             current_box = boxes[current, :]
-            indexes = indexes[1:]
+            # indexes = indexes[1:]
+            indexes = indexes[:-1]
             rest_boxes = boxes[indexes, :]
-            iou = self.iou_of(
-                rest_boxes,
-                current_box.unsqueeze(0),
-            )
-            indexes = indexes[iou <= iou_threshold]
+            iou, inter, union = self.iou_of(rest_boxes, expand_dims(current_box, axis=0), )
+            iot = inter / self.area_of(current_box[..., :2], current_box[..., 2:])
 
-        return box_scores[picked, :]
+            indexes = indexes[((iou <= nms_threshold) * (iot <= nms_threshold)).astype(np.bool)]
+        return box_scores[picked, :], picked
 
     def predict(self, width, height, confidences, boxes, detection_threshold=None, iou_threshold=0.3, top_k=-1):
         boxes = boxes
         confidences = confidences
         if detection_threshold is not None:
-            self.detection_threshold=detection_threshold
+            self.detection_threshold = detection_threshold
         picked_box_probs = []
         picked_labels = []
         for class_index in range(1, confidences.shape[1]):
@@ -393,7 +411,7 @@ class RFBnet(Layer):
             subset_boxes = boxes[mask, :]
             box_probs = concate([subset_boxes, probs.reshape(-1, 1)], axis=1)
             box_probs = self.hard_nms(box_probs,
-                                      iou_threshold=iou_threshold,
+                                      nms_threshold=iou_threshold,
                                       top_k=top_k,
                                       )
             picked_box_probs.append(box_probs)
@@ -405,7 +423,8 @@ class RFBnet(Layer):
         picked_box_probs[:, 1] *= height
         picked_box_probs[:, 2] *= width
         picked_box_probs[:, 3] *= height
-        return to_numpy(picked_box_probs[:, :4]).astype(np.int32), np.array(picked_labels), to_numpy(picked_box_probs[:, 4])
+        return to_numpy(picked_box_probs[:, :4]).astype(np.int32), np.array(picked_labels), to_numpy(
+            picked_box_probs[:, 4])
 
     def rerec(self, box, img_shape):
         """Convert box to square."""
@@ -431,34 +450,41 @@ class RFBnet(Layer):
         locations = []
 
         x = self.backbond1(x)
-        confidence, location = self.compute_header(0, x)
-        confidences.append(confidence)
-        locations.append(location)
+        confidence0, location0 = self.compute_header(0, x)
+        confidences.append(confidence0)
+        locations.append(location0)
 
         x = self.backbond2(x)
-        confidence, location = self.compute_header(1, x)
-        confidences.append(confidence)
-        locations.append(location)
+        confidence1, location1 = self.compute_header(1, x)
+        confidences.append(confidence1)
+        locations.append(location1)
 
         x = self.backbond3(x)
-        confidence, location = self.compute_header(2, x)
-        confidences.append(confidence)
-        locations.append(location)
+        confidence2, location2 = self.compute_header(2, x)
+        confidences.append(confidence2)
+        locations.append(location2)
 
         x = self.extra(x)
-        confidence, location = self.compute_header(3, x)
-        confidences.append(confidence)
-        locations.append(location)
+        confidence3, location3 = self.compute_header(3, x)
+        confidences.append(confidence3)
+        locations.append(location3)
 
         confidences = torch.cat(confidences, 1)
+        if not hasattr(self,'softmax') or self.softmax is None:
+            self.softmax=SoftMax(-1)
+        confidences=self.softmax(confidences)
+
         locations = torch.cat(locations, 1)
 
         if self.training:
-            return confidences, locations
-        else:
-            confidences = softmax(confidences, -1)
+            result = OrderedDict()
+            result['confidences'] = confidences
+            result['locations'] = locations
+            return result
 
-            locations = decode(locations, self.priors, self.variance)
+        else:
+
+            # locations = decode(locations, self.priors, self.variance)
             return confidences, locations
 
 
@@ -471,30 +497,30 @@ def RfbNet(include_top=True,
         input_shape = tuple(input_shape)
     else:
         input_shape = (3, 480, 640)
-    rfbnet = SsdDetectionModel(input_shape=(3, 480, 640), output=RFBnet(base_filters=base_filters, num_classes=num_classes, num_regressors=num_regressors))
-    rfbnet.detection_threshold=0.7
-    rfbnet.nms_threshold=0.7
+    if num_classes != 2 or num_regressors != 4:
+        pretrained = False
+    rfbnet = SsdDetectionModel(input_shape=input_shape,
+                               output=RFBnet(base_filters=base_filters, num_classes=num_classes,
+                                             num_regressors=num_regressors))
+    rfbnet.detection_threshold = 0.7
+    rfbnet.nms_threshold = 0.7
     rfbnet.palette[0] = (128, 255, 128)
     rfbnet.palette[1] = (128, 255, 128)
     rfbnet.preprocess_flow = [
         Resize((480, 640), True),
         Normalize(127.5, 127.5)
     ]
+
     if pretrained == True:
         download_model_from_google_drive('1T_0VYOHaxoyuG1fAxY-6g0C7pfXiujns', dirname, 'version-RFB-640.pth')
-        recovery_model =fix_layer( load(os.path.join(dirname, 'version-RFB-640.pth')))
-        priors=recovery_model.priors.clone()
+        recovery_model = fix_layer(load(os.path.join(dirname, 'version-RFB-640.pth')))
+        recovery_model.softmax = SoftMax(axis=-1)
+        priors = recovery_model.priors.clone()
         recovery_model.__delattr__("priors")
-        recovery_model.register_buffer("priors",priors)
+        recovery_model.register_buffer("priors", priors)
         recovery_model.name = 'rfb640'
         recovery_model.eval()
         recovery_model.to(_device)
         rfbnet.model = recovery_model
     return rfbnet
-
-
-
-
-
-
 

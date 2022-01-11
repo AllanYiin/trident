@@ -1265,6 +1265,7 @@ class Layer(nn.Module):
 
 
 
+
 class Sequential(Layer):
     r"""A sequential container.
     Modules will be added to it in the order they are passed in the constructor.
@@ -1530,8 +1531,10 @@ class ModuleList(Layer):
             index (int): index to insert.
             module (nn.Module): module to insert
         """
+
         for i in range(len(self._modules), index, -1):
             self._modules[str(i)] = self._modules[str(i - 1)]
+
         self._modules[str(index)] = module
 
     def append(self, module):
@@ -1556,6 +1559,8 @@ class ModuleList(Layer):
         for i, module in enumerate(modules):
             self.add_module(str(offset + i), module)
         return self
+
+
 
 
 class ModuleDict(Layer):

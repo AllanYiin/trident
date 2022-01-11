@@ -42,7 +42,7 @@ class Word2Vec(Embedding):
 
     """
 
-    def __init__(self, pretrained=False, locale=None, embedding_dim: Optional[int] = None, num_embeddings: Optional[int] = None, vocabs: Optional[List[str]] = None,
+    def __init__(self, pretrained=False, embedding_dim: Optional[int] = None, num_embeddings: Optional[int] = None, vocabs: Optional[List[str]] = None,
                  padding_idx: Optional[int] = None,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
                  sparse: bool = False, _weight: Optional[Tensor] = None, filter_index=-1, keep_output: bool = False, name: Optional[str] = None) -> None:
@@ -51,7 +51,9 @@ class Word2Vec(Embedding):
         Py Word2vec结构
         """
         super().__init__(num_embeddings=num_embeddings, embedding_dim=embedding_dim, max_norm=max_norm, norm_type=norm_type, scale_grad_by_freq=scale_grad_by_freq, sparse=sparse,
-                         _weight=_weight, filter_index=filter_index, keep_output=keep_output, name=name)
+                         _weight=_weight,padding_idx=padding_idx, keep_output=keep_output, name=name)
+        self.pretrained=pretrained
+        self.filter_index=filter_index
         self.locale =ctx.locale
         print('locale:', self.locale)
 
@@ -91,6 +93,7 @@ class Word2Vec(Embedding):
         st = datetime.datetime.now()
         set_device('cpu')
         dirname = os.path.join(get_trident_dir(), 'models')
+
         download_model_from_google_drive('13XZPWh8QhEsC8EdIp1niLtZz0ipatSGC', dirname, 'word2vec_chinese.pth')
         recovery_model = load(os.path.join(dirname, 'word2vec_chinese.pth'))
         recovery_weight=recovery_model.state_dict()['weight']
@@ -230,7 +233,10 @@ class Word2Vec(Embedding):
 
 def ChineseWord2Vec(pretrained=True, freeze_features=True, **kwargs):
     if pretrained==True:
-        return Word2Vec.load()
+        model=Word2Vec.load()
+        if freeze_features:
+            model.trainable=False
+        return model
     else:
         return Word2Vec()
 

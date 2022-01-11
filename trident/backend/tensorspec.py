@@ -58,8 +58,10 @@ def distict_color_count(img):
         object:
 
     Examples:
+        >>> from trident import *
         >>> img=read_image('../../trident_logo.png')[:,:,:3]
-        >>> len(distict_color_count(img))
+        >>> color_counter=distict_color_count(img)
+        >>> len(color_counter)
         1502
         >>> img=read_image('../../trident_logo.png')[:,:,:1]
         >>> len(distict_color_count(img))

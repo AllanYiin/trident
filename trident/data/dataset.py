@@ -384,6 +384,8 @@ class ImageDataset(Dataset):
     @image_transform_funcs.setter
     def image_transform_funcs(self, value):
         self.transform_funcs = value
+        if isinstance(self.parent,Iterator):
+            self.parent._is_signature_update = False
 
     @property
     def reverse_image_transform_funcs(self):
@@ -611,16 +613,22 @@ class BboxDataset(Dataset):
             return np.array(bboxes).astype(np.float32)
 
     def bbox_transform(self, *bbox):
-        if isinstance(bbox, np.ndarray):
-            # if img_data.ndim>=2:
-            for fc in self.transform_funcs:
-                bbox = fc(bbox, spec=self.element_spec)
-            return bbox
-        else:
-            return bbox
+        return self.data_transform(bbox)
+
 
     def data_transform(self, data):
-        return self.bbox_transform(data)
+        if isinstance(data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.transform_funcs:
+                if hasattr(fc, '_apply_boxes'):
+                    data = fc._apply_boxes(data, spec=self.element_spec)
+                else:
+                    data = fc(data)
+            return data
+        else:
+            return data
+
+
 
 
 class LandmarkDataset(Dataset):
@@ -640,16 +648,20 @@ class LandmarkDataset(Dataset):
         return self.items[index]
 
     def landmark_transform(self, *landmarks):
-        if isinstance(landmarks, np.ndarray):
-            # if img_data.ndim>=2:
-            for fc in self.transform_funcs:
-                landmarks = fc(landmarks, spec=self.element_spec)
-            return landmarks
-        else:
-            return landmarks
+        return self.data_transform(landmarks)
+
 
     def data_transform(self, data):
-        return self.landmark_transform(data)
+        if isinstance(data, np.ndarray):
+            # if img_data.ndim>=2:
+            for fc in self.transform_funcs:
+                if hasattr(fc, '_apply_keypoints'):
+                    data = fc._apply_keypoints(data, spec=self.element_spec)
+                else:
+                    data = fc(data)
+            return data
+        else:
+            return data
 
 
 class RandomNoiseDataset(Dataset):
@@ -1068,6 +1080,7 @@ class Iterator(object):
         self._label = None
         self._unpair = None
         self.paired_process_symbols = []
+        self._is_signature_update=False
 
         self.is_shuffle = is_shuffle
         self.memory_cache = []
@@ -1080,16 +1093,22 @@ class Iterator(object):
         self.pass_time_spend = 0
         if data is not None and isinstance(data, tuple):
             self._data = Dataset.zip(*data)
+            self._data.parent = self
+
         elif data is not None and isinstance(data, (Dataset, ZipDataset, TextSequenceDataset)):
             self._data = data
+            self._data.parent = self
 
         if label is not None and isinstance(label, tuple):
             self._label = Dataset.zip(*label)
+            self._label.parent = self
         elif label is not None and (inspect.isgenerator(label) or isinstance(label, (Dataset, ZipDataset, TextSequenceDataset))):
             self._label = label
+            self._label.parent = self
 
         if unpair is not None and isinstance(unpair, Dataset):
             self._unpair = unpair
+            self._unpair.parent = self
 
         if self._data is None:
             self._data = NumpyDataset(symbol="")
@@ -1097,7 +1116,7 @@ class Iterator(object):
             self._label = NumpyDataset(symbol="")
         if self._unpair is None:
             self._unpair = NumpyDataset(symbol="")
-
+        self._is_signature_update = False
         datasets = self.get_datasets()
 
         data_symbols = iteration_tools.flatten([self.data.symbol], iterable_types=(list, tuple))
@@ -1149,6 +1168,7 @@ class Iterator(object):
     def data(self, value):
         self._data = value
         self._data.parent=self
+        self._is_signature_update = False
 
         if self._label is not None and isinstance(self._label, (MaskDataset, BboxDataset, ImageDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(
                 self._data):
@@ -1168,6 +1188,7 @@ class Iterator(object):
     def label(self, value):
         self._label = value
         self._label.parent = self
+        self._is_signature_update = False
         if isinstance(self._label, (MaskDataset, ImageDataset, BboxDataset)) and isinstance(self._data, ImageDataset) and len(self._label) == len(self._data):
             self._label.is_paired_process = self._data.is_paired_process = self.is_paired_process = True
 
@@ -1185,6 +1206,7 @@ class Iterator(object):
     def unpair(self, value):
         self._unpair = value
         self._unpair.parent = self
+        self._is_signature_update = False
         self.batch_sampler = BatchSampler(self, self._batch_size, is_shuffle=self.is_shuffle, drop_last=False)
         self.batch_sampler.sample_filter = self.sample_filter
         self._sample_iter = iter(self.batch_sampler)
@@ -1241,18 +1263,17 @@ class Iterator(object):
 
 
     def batch_transform(self, datadict: Dict[TensorSpec, np.ndarray]):
-        if len(self.batch_transform_funcs) > 0:
-            if len(self.batch_transform_funcs) == 0:
-                return datadict
-
+        if len(self.batch_transform_funcs) == 0:
+            return datadict
+        elif len(self.batch_transform_funcs) > 0:
                 # if img_data.ndim>=2:
             for fc in self.batch_transform_funcs:
                 try:
                     if hasattr(fc, 'memory_cache'):
                         fc.memory_cache = self.memory_cache
-                        datadict = fc(datadict)
-                    elif fc.__class__.__name__ in ['OneOf', 'Compose']:
-                        datadict = fc(datadict)
+
+                    #elif fc.__class__.__name__ in ['OneOf', 'Compose']:
+                    datadict = fc(datadict)
 
                 except:
                     PrintException()
@@ -1337,18 +1358,32 @@ class Iterator(object):
                 returnData[spec] = results[n]
 
             if len(self.paired_process_symbols) > 0:
+
                 returnData = self.paired_transform(returnData)
 
             # for batch transform cache data in memory
             if len(self.batch_transform_funcs) > 0:
                 self.memory_cache.append(copy.deepcopy(returnData))
-                if len(self.memory_cache) > self._batch_size:
+                if len(self.memory_cache) > self.batch_size*2:
                     self.memory_cache.pop(0)
-                if len(self.memory_cache) > self._batch_size // 2:
+                if len(self.memory_cache) >=4:
                     returnData = self.batch_transform(returnData)
+
+
+
+            # if len(self.parent.image_transform_funcs) > 0:
+                # for fc in self.parent.image_transform_funcs:
+                #     try:
+                #         if
+                #         datadict = fc(datadict)
+                #     except:
+                #         PrintException()
+                # return datadict
 
             for i in range(len(returnData)):
                 ds = self.get_datasets()[i]
+                if returnData.value_list[i] is None:
+                    print('')
                 returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
             # def process_data_transform(i):
             #     ds = self.get_datasets()[i]
@@ -1362,10 +1397,15 @@ class Iterator(object):
             #     threads[i].join()
 
 
-            if self.signature is None or len(self.signature.outputs) == 0:
+            if self.signature is None or len(self.signature.outputs) == 0 or len(self._signature.outputs)!=len(self.get_datasets())  or self._is_signature_update == False:
                 self._signature = Signature(name='data_provider')
-                for spec in returnData.key_list:
-                    self._signature.outputs[spec.name] = spec
+                for spec,ds in zip(returnData.key_list,self.get_datasets()):
+                    data_value=returnData[spec]
+                    self._signature.outputs[ds.symbol] =copy.deepcopy(spec)
+                    self._signature.outputs[ds.symbol].shape=tensor_to_shape(data_value,need_exclude_batch_axis=True,is_singleton=True)
+                    self._signature.outputs[ds.symbol].object_type=ds.object_type
+                self._is_signature_update=True
+
 
             self.pass_cnt += 1
             self.pass_time_spend += float(time.time() - start_time)

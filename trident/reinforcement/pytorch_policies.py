@@ -44,7 +44,8 @@ class PolicyBase(Model):
     """The base class for any RL policy.
     """
 
-    def __init__(self, network: Layer, env: gym.Env, action_strategy=None, gamma=0.99, use_experience_replay=False, replay_unit='step', memory_length: int = 10000,
+    def __init__(self, network: Layer, env: gym.Env, action_strategy=None, gamma=0.99, use_experience_replay=False,
+                 replay_unit='step', memory_length: int = 10000,
                  name=None) -> None:
         super().__init__()
         self.network = network
@@ -79,19 +80,25 @@ class PolicyBase(Model):
         super()._initial_graph(inputs=self.get_observation(), output=deepcopy(self.network))
 
     def get_observation(self):
+        self.do_on_get_observation_start()
+        state = None
         if hasattr(self.env, 'state'):
-            return expand_dims(self.data_preprocess(self.env.state), 0)
+            state = expand_dims(self.data_preprocess(self.env.state), 0)
         elif hasattr(self.env, 'screen'):
-            return expand_dims(self.data_preprocess(self.env.screen), 0)
+            state = expand_dims(self.data_preprocess(self.env.screen), 0)
         elif 'observation' in self.env.metadata['render.modes']:
-            return expand_dims(self.data_preprocess(self.env.render('observation')), 0)
+            state = expand_dims(self.data_preprocess(self.env.render('observation')), 0)
         else:
-            return expand_dims(self.data_preprocess(self.env.render('rgb_array')), 0)
+            state = expand_dims(self.data_preprocess(self.env.render('rgb_array')), 0)
+        self.do_on_get_observation_end(state)
+        return state
 
     def select_action(self, state, model_only=False, **kwargs):
+        self.do_on_select_action_start()
         return self.env.action_space.samples()
 
     def get_rewards(self, action):
+        self.do_on_get_rewards_start()
         return self.env.step(action)
 
     def experience_replay(self, batch_size):
@@ -110,7 +117,8 @@ class PolicyBase(Model):
             self.env.reset()
             state = self.get_observation()
             for t in count():
-                action = self.select_action(state, model_only=True if self.action_strategy == ActionStrategy.OnPolicy else False)
+                action = self.select_action(state,
+                                            model_only=True if self.action_strategy == ActionStrategy.OnPolicy else False)
                 _observation, reward, done, info = self.get_rewards(action)
                 if need_render:
                     self.env.render()
@@ -187,8 +195,10 @@ class PolicyBase(Model):
 
         '''
         if isinstance(target_model, (Model, Layer)) and isinstance(trained_model, (Model, Layer)):
-            target_model_parameters = target_model._model.parameters() if isinstance(target_model, Model) else target_model.parameters()
-            trained_model_parameters = trained_model._model.parameters() if isinstance(trained_model, Model) else trained_model.parameters()
+            target_model_parameters = target_model._model.parameters() if isinstance(target_model,
+                                                                                     Model) else target_model.parameters()
+            trained_model_parameters = trained_model._model.parameters() if isinstance(trained_model,
+                                                                                       Model) else trained_model.parameters()
             for target_param, trained_param in zip(target_model_parameters, trained_model_parameters):
                 target_param.data.copy_(tau * trained_param.data + (1.0 - tau) * target_param.data)
             return target_model
@@ -205,7 +215,8 @@ class PolicyBase(Model):
             R[i] = gae
         return R
 
-    def training_model(self, current_episode=0, current_step=0, num_episodes=100, train_timing=None, done=False, batch_size=1, repeat_train=1):
+    def training_model(self, current_episode=0, current_step=0, num_episodes=100, train_timing=None, done=False,
+                       batch_size=1, repeat_train=1):
 
         is_collect_data = False
         for i in range(repeat_train):
@@ -228,15 +239,18 @@ class PolicyBase(Model):
                                                 current_epoch=current_episode,
                                                 current_batch=current_step,
                                                 total_epoch=num_episodes,
-                                                done=(done and not 'episode' in train_timing) or (current_step == repeat_train - 1 and 'episode' in train_timing),
+                                                done=(done and not 'episode' in train_timing) or (
+                                                        current_step == repeat_train - 1 and 'episode' in train_timing),
                                                 is_collect_data=True,
                                                 is_print_batch_progress=False,
                                                 is_print_epoch_progress=False,
                                                 log_gradients=False, log_weights=False,
-                                                accumulate_grads=(current_step * repeat_train + 1) % self.accumulation_steps != 0)
+                                                accumulate_grads=(
+                                                                         current_step * repeat_train + 1) % self.accumulation_steps != 0)
             self.save_or_sync_weights()
 
-    def play(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, training=True, train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
+    def play(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, training=True,
+             train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
              need_render=True, **kwargs):
         if train_timing not in ['on_episode_start', 'on_step_end', 'on_step_start']:
             raise ValueError('Only on_episode_start,on_step_end are valid  train_timing options')
@@ -261,11 +275,13 @@ class PolicyBase(Model):
         for i_episode in range(self.total_epoch):
 
             if training and train_timing == 'on_episode_start' and self.current_epoch % train_every_nstep == 0:
-                self.training_model(self.current_epoch, 0, num_episodes=self.total_epoch, repeat_train=repeat_train, train_timing=train_timing, batch_size=batch_size)
+                self.training_model(self.current_epoch, 0, num_episodes=self.total_epoch, repeat_train=repeat_train,
+                                    train_timing=train_timing, batch_size=batch_size)
 
             self.env.reset()
             self.total_rewards = 0
             state = self.get_observation()
+
             for t in count():
                 self.frame_steps += 1
                 self.t = t
@@ -274,7 +290,10 @@ class PolicyBase(Model):
                 #     self.training_model(i_episode, t,num_episodes=num_episodes, repeat_train=repeat_train, batch_size=batch_size)
 
                 action = self.select_action(state, model_only=True)
+                self.do_on_select_action_end(action)
+
                 observation, reward, done, info = self.get_rewards(action)
+                self.do_on_get_rewards_end(observation, reward, done, info)
 
                 self.total_rewards += reward
 
@@ -286,9 +305,9 @@ class PolicyBase(Model):
                     if self.push_into_memory_criteria(state, action, next_state, reward) or done:
                         self.memory.push(state, action, next_state, reward)
                 elif self.replay_unit == 'episode':
-                    self.rollout.collect('state', self.frame_steps, state)
-                    self.rollout.collect('action', self.frame_steps, to_scalar(action))
-                    self.rollout.collect('reward', self.frame_steps, to_scalar(reward))
+                    self.rollout.collect('state', state)
+                    self.rollout.collect('action', action)
+                    self.rollout.collect('reward', reward)
 
                     if done:
                         if self.push_into_memory_criteria(self.state_pool, self.action_pool, None, self.reward_pool):
@@ -297,26 +316,32 @@ class PolicyBase(Model):
 
                 complete = self.episode_complete_criteria()
                 # Train on_step_end
-                if training and train_timing == 'on_step_end' and ((self.self.frame_steps + 1) % train_every_nstep == 0 or done):
-                    self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete, train_timing=train_timing, repeat_train=repeat_train, batch_size=batch_size)
+                if training and train_timing == 'on_step_end' and (
+                        (self.self.frame_steps + 1) % train_every_nstep == 0 or done):
+                    self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete,
+                                        train_timing=train_timing, repeat_train=repeat_train, batch_size=batch_size)
 
                 state = next_state
                 if done or complete:
                     self.env.reset()
                     if training and train_timing == 'on_episode_end' and i_episode % train_every_nstep == 0:
-                        self.training_model(i_episode, 0, num_episodes=num_episodes, repeat_train=repeat_train, train_timing=train_timing, batch_size=batch_size)
+                        self.training_model(i_episode, 0, num_episodes=num_episodes, repeat_train=repeat_train,
+                                            train_timing=train_timing, batch_size=batch_size)
 
                     self.epoch_metric_history.collect('rewards', i_episode, float(self.total_rewards))
                     self.epoch_metric_history.collect('t', i_episode, float(t + 1))
                     if self.use_experience_replay:
-                        self.epoch_metric_history.collect('replay_buffer_utility', i_episode, float(len(self.memory)) / self.memory.capacity)
+                        self.epoch_metric_history.collect('replay_buffer_utility', i_episode,
+                                                          float(len(self.memory)) / self.memory.capacity)
 
                     self.do_on_epoch_end()
-                    if print_progess_frequency == 1 or (i_episode > 0 and (i_episode + 1) % print_progess_frequency == 0):
+                    if print_progess_frequency == 1 or (
+                            i_episode > 0 and (i_episode + 1) % print_progess_frequency == 0):
                         self.print_epoch_progress()
 
                     if i_episode > 0 and (i_episode + 1) % (5 * print_progess_frequency) == 0:
-                        loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history, metrics_names=list(self.epoch_metric_history.keys()), calculate_base='epoch',
+                        loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,
+                                          metrics_names=list(self.epoch_metric_history.keys()), calculate_base='epoch',
                                           imshow=True)
 
                     if self.task_complete_criteria():
@@ -330,7 +355,8 @@ class PolicyBase(Model):
         self.env.render()
         self.env.close()
 
-    def learn(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
+    def learn(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5,
+              train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
               need_render=True, **kwargs):
         if ctx.enable_tensorboard:
             for k, v in self.training_context.items():
@@ -357,7 +383,8 @@ class PolicyBase(Model):
         self.do_on_training_start()
 
         try:
-            self.play(num_episodes=num_episodes, batch_size=batch_size, min_replay_samples=min_replay_samples, print_progess_frequency=print_progess_frequency, training=True,
+            self.play(num_episodes=num_episodes, batch_size=batch_size, min_replay_samples=min_replay_samples,
+                      print_progess_frequency=print_progess_frequency, training=True,
                       train_timing=train_timing, train_every_nstep=train_every_nstep,
                       repeat_train=repeat_train, need_render=need_render)
         except Exception as e:
@@ -396,20 +423,47 @@ class PolicyBase(Model):
             return image_backend_adaption(img_data)
         if isinstance(img_data, np.ndarray):
             for fc in self._preprocess_flow:
-                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self._model.input_spec is not None:
+                if self._model is not None and self.signature is not None and len(
+                        self.signature) > 1 and self._model.input_spec is not None:
                     img_data = fc(img_data, spec=self._model.input_spec)
                 else:
                     img_data = fc(img_data)
             img_data = image_backend_adaption(img_data)
             if self._model.input_spec is None:
-                self._model.input_spec = TensorSpec(shape=tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=True, is_singleton=True), object_type=ObjectType.rgb,
-                                                    name='input')
+                self._model.input_spec = TensorSpec(
+                    shape=tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=True, is_singleton=True),
+                    object_type=ObjectType.rgb,
+                    name='input')
 
                 self.input_shape = self._model.input_spec.shape[1:]
 
             return img_data
         else:
             return img_data
+
+    def do_on_get_observation_start(self):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_observation_start(self.training_context)
+
+    def do_on_get_observation_end(self, observation):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_observation_end(self.training_context)
+
+    def do_on_select_action_start(self):
+        for callback in self.training_context['callbacks']:
+            callback.on_select_action_start(self.training_context)
+
+    def do_on_select_action_end(self, action):
+        for callback in self.training_context['callbacks']:
+            callback.on_select_action_end(self.training_context)
+
+    def do_on_get_rewards_start(self):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_rewards_start(self.training_context)
+
+    def do_on_get_rewards_end(self, observation, reward, done, info):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_rewards_end(self.training_context)
 
     def do_on_batch_end(self):
         self.training_context['time_batch_progress'] += (time.time() - self.training_context['time_batch_start'])
@@ -441,7 +495,6 @@ class PolicyBase(Model):
                 print(e)
                 PrintException()
         return self
-
 
     def with_mlflow(self):
         from trident.loggers.mlflow_logger import MLFlowLogger
@@ -498,7 +551,8 @@ class ActorCriticPolicy(MuiltiNetwork):
     """The base class for any RL policy.
     """
 
-    def __init__(self, actor: Layer, critic: Layer, env: gym.Env, state_shape=None, action_strategy=None, gamma=0.99, use_experience_replay=False, replay_unit='step',
+    def __init__(self, actor: Layer, critic: Layer, env: gym.Env, state_shape=None, accumulation_steps=1,
+                 action_strategy=None, gamma=0.99, use_experience_replay=False, replay_unit='step',
                  memory_length: int = 10000,
                  name=None) -> None:
         super().__init__()
@@ -507,6 +561,8 @@ class ActorCriticPolicy(MuiltiNetwork):
 
         self.env = env
         self.state = None
+        self.done = False
+        self.accumulation_steps = accumulation_steps
         self.observation_space = env.observation_space
         self.action_space = env.action_space
         self.agent_id = uuid.uuid4().node
@@ -540,31 +596,36 @@ class ActorCriticPolicy(MuiltiNetwork):
 
         if isinstance(self._networks['critic'], Layer):
             self._networks['critic'] = Model(output=self._networks['critic'], inputs=self.get_observation())
-
+        self._networks['critic'].training_context['model_name'] = 'critic'
+        self._networks['actor'].training_context['model_name'] = 'actor'
         self._networks['critic'].training_context['skip_reset_total_loss'] = True
         self._networks['actor'].training_context['skip_reset_total_loss'] = True
         self._networks['critic'].training_context['skip_generate_output'] = True
         self._networks['actor'].training_context['skip_generate_output'] = True
 
     def get_observation(self):
-        if hasattr(self.self, 'state'):
-            return expand_dims(self.data_preprocess(self.state), 0)
-        elif hasattr(self.env, 'screen'):
-            return expand_dims(self.data_preprocess(self.env.screen), 0)
+        self.do_on_get_observation_start()
+        state = None
+        if hasattr(self.env, 'screen'):
+            state = self.data_preprocess(self.env.screen)
         elif 'observation' in self.env.metadata['render.modes']:
-            return expand_dims(self.data_preprocess(self.env.render('observation')), 0)
+            state = self.data_preprocess(self.env.render('observation'))
         else:
-            return expand_dims(self.data_preprocess(self.env.render('rgb_array')), 0)
+            state = self.data_preprocess(self.env.render('rgb_array'))
+        if ndim(state) == 4:
+            pass
+        else:
+            state = np.expand_dims(state, 0)
+        self.do_on_get_observation_end(state)
+        return state
 
     def select_action(self, state, model_only=False, **kwargs):
-
+        self.do_on_select_action_start()
         return self.env.action_space.samples()
 
     def get_rewards(self, action):
-        if hasattr(self,'done') and self.done:
-            self.env.reset()
-        else:
-            return self.env.step(action)
+        self.do_on_get_rewards_start()
+        return self.env.step(action)
 
     def experience_replay(self, batch_size):
         return NotImplemented
@@ -582,7 +643,8 @@ class ActorCriticPolicy(MuiltiNetwork):
             self.env.reset()
             state = self.get_observation()
             for t in count():
-                action = self.select_action(state, model_only=True if self.action_strategy == ActionStrategy.OnPolicy else False)
+                action = self.select_action(state,
+                                            model_only=True if self.action_strategy == ActionStrategy.OnPolicy else False)
                 _observation, reward, done, info = self.get_rewards(action)
                 if need_render:
                     self.env.render()
@@ -654,8 +716,10 @@ class ActorCriticPolicy(MuiltiNetwork):
 
         '''
         if isinstance(target_model, (Model, Layer)) and isinstance(trained_model, (Model, Layer)):
-            target_model_parameters = target_model._model.parameters() if isinstance(target_model, Model) else target_model.parameters()
-            trained_model_parameters = trained_model._model.parameters() if isinstance(trained_model, Model) else trained_model.parameters()
+            target_model_parameters = target_model._model.parameters() if isinstance(target_model,
+                                                                                     Model) else target_model.parameters()
+            trained_model_parameters = trained_model._model.parameters() if isinstance(trained_model,
+                                                                                       Model) else trained_model.parameters()
             for target_param, trained_param in zip(target_model_parameters, trained_model_parameters):
                 target_param.data.copy_(tau * trained_param.data + (1.0 - tau) * target_param.data)
             return target_model
@@ -671,45 +735,54 @@ class ActorCriticPolicy(MuiltiNetwork):
             # for i in range(len(rewards) - 1, -1, -1):
             #     gae = delta[i] + m[i] * gae
             #     R[i] = gae+values[i]
-            for value,next_value, reward, done in list(zip(values,next_values, rewards, dones))[::-1]:
+            for value, next_value, reward, done in list(zip(values, next_values, rewards, dones))[::-1]:
                 gae = gae * gamma * gae_lambda
-                gae = gae + reward +gamma * next_value.detach() * (1 - done) - value.detach()
-                R.insert(0,gae + value)
+                gae = gae + reward + gamma * next_value.detach() * (1 - done) - value.detach()
+                R.insert(0, gae + value)
 
             R = stack(R, axis=0)
             return R
         except Exception as e:
             print(e)
 
-    def update_actor(self, current_episode=0, current_step=0, num_episodes=100, repeat_train=1, train_timing=None, done=False, batch_size=1, accumulate_grads=False, **kwargs):
+    def update_actor(self, current_episode=0, current_step=0, num_episodes=100, repeat_train=1, train_timing=None,
+                     done=False, batch_size=1, accumulate_grads=False, **kwargs):
         is_collect_data = False
+        traindata = OrderedDict()
+        traindata['state'] = self.prev_screen
         for i in range(repeat_train):
+            need_print_batch_progress = (self.train_steps + 1) % self.print_progess_frequency == 0
             self.actor.train_model(None, None,
                                    current_epoch=current_episode,
                                    current_batch=self.train_steps,
                                    total_epoch=self.total_epoch,
                                    done=self.done,
                                    is_collect_data=True,
-                                   is_print_batch_progress=False,
-                                   is_print_epoch_progress=False,
+                                   is_print_batch_progress=need_print_batch_progress,
+                                   is_print_epoch_progress=self.done,
                                    log_gradients=False, log_weights=False,
                                    accumulate_grads=accumulate_grads)
 
-    def update_critic(self, current_episode=0, current_step=0, num_episodes=100, repeat_train=1, train_timing=None, done=False, batch_size=1, accumulate_grads=False, **kwargs):
+    def update_critic(self, current_episode=0, current_step=0, num_episodes=100, repeat_train=1, train_timing=None,
+                      done=False, batch_size=1, accumulate_grads=False, **kwargs):
         is_collect_data = False
+        traindata = OrderedDict()
+        traindata['state'] = self.prev_screen
         for i in range(repeat_train):
+            need_print_batch_progress = (self.train_steps + 1) % self.print_progess_frequency == 0
             self.critic.train_model(None, None,
                                     current_epoch=current_episode,
                                     current_batch=self.train_steps,
                                     total_epoch=self.total_epoch,
                                     done=self.done,
                                     is_collect_data=True,
-                                    is_print_batch_progress=False,
-                                    is_print_epoch_progress=False,
+                                    is_print_batch_progress=need_print_batch_progress,
+                                    is_print_epoch_progress=self.done,
                                     log_gradients=False, log_weights=False,
                                     accumulate_grads=accumulate_grads)
 
-    def training_model(self, current_episode=0, current_step=0, num_episodes=100, train_timing=None, done=False, batch_size=1, repeat_train=1, **kwargs):
+    def training_model(self, current_episode=0, current_step=0, num_episodes=100, train_timing=None, done=False,
+                       batch_size=1, repeat_train=1, **kwargs):
 
         is_collect_data = False
         for i in range(repeat_train):
@@ -733,7 +806,8 @@ class ActorCriticPolicy(MuiltiNetwork):
                                accumulate_grads=(self.train_steps * repeat_train + 1) % self.accumulation_steps != 0)
             self.save_or_sync_weights()
 
-    def play(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, training=True, train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
+    def play(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, training=True,
+             train_timing='on_step_end', train_every_nstep=1, repeat_train=1,
              need_render=True, **kwargs):
         if train_timing not in ['on_episode_start', 'on_episode_end', 'on_step_end']:
             raise ValueError('Only on_episode_start,on_step_end are valid  train_timing options')
@@ -747,9 +821,9 @@ class ActorCriticPolicy(MuiltiNetwork):
             if self.use_experience_replay:
                 self.collect_samples(min_replay_samples=min_replay_samples)
             elif train_timing == 'on_episode_start':
-                self.collect_samples(min_replay_samples=1, need_render=True if self.replay_unit == 'episode' else False)
+                # self.collect_samples(min_replay_samples=1, need_render=True if self.replay_unit == 'episode' else False)
                 print('start train....')
-
+            self.print_progess_frequency = print_progess_frequency
             self.train_every_nstep = train_every_nstep
             self.total_epoch = num_episodes
             self.total_reward = 0
@@ -768,11 +842,15 @@ class ActorCriticPolicy(MuiltiNetwork):
                 self.do_on_epoch_start()
 
                 if training and train_timing == 'on_episode_start' and i_episode % train_every_nstep == 0:
-                    self.training_model(i_episode, 0, num_episodes=num_episodes, repeat_train=repeat_train, train_timing=train_timing, batch_size=batch_size)
-                #self.state = self.env.reset()
+                    self.training_model(i_episode, 0, num_episodes=num_episodes, repeat_train=repeat_train,
+                                        train_timing=train_timing, batch_size=batch_size)
+                # self.state = self.env.reset()
 
                 self.total_rewards = 0
+                self.done = False
+                self.env.reset()
                 state = self.get_observation()
+
                 self.current_screen = state
                 self.prev_screen = state
                 for t in count():
@@ -784,12 +862,18 @@ class ActorCriticPolicy(MuiltiNetwork):
                     # if training and train_timing == 'on_step_start' and t % train_every_nstep == 0:
                     #     self.training_model(i_episode, t,num_episodes=num_episodes, repeat_train=repeat_train, batch_size=batch_size)
 
-                    action = self.select_action(self.get_observation(), model_only=True)
-                    observation, reward, done, info = self.get_rewards(action)
+                    action = self.select_action(state, model_only=True)
+                    self.do_on_select_action_end(action)
 
+                    if hasattr(self, 'done') and self.done:
+                        break
+                    observation, reward, done, info = self.get_rewards(action)
+                    self.do_on_get_rewards_end(observation, reward, done, info)
+
+                    self.info = info
                     self.total_rewards += reward
 
-                    next_state = self.get_observation() if not done else zeros((1, 3, 84, 84))
+                    next_state = observation if not done else zeros_like(observation)
                     self.prev_screen = self.current_screen
                     self.current_screen = next_state
 
@@ -797,28 +881,32 @@ class ActorCriticPolicy(MuiltiNetwork):
                         self.env.render()
 
                     # Train on_step_end
-                    if training and train_timing == 'on_step_end' and ((self.frame_steps + 1) % train_every_nstep == 0 or done) and self.frame_steps > 5:
+                    complete = self.episode_complete_criteria()
+                    if training and train_timing == 'on_step_end' and (
+                            (len(self.rollout) + 1) % train_every_nstep == 0 or done) and self.frame_steps > 5:
                         try:
-                            self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete, repeat_train=repeat_train, train_timing=train_timing)
+                            self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete,
+                                                repeat_train=repeat_train, train_timing=train_timing)
                         except Exception as e:
                             print(e)
-
-                    complete = self.episode_complete_criteria()
 
                     state = next_state
 
                     if done or complete:
                         # Train on_step_end
-                        if training and train_timing == 'on_episode_end' and ((self.frame_steps + 1) % train_every_nstep == 0 or done) and self.frame_steps > 5:
+                        if training and train_timing == 'on_episode_end' and (
+                                (self.frame_steps + 1) % train_every_nstep == 0 or done) and self.frame_steps > 5:
                             try:
-                                self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete, repeat_train=repeat_train, train_timing=train_timing)
+                                self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete,
+                                                    repeat_train=repeat_train, train_timing=train_timing)
                             except Exception as e:
                                 print(e)
 
                         self.epoch_metric_history.collect('rewards', i_episode, float(self.total_rewards))
                         self.epoch_metric_history.collect('t', i_episode, float(t + 1))
                         if self.use_experience_replay:
-                            self.epoch_metric_history.collect('replay_buffer_utility', i_episode, float(len(self.memory)) / self.memory.capacity)
+                            self.epoch_metric_history.collect('replay_buffer_utility', i_episode,
+                                                              float(len(self.memory)) / self.memory.capacity)
 
                         self.do_on_epoch_end()
                         if print_progess_frequency == 1 or ((i_episode + 1) % print_progess_frequency == 0):
@@ -827,8 +915,10 @@ class ActorCriticPolicy(MuiltiNetwork):
                         # 定期繪製損失函數以及評估函數對時間的趨勢圖
                         if i_episode > 0 and (i_episode + 1) % (5 * print_progess_frequency) == 0:
                             keywords = ['reward', 'critic', 'actor', 'loss', 'score']
-                            metrics_names = [k for k in self.epoch_metric_history.keys() if any([w in k.lower() for w in keywords]) or k.lower() == 't']
-                            loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history, metrics_names=metrics_names, calculate_base='epoch',
+                            metrics_names = [k for k in self.epoch_metric_history.keys() if
+                                             any([w in k.lower() for w in keywords]) or k.lower() == 't']
+                            loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,
+                                              metrics_names=metrics_names, calculate_base='epoch',
                                               imshow=True)
 
                         if self.task_complete_criteria():
@@ -836,7 +926,6 @@ class ActorCriticPolicy(MuiltiNetwork):
                             print('episode {0} meet task complete criteria, training finish! '.format(i_episode))
                             return True
 
-                        break
             print('Complete')
 
         except Exception as e:
@@ -846,7 +935,8 @@ class ActorCriticPolicy(MuiltiNetwork):
             self.critic.save_model(save_path=self.critic.training_context['save_path'])
             self.env.close()
 
-    def learn(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
+    def learn(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5,
+              train_timing='on_step_end', train_every_nstep=1, repeat_train=1,
               need_render=True, **kwargs):
         if ctx.enable_tensorboard:
             for k, v in self.training_context.items():
@@ -858,11 +948,10 @@ class ActorCriticPolicy(MuiltiNetwork):
 
             make_dir_if_need(os.path.join(working_directory, 'Logs'))
 
-
             t1 = threading.Thread(target=launchTensorBoard, args=([]))
             t1.setDaemon(True)
             t1.start()
-            open_browser('http://{0}:{1}/'.format(ctx.tensorboard_server,ctx.tensorboard_port),5)
+            open_browser('http://{0}:{1}/'.format(ctx.tensorboard_server, ctx.tensorboard_port), 5)
         if ctx.enable_mlflow:
             ctx.mlflow_logger.start_run(run_id=self.execution_id)
             open_browser('http://{0}:{1}/'.format(ctx.mlflow_server, ctx.mlflow_port), 5)
@@ -876,7 +965,8 @@ class ActorCriticPolicy(MuiltiNetwork):
         self.do_on_training_start()
 
         try:
-            self.play(num_episodes=num_episodes, batch_size=batch_size, min_replay_samples=min_replay_samples, print_progess_frequency=print_progess_frequency, training=True,
+            self.play(num_episodes=num_episodes, batch_size=batch_size, min_replay_samples=min_replay_samples,
+                      print_progess_frequency=print_progess_frequency, training=True,
                       train_timing=train_timing, train_every_nstep=train_every_nstep,
                       repeat_train=repeat_train, need_render=need_render)
         except Exception as e:
@@ -905,6 +995,14 @@ class ActorCriticPolicy(MuiltiNetwork):
         self.env.reset()
 
     def data_preprocess(self, img_data):
+        if is_tensor(img_data):
+            img_data = to_numpy(img_data)
+        if len(self._preprocess_flow) == 0:
+            pass
+        else:
+            for fn in self.preprocess_flow:
+                img_data = fn(img_data)
+        img_data = image_backend_adaption(img_data)
         return img_data
 
     def do_on_training_start(self):
@@ -927,6 +1025,30 @@ class ActorCriticPolicy(MuiltiNetwork):
             if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
                 self.warmup = 0
+
+    def do_on_get_observation_start(self):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_observation_start(self.training_context)
+
+    def do_on_get_observation_end(self, observation):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_observation_end(self.training_context)
+
+    def do_on_select_action_start(self):
+        for callback in self.training_context['callbacks']:
+            callback.on_select_action_start(self.training_context)
+
+    def do_on_select_action_end(self, action):
+        for callback in self.training_context['callbacks']:
+            callback.on_select_action_end(self.training_context)
+
+    def do_on_get_rewards_start(self):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_rewards_start(self.training_context)
+
+    def do_on_get_rewards_end(self, observation, reward, done, info):
+        for callback in self.training_context['callbacks']:
+            callback.on_get_rewards_end(self.training_context)
 
     def with_tensorboard(self):
         make_dir_if_need(os.path.join(working_directory, 'Logs'))
@@ -951,7 +1073,6 @@ class ActorCriticPolicy(MuiltiNetwork):
                 PrintException()
         return self
 
-
     def with_mlflow(self):
         from trident.loggers.mlflow_logger import MLFlowLogger
         ctx.try_enable_mlflow(MLFlowLogger())
@@ -966,7 +1087,8 @@ class DqnPolicy(PolicyBase):
     def __init__(self, network: Layer, env: gym.Env, memory_length: int = 10000
                  , gamma=0.99, max_epsilon=0.9, min_epsilon=0.01, decay=100
                  , target_update=10, name='dqn') -> None:
-        super(DqnPolicy, self).__init__(network=network, env=env, action_strategy=ActionStrategy.OffPolicy, gamma=gamma, use_experience_replay=True, replay_unit='step',
+        super(DqnPolicy, self).__init__(network=network, env=env, action_strategy=ActionStrategy.OffPolicy, gamma=gamma,
+                                        use_experience_replay=True, replay_unit='step',
                                         memory_length=memory_length, name=name)
         self.state = self.env.reset()
         self.gamma = gamma
@@ -997,7 +1119,8 @@ class DqnPolicy(PolicyBase):
 
     def select_action(self, state, model_only=False, **kwargs):
         sample = random.random()
-        self.epsilon = self.min_epsilon + (self.max_epsilon - self.min_epsilon) * math.exp(-1.0 * self.steps_done / self.decay)
+        self.epsilon = self.min_epsilon + (self.max_epsilon - self.min_epsilon) * math.exp(
+            -1.0 * self.steps_done / self.decay)
         self.steps_done += 1
         if model_only == True or sample > self.epsilon:
             with torch.no_grad():
@@ -1065,9 +1188,11 @@ class DqnPolicy(PolicyBase):
             self.target_net.load_state_dict(self.policy_net.state_dict(), strict=True)
             self.save_model(save_path=self.training_context['save_path'])
 
-    def learn(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
-              accumulate_grads=False,**kwargs):
-        self.play(num_episodes=num_episodes, batch_size=batch_size, min_replay_samples=min_replay_samples, print_progess_frequency=print_progess_frequency, training=True,
+    def learn(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5,
+              train_timing='on_episode_start', train_every_nstep=1, repeat_train=1,
+              accumulate_grads=False, **kwargs):
+        self.play(num_episodes=num_episodes, batch_size=batch_size, min_replay_samples=min_replay_samples,
+                  print_progess_frequency=print_progess_frequency, training=True,
                   train_timing=train_timing, train_every_nstep=train_every_nstep,
                   repeat_train=repeat_train, need_render=True)
 
@@ -1078,7 +1203,8 @@ class PGPolicy(PolicyBase):
 
     def __init__(self, network: Layer, env: gym.Env, use_experience_replay=False, memory_length: int = 10000
                  , gamma=0.999, name='pg') -> None:
-        super(PGPolicy, self).__init__(network=network, env=env, action_strategy=ActionStrategy.OnPolicy, gamma=gamma, use_experience_replay=use_experience_replay,
+        super(PGPolicy, self).__init__(network=network, env=env, action_strategy=ActionStrategy.OnPolicy, gamma=gamma,
+                                       use_experience_replay=use_experience_replay,
                                        replay_unit='episode',
                                        memory_length=memory_length, name=name)
         self.state = self.env.reset()
@@ -1108,10 +1234,19 @@ class PGPolicy(PolicyBase):
         self.steps_done = 0
 
     def get_observation(self):
+        state = None
+        if hasattr(self, 'state'):
+            state = self.data_preprocess(self.state)
         if hasattr(self.env, 'state'):
-            return expand_dims(self.data_preprocess(to_numpy(self.env.state)), 0).astype(np.float32)
+            state = self.data_preprocess(self.env.state)
+        elif hasattr(self.env, 'screen'):
+            state = self.data_preprocess(self.env.screen)
         else:
-            return expand_dims(self.data_preprocess(self.env.render('observation')), 0).astype(np.float32)
+            state = self.data_preprocess(self.env.render('rgb_array'))
+        if ndim(state) == 4:
+            return state
+        else:
+            return np.expand_dims(state, 0)
 
     def select_action(self, state, **kwargs):
         # 只根據模型來決定action   on-policy
@@ -1174,19 +1309,38 @@ class A2CPolicy(ActorCriticPolicy):
     """The base class for any RL policy.
     """
 
-    def __init__(self, actor: Layer, critic: Layer, env: gym.Env, gamma=0.999, train_every_nstep=20, name='a2c') -> None:
-        super(A2CPolicy, self).__init__(actor=actor, critic=critic, env=env, action_strategy=ActionStrategy.OnPolicy, gamma=gamma, use_experience_replay=False,
+    def __init__(self, actor: Layer, critic: Layer, env: gym.Env, gamma=0.999, train_every_nstep=20,
+                 name='a2c') -> None:
+        super(A2CPolicy, self).__init__(actor=actor, critic=critic, env=env, action_strategy=ActionStrategy.OnPolicy,
+                                        gamma=gamma, use_experience_replay=False,
                                         replay_unit='episode', name=name)
         self.state = self.env.reset()
+        self.done = False
         self.rollout = Rollout()
         self.train_every_nstep = train_every_nstep
         self.actor.batch_loss_history.regist('actor_loss')
         self.critic.batch_loss_history.regist('critic_loss')
 
     def get_observation(self):
-        return self.env.state
+        self.do_on_get_observation_start()
+        state = None
+        if hasattr(self, 'state'):
+            state = self.data_preprocess(self.state)
+        if hasattr(self.env, 'state'):
+            state = self.data_preprocess(self.env.state)
+        elif hasattr(self.env, 'screen'):
+            state = self.data_preprocess(self.env.screen)
+        else:
+            state = self.data_preprocess(self.env.render('rgb_array'))
+        if ndim(state) == 4:
+            pass
+        else:
+            state = np.expand_dims(state, 0)
+        self.do_on_get_observation_end(state)
+        return state
 
     def select_action(self, state, **kwargs):
+        self.do_on_select_action_start()
         # 只根據模型來決定action   on-policy
         if ndim(state) == 3:
             state = expand_dims(state, 0)
@@ -1201,6 +1355,7 @@ class A2CPolicy(ActorCriticPolicy):
         return int(action.item())
 
     def get_rewards(self, action):
+        self.do_on_get_rewards_start()
         observation, reward, done, info = self.env.step(action)
         return observation, reward, done, info
 
@@ -1235,12 +1390,16 @@ class A2CPolicy(ActorCriticPolicy):
                 actor_loss -= log_prob * (advantage.copy().detach())
 
             self.critic.current_loss = critic_loss
-            self.critic.batch_loss_history.collect('critic_loss', len(self.critic.batch_loss_history), critic_loss.copy().detach())
-            self.update_critic(self.i_episode, self.t, self.num_episodes, 1, 'on_step_end', self.done, accumulate_grads=False)
+            self.critic.batch_loss_history.collect('critic_loss', len(self.critic.batch_loss_history),
+                                                   critic_loss.copy().detach())
+            self.update_critic(self.i_episode, self.t, self.num_episodes, 1, 'on_step_end', self.done,
+                               accumulate_grads=False)
 
             self.actor.current_loss = actor_loss
-            self.actor.batch_loss_history.collect('actor_loss', len(self.actor.batch_loss_history), actor_loss.copy().detach())
-            self.update_actor(self.i_episode, self.t, self.num_episodes, 1, 'on_step_end', self.done, accumulate_grads=False)
+            self.actor.batch_loss_history.collect('actor_loss', len(self.actor.batch_loss_history),
+                                                  actor_loss.copy().detach())
+            self.update_actor(self.i_episode, self.t, self.num_episodes, 1, 'on_step_end', self.done,
+                              accumulate_grads=False)
 
             self.rollout.reset()
             # if (self.t > 0 and self.t % (20 * self.train_every_nstep) == 0):
@@ -1248,9 +1407,10 @@ class A2CPolicy(ActorCriticPolicy):
             #     self.critic.print_batch_progress(10 * self.train_every_nstep)
             #     self.save_model()
 
-    def play(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, training=True, train_timing='on_episode_start', train_every_nstep=None,
+    def play(self, num_episodes, batch_size=1, min_replay_samples=1, print_progess_frequency=5, training=True,
+             train_timing='on_episode_end', train_every_nstep=None,
              repeat_train=1,
-             need_render=True,**kwargs):
+             need_render=True, **kwargs):
         if train_timing not in ['on_episode_start', 'on_episode_end', 'on_step_end']:
             raise ValueError('Only on_episode_start,on_step_end are valid  train_timing options')
         if train_every_nstep is None:
@@ -1284,9 +1444,13 @@ class A2CPolicy(ActorCriticPolicy):
                 #     self.training_model(i_episode, t,num_episodes=num_episodes, repeat_train=repeat_train, batch_size=batch_size)
 
                 action = self.select_action(state, model_only=True)
-                observation, reward, done, info = self.get_rewards(action)
-                next_state = self.get_observation() if not done else None
+                self.do_on_select_action_end(action)
 
+                observation, reward, done, info = self.get_rewards(action)
+                self.do_on_get_rewards_end(observation, reward, done, info)
+
+                next_state = self.get_observation() if not done else None
+                self.done = done
                 self.total_rewards += reward
                 self.calculate_discounted_returns()
 
@@ -1295,6 +1459,13 @@ class A2CPolicy(ActorCriticPolicy):
 
                 complete = self.episode_complete_criteria()
                 # Train on_step_end
+                if training and train_timing == 'on_episodes_end' and (
+                        (self.frame_steps + 1) % train_every_nstep == 0 or done) and self.frame_steps > 5:
+                    try:
+                        self.training_model(i_episode, t, num_episodes=num_episodes, done=done or complete,
+                                            repeat_train=repeat_train, train_timing=train_timing)
+                    except Exception as e:
+                        print(e)
 
                 state = next_state
 
@@ -1307,15 +1478,14 @@ class A2CPolicy(ActorCriticPolicy):
                     self.print_epoch_progress()
 
                     if i_episode > 0 and (i_episode + 1) % (5 * print_progess_frequency) == 0:
-                        loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history, metrics_names=list(self.epoch_metric_history.keys()), calculate_base='epoch',
+                        loss_metric_curve(self.epoch_loss_history, self.epoch_metric_history,
+                                          metrics_names=list(self.epoch_metric_history.keys()), calculate_base='epoch',
                                           imshow=True)
 
                     if self.task_complete_criteria():
                         self.save_model()
                         print('episode {0} meet task complete criteria, training finish! '.format(i_episode))
                         return True
-
-                    break
 
         print('Complete')
         self.env.render()
@@ -1326,15 +1496,21 @@ class PPOPolicy(ActorCriticPolicy):
     """Proximal Policy Optimization
     """
 
-    def __init__(self, actor: Layer, critic: Layer, env: gym.Env, state_shape=None, use_experience_replay=False, memory_length: int = 10000
-                 , gamma=0.9, beta=0.01, use_gae=False, gae_lambda=0.95, normalize_advantages=False, clip_grad_norm=0.5, name='ppo') -> None:
-        super(PPOPolicy, self).__init__(actor=actor, critic=critic, env=env, state_shape=state_shape, action_strategy=ActionStrategy.OnPolicy, gamma=gamma,
-                                        use_experience_replay=use_experience_replay,
+    def __init__(self, actor: Layer, critic: Layer, env: gym.Env, state_shape=None, target_update=5, gamma=0.9,
+                 beta=0.01, use_gae=False, gae_lambda=0.95, normalize_returns=False, normalize_advantages=False,
+                 clip_grad_norm=0.5, name='ppo') -> None:
+        super(PPOPolicy, self).__init__(actor=actor, critic=critic, env=env, state_shape=state_shape,
+                                        action_strategy=ActionStrategy.OnPolicy, gamma=gamma,
+                                        use_experience_replay=False,
                                         replay_unit='episode',
-                                        memory_length=memory_length, name=name)
+                                        memory_length=10000, name=name)
         self.state = self.env.reset()
+        self.target_update = target_update
         self.memory = Rollout()
+        self.unsync_cnt = 0
+
         self.use_gae = use_gae
+        self.normalize_returns = normalize_returns
         self.normalize_advantages = normalize_advantages
         self.gae_lambda = gae_lambda
         self.beta = beta
@@ -1350,29 +1526,43 @@ class PPOPolicy(ActorCriticPolicy):
             self._networks['critic'] = Model(output=self._networks['critic'], inputs=self.get_observation())
         orthogonal(self._networks['actor'])
         orthogonal(self._networks['critic'])
+        self._networks['critic'].training_context['model_name'] = 'critic'
+        self._networks['actor'].training_context['model_name'] = 'actor'
 
         self._networks['critic'].training_context['skip_reset_total_loss'] = True
         self._networks['actor'].training_context['skip_reset_total_loss'] = True
         self._networks['critic'].training_context['skip_generate_output'] = True
         self._networks['actor'].training_context['skip_generate_output'] = True
         self._networks['critic'].training_context['retain_graph'] = True
+        self.critic.batch_loss_history.regist('critic_loss')
+        self.actor.batch_loss_history.regist('actor_loss')
 
         self.old_actor = copy.deepcopy(self._networks['actor'].model)
         self.old_actor.eval()
-        self.old_actor.trainable=False
+        self.old_actor.trainable = False
 
     def get_observation(self):
+        self.do_on_get_observation_start()
+        state = None
         if hasattr(self.env, 'state'):
-            return expand_dims(self.data_preprocess(to_numpy(self.env.state)), 0).astype(np.float32)
+            state = self.data_preprocess(self.env.state)
+        elif hasattr(self.env, 'screen'):
+            state = self.data_preprocess(self.env.screen)
         else:
-            return expand_dims(self.data_preprocess(self.env.render('observation')), 0).astype(np.float32)
+            state = self.data_preprocess(self.env.render('rgb_array'))
+        if ndim(state) < 4:
+            state = np.expand_dims(state, 0)
+        self.state = state
+        self.do_on_get_observation_end(state)
+        return self.state
 
     @torch.no_grad()
     def select_action(self, state, **kwargs):
+        self.do_on_select_action_start()
         # 只根據模型來決定action   on-policy
-        state = to_tensor(self.get_observation())
+        state = to_tensor(state)
 
-        probs = self.old_actor(state)
+        probs = self.old_actor(state).squeeze()
         m = Categorical(probs=probs)
         action = m.sample()
 
@@ -1383,11 +1573,10 @@ class PPOPolicy(ActorCriticPolicy):
         return int(action.item())
 
     def get_rewards(self, action):
-        if hasattr(self,'done') and self.done:
-            self.env.reset()
+        self.do_on_get_rewards_start()
         observation, reward, done, info = self.env.step(action)
+        observation = self.get_observation()
 
-        self.state = observation
         self.rollout.collect('reward', float(reward))
         self.rollout.collect('done', done)
         self.done = done
@@ -1397,113 +1586,111 @@ class PPOPolicy(ActorCriticPolicy):
         try:
             actor_loss = 0
             critic_loss = 0
-            reward_pool = self.rollout.reward
+            reward_pool = self.rollout.get_normalized('reward') if self.normalize_returns else self.rollout.reward
             probs_pool = self.rollout.probs
             log_prob_pool = self.rollout.log_prob
             state_pool = self.rollout.state
             action_pool = self.rollout.action
-            done_pool = self.rollout.done
+            done_pool = to_tensor(self.rollout.done).squeeze().detach().float()
 
             last_done = done_pool[-1]
-            last_next_value = 0.0 if last_done else self.critic.model(state_pool[-1])[:, action_pool[-1]].item()
-            running_add = last_next_value
-            DiscountedReturns = []
+
+            # running_add = last_next_value
+            # DiscountedReturns = []
             Values = []
             Ratio1 = []
             Ratio2 = []
             LogProbs = []
+            gae = 0
+            R = []
 
-            # maske lstm stateful
-            for module in self.actor.model.modules():
-                class_name = module.__class__.__name__.lower()
-                if 'lstm' in class_name or 'gru' in class_name:
-                    if hasattr(module, 'stateful'):
-                        module.stateful = False
+            for state in state_pool:
+                value = self.critic.model(state)[0]
+                Values.append(value)
 
-            for i in reversed(range(len(reward_pool))):
-                running_add = running_add * self.gamma + reward_pool[i]
-                DiscountedReturns.insert(0, running_add)
-                value = self.critic.model(state_pool[i])[:, action_pool[i]]
-                Values.insert(0, value)
+            if len(Values) > len(reward_pool):
+                Values = Values[:-1]
+            Values = torch.cat(Values)
 
-            DiscountedReturns = to_tensor(DiscountedReturns).detach()
-            #R=(R-R.mean())/(R.std()+1e-7)
+            next_value = to_tensor(0.0)
+            if not last_done.bool():
+                next_value = self.critic.model(self.state)[0]
 
-            NextValues = Values.copy()[1:]
-            NextValues.append(to_tensor(running_add))
-            PrevValues=Values.copy()[:-1]
-            PrevValues.insert(0,Values[0])
+            for value, reward, done in list(zip(Values, reward_pool, done_pool))[::-1]:
+                gae = gae * self.gamma * self.gae_lambda
+                gae = gae + reward + self.gamma * next_value * (1 - done) - value
+                next_value = value
+                R.append(gae + value)
+            R = R[::-1]
+            R = torch.cat(R).detach()
 
-            Values = concate(Values, axis=0)
-            NextValues = concate(NextValues, axis=0)
-            PrevValues = concate(PrevValues, axis=0)
-            clipped_value = PrevValues+clip(Values-PrevValues,-0.2,0.2)
+            # if self.normalize_returns:
+            #     R=(R -R .mean())/(R.std()+1e-5)
 
-            done_pool = to_tensor(done_pool).float().detach()
-            advantages = None
-            if self.use_gae:
+            advantages = R - Values
 
-                gaes = self.calculate_gae(Values, NextValues, DiscountedReturns, done_pool, self.gamma, self.gae_lambda)
-                clipped_gaes = self.calculate_gae(clipped_value, NextValues, DiscountedReturns, done_pool, self.gamma, self.gae_lambda)
-                advantages = max(gaes, clipped_gaes).detach()-Values
-                if self.normalize_advantages:
-                    # only divide std
-                    advantages = advantages / (advantages.std() + 1e-5)
-            else:
-                advantages = max(DiscountedReturns.detach()-Values, DiscountedReturns.detach()-clipped_value)
+            critic_loss = 0.5 * (advantages ** 2).mean()
+            self.critic.training_context['current_loss'] = self.critic.training_context['current_loss'] + critic_loss
+            self.critic.training_context['tmp_losses'].collect('critic_loss', self.train_steps,
+                                                               critic_loss.copy().detach())
+            self.critic.batch_metric_history.collect('critic_rmse', self.train_steps,
+                                                     critic_loss.copy().detach().sqrt())
 
-            critic_loss = (advantages ** 2).mean()
+            self.update_critic(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end', self.done)
+            # self.critic.print_batch_progress(1)
+            self.critic.current_loss = 0
 
             # need forward calculate for lstm-based actor
             for i in range(len(reward_pool)):
-                new_probs = self.actor(state_pool[i])
+                new_probs = self.actor(state_pool[i]).squeeze()
                 new_m = Categorical(probs=new_probs)
                 new_log_prob = new_m.log_prob(to_tensor(action_pool[i]))
-                LogProbs.insert(0, new_log_prob)
-
-                ratio1 = exp(new_log_prob - log_prob_pool[i].detach())
-                ratio2 = clip(ratio1, 1.0 - 0.2, 1.0 + 0.2)
-                Ratio1.insert(0, ratio1)
-                Ratio2.insert(0, ratio2)
+                LogProbs.append(new_log_prob)
+                ratio1 = exp(new_log_prob - log_prob_pool[i])
+                Ratio1.append(ratio1)
 
             LogProbs = concate(LogProbs, axis=0)
+            Ratio1 = concate(Ratio1, axis=0)
+            Ratio2 = clip(Ratio1, 1.0 - 0.2, 1.0 + 0.2)
 
-            Ratio1 = stack(Ratio1, axis=0)
-            Ratio2 = stack(Ratio2, axis=0)
-            self.actor.batch_metric_history.collect('ratio1', self.train_steps, Ratio1.copy().detach().mean())
-            self.actor.batch_metric_history.collect('ratio2', self.train_steps, Ratio2.copy().detach().mean())
+            self.actor.batch_metric_history.collect('ratio1', self.train_steps, Ratio1.mean())
+            self.actor.batch_metric_history.collect('ratio2', self.train_steps, Ratio2.mean())
 
-            if self.done == True:
-
-                actor_loss = -1 * (LogProbs * (advantages)).mean()
-            else:
-                surr1 = Ratio1 * (advantages)
-                surr2 = Ratio2 * (advantages)
-                actor_loss = None
-                actor_loss = (-1 * minimum(surr1, surr2)).mean()
-
-            return critic_loss, actor_loss, advantages, DiscountedReturns, Values
+            # surr1 = Ratio1 * advantages
+            # surr2 = Ratio2 * advantages
+            actor_loss = -1 * (element_min(Ratio1, Ratio2) * advantages).mean()
+            return critic_loss, actor_loss, advantages, R, Values
         except Exception as e:
             print(e)
+            PrintException()
 
     def save_or_sync_weights(self):
-        if self.train_steps <= 1 or (self.train_steps) % (5*self.accumulation_steps)  == 0:
-            self.save_model(save_path=self.training_context['save_path'])
-            self.critic.model.to(get_device())
-            self.actor.model.to(get_device())
+        self.critic.save_model(save_path=self.critic.training_context['save_path'])
+        self.actor.save_model(save_path=self.actor.training_context['save_path'])
+
+        if self.current_epoch <= 2 or (self.done and (self.current_epoch + 1) % self.target_update == 0):
             self.old_actor.load_state_dict(self.actor.model.state_dict())
             self.old_actor.eval()
             self.actor.model.train()
+            if len(self.memory) > 3000:
+                self.memory.housekeeping(2000)
+            print('memory size:{0}'.format(len(self.memory)))
+            # self.memory.reset()
+        # elif self.train_steps<=2 or (self.unsync_cnt+1) % (self.target_update*self.accumulation_steps)  == 0:
+        #     self.old_actor.load_state_dict(self.actor.model.state_dict())
+        #     self.old_actor.eval()
+        #     self.actor.model.train()
+        #     self.unsync_cnt=0
+        # else:
+        #     self.unsync_cnt+=1
 
-    def training_model(self, current_episode=0, current_step=0, num_episodes=100, train_timing='on_step_end', done=False, repeat_train=1, **kwargs):
-
-        self.critic.batch_loss_history.regist('critic_loss')
-        self.actor.batch_loss_history.regist('actor_loss')
-        log_prob_pool = self.rollout.log_prob
-        state_pool = self.rollout.state
-        action_pool = self.rollout.action
-        done_pool = self.rollout.done
-        reward_pool = self.rollout.get_running_mean('reward')
+    def training_model(self, current_episode=0, current_step=0, num_episodes=100, train_timing='on_step_end',
+                       done=False, repeat_train=1, **kwargs):
+        # log_prob_pool = self.rollout.log_prob
+        # state_pool = self.rollout.state
+        # action_pool = self.rollout.action
+        # done_pool = self.rollout.done
+        # reward_pool =  self.rollout.get_normalized('reward') if self.normalize_returns else self.rollout.reward
         gae = 0.0
         R = []
         V = []
@@ -1514,70 +1701,21 @@ class PPOPolicy(ActorCriticPolicy):
                 actor_loss = to_tensor(0.0)
                 critic_loss = to_tensor(0.0)
 
-                if self.done == True and len(self.memory) > 5 and self.current_epoch > 0:
+                if len(self.rollout) > 3:
                     for module in self.actor.model.modules():
                         class_name = module.__class__.__name__.lower()
                         if 'lstm' in class_name or 'gru' in class_name:
                             if hasattr(module, 'stateful'):
-                                module.stateful = False
+                                module.stateful = True
+                                module.clear_state()
+                    for module in self.critic.model.modules():
+                        class_name = module.__class__.__name__.lower()
+                        if 'lstm' in class_name or 'gru' in class_name:
+                            if hasattr(module, 'stateful'):
+                                module.stateful = True
+                                module.clear_state()
 
-                    for i in range(8):
-                        try:
-                            self.train_steps += 1
-                            self.current_batch += 1
-                            self.steps = self.train_steps
-                            accumulate_grads = self.training_context['steps'] % self.accumulation_steps != 0
-                            # self.do_on_batch_start()
-
-                            batch_data = self.memory.get_samples(builtins.min(64, len(self.memory)))
-                            batch_return = batch_data['return']
-                            batch_state = batch_data['state']
-                            batch_action = batch_data['action']
-                            batch_log_prob = batch_data['log_prob']
-
-                            batch_value = concate([self.critic(to_tensor(batch_state[i]))[:, batch_action[i]] for i in range(len(batch_state))], axis=0)
-                            batch_return = to_tensor(batch_return)
-                            batch_advantages = (batch_return.detach() - batch_value)
-
-                            batch_critic_loss = (batch_advantages ** 2).mean()
-                            self.critic.current_loss = batch_critic_loss
-                            self.critic.batch_loss_history.collect('critic_loss', self.train_steps, batch_critic_loss.copy().detach())
-                            self.critic.batch_metric_history.collect('critic_rmse', self.train_steps, (batch_critic_loss.copy().detach()).sqrt())
-                            self.update_critic(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end', False, accumulate_grads=accumulate_grads)
-                            self.critic.current_loss = 0.0
-                            batch_actor_loss = to_tensor(0.0)
-                            for j in range(len(batch_state)):
-                                #old_batch_probs = self.old_actor(to_tensor(batch_state[j]))
-                                #old_m = Categorical(probs=old_batch_probs)
-                                old_batch_probs = batch_log_prob[j].long().detach()
-                                #old_batch_probs=old_m.log_prob(to_tensor(batch_action[j]).long())
-                                new_batch_probs = self.actor(to_tensor(batch_state[j]))
-                                new_m = Categorical(probs=new_batch_probs)
-                                new_log_prob = new_m.log_prob(to_tensor(batch_action[j]).long())
-
-                                # entropy_loss = entropy_loss + new_m.entropy().mean()
-                                ratio = exp(new_log_prob - old_batch_probs)
-                                cliprange = 0.2
-                                surr1 = ratio * (batch_advantages[j].detach())
-                                surr2 = clip(ratio, 1.0 - cliprange, 1.0 + cliprange) * (batch_advantages[j].detach())
-                                batch_actor_loss = batch_actor_loss - (minimum(surr1, surr2)).mean()
-                            self.actor.current_loss = batch_actor_loss / len(batch_state)
-                            self.actor.batch_loss_history.collect('actor_loss', self.train_steps, batch_actor_loss.copy() / len(batch_state))
-                            # self.actor.batch_loss_history.collect('entropy_loss', self.train_steps, (-0.01 * entropy_loss).copy().detach() / (len(state_pool) - 1))
-
-                            self.update_actor(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end', False, accumulate_grads=accumulate_grads)
-                            self.actor.current_loss = 0.0
-                            self.save_or_sync_weights()
-
-                        except Exception as e:
-                            print(e)
-                            PrintException()
-
-                    # self.critic.print_batch_progress(8 if done else 2)
-                    # self.actor.print_batch_progress(8 if done else 2)
-
-                if len(reward_pool) > 3:
-                    accumulate_grads = self.training_context['steps'] % self.accumulation_steps != 0
+                    accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
                     try:
                         self.train_steps += 1
                         self.current_batch += 1
@@ -1587,13 +1725,6 @@ class PPOPolicy(ActorCriticPolicy):
                         self.done = done
 
                         critic_loss, actor_loss, advantages, R, V = self.calculate_discounted_returns()
-                        self.critic.current_loss = critic_loss
-                        self.critic.batch_loss_history.collect('critic_loss', self.train_steps, critic_loss.copy().detach())
-                        self.critic.batch_metric_history.collect('critic_rmse', self.train_steps, critic_loss.copy().detach().sqrt())
-
-                        self.update_critic(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end', self.done, accumulate_grads=accumulate_grads)
-                        # self.critic.print_batch_progress(1)
-                        self.critic.current_loss = 0
 
                         # keep = []
                         # for t in list(range(len(state_pool)))[::-1]:
@@ -1608,37 +1739,130 @@ class PPOPolicy(ActorCriticPolicy):
                         # keep = list(filter(not_negative, list(sorted((set(keep))))))
                         # for idx in keep:
 
-                        self.actor.current_loss = actor_loss
-                        self.actor.batch_loss_history.collect('actor_loss', self.train_steps, actor_loss.copy().detach())
+                        self.actor.training_context['current_loss'] = self.actor.training_context[
+                                                                          'current_loss'] + actor_loss
+                        self.actor.training_context['tmp_losses'].collect('actor_loss', self.train_steps,
+                                                                          actor_loss.copy().detach())
+
                         # self.actor.batch_loss_history.collect('entropy_loss', self.train_steps, (-0.01 * entropy_loss).copy().detach() / (len(state_pool) - 1))
 
-                        self.update_actor(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end', self.done, accumulate_grads=accumulate_grads)
+                        self.update_actor(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end',
+                                          self.done, accumulate_grads=accumulate_grads)
                         self.actor.current_loss = 0.0
                         # self.actor.print_batch_progress(1)
-                        self.save_or_sync_weights()
+                        # self.save_or_sync_weights()
 
-
-
-                        for idx in list(range(len(state_pool)))[::-1]:
-                            if self.rollout.reward[idx] != 0:
-                                self.memory.collect('return', advantages[idx].item() + V[idx].item())
-                                self.memory.collect('state', to_numpy(state_pool[idx]))
-                                self.memory.collect('action', action_pool[idx])
-                                self.memory.collect('log_prob', log_prob_pool[idx])
+                        for idx in list(range(len(R)))[::-1]:
+                            if random.random() > 0.9 or abs(self.rollout.reward[idx]) >= 0.12:
+                                self.memory.collect('return', R[idx])
+                                self.memory.collect('state', to_numpy(self.rollout.state[idx]))
+                                self.memory.collect('action', self.rollout.action[idx])
+                                self.memory.collect('log_prob', self.rollout.log_prob[idx])
 
                         self.rollout.reset()
-                        del log_prob_pool
-                        del state_pool
-                        del action_pool
-                        del done_pool
                         del advantages
-                        del R
                         del V
                         gc.collect()
 
                     except Exception as e:
                         print(e)
                         PrintException()
+
+                if self.done == True and len(self.memory) > 5:
+                    for module in self.actor.model.modules():
+                        class_name = module.__class__.__name__.lower()
+                        if 'lstm' in class_name or 'gru' in class_name:
+                            if hasattr(module, 'stateful'):
+                                module.stateful = False
+                    for module in self.critic.model.modules():
+                        class_name = module.__class__.__name__.lower()
+                        if 'lstm' in class_name or 'gru' in class_name:
+                            if hasattr(module, 'stateful'):
+                                module.stateful = False
+
+                    for i in range(8):
+                        try:
+                            self.train_steps += 1
+                            self.current_batch += 1
+                            self.steps = self.train_steps
+                            accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
+                            # self.do_on_batch_start()
+
+                            batch_data = self.memory.get_samples(
+                                builtins.min(self.training_context['batch_size'], len(self.memory)))
+                            batch_return = batch_data['return']
+                            batch_state = batch_data['state']
+                            batch_action = batch_data['action']
+                            batch_log_prob = batch_data['log_prob']
+
+                            batch_value = concate(
+                                [self.critic(to_tensor(batch_state[i]))[0] for i in range(len(batch_state))], axis=0)
+                            batch_return = to_tensor(batch_return)
+                            batch_advantages = (batch_return.detach() - batch_value)
+
+                            batch_critic_loss = 0.5 * (batch_advantages ** 2).mean()
+                            self.critic.training_context['current_loss'] = self.critic.training_context[
+                                                                               'current_loss'] + batch_critic_loss
+                            self.critic.training_context['tmp_losses'].collect('critic_loss', self.train_steps,
+                                                                               batch_critic_loss.copy().detach())
+
+                            self.critic.batch_metric_history.collect('critic_rmse', self.train_steps,
+                                                                     (batch_critic_loss.copy().detach()).sqrt())
+                            self.update_critic(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end',
+                                               False, accumulate_grads=accumulate_grads)
+                            self.critic.current_loss = 0.0
+                            batch_actor_loss = to_tensor(0.0)
+                            for j in range(len(batch_state)):
+                                # old_batch_probs = self.old_actor(to_tensor(batch_state[j]))
+                                # old_m = Categorical(probs=old_batch_probs)
+                                old_batch_probs = batch_log_prob[j].detach()
+                                # old_batch_probs=old_m.log_prob(to_tensor(batch_action[j]).long())
+                                new_batch_probs = self.actor(to_tensor(batch_state[j]))
+                                new_m = Categorical(probs=new_batch_probs)
+                                new_log_prob = new_m.log_prob(to_tensor(batch_action[j]).long().detach())
+
+                                # entropy_loss = entropy_loss + new_m.entropy().mean()
+                                ratio = exp(new_log_prob - old_batch_probs)
+                                ratio2 = clip(ratio, 1.0 - 0.2, 1.0 + 0.2)
+                                # surr1 = ratio * (batch_advantages[j].detach())
+                                # surr2 = clip(ratio, 1.0 - 0.2, 1.0 + 0.2) * (batch_advantages[j].detach())
+                                batch_actor_loss = batch_actor_loss - (
+                                            torch.min(ratio, ratio2) * batch_advantages[j]).mean()
+
+                            self.actor.training_context['current_loss'] = self.actor.training_context[
+                                                                              'current_loss'] + batch_actor_loss / len(
+                                batch_state)
+                            self.actor.training_context['tmp_losses'].collect('actor_loss', self.train_steps, (
+                                        batch_actor_loss / len(batch_state)).copy().detach())
+
+                            # self.actor.batch_loss_history.collect('entropy_loss', self.train_steps, (-0.01 * entropy_loss).copy().detach() / (len(state_pool) - 1))
+
+                            self.update_actor(self.current_epoch, self.train_steps, self.total_epoch, 1, 'on_step_end',
+                                              False, accumulate_grads=accumulate_grads)
+                            self.actor.current_loss = 0.0
+                        # self.save_or_sync_weights()
+                        except Exception as e:
+                            print(e)
+                            PrintException()
+                    for module in self.actor.model.modules():
+                        class_name = module.__class__.__name__.lower()
+                        if 'lstm' in class_name or 'gru' in class_name:
+                            if hasattr(module, 'stateful'):
+                                module.stateful = True
+                    for module in self.critic.model.modules():
+                        class_name = module.__class__.__name__.lower()
+                        if 'lstm' in class_name or 'gru' in class_name:
+                            if hasattr(module, 'stateful'):
+                                module.stateful = True
+
+                if self.done == True:
+                    print(gray_color(
+                        'episode {0}  t: {1} total rewards:{2:.2f} {3} '.format(self.current_epoch + 1, self.t,
+                                                                                self.total_rewards, ''.join(
+                                ['{0}: {1} '.format(k, v) for k, v in self.info.items() if
+                                 k not in ['world', 'y_pos', 'x_pos']]))))
+                    print('')
+                    self.save_or_sync_weights()
 
             except Exception as e:
                 print(e)

@@ -48,7 +48,7 @@ if not os.path.exists(dirname):
 
 
 
-def DenseLayer(growth_rate,name=''):
+def DenseLayer(growth_rate,dropout_rate=0.2,name=''):
     """
     The basic normalization, convolution and activation combination for dense connection
 
@@ -61,15 +61,14 @@ def DenseLayer(growth_rate,name=''):
 
     """
     items = OrderedDict()
-    items['norm']=BatchNorm2d()
-    items['relu']=Relu()
-    items['conv1']=Conv2d_Block((1,1),num_filters=4 * growth_rate,strides=1,activation='relu',auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
-    items['conv2']=Conv2d((3,3),num_filters=growth_rate,strides=1,auto_pad=True,padding_mode='zero',use_bias=False)
+
+    items['conv1']=Conv2d_Block((1,1),sequence_rank='nac',num_filters=4 * growth_rate,strides=1,activation=Relu(),auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
+    items['conv2']=Conv2d_Block((3,3),sequence_rank='nac',num_filters=growth_rate,strides=1,auto_pad=True,padding_mode='zero',use_bias=False,dropout_rate=dropout_rate)
     return  Sequential(items)
 
 
 class DenseBlock(Layer):
-    def __init__(self, num_layers,  growth_rate=32, drop_rate=0,keep_output=False,name=''):
+    def __init__(self, num_layers,  growth_rate=32, dropout_rate=0,keep_output=False,name=''):
         """
         The dense connected block.
         Feature-maps of eachconvolution layer are used as inputs into all subsequent layers
@@ -90,7 +89,7 @@ class DenseBlock(Layer):
             self.name=name
         self.keep_output=keep_output
         for i in range(num_layers):
-            layer = DenseLayer(growth_rate,name='denselayer%d' % (i + 1))
+            layer = DenseLayer(growth_rate,dropout_rate=dropout_rate,name='denselayer%d' % (i + 1))
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, x, **kwargs):

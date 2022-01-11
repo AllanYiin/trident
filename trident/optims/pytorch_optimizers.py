@@ -1215,10 +1215,12 @@ class Ranger(Optimizer):
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
                 beta1, beta2 = group['betas']
 
+                if group['weight_decay'] != 0:
+                    grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
-                if self.gradient_centralization in ['all', 'gcc']:
-                    if len(list(grad.size())) > 3:
-                        grad.add_(-grad.mean(dim=tuple(range(1, grad.dim())), keepdim=True))
+                # if self.gradient_centralization in ['all', 'gcc']:
+                #     if ndim(grad) > 3:
+                #         grad.add_(-grad.mean(axis=tuple(range(1, ndim(grad) )), keepdims=True))
 
                 state['step'] += 1.0
 
@@ -1252,13 +1254,10 @@ class Ranger(Optimizer):
                 else:
                     G_grad = exp_avg
 
-                if group['weight_decay'] != 0:
-                    G_grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
-
-                if self.gradient_centralization in ['all', 'gc']:
-                    if len(list(G_grad.size())) > 1:
-                        G_grad.add_(-G_grad.mean(dim=tuple(range(1, len(list(G_grad.size())))), keepdim=True))
+                if self.gradient_centralization in ['all', 'gc','gcc']:
+                    if ndim(G_grad) > 1:
+                        G_grad.add_(-G_grad.mean(axis=list(range(1, ndim(G_grad) )), keepdims=True))
 
                 p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
                 if any_abnormal_number(p_data_fp32):
@@ -1559,6 +1558,13 @@ class LARS(Optimizer):
                 if p.grad is None or not p.requires_grad:
                     continue
 
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
                 param = p.data
                 grad = p.grad.data
 
@@ -1602,6 +1608,9 @@ class LARS(Optimizer):
                         update = next_v
 
                     p.data.add_(-update)
+                    if half_precision:
+                        p.data = p.data.half()
+                        p.grad = p.grad.half()
                 else:
                     raise NotImplementedError
 
@@ -1767,12 +1776,15 @@ class AdaBelief(Optimizer):
                     if group['weight_decay'] != 0:
                         grad.add_(p_data_fp32, alpha=group['weight_decay'])
 
+
+
                 # get current state variable
                 exp_avg, exp_avg_sq = state['exp_avg'], state['exp_avg_sq']
 
-                if self.gradient_centralization in ['all', 'gcc']:
-                    if ndim(grad)> 3:
-                        grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
+                # if self.gradient_centralization in ['all', 'gcc', 'gc']:
+                #     if ndim(grad)> 1:
+                #         grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
+
 
                 state['step'] += 1
                 bias_correction1 = 1 - beta1 ** state['step']
@@ -1793,11 +1805,13 @@ class AdaBelief(Optimizer):
                 else:
                     denom = (exp_avg_sq.add_(group['eps']).sqrt() / math.sqrt(bias_correction2)).add_(group['eps'])
 
+
                 # update
                 if not self.rectify:
                     # Default update
-                    step_size = group['lr'] / bias_correction1
-                    p_data_fp32.addcdiv_(exp_avg, denom, value=-step_size)
+                    step_size = 1/ bias_correction1
+                    G_grad = exp_avg / denom
+
 
                 else:  # Rectified update, forked from RAdam
                     buffered = group['buffer'][int(state['step'] % 10)]
@@ -1830,18 +1844,16 @@ class AdaBelief(Optimizer):
                         G_grad = exp_avg
 
 
-                    if self.gradient_centralization in ['all', 'gc']:
-                        if ndim(G_grad) > 1:
-                            G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
+                if self.gradient_centralization in ['all', 'gcc']:
+                    if ndim(G_grad) > 1:
+                        G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
+                p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
+                if any_abnormal_number(p_data_fp32):
+                    sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
+                    p_data_fp32 = where(is_abnormal_number(p_data_fp32), p.data.float(), p_data_fp32)
 
-                    if any_abnormal_number(p_data_fp32):
-                        sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n\r'.format(self.__class__.__name__))
-                        p_data_fp32 = where(is_abnormal_number(p_data_fp32), p.data.float(), p_data_fp32)
-
-                    p_data_fp32.add_(G_grad, alpha=-step_size * group['lr'])
-                    p.data.copy_(p_data_fp32)
-
+                p.data.copy_(p_data_fp32)
                 if half_precision:
                     p.data = p.data.half()
                     p.grad = p.grad.half()
@@ -1958,6 +1970,13 @@ class RangerAdaBelief(Optimizer):
             for p in group['params']:
                 if p.grad is None or not p.requires_grad:
                     continue
+                # cast data type
+                half_precision = False
+                if p.data.dtype == torch.float16:
+                    half_precision = True
+                    p.data = p.data.float()
+                    p.grad = p.grad.float()
+
                 grad = p.grad.data.float()
 
                 if not self.weight_decouple:  # if not decoupled weight decay, add weight decay to grad
@@ -2066,6 +2085,9 @@ class RangerAdaBelief(Optimizer):
                     slow_p.add_(p.data - slow_p, alpha=self.alpha)
                     # copy interpolated weights to RAdam param tensor
                     p.data.copy_(slow_p)
+                if half_precision:
+                    p.data = p.data.half()
+                    p.grad = p.grad.half()
         return loss
 
 
@@ -2155,14 +2177,16 @@ class DiffGrad(Optimizer):
                 beta1, beta2 = group['betas']
 
 
-                if self.gradient_centralization in ['all', 'gcc']:
-                    if ndim(grad)> 3:
-                        grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
-
-                state['step'] += 1
+                # if self.gradient_centralization in ['all', 'gcc']:
+                #     if ndim(grad)> 3:
+                #         grad=grad-grad.mean(axis=list(range(1, ndim(grad))), keepdims=True)
 
                 if group['weight_decay'] != 0:
                     grad.add_(p_data_fp32, alpha=group['weight_decay'])
+
+                state['step'] += 1
+
+
 
                 # Decay the first and second moment running average coefficient
                 exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
@@ -2181,10 +2205,15 @@ class DiffGrad(Optimizer):
 
                 # update momentum with dfc
                 exp_avg1 = exp_avg * dfc
+                G_grad=true_divide(exp_avg1, denom)
+
+                if self.gradient_centralization is not None:
+                    if ndim(G_grad) > 1:
+                        G_grad = G_grad - G_grad.mean(axis=list(range(1, ndim(G_grad))), keepdims=True)
 
                 step_size = group['lr'] * math.sqrt(bias_correction2) / bias_correction1
 
-                p.data.add_(true_divide(exp_avg1, denom), alpha=-step_size)
+                p.data.add_(G_grad, alpha=-step_size)
 
                 if half_precision:
                     p.data = p.data.half()

@@ -16,7 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from collections import abc
 from torch.nn import init
-
+from trident import context
 from trident.layers.pytorch_activations import get_activation, Identity
 from trident.layers.pytorch_layers import *
 from trident.layers.pytorch_normalizations import get_normalization, SpectralNorm
@@ -28,9 +28,9 @@ from trident.backend.pytorch_ops import *
 __all__ = ['FullConnect_Block','Conv2d_Block', 'Conv1d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'TemporalConv1d_Block',
            'TransConv2d_Block', 'Classifier1d', 'ShortCut2d', 'ShortCut', 'Hourglass', 'ConcateBlock', 'SqueezeExcite', 'For']
 
-_session = get_session()
+ctx = context._context()
 
-_epsilon = _session.epsilon
+_epsilon = ctx.epsilon
 
 
 def _ntuple(n):
@@ -119,26 +119,41 @@ class FullConnect_Block(Layer):
 
     def fuse(self):
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_fc = deepcopy(self.fc)
             with torch.no_grad():
-                bn_rv = self.norm.running_var.data.copy()
-                bn_rm = self.norm.running_mean.data.copy()
-                bn_eps = self.norm.eps.data.copy()
-                bn_w = self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
-                bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
-                linear_w = self.fc.weight.data.copy()
-                linear_b = self.fc.bias.data.copy() if self.fc.use_bias else zeros_like(bn_rm)
-                bn_scale = bn_w * torch.rsqrt(bn_rv + bn_eps)
+                if self.sequence_rank == 'fna' or self.sequence_rank == 'afn':
+                    bn_rv = self.norm.running_var.data.copy()
+                    bn_rm = self.norm.running_mean.data.copy()
+                    bn_eps = self.norm.eps
+                    bn_w = self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                    bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                    bn_scale = bn_w * torch.rsqrt(bn_rv + bn_eps)
+                    fc_w = self.fc.weight.data.copy()
+                    fc_b = self.fc.bias.data.copy() if self.fc.use_bias else zeros_like(bn_rm)
 
-                fused_w = linear_w * bn_scale.unsqueeze(-1)
-                fused_b = (linear_b - bn_rm) * bn_scale + bn_b
-                self.fc.weight.data.copy_(fused_w)
-                self.fc.bias = Parameter(fused_b)
-                # if self.fc.use_bias:
-                #
-                #     self.fc.bias.data.copy_(fused_b)
-                # else:
+                    fused_w = fc_w * bn_scale.unsqueeze(-1)
+                    fused_b = (fc_b - bn_rm) * bn_scale + bn_b
+                    shadow_fc.weight.data.copy_(fused_w)
+                    shadow_fc.use_bias=True
+                    shadow_fc.bias = Parameter(fused_b)
 
-                self.norm = None
+                    # test fusion effect
+                    dummy_input = random_normal([2] + self.input_shape.dims[1:], dtype=self.fc.weight.dtype).cuda()
+                    result1 = self.forward(dummy_input.copy())
+                    result2 = shadow_fc.forward(dummy_input.copy())
+                    if self.activation is not None:
+                        result2 = self.activation(result2)
+                    diff = to_numpy((result1 - result2).abs())
+                    ctx.print('diff', diff.mean(), diff.max())
+                    if diff.mean() < 1e-7 and diff.max() < 1e-5:
+                        self.fc.weight.data.copy_(fused_w)
+                        self.fc.use_bias = True
+                        self.fc.bias = Parameter(fused_b)
+                        del self._modules['norm']
+                        del dummy_input
+                        del result1
+                        del result2
+                        del shadow_fc
 
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
@@ -244,6 +259,51 @@ class Conv1d_Block(Layer):
             elif isinstance(self.__dict__['activation'], nn.Module):
                 s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
         return s.format(**self.__dict__)
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
+            with torch.no_grad():
+                if self.sequence_rank == 'cna':
+                    # sequential
+                    # y1 = x * w1 + b1  # linear
+                    # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
+
+                    # # replace y1
+                    # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                    bn_rv=self.norm.running_var.data.copy()
+                    bn_rm=self.norm.running_mean.data.copy()
+                    bn_eps=self.norm.eps
+                    conv_w=self.conv.weight.data.copy()
+                    conv_b = self.conv.bias.data.copy() if self.conv.use_bias else zeros_like(bn_rm)
+                    bn_w=self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                    bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                    bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+
+                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+                    conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                    shadow_conv.weight.data.copy_(conv_w)
+                    shadow_conv.use_bias=True
+                    shadow_conv.bias=Parameter(conv_b)
+                    #test fusion effect
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    result1=self.forward(dummy_input.copy())
+                    result2=shadow_conv.forward(dummy_input.copy())
+                    if self.activation is not None:
+                        result2=self.activation(result2)
+                    diff=to_numpy((result1-result2).abs())
+                    ctx.print('diff',diff.mean(),diff.max())
+                    if diff.mean()<1e-7 and diff.max()<1e-5:
+                        self.conv.weight.data.copy_(conv_w)
+                        self.conv.use_bias =True
+                        self.conv.bias = Parameter(conv_b)
+                        del self._modules['norm']
+                        del dummy_input
+                        del result1
+                        del result2
+                        del shadow_conv
+
+
 
 class Conv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), num_filters=None, strides=1, auto_pad=True, padding_mode='zero',
@@ -302,6 +362,7 @@ class Conv2d_Block(Layer):
             norm = None
             conv = nn.utils.spectral_norm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
+            self.sequence_rank = 'cna'
             self.add_module('conv', conv)
             self.add_module('norm', norm)
             self.add_module('activation',  get_activation(activation,only_layer=True))
@@ -348,22 +409,47 @@ class Conv2d_Block(Layer):
     def fuse(self):
 
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
             with torch.no_grad():
-                bn_rv=self.norm.running_var.data.copy()
-                bn_rm=self.norm.running_mean.data.copy()
-                bn_eps=self.norm.eps.data.copy()
-                conv_w=self.conv.weight.data.copy()
-                conv_b = self.conv.bias.data.copy() if self.conv.use_bias else zeros_like(bn_rm)
-                bn_w=self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
-                bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
-                bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+                if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
+                    # sequential
+                    # y1 = x * w1 + b1  # linear
+                    # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
 
-                conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
-                conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
-                self.conv.weight.data.copy_(conv_w)
-                #self.conv.bias.data.copy_(conv_b) if self.conv.use_bias else \
-                self.conv.bias=Parameter(conv_b)
-                self.norm=None
+                    # # replace y1
+                    # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                    bn_rv=self.norm.running_var.data.copy()
+                    bn_rm=self.norm.running_mean.data.copy()
+                    bn_eps=self.norm.eps
+                    conv_w=self.conv.weight.data.copy()
+                    conv_b = self.conv.bias.data.copy() if self.conv.use_bias else zeros_like(bn_rm)
+                    bn_w=self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                    bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                    bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+
+                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+                    conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                    shadow_conv.weight.data.copy_(conv_w)
+                    shadow_conv.use_bias=True
+                    shadow_conv.bias=Parameter(conv_b)
+                    #test fusion effect
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    result1=self.forward(dummy_input.copy())
+                    result2=shadow_conv.forward(dummy_input.copy())
+                    if self.activation is not None:
+                        result2=self.activation(result2)
+                    diff=to_numpy((result1-result2).abs())
+                    ctx.print('diff',diff.mean(),diff.max())
+                    if diff.mean()<1e-6 and diff.max()<1e-5:
+                        self.conv.weight.data.copy_(conv_w)
+                        self.conv.use_bias =True
+                        self.conv.bias = Parameter(conv_b)
+                        del self._modules['norm']
+                        del dummy_input
+                        del result1
+                        del result2
+                        del shadow_conv
+
 
 
 
@@ -662,6 +748,52 @@ class DepthwiseConv2d_Block(Layer):
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
+            with torch.no_grad():
+                if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
+                    # sequential
+                    # y1 = x * w1 + b1  # linear
+                    # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
+
+                    # # replace y1
+                    # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                    bn_rv=self.norm.running_var.data.copy()
+                    bn_rm=self.norm.running_mean.data.copy()
+                    bn_eps=self.norm.eps
+                    conv_w=self.conv.weight.data.copy()
+                    conv_b = self.conv.bias.data.copy() if self.conv.use_bias else zeros_like(bn_rm)
+                    bn_w=self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                    bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                    bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+
+                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 2)+[-1] )
+                    conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                    shadow_conv.weight.data.copy_(conv_w)
+                    shadow_conv.use_bias=True
+                    shadow_conv.bias=Parameter(conv_b)
+                    #test fusion effect
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    result1=self.forward(dummy_input.copy())
+                    result2=shadow_conv.forward(dummy_input.copy())
+                    if self.activation is not None:
+                        result2=self.activation(result2)
+                    diff=to_numpy((result1-result2).abs())
+                    ctx.print('diff', diff.mean(), diff.max())
+                    if diff.mean()<1e-6 and diff.max()<1e-5:
+                        self.conv.weight.data.copy_(conv_w)
+                        self.conv.use_bias =True
+                        self.conv.bias = Parameter(conv_b)
+                        del self._modules['norm']
+                    else:
+                        ctx.print('diff',diff.mean(),diff.max())
+                    del dummy_input
+                    del result1
+                    del result2
+                    del shadow_conv
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -756,6 +888,50 @@ class SeparableConv2d_Block(Layer):
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
+            with torch.no_grad():
+                if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
+                    # sequential
+                    # y1 = x * w1 + b1  # linear
+                    # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
+
+                    # # replace y1
+                    # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                    bn_rv=self.norm.running_var.data.copy()
+                    bn_rm=self.norm.running_mean.data.copy()
+                    bn_eps=self.norm.eps
+                    conv_w=self.conv.pointwise.data.copy()
+                    conv_b = self.conv.bias.data.copy() if self.conv.use_bias else zeros_like(bn_rm)
+                    bn_w=self.norm.weight.data.copy() if self.norm.affine else ones_like(bn_rm)
+                    bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
+                    bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
+
+                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+                    conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                    shadow_conv.pointwise.data.copy_(conv_w)
+                    shadow_conv.use_bias=True
+                    shadow_conv.bias=Parameter(conv_b)
+                    #test fusion effect
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    result1=self.forward(dummy_input.copy())
+                    result2=shadow_conv.forward(dummy_input.copy())
+                    if self.activation is not None:
+                        result2=self.activation(result2)
+                    diff=to_numpy((result1-result2).abs())
+                    ctx.print('diff',diff.mean(),diff.max())
+                    if diff.mean()<1e-6 and diff.max()<1e-5:
+                        self.conv.weight.data.copy_(conv_w)
+                        self.conv.use_bias =True
+                        self.conv.bias = Parameter(conv_b)
+                        del self._modules['norm']
+                        del dummy_input
+                        del result1
+                        del result2
+                        del shadow_conv
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -810,9 +986,6 @@ def For(what_range, constructor):
         A function that accepts one argument and applies the layers as constructed by ``constructor`` one after another.
 
     Examples:
-     >>> # stack of 3 Dense relu layers
-     >>> model = For(range(3), lambda: Dense(200, activation=relu))
-     >>> # version of the above that has no activation for the last layer
      >>> model = For(range(3), lambda i: Dense(200, name='dense_{0}'.format(i+1)))
      >>> print(model[2].name)
      dense_3

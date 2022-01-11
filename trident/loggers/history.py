@@ -42,32 +42,39 @@ class HistoryBase(OrderedDict):
     def enable_tensorboard(self):
         return ctx.enable_tensorboard
 
+    @property
+    def enable_mlflow(self):
+        return ctx.enable_mlflow
 
     def regist(self,data_name:str):
         if data_name not in self:
             self[data_name]=[]
 
-    def collect(self, data_name: str, step: int, value: (float,np.ndarray, Tensor)):
+    def collect(self, data_name: str, step: int, value: (float,np.ndarray)):
         if data_name not in self:
             self.regist(data_name)
+        if any_abnormal_number(value):
+            pass
+        else:
+            value=to_scalar(value)
+            is_redundant_skip=False
+            if self.prevent_redundant:
+                if  (step, value) in self[data_name]:
+                    is_redundant_skip=True
 
-        value=to_scalar(value)
-        is_redundant_skip=False
-        if self.prevent_redundant:
-            if  (step, value) in self[data_name]:
-                is_redundant_skip=True
-
-        if not is_redundant_skip:
-            self[data_name].append((step, value))
-            if ctx.enable_tensorboard:
-                if self.training_name is None:
-                    ctx.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
-                else:
-                    ctx.summary_writer.add_scalar(self.training_name+ "/"+self.name + "/" + data_name, value, global_step=step, walltime=time.time())
+            if not is_redundant_skip:
+                self[data_name].append((step, value))
+                if ctx.enable_tensorboard:
+                    if self.training_name is None:
+                        ctx.summary_writer.add_scalar( self.name+"/"+data_name, value, global_step=step, walltime=time.time())
+                    else:
+                        ctx.summary_writer.add_scalar(self.training_name+ "/"+self.name + "/" + data_name, value, global_step=step, walltime=time.time())
+                if ctx.enable_mlflow:
+                        ctx.mlflow_logger.add_scalar( data_name, value, global_step=step, walltime=time.time())
 
     def reset(self):
         for i in range(len(self)):
-            self.value_list[i]=[]
+            self.value_list[i].clear()
     def get_keys(self):
         return self.key_list
 
@@ -77,7 +84,7 @@ class HistoryBase(OrderedDict):
             steps,values=zip(*self[data_name].copy())
             return list(steps),list(values)
         else:
-            sys.stderr.write('{0} is not in this history.'.format(data_name))
+            #sys.stderr.write('{0} is not in this history.'.format(data_name))
             return [], []
 
     def get_last(self,data_name):

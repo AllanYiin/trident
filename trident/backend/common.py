@@ -31,7 +31,7 @@ from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Di
 import numpy as np
 
 __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabled', 'set_autocast_enabled', 'get_backend', 'get_plateform', 'get_image_backend', 'get_trident_dir',
-           'epsilon', 'floatx', 'import_or_install',
+           'epsilon', 'floatx', 'import_or_install','compile_and_install_module',
            'check_keys', 'make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_file_modified_time', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'TensorShape', 'unpack_singleton', 'enforce_singleton',
@@ -40,8 +40,8 @@ __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabl
            'remove_nonprintable',
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode', 'adaptive_format', 'num_cpus',
-           'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'get_gpu_memory_map', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
-           'gray_color', 'yellow_color','open_browser','launchTensorBoard','launchMLFlow']
+           'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
+           'gray_color', 'yellow_color','magenta_color','violet_color','open_browser','launchTensorBoard','launchMLFlow']
 
 # In some cases, these basic types are shadowed by corresponding
 # top-level values.  The underscore variants let us refer to these
@@ -302,7 +302,7 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
             num = int(num)
         return '{0:,}'.format(num)
     elif isinstance(prev_value, Iterable) and len(prev_value) > 1:
-        if all([1.2 >= s >= 0.001 or -0.001 >= s >= -1.2 or s == 0 for s in prev_value]):
+        if value_type != 'loss' and all([1.2 >= s >= 0.001 or -0.001 >= s >= -1.2 or s == 0 for s in prev_value]):
             return '{0:.3%}'.format(num)
         elif len(prev_value) > 0:
             digit = int(np.array([builtins.abs(builtins.min(math.log10(builtins.abs(s)), 0)) + 3 if s != 0 else 0 for s in prev_value]).mean())
@@ -319,7 +319,7 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
     elif name is not None and len(name) >= 3 and (name.endswith('s')):
         return '{0:{1}}'.format(num, '.3f')
     else:
-        format_string = ',.3'
+        format_string = ',.3f'
         if value_type == 'metric':
             if math.modf(num)[0] == 0:
                 num = int(num)
@@ -330,7 +330,7 @@ def adaptive_format(num: numbers.Number, prev_value: Union[numbers.Number, Itera
                 return '{0:{1}}'.format(num, '.3f')
             else:
                 return '{0:{1}}'.format(num, '.3e')
-        elif value_type != 'loss':
+        elif value_type == 'loss':
             if 10000 >= num >= 0.001 or -0.001 >= num >= -10000 or num == 0:
                 return '{0:{1}}'.format(num, '.3f')
             else:
@@ -902,6 +902,21 @@ class AverageMeter(object):
         self.count += n
         self.avg = self.sum / self.count
 
+def compile_and_install_module(module_name: str, source_code: str) -> types.ModuleType:
+    """Compile source code and install it as a module.
+
+    End result is that `import <module_name>` and `from <module_name> import ...` should work.
+    """
+    module = types.ModuleType(module_name, "Module created from source code")
+
+    # Execute source in context of empty/fake module
+    exec(source_code, module.__dict__)
+
+    # Insert fake module into sys.modules. It's now a real module
+    sys.modules[module_name] = module
+
+    # Imports should work now
+    return import_module(module_name)
 
 def import_or_install(package_name: str, install_package_name: str = None) -> None:
     """Import [package_name] if possibile, or install [install_package_name] and then import it
@@ -1631,32 +1646,6 @@ def num_cpus():
         return os.cpu_count()
 
 
-def get_memory_profile(mode):
-    """
-    'all' means return memory for all gpus
-    'min_max' means return memory for max and min
-    :param mode:
-    :return:
-    """
-    memory_map = get_gpu_memory_map()
-
-    if mode == 'min_max':
-        min_mem = 1000000
-        min_k = None
-        max_mem = 0
-        max_k = None
-        for k, v in memory_map:
-            if v > max_mem:
-                max_mem = v
-                max_k = k
-            if v < min_mem:
-                min_mem = v
-                min_k = k
-
-        memory_map = {min_k: min_mem, max_k: max_mem}
-
-    return memory_map
-
 
 def get_gpu_memory_map():
     """Get the current gpu usage.
@@ -1684,12 +1673,40 @@ def get_gpu_memory_map():
             elif i == 1:
                 memory_map[k] =int(v)
             elif i == 3:
-                memory_map[k] =float(v)/100
+                memory_map[k] =float(v)
             elif i > 3:
                 memory_map[k] = float(v)
-        memory_map['memory usage'] =memory_map['memory.used [MiB]']/memory_map['memory.total [MiB]']
+            else:
+                memory_map[k] = v
+        memory_map['memory usage'] =memory_map[memory_map.key_list[-4]]/memory_map[memory_map.key_list[-2]]
         memory_map_list.append(memory_map)
     return memory_map_list
+
+def get_memory_profile(mode):
+    """
+    'all' means return memory for all gpus
+    'min_max' means return memory for max and min
+    :param mode:
+    :return:
+    """
+    memory_map = get_gpu_memory_map()
+
+    if mode == 'min_max':
+        min_mem = 1000000
+        min_k = None
+        max_mem = 0
+        max_k = None
+        for k, v in memory_map:
+            if v > max_mem:
+                max_mem = v
+                max_k = k
+            if v < min_mem:
+                min_mem = v
+                min_k = k
+
+        memory_map = {min_k: min_mem, max_k: max_mem}
+
+    return memory_map
 
 
 def map_function_arguments(params, params_dict, *args, **kwargs):
@@ -1784,9 +1801,9 @@ def blue_color(text, bolder=False):
 
 def cyan_color(text, bolder=False):
     if bolder:
-        return '\033[1;96m{0}\033[0m'.format(text)
+        return '\033[1;36m{0}\033[0m'.format(text)
     else:
-        return '\033[96m{0}\033[0;0m'.format(text)
+        return '\033[36m{0}\033[0;0m'.format(text)
 
 
 def yellow_color(text, bolder=False):
@@ -1808,6 +1825,20 @@ def gray_color(text, bolder=False):
         return u'\033[1;337m%s\033[0m' % text
     else:
         return '\033[37m {0}\033[0;0m'.format(text)
+
+def violet_color(text, bolder=False):
+    if bolder:
+        return u'\033[1;35m%s\033[0m' % text
+    else:
+        return '\033[35m {0}\033[0;0m'.format(text)
+
+
+def magenta_color(text, bolder=False):
+    if bolder:
+        return u'\033[1;35m%s\033[0m' % text
+    else:
+        return '\033[35m {0}\033[0;0m'.format(text)
+
 
 
 def get_args_spec(fn):

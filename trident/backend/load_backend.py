@@ -95,7 +95,7 @@ elif _session.backend == 'tensorflow':
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
         try:
-            tf.config.experimental.set_memory_growth(gpus[0], True)
+            tf.config.experimental.set_memory_growth(gpus[0], False)
             # tf.config.experimental.set_virtual_device_configuration(
             #     gpus[0],
             #     [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=1024 * 2)])
@@ -112,6 +112,7 @@ elif _session.backend == 'tensorflow':
             print(e)
 
     else:
+        os.environ.pop("CUDA_VISIBLE_DEVICES")
         set_session('device', '/cpu:0')
 
     from trident.backend.tensorflow_ops import *

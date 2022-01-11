@@ -113,7 +113,7 @@ def color2label2(color_label,palette):
 def color2label(color_label,palette):
     num_classes=len(palette)
     if color_label.ndim==3:
-        color_label=np.round(color_label/32).astype(np.int64)*32
+        #color_label=np.round(color_label/32).astype(np.int64)*32
         label_mask= np.zeros((color_label.shape[0], color_label.shape[1])).astype(np.int64)
         if isinstance(palette,list) and len(palette[0])==3:
             pass
@@ -136,12 +136,15 @@ def color2label(color_label,palette):
         return color_label
 
 
-def label2color(label_mask,palette):
-    items=np.unique(label_mask,return_index=True)
-    num_classes = len(items)
-    if num_classes==2:
-        palette=[[0,0,0],[255,255,255]]
+def label2color(label_mask,num_classes=None,palette=None):
+    if num_classes is None and palette is not None:
+        num_classes = len(palette)
+    if  num_classes is None :
+        label_mask=label_mask.max()
+
     if palette is None:
+        if num_classes == 2:
+            palette = [[0, 0, 0], [255, 255, 255]]
         palette=generate_palette(num_classes)
 
     color_label= np.zeros((*label_mask.shape,3)).astype(np.int64)

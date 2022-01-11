@@ -993,7 +993,7 @@ def exp(x:np.ndarray):
     return np.exp(x)
 
 
-def clip(x:np.ndarray, min=-np.inf, max=np.inf):
+def clip(x:np.ndarray, min=None, max=None):
     """
 
     Args:
@@ -1004,7 +1004,7 @@ def clip(x:np.ndarray, min=-np.inf, max=np.inf):
     Returns:
 
     """
-    return np.clip(x,min, max)
+    return np.clip(x,a_min=min,a_max=max)
 
 
 def sin(x:np.ndarray):

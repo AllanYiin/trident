@@ -537,7 +537,7 @@ class Ssd(Layer):
         """
         super(Ssd, self).__init__(name=name)
         self.base_filters = base_filters
-
+        self.softmax = SoftMax(axis=-1)
         idxes = []
         if isinstance(backbond, Sequential):
             for i in range(len(backbond._modules)):
@@ -658,10 +658,12 @@ class Ssd(Layer):
         confidence = self.classification_headers[i](x)
         confidence = confidence.permute(0, 2, 3, 1).contiguous()
         confidence = confidence.view(confidence.size(0), -1, self.num_classes)
+        confidence = self.softmax(confidence,-1)
 
         location = self.regression_headers[i](x)
         location = location.permute(0, 2, 3, 1).contiguous()
-        location = location.view(location.size(0), -1, 4)
+        num_batches = location.size(0)
+        location = location.view(num_batches, -1, self.num_regressors)
 
         return confidence, location
 
@@ -694,11 +696,14 @@ class Ssd(Layer):
         locations = torch.cat(locations, 1)
 
         if self.training:
-            return confidences, locations
-        else:
-            confidences = softmax(confidences, -1)
+            result = OrderedDict()
+            result['confidences'] = confidences
+            result['locations'] = locations.view(locations.size(0), -1, self.num_regressors)
+            return result
 
-            locations = decode(locations, self.priors, self.variance)
+        else:
+
+            # locations = decode(locations, self.priors, self.variance)
             return confidences, locations
 
 
@@ -707,9 +712,6 @@ class SsdDetectionModel(ImageDetectionModel):
         super(SsdDetectionModel, self).__init__(inputs, input_shape, output)
         self.preprocess_flow = []
         self.palette = OrderedDict()
-        with open('coco_classes.txt', 'r',
-                  encoding='utf-8-sig') as f:
-            self.class_names = [l.rstrip() for l in f]
 
         object.__setattr__(self, 'detection_threshold', 0.2)
         object.__setattr__(self, 'nms_threshold', 0.1)
@@ -743,7 +745,7 @@ class SsdDetectionModel(ImageDetectionModel):
         overlap_area = self.area_of(overlap_left_top, overlap_right_bottom)
         area0 = self.area_of(boxes0[..., :2], boxes0[..., 2:])
         area1 = self.area_of(boxes1[..., :2], boxes1[..., 2:])
-        return overlap_area / (area0 + area1 - overlap_area + eps)
+        return overlap_area / (area0 + area1 - overlap_area + eps),overlap_area, (area0 + area1 - overlap_area + eps)
 
     def hard_nms(self, box_scores, nms_threshold, top_k=-1, candidate_size=200):
         """
@@ -762,7 +764,7 @@ class SsdDetectionModel(ImageDetectionModel):
         boxes = box_scores[:, :4]
         picked = []
         # _, indexes = scores.sort(descending=True)
-        indexes = argsort(scores)
+        indexes = np.argsort(-scores)
         # indexes = indexes[:candidate_size]
         indexes = indexes[-candidate_size:]
         while len(indexes) > 0:
@@ -775,9 +777,10 @@ class SsdDetectionModel(ImageDetectionModel):
             # indexes = indexes[1:]
             indexes = indexes[:-1]
             rest_boxes = boxes[indexes, :]
-            iou = self.iou_of(rest_boxes, expand_dims(current_box, axis=0), )
-            indexes = indexes[iou <= nms_threshold]
+            iou, inter, union = self.iou_of(rest_boxes, expand_dims(current_box, axis=0), )
+            iot = inter / self.area_of(current_box[..., :2], current_box[..., 2:])
 
+            indexes = indexes[((iou <= nms_threshold) * (iot <= nms_threshold)).astype(np.bool)]
         return box_scores[picked, :], picked
 
     def nms(self, boxes, nms_threshold=0.3):
@@ -876,20 +879,20 @@ class SsdDetectionModel(ImageDetectionModel):
                     self.palette = generate_palette(confidence.shape[-1])
 
                 probs = 1 - confidence[:, 0]
-                label = argmax(confidence[:, 1:], -1) + 1
+                label = argmax(confidence[:, :], -1)
 
                 # mask = label > 0
                 # probs = probs[mask]
                 # label = label[mask]
                 # boxes = boxes[mask, :]
-                print(probs.max())
+                #print(probs.max())
                 mask = probs > self.detection_threshold
                 probs = probs[mask]
                 label = label[mask]
                 boxes = boxes[mask, :]
 
                 if boxes is not None and len(boxes) > 0:
-                    box_probs = concate([boxes.float(), label.reshape(-1, 1).float(), probs.reshape(-1, 1).float()], axis=1)
+                    box_probs = to_numpy(concate([boxes.float(), label.reshape(-1, 1).float(), probs.reshape(-1, 1).float()], axis=1))
                     if len(boxes) > 1:
                         box_probs, keep = self.hard_nms(box_probs, nms_threshold=self.nms_threshold, top_k=-1, )
 
@@ -918,12 +921,16 @@ class SsdDetectionModel(ImageDetectionModel):
                 labels = np.expand_dims(labels, 0)
             print(img, time.time() - start_time)
             pillow_img = array2image(rgb_image.copy())
-            for m in range(len(boxes)):
-                this_box = boxes[m]
-                this_label = labels[m]
-                thiscolor = tuple([int(c) for c in self.palette[int(this_label) - 1][:3]])
-                print(img, self.class_names[int(this_label) - 1], this_box, probs[m])
-                pillow_img = plot_bbox(this_box, pillow_img, thiscolor, self.class_names[int(this_label) - 1], line_thickness=2)
+
+            print(boxes,labels,flush=True)
+            if len(boxes)>0:
+                for m in range(len(boxes)):
+                    this_box = boxes[m]
+                    this_label = labels[m]
+                    if int(this_label) >0:
+                        thiscolor = tuple([int(c) for c in self.palette[int(this_label) - 1][:3]])
+                        print(img, self.class_names[int(this_label) - 1], this_box, probs[m],flush=True)
+                        pillow_img = plot_bbox(this_box, pillow_img, thiscolor, self.class_names[int(this_label) - 1] if self.class_names is not None else '', line_thickness=2)
             rgb_image = np.array(pillow_img.copy())
 
         return rgb_image, boxes, labels, probs

@@ -204,7 +204,7 @@ class Resize(VisionTransform):
             return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
         else:
 
-            resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+            resized_image =cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
             shp = list(int_shape(resized_image))
             shp[:2] = self.output_size
 

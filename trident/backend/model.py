@@ -21,6 +21,7 @@ import numpy as np
 from trident.backend.common import to_list, format_time, get_terminal_size, get_session, get_backend, \
     PrintException, OrderedDict, split_path, sanitize_path, adaptive_format,  cyan_color, get_class,camel2snake
 from trident.backend import dtype
+
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
 from trident import context
@@ -644,8 +645,7 @@ class ModelBase(object):
                         filtered_batch_metric_values).mean()
                     self.epoch_metric_history.collect(k, self.training_context['current_epoch'], filtered_batch_metric_values)
 
-        if self.training_context['is_print_epoch_progress']:
-            self.print_epoch_progress(self.training_context['print_epoch_progress_frequency'])
+
             # self.training_context['print_epoch_progress_frequency'] = 1
 
 
@@ -1092,8 +1092,8 @@ class ModelBase(object):
         return self
 
     def unfreeze_model_scheduling(self, frequency: int, unit='epoch', slice_from=None, slice_to=None, module_name=None):
-
-        self.callbacks.append(UnfreezeModelCallback(frequency, unit, slice_from, slice_to, module_name=module_name))
+        cb=get_class('UnfreezeModelCallback',['trident.callbacks'])
+        self.callbacks.append(cb(frequency, unit, slice_from, slice_to, module_name=module_name))
         return self
 
     def cpu(self):

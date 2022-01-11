@@ -364,7 +364,7 @@ class SoftMax(Layer):
             self.noise_intensity = 0.005
         if self.training:
             if self.add_noise == True:
-                noise = self.noise_intensity * tf.random.uniform(shape=x.get_shape(),minval=0.0,maxval=1.0,dtype=x.dtype)
+                noise = self.noise_intensity * tf.random.uniform(shape=x.get_shape(),minval=0.0,maxval=1.0,dtype=x.dtype).detach()
                 x = x + noise
             x = tf.math.log_softmax(x, self.axis)
         else:
@@ -600,14 +600,16 @@ class _ConvNd(Layer):
         self.separable = separable
         if self.separable == True:
             self.depthwise = True
-        self.register_parameter('weight', None)
-        self.register_parameter('bias', None)
+
 
 
 
 
         self.transposed = transposed
         self.use_bias = use_bias
+        self.register_parameter('weight', None)
+        if self.use_bias:
+            self.register_parameter('bias', None)
 
     def build(self, input_shape:TensorShape):
         if self._built == False:

@@ -57,7 +57,13 @@ class ImageDataProvider(object):
         self.__name__ = dataset_name
         self.uuid = uuid.uuid4().node
         self.traindata = traindata
+        if isinstance( self.traindata,Iterator):
+            self.traindata.parent=self
+
         self.testdata = testdata
+        if isinstance( self.testdata,Iterator):
+            self.testdata.parent=self
+
         self.annotations = {}
 
         self.scenario = 'train'
@@ -148,6 +154,7 @@ class ImageDataProvider(object):
         value=[] if value is None else value
         self._image_transform_funcs = value
         if self.traindata is not None and hasattr(self.traindata.data, 'transform_funcs'):
+            self.traindata._is_signature_update=False
             dss = self.traindata.get_datasets()
             for ds in dss:
                 if isinstance(ds, ImageDataset):
@@ -169,7 +176,6 @@ class ImageDataProvider(object):
                     for t in list(range(len(value)))[::-1]:
                         if isinstance(value[t], Transform) and hasattr(value[t], 'is_spatial') and value[t].is_spatial:
                             ds.transform_funcs.insert(0, value[t])
-
 
     def image_transform(self, img_data):
         if img_data.ndim == 4:
@@ -240,9 +246,11 @@ class ImageDataProvider(object):
 
         if self.traindata is not None and hasattr(self.traindata, 'paired_transform_funcs'):
             self.traindata.paired_transform_funcs =value
+            self.traindata._is_signature_update = False
 
         if self.testdata is not None and hasattr(self.testdata, 'paired_transform_funcs'):
             self.testdata.paired_transform_funcs = value
+            self.testdata._is_signature_update = False
 
 
     @property

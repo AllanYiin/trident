@@ -38,7 +38,16 @@ _valid_when=["on_training_start"
  ,"on_progress_end"
 ,"on_excution_exception"
  ,"on_model_saving_start"
- ,"on_model_saving_end"]
+ ,"on_model_saving_end"
+,"on_get_observation_start"
+,"on_get_observation_end"
+,"on_select_action_start"
+,"on_select_action_end"
+,"on_get_rewards_start"
+,"do_on_get_rewards_end"
+
+
+             ]
 
 class CallbackBase(ABC):
     """
@@ -304,7 +313,25 @@ class CallbackBase(ABC):
 
         pass
 
+    def on_get_observation_start(self, training_context):
+        pass
 
+    def on_get_observation_end(self, training_context):
+        pass
+
+    def on_select_action_start(self, training_context):
+        pass
+
+    def on_select_action_end(self, training_context):
+        pass
+
+    def on_get_rewards_start(self, training_context):
+        pass
+
+    def on_get_rewards_end(self, training_context):
+        pass
+
+    
 
 class LambdaCallback(CallbackBase):
     """

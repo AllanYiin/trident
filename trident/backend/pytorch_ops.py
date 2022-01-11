@@ -107,7 +107,7 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'index_select', 'scatter_add', 'scatter_sub', 'scatter_max', 'scatter_min', 'gram_matrix', 'set_seed',
            'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like',
-           'multinomial', 'random_bernoulli', 'get_rotation_matrix2d', 'warp_affine', 'binary_cross_entropy',
+           'multinomial', 'random_bernoulli', 'binary_cross_entropy',
            'rgb2xyz', 'rgb2hsv', 'rgb2lab', 'rgb2gray', 'xyz2lab', 'xyz2rgb', 'lab2xyz', 'lab2rgb', 'bbox_iou',
            'bbox_giou', 'bbox_ciou', 'bbox_diou']
 

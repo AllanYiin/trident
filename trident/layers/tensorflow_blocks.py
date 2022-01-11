@@ -118,6 +118,43 @@ class FullConnect_Block(Layer):
             x = F.dropout(x, p=self.dropout_rate, training=self.training)
         return x
 
+    def fuse(self):
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_fc = deepcopy(self.fc)
+            if self.sequence_rank == 'fna' or self.sequence_rank == 'afn':
+                bn_rv = self.norm.running_var.value().copy()
+                bn_rm = self.norm.running_mean.value().copy()
+                bn_eps = self.norm.eps
+                bn_w = self.norm.weight.value().copy() if self.norm.affine else ones_like(bn_rm)
+                bn_b = self.norm.bias.value().copy() if self.norm.affine else zeros_like(bn_rm)
+                bn_scale = bn_w / tf.sqrt(bn_rv + bn_eps)
+                fc_w = self.fc.weight.value().copy()
+                fc_b = self.fc.bias.value().copy() if self.fc.use_bias else zeros_like(bn_rm)
+
+                fused_w = expand_dims(fc_w * bn_scale,-1)
+                fused_b = (fc_b - bn_rm) * bn_scale + bn_b
+                shadow_fc.weight.assign(fused_w)
+                shadow_fc.use_bias=True
+                shadow_fc.bias = Parameter(vafused_b)
+
+                # test fusion effect
+                dummy_input = random_normal([2] + self.input_shape.dims[1:], dtype=self.fc.weight.dtype).cuda()
+                result1 = self.forward(dummy_input.copy())
+                result2 = shadow_fc.forward(dummy_input.copy())
+                if self.activation is not None:
+                    result2 = self.activation(result2)
+                diff = to_numpy((result1 - result2).abs())
+                ctx.print('diff', diff.mean(), diff.max())
+                if diff.mean() < 1e-7 and diff.max() < 1e-5:
+                    self.fc.weight.assign(fused_w)
+                    self.fc.use_bias = True
+                    self.fc.bias = Parameter(fused_b)
+                    del self._modules['norm']
+                    del dummy_input
+                    del result1
+                    del result2
+                    del shadow_fc
+
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -283,6 +320,50 @@ class Conv2d_Block(Layer):
         if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
+    
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
+
+            if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
+                # sequential
+                # y1 = x * w1 + b1  # linear
+                # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
+
+                # # replace y1
+                # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                bn_rv=self.norm.running_var.value().copy()
+                bn_rm=self.norm.running_mean.value().copy()
+                bn_eps=self.norm.eps
+                conv_w=self.conv.weight.value().copy()
+                conv_b = self.conv.bias.value().copy() if self.conv.use_bias else zeros_like(bn_rm)
+                bn_w=self.norm.weight.value().copy() if self.norm.affine else ones_like(bn_rm)
+                bn_b = self.norm.bias.value().copy() if self.norm.affine else zeros_like(bn_rm)
+                bn_var_rsqrt = 1/tf.sqrt(bn_rv + bn_eps)
+
+                conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape( [1] * (len(conv_w.shape) - 1)+[-1])
+                conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                shadow_conv.weight.assign(conv_w)
+                shadow_conv.use_bias=True
+                shadow_conv.bias=Parameter(conv_b)
+                #test fusion effect
+                dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                result1=self.forward(dummy_input.copy())
+                result2=shadow_conv.forward(dummy_input.copy())
+                if self.activation is not None:
+                    result2=self.activation(result2)
+                diff=to_numpy((result1-result2).abs())
+                ctx.print('diff',diff.mean(),diff.max())
+                if diff.mean()<1e-6 and diff.max()<1e-5:
+                    self.conv.weight.assign(conv_w)
+                    self.conv.use_bias =True
+                    self.conv.bias = Parameter(conv_b)
+                    del self._modules['norm']
+                    del dummy_input
+                    del result1
+                    del result2
+                    del shadow_conv
 
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
@@ -413,72 +494,6 @@ class TransConv3d_Block(Layer):
         return s.format(**self.__dict__)
 
 
-class DepthwiseConv2d_Block1(Layer):
-    def __init__(self, kernel_size=(3, 3), depth_multiplier=None, strides=1, auto_pad=True, padding_mode='zero', activation=None, normalization=None, use_spectral=False,
-                 use_bias=False, dilation=1, groups=1, add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, sequence_rank='cna', **kwargs):
-        super(DepthwiseConv2d_Block, self).__init__()
-        super().__init__(name, **kwargs)
-        if sequence_rank in ['cna', 'nac']:
-            self.sequence_rank = sequence_rank
-        self.kernel_size = kernel_size
-        self.strides = strides
-        self.auto_pad = auto_pad
-
-        self.use_bias = use_bias
-        self.dilation = dilation
-        self.groups = groups
-
-        self.add_noise = add_noise
-        self.noise_intensity = noise_intensity
-        self.dropout_rate = dropout_rate
-        self.depth_multiplier = depth_multiplier
-        self.use_spectral = use_spectral
-        if not self.use_spectral:
-            self.conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
-                                        auto_pad=self.auto_pad, activation=None,
-                                        use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
-            self.norm = get_normalization(normalization)
-            self.conv = None
-        self.activation = get_activation(activation)
-        self.droupout = None
-
-    def build(self, input_shape:TensorShape):
-        if self._built == False:
-            conv = DepthwiseConv2d(kernel_size=self.kernel_size, depth_multiplier=self.depth_multiplier, strides=self.strides,
-                                   auto_pad=self.auto_pad, activation=None,
-                                   use_bias=self.use_bias, dilation=self.dilation, groups=self.groups, name=self._name)
-            # conv.input_shape = input_shape
-
-            if self.use_spectral:
-                # self.conv = nn.utils.spectral_norm(conv)
-                self.norm = None
-            else:
-                self.conv = conv
-            self._built = True
-
-
-    def forward(self, x, **kwargs):
-        if self.training and self.add_noise == True:
-            noise = self.noise_intensity * tf.random.normal(shape=x.shape, mean=0, stddev=1,dtype=x.dtype)
-            x += noise
-        x = self.conv(x)
-        if self.norm is not None:
-            x = self.norm(x)
-        if self.activation is not None:
-            x = self.activation(x)
-        if self.training and self.dropout_rate > 0:
-            x = tf.nn.dropout(x, rate=self.dropout_rate)
-        return x
-
-    def extra_repr(self):
-        s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
-        if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
-            if inspect.isfunction(self.__dict__['activation']):
-                s += ', activation={0}'.format(self.__dict__['activation'].__name__)
-            elif isinstance(self.__dict__['activation'], Layer):
-                s += ', activation={0}'.format(self.__dict__['activation']).__repr__()
-        return s.format(**self.__dict__)
-
 
 class DepthwiseConv2d_Block(Layer):
     def __init__(self, kernel_size=(3, 3), depth_multiplier=1, strides=1, auto_pad=True, padding=None, padding_mode='zero',
@@ -540,6 +555,53 @@ class DepthwiseConv2d_Block(Layer):
         if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
+
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
+
+            if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
+                # sequential
+                # y1 = x * w1 + b1  # linear
+                # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
+
+                # # replace y1
+                # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                bn_rv=self.norm.running_var.value().copy()
+                bn_rm=self.norm.running_mean.value().copy()
+                bn_eps=self.norm.eps
+                conv_w=self.conv.weight.value().copy()
+                conv_b = self.conv.bias.value().copy() if self.conv.use_bias else zeros_like(bn_rm)
+                bn_w=self.norm.weight.value().copy() if self.norm.affine else ones_like(bn_rm)
+                bn_b = self.norm.bias.value().copy() if self.norm.affine else zeros_like(bn_rm)
+                bn_var_rsqrt = 1/tf.sqrt(bn_rv + bn_eps)
+
+                conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 2)+[-1] )
+                conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                shadow_conv.weight.assign(conv_w)
+                shadow_conv.use_bias=True
+                shadow_conv.bias=Parameter(conv_b)
+                #test fusion effect
+                dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                result1=self.forward(dummy_input.copy())
+                result2=shadow_conv.forward(dummy_input.copy())
+                if self.activation is not None:
+                    result2=self.activation(result2)
+                diff=to_numpy((result1-result2).abs())
+                ctx.print('diff', diff.mean(), diff.max())
+                if diff.mean()<1e-6 and diff.max()<1e-5:
+                    self.conv.weight.assign(conv_w)
+                    self.conv.use_bias =True
+                    self.conv.bias = Parameter(conv_b)
+                    del self._modules['norm']
+                else:
+                    ctx.print('diff',diff.mean(),diff.max())
+                del dummy_input
+                del result1
+                del result2
+                del shadow_conv
+
 
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
@@ -606,6 +668,50 @@ class SeparableConv2d_Block(Layer):
         if self.training and self.dropout_rate > 0:
             x = tf.nn.dropout(x, rate=self.dropout_rate)
         return x
+    
+    def fuse(self):
+
+        if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
+            shadow_conv=deepcopy(self.conv)
+            with torch.no_grad():
+                if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
+                    # sequential
+                    # y1 = x * w1 + b1  # linear
+                    # y2 = (y1 - running_mean) / sqrt(running_var + eps) * gamma + beta  # batchnorm
+
+                    # # replace y1
+                    # y2 = (x * w1 + b1 - running_mean) / sqrt(running_var + eps) * gamma + beta
+                    bn_rv=self.norm.running_var.value().copy()
+                    bn_rm=self.norm.running_mean.value().copy()
+                    bn_eps=self.norm.eps
+                    conv_w=self.conv.pointwise.value().copy()
+                    conv_b = self.conv.bias.value().copy() if self.conv.use_bias else zeros_like(bn_rm)
+                    bn_w=self.norm.weight.value().copy() if self.norm.affine else ones_like(bn_rm)
+                    bn_b = self.norm.bias.value().copy() if self.norm.affine else zeros_like(bn_rm)
+                    bn_var_rsqrt =1/tf.sqrt(bn_rv + bn_eps)
+
+                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
+                    conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
+                    shadow_conv.pointwise.assign(conv_w)
+                    shadow_conv.use_bias=True
+                    shadow_conv.bias=Parameter(conv_b)
+                    #test fusion effect
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    result1=self.forward(dummy_input.copy())
+                    result2=shadow_conv.forward(dummy_input.copy())
+                    if self.activation is not None:
+                        result2=self.activation(result2)
+                    diff=to_numpy((result1-result2).abs())
+                    ctx.print('diff',diff.mean(),diff.max())
+                    if diff.mean()<1e-6 and diff.max()<1e-5:
+                        self.conv.weight.assign(conv_w)
+                        self.conv.use_bias =True
+                        self.conv.bias = Parameter(conv_b)
+                        del self._modules['norm']
+                        del dummy_input
+                        del result1
+                        del result2
+                        del shadow_conv
 
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'

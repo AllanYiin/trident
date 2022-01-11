@@ -80,9 +80,9 @@ class VisionTransform(Transform):
         _apply_*() methods, otherwise ``NotImplementedError`` will be raised.
     """
 
-    def __init__(self, name=None):
+    def __init__(self, keep_prob=0,name=None):
         super().__init__(name=name)
-        self.output_size=None
+        self.keep_prob=keep_prob
         self._shape_info = None
 
 
@@ -159,10 +159,10 @@ class VisionTransform(Transform):
 
 
     def _apply_image(self, image,spec:TensorSpec):
-        raise NotImplementedError
+        return image
 
     def _apply_coords(self, coords,spec:TensorSpec):
-        raise NotImplementedError
+        return coords
 
     def _apply_boxes(self, boxes,spec:TensorSpec):
         if isinstance( self.output_size,numbers.Number):
@@ -203,7 +203,7 @@ class VisionTransform(Transform):
             return trans_boxes
 
     def _apply_mask(self, mask,spec:TensorSpec):
-        raise NotImplementedError
+        return mask
 
     def _apply_keypoints(self, keypoints,spec:TensorSpec):
         coords, visibility = keypoints[..., :2], keypoints[..., 2:]

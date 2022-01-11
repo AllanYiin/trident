@@ -7,7 +7,7 @@ import platform
 from collections import OrderedDict
 import numpy as np
 import locale
-
+from functools import partial
 
 _trident_context=None
 
@@ -193,7 +193,7 @@ class _Context:
         self._module_dict = dict()
         self.trident_dir = self._get_trident_dir()
         self.backend =None
-        self.print=print
+        self.print=partial(print,flush=True)
         site_packages=get_sitepackages()
 
         self.is_tensorboard_available=False
