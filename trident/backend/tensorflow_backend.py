@@ -27,7 +27,10 @@ from typing import Union, Tuple, Any, Callable, Iterator, Set, Optional, overloa
 import typing
 import numpy as np
 import tensorflow as tf
-from tensorflow.python import enable_eager_execution
+#from tensorflow.python import enable_eager_execution
+
+tf.executing_eagerly()
+
 from tensorflow.python.eager import context
 from tensorflow.python.framework import func_graph, ops
 
@@ -126,14 +129,16 @@ base_version = LooseVersion(vstring='2.2.0-rc0')
 if tf_version.version < base_version.version:
     raise ValueError('trident only support Tensorflow 2.2.0-rc0 or newer.\n')
 
-sys.stdout.write('use device:{0}.\n'.format(get_device()))
-
 try:
-    enable_eager_execution()
+
     tf.executing_eagerly()
     sys.stdout.write('executing_eagerly\n')
 except Exception as e:
     sys.stdout.write('executing_eagerly fail. {0}\n'.format(e))
+
+
+sys.stdout.write('use device:{0}.\n'.format(get_device()))
+
 
 
 def load(path):

@@ -38,7 +38,7 @@ __all__ = ['Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tenso
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_cross_entropy']
 
 ctx=get_session()
-Tensor=tf.Tensor
+Tensor=EagerTensor
 CompositeTensor=composite_tensor.CompositeTensor
 FLOAT32MAX=np.finfo(float).max
 FLOAT32MIN=np.finfo(float).min
@@ -132,8 +132,11 @@ def _get_device():
     return get_session().device
 
 
-def detach(x:EagerTensor):
-    return x._copy_nograd()
+def detach(x:Tensor):
+    if isinstance(x,EagerTensor):
+        return x._copy_nograd()
+    elif isinstance(x,tf.Tensor):
+        return   tf.stop_gradient(x)
 
 
 def is_tensor(x):
@@ -1384,7 +1387,7 @@ def sqrt(x: Tensor):
 
     """
 
-    return tf.math.sqrt(tf.clip_by_value(x,clip_value_min=0,clip_value_max=np.inf))
+    return tf.math.sqrt(x)
 
 @numpy_compatible
 def rsqrt(x: Tensor):
@@ -4574,10 +4577,10 @@ _FUN_NAMES = [
     ('random_normal_like', random_normal_like)
     ]
 for target_fun_name,source_fun in _FUN_NAMES:
-    if not hasattr(Tensor,target_fun_name):
-        setattr(Tensor, target_fun_name, source_fun)
+    if not hasattr(tf.Tensor,target_fun_name):
+        setattr(tf.Tensor, target_fun_name, source_fun)
     elif target_fun_name in ["to","float","int","long","sum","mean"]:
-        setattr(Tensor, target_fun_name, source_fun)
+        setattr(tf.Tensor, target_fun_name, source_fun)
 del _FUN_NAMES
 
 
