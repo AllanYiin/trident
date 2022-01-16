@@ -37,7 +37,7 @@ from trident.optims.losses import Loss,_check_logsoftmax_logit,_check_logit
 
 _device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 __all__ = ['_ClassificationLoss', 'MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss', 'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
-           'ExponentialLoss', 'ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss', 'WingLoss', 'AdaptiveWingLoss','KLDivergenceLoss',
+           'ExponentialLoss', 'ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss','ActiveContourLoss', 'WingLoss', 'AdaptiveWingLoss','KLDivergenceLoss',
            'IoULoss', 'FocalLoss', 'SoftIoULoss', 'CenterLoss', 'TripletLoss', 'TripletMarginLoss',
            'LovaszSoftmax', 'PerceptionLoss', 'EdgeLoss', 'TransformInvariantLoss', 'get_loss']
 
@@ -262,22 +262,18 @@ class _ClassificationLoss(Loss):
         #print(2, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
         # check num_clases
         self.is_target_onehot = None
+        self.from_logits= None
         if len(output) == 0:
             return to_tensor(0.0)
 
         if output.max()>0 or self.is_logsoftmax is None or not self.is_logsoftmax:
-            if reduce_min(output) >= 0 :
+            if reduce_max(output) >=0 :
                 self.is_logsoftmax = False
-                sum_output=reduce_sum(output,axis=self.axis,keepdims=True)
-                if reduce_max(output) > 1:
-                    self.from_logits = False
-                elif reduce_max(abs(sum_output-1))<1e-2:
+                if _check_logit(output,self.axis):
                     self.from_logits = True
+                    output = clip(output, min=1e-7, max=1)
                 else:
                     self.from_logits = False
-
-                output = clip(output, min=1e-7, max=1)
-
             elif  _check_logsoftmax_logit(output,self.axis):
                 self.is_logsoftmax = True
                 self.from_logits = True
@@ -675,7 +671,7 @@ class CrossEntropyLoss(_ClassificationLoss):
             #gather_unbalance_weight=unbalance_weight.gather(1,target.unsqueeze(-1))
             #gather_unbalance_weight=torch.index_select(sample_weight, -1, target.reshape((-1))).reshape(target_shape).unsqueeze(1).detach()
 
-            if not self.is_logsoftmax and reduce_min(output)>=0:
+            if not self.is_logsoftmax  or  not self.from_logits:
                 output=clip(log_softmax(output, axis=self.axis), min=-12, max=0)
             target = target.detach()
             sample_weight=sample_weight.detach()
@@ -689,8 +685,10 @@ class CrossEntropyLoss(_ClassificationLoss):
                     unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),pow(1 -  clip(unbalance_weight, min=1e-7),3.5))
                     sample_weight=unbalance_weight
 
-            if self.is_logsoftmax and  reduce_min(output)<=0:
+            if self.is_logsoftmax :
                 output=clip(exp(output), min=1e-7, max=1)
+            elif not self.from_logits:
+                output=softmax(output)
 
             new_shape=[1]*ndim(output)
             new_shape[1]=int_shape(output)[1]
@@ -1168,6 +1166,117 @@ class DiceLoss(_ClassificationLoss):
 
         dice = (2.0 * intersection*sample_weight + self.smooth) / (den1*sample_weight +den2*sample_weight + self.smooth)
         return 1.0-dice
+
+
+
+
+
+        #dice = (2.0 * intersection.sum(1) + self.smooth)/(den1.sum(1) + den2.sum(1) + self.smooth)
+
+        # if output.shape[1]==2:
+        #     dice =  (2.0 * (intersection * sample_weight[:,1:].sum(1) )+ self.smooth) / clip(den1[:,1:].sum(1) + den2[:,1:].sum(1) + self.smooth,min=1e-7)
+        # else:
+        #
+        #     dice =  torch.div((2.0 * (intersection * sample_weight).sum(1) + self.smooth) , clip(den1.sum(1) + den2.sum(1) + self.smooth,min=1e-7))
+
+        # if any_abnormal_number(den2):
+        #     print('{0} after dice {1}'.format(self.name,dice))
+
+        #return 1.0 -dice
+
+class ActiveContourLoss(_ClassificationLoss):
+    r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
+
+    It is useful when training a classification problem with `C` classes.
+    If provided, the optional argument :attr:`weight` should be a 1D `Tensor`
+    assigning weight to each of the classes.
+    This is particularly useful when you have an unbalanced training set.
+
+    Args:
+        axis (int): the position where the classes is.
+        sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
+        number of classes.
+        from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
+        ignore_index (int or list of int):
+        cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
+        less than 1..
+        label_smooth (bool): Should use label smoothing?
+        reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
+            'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
+            summation them.
+
+    Examples:
+    >>> output=zeros((1,3,128,128))
+    >>> output[0,1,32:64,48:92]=1
+    >>> output[0,2,12:32,56:64]=1
+    >>> target=zeros((1,128,128)).long()
+    >>> target[0,33:63,50:9]=1
+    >>> target[0,13:35,52:65]=2
+    >>> DiceLoss(reduction='mean')(output,target).cpu()
+    tensor(0.8271)
+    >>> DiceLoss(ignore_index=0,reduction='mean')(output,target).cpu()
+    tensor(0.9829)
+
+
+
+    Reference:
+        cvpr2019 paper "Learning Active Contour Models for Medical Image Segmentation" by Chen, Xu, et al.
+        https://github.com/xuuuuuuchen/Active-Contour-Loss
+
+
+    """
+
+    def __init__(self, lambdaP=1, mu=1,axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100, cutoff=None, label_smooth=False, reduction='mean',
+                 enable_ohem=False, ohem_ratio=3.5,  input_names=None, output_names=None,name='ActiveContourLoss'):
+        """
+        Args:
+            axis (int): the axis where the class label is.
+            sample_weight ():
+            from_logits ():
+            ignore_index ():
+            cutoff ():
+            label_smooth ():
+            reduction (string):
+            name (stringf):
+        """
+
+        super().__init__(axis=axis, sample_weight=sample_weight, auto_balance=auto_balance, from_logits=from_logits, ignore_index=ignore_index, cutoff=cutoff,
+                         label_smooth=label_smooth, reduction=reduction, enable_ohem=enable_ohem, ohem_ratio=ohem_ratio ,  input_names=input_names, output_names=output_names, name=name)
+        self.lambdaP = lambdaP
+        self.mu=mu
+        self.is_logsoftmax =None
+        self.need_target_onehot = True
+        self.is_multiselection = False
+
+    def flatten_check(self, output, target):
+        return output, target
+
+    def calculate_loss(self, output, target, **kwargs):
+        B,C,H,W=output.shape
+        """
+        lenth term
+        """
+
+        x = output[:,:,1:,:] - output[:,:,:-1,:] # horizontal gradient (B, C, H-1, W)
+        y = output[:,:,:,1:] - output[:,:,:,:-1]# vertical gradient   (B, C, H,   W-1)
+        delta_x = x[:,:,1:,:-2]**2 # (B, C, H-2, W-2)
+        delta_y = y[:,:,:-2,1:]**2# (B, C, H-2, W-2)
+        delta_u = abs(delta_x + delta_y)
+
+        lenth = reduce_mean((delta_u + 0.00000001).sqrt()) # equ.(11) in the paper
+
+        """
+        region term
+        """
+
+        C_1 = ones((H, W))
+        C_2 = zeros((H, W))
+
+        region_in = abs(mean( output * ((target - C_1)**2) ) ) # equ.(12) in the paper
+        region_out = abs(mean( (1-output) * ((target - C_2)**2) )) # equ.(12) in the paper
+
+
+        return lenth + self.lambdaP * (self.mu * region_in + region_out)
 
 
 
