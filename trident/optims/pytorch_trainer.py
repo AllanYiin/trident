@@ -251,7 +251,7 @@ class Model(model.ModelBase):
                 out = output(*dummay_input)
 
             self._model = output
-            # self._model.input_spec=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
+            # self._model.signature.inputs.value_list[0]=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
 
             if is_tensor(out) and len(output._signature.outputs) == 1:
                 output._signature.outputs[output._signature.outputs.key_list[0]].shape = tensor_to_shape(out)
@@ -899,9 +899,7 @@ class Model(model.ModelBase):
     def do_gradient_update(self, log_gradients=False):
         try:
             accumulate_grads = (self.training_context['steps']+1) % self.accumulation_steps != 0
-            need_backward = self.training_context['stop_update'] == 0 or (
-                        0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
-                    'stop_update'])
+            need_backward = self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update'])
             is_layer = isinstance(self._model, (Layer, nn.Module))
 
             if is_layer:
@@ -918,16 +916,20 @@ class Model(model.ModelBase):
                     (self.training_context['current_loss'] / self.accumulation_steps).backward(
                         retain_graph=self.training_context['retain_graph'])
 
-                # only check once every epoch start.
-                if is_layer and self.grad_clipping_by_norm:
 
-                    if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                        torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
-
-                    else:
-                        torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
                 if not accumulate_grads:
+                    # only check once every epoch start.
+                    if is_layer and self.grad_clipping_by_norm:
+
+                        if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
+                            torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
+
+                        else:
+                            torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
+
+
+
                     super().on_optimization_step_start()
 
                     if log_gradients:
@@ -1732,10 +1734,12 @@ class ImageClassificationModel(Model):
 
     @class_names.setter
     def class_names(self, value):
-        if self._class_names is not None and self._class_names != value:
+        if self._class_names is None or  self._class_names != value:
             self._class_names = value
             self._lab2idx = {v: k for k, v in enumerate(self._class_names)}
             self._idx2lab = {k: v for k, v in enumerate(self._class_names)}
+
+
 
     def index2label(self, idx: int):
         if self._idx2lab is None or len(self._idx2lab.items()) == 0:
@@ -1754,7 +1758,7 @@ class ImageClassificationModel(Model):
             return self._lab2idx[label]
 
     def infer_single_image(self, img, topk=1):
-        if isinstance(self._model, Layer) and self._model.built:
+        if  (isinstance(self._model, nn.Module) and (not hasattr(self._model,'built') or self._model.built) ):
             self._model.eval()
             img = image2array(img)
             if img.shape[-1] == 4:
@@ -1764,7 +1768,7 @@ class ImageClassificationModel(Model):
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -1811,7 +1815,7 @@ class ImageRegressionModel(Model):
             rescale_scale = 1.0
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
                             isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1851,7 +1855,7 @@ class ImageDetectionModel(Model):
             rescale_scale = 1
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
                             isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -1928,7 +1932,7 @@ class ImageSegmentationModel(Model):
                 self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(
                 torch.device("cuda" if self._model.weights[0].data.is_cuda else "cpu")).to(
@@ -1970,7 +1974,7 @@ class ImageGenerationModel(Model):
             rescale_scale = 1.0
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
                             isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -2014,7 +2018,7 @@ class FaceLandmarkModel(Model):
             img_shape = int_shape(img)
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
                             isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
@@ -2059,7 +2063,7 @@ class FaceRecognitionModel(Model):
             rescale_scale = 1.0
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
-                    img = func(img, spec=self._model.input_spec)
+                    img = func(img, spec=self._model.signature.inputs.value_list[0])
                     if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
                             isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
