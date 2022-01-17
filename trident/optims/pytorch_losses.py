@@ -1184,6 +1184,9 @@ class DiceLoss(_ClassificationLoss):
 
         #return 1.0 -dice
 
+
+
+
 class ActiveContourLoss(_ClassificationLoss):
     r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
 
@@ -1251,49 +1254,60 @@ class ActiveContourLoss(_ClassificationLoss):
     def flatten_check(self, output, target):
         return output, target
 
+
     def calculate_loss(self, output, target, **kwargs):
         B,C,H,W=output.shape
+        if self.is_logsoftmax:
+            output=exp(output)
+
+        unbalance_weight = ones([self.num_classes]).to(_float_dtype)
+        if self.auto_balance and self.label_statistics is not None:
+            if self.num_classes == len(self.label_statistics):
+                unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
+                unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),
+                                         pow(1 - clip(unbalance_weight, min=1e-7), 3.5))
+                sample_weight = unbalance_weight
+
+        sample_weight = expand_dims(sample_weight, 0)
+
+        target=target.detach().to(output.dtype)
         """
         lenth term
         """
 
-        x = output[:,:,1:,:] - output[:,:,:-1,:] # horizontal gradient (B, C, H-1, W)
-        y = output[:,:,:,1:] - output[:,:,:,:-1]# vertical gradient   (B, C, H,   W-1)
-        delta_x = x[:,:,1:,:-2]**2 # (B, C, H-2, W-2)
-        delta_y = y[:,:,:-2,1:]**2# (B, C, H-2, W-2)
-        delta_u = abs(delta_x + delta_y)
 
-        lenth = reduce_mean((delta_u + 0.00000001).sqrt()) # equ.(11) in the paper
+        oy = output[:, :, 1:, :] - output[:, :, :-1, :]  # horizontal and vertical directions
+        ox = output[:, :, :, 1:] - output[:, :, :, :-1]
+        output_grad = sqrt(oy[:, :, 1:, :-2] ** 2 + ox[:, :, :-2, 1:] ** 2 + 0.00000001)
+
 
         """
         region term
         """
+        # ty = target[:, :, 1:, :] - target[:, :, :-1, :]  # horizontal and vertical directions
+        # tx = target[:, :, :, 1:] - target[:, :, :, :-1]
+        # target_grad=sqrt(ty[:, :, 1:, :-2] ** 2 + tx[:, :, :-2, 1:] ** 2 + 0.00000001).detach()
 
-        C_1 = ones((H, W))
-        C_2 = zeros((H, W))
-
-        region_in = abs(mean( output * ((target - C_1)**2) ) ) # equ.(12) in the paper
-        region_out = abs(mean( (1-output) * ((target - C_2)**2) )) # equ.(12) in the paper
-
-
-        return lenth + self.lambdaP * (self.mu * region_in + region_out)
-
-
-
-
-
-        #dice = (2.0 * intersection.sum(1) + self.smooth)/(den1.sum(1) + den2.sum(1) + self.smooth)
-
-        # if output.shape[1]==2:
-        #     dice =  (2.0 * (intersection * sample_weight[:,1:].sum(1) )+ self.smooth) / clip(den1[:,1:].sum(1) + den2[:,1:].sum(1) + self.smooth,min=1e-7)
-        # else:
+        # c_in =  torch.ones_like(target_grad).to(output.dtype)
+        # c_out =torch.zeros_like(target_grad).to(output.dtype)
+        # region_in = torch.abs(torch.mean(output_grad * ((c_in-target_grad) ** 2), dim=(2, 3)))
+        # region_out = torch.abs(torch.mean((1 - output_grad) * ((target_grad - c_out) ** 2), dim=(2, 3)))
         #
-        #     dice =  torch.div((2.0 * (intersection * sample_weight).sum(1) + self.smooth) , clip(den1.sum(1) + den2.sum(1) + self.smooth,min=1e-7))
+        c_in =  torch.ones_like(target).to(output.dtype).detach()
+        c_out =torch.zeros_like(target).to(output.dtype).detach()
+        region_in = torch.abs(torch.mean(output * ((c_in-target) ** 2), dim=(2, 3)))
+        region_out = torch.abs(torch.mean((1 - output) * ((target - c_out) ** 2), dim=(2, 3)))
 
-        # if any_abnormal_number(den2):
-        #     print('{0} after dice {1}'.format(self.name,dice))
+        length = reduce_mean(output_grad, axis=(2, 3))*sample_weight
+        region=(region_in + region_out)*sample_weight
 
-        #return 1.0 -dice
+        return (length +self.lambdaP*region).sum(-1)
+
+
+
+
+
+
 
 
 
