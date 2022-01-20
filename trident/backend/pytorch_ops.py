@@ -286,10 +286,12 @@ def to_numpy(*x) -> np.ndarray:
         return np.array(x)
     elif isinstance(x, tuple):
         return np.array(list(x))
+    elif isinstance(x, bool):
+        return np.array([int(x)]).astype(np.bool)
     elif isinstance(x, numbers.Number):
         return np.asarray([x])
     else:
-        raise ValueError("Unsupported type")
+        raise ValueError("Unsupported type: {0}".format(x.__class__.__name__))
 
 
 def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
@@ -322,7 +324,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     if is_tpu_available() and (device == 'tpu' or device is None):
         import torch_xla.core.xla_model as xm
         device = xm.xla_device()
-    input_dtype = dtype
+    #input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
     elif dtype is None and not is_tensor(x) and isinstance(x, collections.Iterable) and all(
@@ -337,8 +339,8 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
 
     if isinstance(x, Tensor):
         if x is not None:
-            dtype =None
-            if input_dtype is None:
+            #dtype =None
+            if dtype is None:
                 dtype = x.dtype
             else:
                 x = x.type(dtype)
@@ -844,7 +846,7 @@ def less(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dtype=N
     if dtype is None:
         dtype = Dtype.bool
     right = to_tensor(right, dtype=left.dtype, device=left.device)
-    return cast(left.lt(right), cast_dtype=dtype)
+    return left.lt(right).to(dtype)
 
 
 @numpy_compatible
@@ -862,18 +864,18 @@ def equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dtype=
         >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.])).cpu()
         tensor([False,  True, False])
         >>> equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.])).sum().cpu()
-        tensor(1)
+        tensor(1.)
         >>> reduce_mean(equal(to_tensor([41., 42., 43.]), to_tensor([42., 42., 42.]))).cpu()
-        tensor([1])
+        tensor(0.3333)
         >>> equal(to_tensor([-1,0,1]), 1).cpu()
-        tensor([False, False,  True])
+        tensor([[False, False,  True]])
         >>> equal(to_tensor([1,2,3]), 3).cpu()
-        tensor([False, False,  True])
+        tensor([[False, False,  True]])
 
     """
 
     right = to_tensor(right, dtype=left.dtype, device=left.device)
-    return cast(left.eq(right), cast_dtype=dtype)
+    return left.eq(right).to(dtype)
 
 
 @numpy_compatible
@@ -896,7 +898,7 @@ def greater(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dtyp
     """
 
     right = to_tensor(right, dtype=left.dtype, device=left.device)
-    return cast(left.gt(right), cast_dtype=dtype)
+    return left.gt(right).to(dtype)
 
 
 @numpy_compatible
@@ -919,7 +921,7 @@ def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number]
 
     """
     right = to_tensor(right, dtype=left.dtype, device=left.device)
-    return cast(left.ge(right), cast_dtype=dtype)
+    return left.ge(right).to(dtype)
 
 
 @numpy_compatible
@@ -941,8 +943,8 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dt
         tensor([1., 0., 1.])
 
     """
-    right = to_tensor(right, dtype=left.dtype, device=left.device)
-    return cast(left.ne(right), cast_dtype=dtype)
+    right = to_tensor(right, dtype=left.dtype, device=left.device) if not is_tensor(right) else right
+    return left.ne(right).to(dtype)
 
 
 @numpy_compatible
@@ -965,7 +967,7 @@ def less_equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], d
 
     """
     right = to_tensor(right, dtype=left.dtype, device=left.device)
-    return cast(left.le(right), cast_dtype=dtype)
+    return left.le(right).to(dtype)
 
 
 @numpy_compatible
@@ -1179,8 +1181,8 @@ def matmul(a: Tensor, b: Tensor, transpose_a=False, transpose_b=False):
      it simply calls the `matmul()` function, so the following lines are
      equivalent:
 
-     >>> d = a @ b @ [[10], [11]]
-     >>> d = matmul(matmul(a, b), [[10], [11]])
+         >>> d = a @ b @ [[10], [11]]
+         >>> d = matmul(matmul(a, b), [[10], [11]])
 
      Args:
        a: `Tensor` and rank > 1.
@@ -1357,10 +1359,8 @@ def sqrt(x: Tensor):
       A `Tensor` of same size, type and sparsity as `x`.
 
     """
-    if x > 0:
-        return x.sqrt()
-    else:
-        raise ValueError("Negative root")
+    return x.sqrt()
+
 
 
 @numpy_compatible
@@ -1891,10 +1891,11 @@ def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
 
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
+
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x.to(_float_dtype)
+        x=x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
             return torch.mean(x)
@@ -1936,7 +1937,7 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x.to(_float_dtype)
+        x=x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
             return torch.sum(x)
@@ -1992,7 +1993,7 @@ def reduce_max(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x.to(_float_dtype)
+        x=x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
             result = x.max()
@@ -2056,7 +2057,7 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x.to(_float_dtype)
+        x=x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
 
         if axis is None and keepdims == False:
@@ -2112,7 +2113,7 @@ def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
-        x.to(_float_dtype)
+        x=x.to(_float_dtype)
     if axis is None or isinstance(axis, (int, list, tuple)):
 
         return torch.logsumexp(x, dim=axis, keepdim=keepdims)
@@ -4079,11 +4080,11 @@ def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=None, seed=None):
     """
     if seed is not None:
         set_seed(seed)
-        if dtype is not None:
-            dtype = str2dtype(dtype)
+    if dtype is not None:
+        dtype = str2dtype(dtype)
 
     t = torch.zeros(int_shape(x), dtype=x.dtype)
-    t.uniform_(min_value, max_value=max_value)
+    t.uniform_(min_value, max_value)
     return t
 
 
@@ -4519,7 +4520,7 @@ def gray2rgb(gray: Tensor):
 ## bounding box
 ###########################
 
-
+@numpy_compatible
 def xywh2xyxy(boxes, image_size=None):
     """
     Args:
@@ -4548,7 +4549,7 @@ def xywh2xyxy(boxes, image_size=None):
     else:
         raise TypeError('Argument xywh must be a list, tuple, numpy array or tensor.')
 
-
+@numpy_compatible
 def xyxy2xywh(boxes):
     """Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format."""
 
@@ -5365,7 +5366,7 @@ _FUN_NAMES = [
     ('ndim', ndim),
     ('int_shape', int_shape),
     ('cast', cast),
-    ('to', to),
+    # ('to', to),
     ('is_sparse', is_sparse),
     ('is_nan', is_nan),
     ('is_inf', is_inf),
