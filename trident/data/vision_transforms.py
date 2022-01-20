@@ -50,9 +50,6 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=Non
                 if isinstance(effectless_value, numbers.Number):
                     self.effectless_value = float(effectless_value)
 
-
-
-
                 # if 'scale' in kwargs and len(kwargs[ 'scale'])==2 and len([k for k,v in kwargs.items() if len(v)==2 ])==1 :
                 #     self.valid_range=kwargs[ 'scale']
                 #     kwargs.pop('scale')
@@ -77,6 +74,8 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=Non
                         self.rangs[ 'value' ] = tuple(value_range)
                     elif len(candidate_ranges) == 1 and 'scale' in self._args.inputs:
                         self.rangs['scale'] = tuple(value_range)
+                    elif len(candidate_ranges) == 1 and 'ksize' in self._args.inputs:
+                        self.rangs['ksize'] = tuple(value_range)
                     else:
                         keys=[k for k in self._args.inputs.key_list if k not in ['self','name','keep_ratio'] and 'size' not in k and 'shape' not in k  and isinstance(self._args.inputs[k].default,numbers.Number)]
                         if len(keys)>0:
@@ -1523,7 +1522,7 @@ class ToRGB(VisionTransform):
         return mask
 
 
-@randomize_with_validate(valid_range=(1, 10), no_change_value=1)
+@randomize_with_validate(valid_range=(1, 31), no_change_value=1)
 class RandomBlur(Blur):
     pass
 
