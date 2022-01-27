@@ -21,6 +21,7 @@ from torch.nn.parameter import Parameter
 
 from trident.backend import dtype as Dtype
 from trident.backend.common import *
+from trident.backend.numpy_ops import DTYPE_MAPPING as numpy_DTYPE_MAPPING
 from trident import context
 
 # from trident.backend.tensorspec import TensorShape
@@ -308,7 +309,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
 
     Examples:
         >>> to_tensor(2)
-        tensor(2, dtype=torch.int32)
+        tensor(2)
         >>> to_tensor([1.0,2.0,3.0],requires_grad=True)
         tensor([1., 2., 3.], requires_grad=True)
         >>> to_tensor([1.0,2.0,3.0],requires_grad=False)
@@ -327,6 +328,12 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     #input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
+    elif isinstance(x, np.ndarray):
+        dtype = str2dtype(str(x.dtype).replace('numpy', 'Dtype'))
+    elif isinstance(x, Tensor) and 'float' not in str(x.dtype):
+        dtype=x.dtype
+    elif isinstance(x, Tensor) and 'float'in str(x.dtype):
+        dtype = _float_dtype
     elif dtype is None and not is_tensor(x) and isinstance(x, collections.Iterable) and all(
             [isinstance(item, numbers.Integral) for item in x]):
         dtype = Dtype.int64
@@ -355,15 +362,15 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
         elif isinstance(x, numbers.Integral):
             if dtype is None:
                 dtype = Dtype.int64
-            return torch.tensor([x], dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],
+
+            return torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,
                                                                                                         dtype=dtype,
-                                                                                                        requires_grad=requires_grad).to(
-                device)
+                                                                                                        requires_grad=requires_grad).to( device)
 
         elif isinstance(x, float):
             if dtype is None:
                 dtype = _float_dtype
-            return torch.tensor([x], dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],
+            return torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,
                                                                                                         dtype=dtype,
                                                                                                         requires_grad=requires_grad).to(
                 device)
@@ -371,7 +378,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             if all([isinstance(item, numbers.Integral) for item in x]):
                 if dtype is None:
                     dtype = Dtype.int64
-                x = torch.tensor([x], dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],
+                x = torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,
                                                                                                          dtype=dtype,
                                                                                                          requires_grad=requires_grad).to(
                     device)
@@ -379,7 +386,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
                 x = unpack_singleton(x)
                 if dtype is None:
                     dtype = _float_dtype
-                x = torch.tensor([x], dtype=dtype).to(device) if requires_grad is None else torch.tensor([x],
+                x = torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x,
                                                                                                          dtype=dtype,
                                                                                                          requires_grad=requires_grad).to(
                     device)
@@ -392,8 +399,8 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             x = x.to(device)
             return x
         elif isinstance(x, np.ndarray):
-            npdtype = x.dtype
-            x = torch.tensor(x, device=device)
+            npdtype =str2dtype(str(x.dtype).replace('numpy','Dtype'))
+            x = torch.from_numpy(x).to(device)
             if 'int' in str(npdtype):
                 x = x.type(Dtype.int64)
             else:
@@ -3505,7 +3512,7 @@ def make_onehot(label, num_classes, axis=-1):
 
     """
 
-    onehot = torch.nn.functional.one_hot(label, num_classes).float()
+    onehot = torch.nn.functional.one_hot(label.long(), num_classes).float()
     last_index = ndim(onehot) - 1
     if axis < 0:
         axis += ndim(onehot)
@@ -5366,7 +5373,7 @@ _FUN_NAMES = [
     ('ndim', ndim),
     ('int_shape', int_shape),
     ('cast', cast),
-    # ('to', to),
+    ('to', to),
     ('is_sparse', is_sparse),
     ('is_nan', is_nan),
     ('is_inf', is_inf),
