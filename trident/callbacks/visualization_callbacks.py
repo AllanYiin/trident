@@ -568,28 +568,28 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                         self.last_layer = OrderedDict()
 
                     if len(self.first_layer) == 0 and len(self.last_layer) == 0:
+                        first_layer_name = ''
+                        last_layer_name = ''
                         if  isinstance(training_context['current_model'],Sequential) and training_context['current_model'][-1].__class__.__name__ == 'ModuleDict':
                             self.is_modulefict = True
                             for k, v in training_context['current_model'][-1].items():
-                                last_layer_name = ''
-                                for name, module in v.named_modules():
-                                    if len([pk for pk, pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad]) > 0:
-                                        last_layer_name = module.relative_name
-                                if last_layer_name != '':
-                                    self.last_layer[last_layer_name] = k
+                                if len(v._parameters) > 0:
+                                    for name, module in v.named_modules():
+                                        if len([pk for pk, pv in module._parameters.items() if 'bias' not in pk and pv.requires_grad]) > 0:
+                                            last_layer_name = module.relative_name
+                                    if last_layer_name != '':
+                                        self.last_layer[last_layer_name] = k
+                        else:
+                            for k, v in training_context['current_model'].named_modules():
+                                if len([pk for pk, pv in v._parameters.items() if 'bias' not in pk and pv is not None and pv.requires_grad]) > 0:
+                                        if first_layer_name == '':
+                                            first_layer_name = v.relative_name
+                                            self.first_layer[first_layer_name] = 'first_layer'
 
-                        first_layer_name = ''
-                        last_layer_name = ''
-                        for k, v in training_context['current_model'].named_modules():
-                            if len([pk for pk, pv in v._parameters.items() if 'bias' not in pk and pv is not None and pv.requires_grad]) > 0:
-                                if first_layer_name == '':
-                                    first_layer_name = v.relative_name
-                                    self.first_layer[first_layer_name] = 'first_layer'
-
-                                if not self.is_modulefict:
-                                    last_layer_name = v.relative_name
+                                        if not self.is_modulefict:
+                                            last_layer_name = v.relative_name
                         if last_layer_name != '' and not self.is_modulefict:
-                            self.last_layer[last_layer_name] = 'last_layer'
+                             self.last_layer[last_layer_name] = 'last_layer'
 
                     for name, module in training_context['current_model'].named_modules():
                         if module.relative_name in self.first_layer or module.relative_name in self.last_layer:
@@ -611,7 +611,7 @@ class PrintGradientsCallback(VisualizationCallbackBase):
                             if module.relative_name in self.first_layer:
                                 training_context['grads_state']['first_layer'] = grads_data
                             elif module.relative_name in self.last_layer:
-                                training_context['grads_state'][self.last_layer[module.relative_name]] = grads_data
+                                training_context['grads_state']['last_layer'] = grads_data
 
                     if len(training_context['grads_state']) > 0:
                         grads_str = yellow_color('{0:<16s}'.format(training_context['current_model'].name) + '|'.join(
