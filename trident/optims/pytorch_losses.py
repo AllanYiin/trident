@@ -193,22 +193,18 @@ class _ClassificationLoss(Loss):
         if ndim(output) > 2:
             if self.axis == 1:
                 output=output.view(output.size(0), output.size(1), -1)
+                if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
+                    target = target.view(target.size(0), -1)
+                elif ndim_target == ndim_output and target.dtype != Dtype.long:
+                    target = target.view(target.size(0), target.size(1), -1)
             elif self.axis == -1:
                 output=output.view(output.size(0), -1,output.size(-1))
                 output=output.transpose(2,1).contiguous()
-
-            if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
-                if ndim_target>=2:
-                    target=target.view(target.size(0),  -1)
-
-
-            elif ndim_target == ndim_output and target.dtype != Dtype.long:
-                if self.axis == 1:
-                    target=target.view(target.size(0), target.size(1), -1)
-                elif self.axis == -1:
+                if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
+                    target = target.view(target.size(0), -1)
+                elif ndim_target == ndim_output and target.dtype != Dtype.long:
                     target=target.view(target.size(0), -1,target.size(-1))
                     target = target.transpose(2, 1).contiguous()
-
             return output, target
         elif ndim(output) <= 2:
 
@@ -675,7 +671,7 @@ class CrossEntropyLoss(_ClassificationLoss):
                 output=clip(log_softmax(output, axis=self.axis), min=-12, max=0)
             target = target.detach()
             sample_weight=sample_weight.detach()
-            return nn.functional.nll_loss(output,target, weight=sample_weight,reduction='none')
+            return nn.functional.nll_loss(output,target.long(), weight=sample_weight,reduction='none')
 
         else:
             unbalance_weight=ones([ self.num_classes]).to(_float_dtype)
@@ -965,7 +961,7 @@ class FocalLoss(_ClassificationLoss):
         self.threshold = threshold
         self.normalized = normalized
         self.is_logsoftmax = None
-        self.need_target_onehot = True
+        self.need_target_onehot = False
         self.is_target_onehot =None
 
     def calculate_loss(self, output, target, **kwargs):
@@ -984,9 +980,8 @@ class FocalLoss(_ClassificationLoss):
         #
 
 
-        alpha = torch.zeros(self.num_classes).to(output.device)
-        alpha[0] += self.alpha
-        alpha[1:] += (1 - self.alpha)
+        alpha = to_tensor([self.alpha,1 - self.alpha],dtype=output.dtype).to(output.device)
+
         if ndim(output) > 2 and self.axis == 1:
             output = output.view(output.size(0), output.size(1), -1)  # N,C,H,W => N,C,H*W
             output = output.transpose(1, 2)  # N,C,H*W => N,H*W,C
@@ -995,19 +990,20 @@ class FocalLoss(_ClassificationLoss):
         if self.is_target_onehot and target.dtype != Dtype.long:
             target = argmax(target, self.axis)
             self.is_target_onehot = False
-        target = target.view(-1, 1)
+        target=target.view(-1,1)
+
 
         if not self.is_logsoftmax:
             output = log_softmax(output)
             self.is_logsoftmax = True
-
-        logpt = output
-        logpt = logpt.gather(1, target)
-        pt = logpt.data.exp()
-        #
-        loss = -1 * ((1 - pt) ** self.gamma) * logpt
+        logpt = output.gather(1, target)
         alpha = alpha.gather(0, target.view(-1))
-        loss = loss * (alpha.view(-1, 1))
+
+        pt = logpt.data.exp()
+
+        loss = -1 * ((1 - pt) ** self.gamma) *( logpt*alpha)
+
+
         return loss
 
 
@@ -1259,7 +1255,7 @@ class ActiveContourLoss(_ClassificationLoss):
         B,C,H,W=output.shape
         if self.is_logsoftmax:
             output=exp(output)
-
+        sample_weight = (cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
         unbalance_weight = ones([self.num_classes]).to(_float_dtype)
         if self.auto_balance and self.label_statistics is not None:
             if self.num_classes == len(self.label_statistics):
@@ -1271,6 +1267,10 @@ class ActiveContourLoss(_ClassificationLoss):
         sample_weight = expand_dims(sample_weight, 0)
 
         target=target.detach().to(output.dtype)
+        if not self.is_target_onehot:
+            target=make_onehot(target,C,axis=1)
+
+
         """
         lenth term
         """
@@ -1293,8 +1293,8 @@ class ActiveContourLoss(_ClassificationLoss):
         # region_in = torch.abs(torch.mean(output_grad * ((c_in-target_grad) ** 2), dim=(2, 3)))
         # region_out = torch.abs(torch.mean((1 - output_grad) * ((target_grad - c_out) ** 2), dim=(2, 3)))
         #
-        c_in =  torch.ones_like(target).to(output.dtype).detach()
-        c_out =torch.zeros_like(target).to(output.dtype).detach()
+        c_in =  torch.ones((B,C,H,W)).to(output.dtype).to(output.device).detach()
+        c_out =torch.zeros((B,C,H,W)).to(output.dtype).to(output.device).detach()
         region_in = torch.abs(torch.mean(output * ((c_in-target) ** 2), dim=(2, 3)))
         region_out = torch.abs(torch.mean((1 - output) * ((target - c_out) ** 2), dim=(2, 3)))
 
@@ -2347,7 +2347,7 @@ class CenterLoss(_Loss):
         batch_size = features.size(0)
         self.centers.to(features.dtype).to(features.device)
         distmat = torch.pow(features, 2).sum(dim=1, keepdim=True).expand(batch_size, self.num_classes) + torch.pow(
-            self.centers, 2).sum(dim=1, keepdim=True).expand(self.num_classes, batch_size).t()
+            self.centers.to(features.dtype).to(features.device), 2).sum(dim=1, keepdim=True).expand(self.num_classes, batch_size).t()
         distmat.addmm_(1, -2, features, self.centers.t())
         classes = torch.arange(self.num_classes).long().to(_device)
 

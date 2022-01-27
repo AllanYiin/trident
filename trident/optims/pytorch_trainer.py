@@ -756,7 +756,8 @@ class Model(model.ModelBase):
             for k in self.training_context['tmp_losses'].key_list:
                 if k != 'epoch' and len(self.training_context['tmp_losses'][k]) > 0:
                     temp[k] = self.training_context['tmp_losses'][k][-1][-1]
-            temp['total_losses'] = to_numpy(self.training_context['current_loss'])[0]
+
+            temp['total_losses'] = to_numpy(self.training_context['current_loss'])
             print('{ ' + ', '.join(
                 ['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
 
