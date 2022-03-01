@@ -1498,7 +1498,7 @@ def get_class(class_name, module_paths=None):
         for module_path in module_paths:
             class_ = locate('.'.join([module_path, class_name]))
             if class_ is not None:
-                break
+                return class_
 
     if class_ is None:
         class_ = locate(class_name)
