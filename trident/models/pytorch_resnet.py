@@ -2,42 +2,25 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import inspect
-import math
 import os
-import uuid
-from collections import *
-from collections import deque
-from copy import copy, deepcopy
-from functools import partial
-from itertools import repeat
 
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from collections import abc
-from torch.nn import init
-from torch.nn.parameter import Parameter
-from trident.models.pretrained_utils import _make_recovery_model_include_top
-
-from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device,load
-from trident.data.image_common import *
+from trident import context
+from trident.backend.pytorch_backend import Sequential, fix_layer, get_device, load
 from trident.data.utils import download_model_from_google_drive
-from trident.layers.pytorch_activations import get_activation, Identity,Relu
+from trident.data.vision_transforms import Resize, Normalize
+from trident.layers.pytorch_activations import Identity, Relu
 from trident.layers.pytorch_blocks import *
 from trident.layers.pytorch_layers import *
-from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 from trident.optims.pytorch_trainer import *
-from trident.data.vision_transforms import Resize,Normalize
+
 __all__ = ['basic_block','bottleneck', 'ResNet','ResNet18','ResNet50','ResNet101','ResNet152','resnet','resnet18']
 
-_session = get_session()
+ctx = context._context()
 _device =get_device()
-_epsilon=_session.epsilon
-_trident_dir=_session.trident_dir
+_epsilon=ctx.epsilon
+_trident_dir=ctx.trident_dir
 
 
 dirname = os.path.join(_trident_dir, 'models')
@@ -196,7 +179,7 @@ def resnet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
 
     flow_list=[]
     resnet = Sequential()
-    resnet.add_module('first_block',Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation='relu',name='first_block'))
+    resnet.add_module('first_block',Conv2d_Block((7,7),64,strides=2,use_bias=use_bias,auto_pad=True,padding_mode='zero',normalization='batch',activation=Relu(inplace=True),name='first_block'))
     resnet.add_module('maxpool',(MaxPool2d((3,3),strides=2,auto_pad=True,padding_mode='zero')))
     resnet.add_module('layer1',(_make_layer(block, 64, layers[0],strides=1, dilate=None,use_bias=use_bias,layer_name='layer1' )))
     resnet.add_module('layer2',(_make_layer(block, 128, layers[1], strides=2, dilate=None,use_bias=use_bias,layer_name='layer2' )))
@@ -204,7 +187,7 @@ def resnet(block, layers, input_shape=(3, 224, 224), num_classes=1000, use_bias=
     resnet.add_module('layer4' ,(_make_layer(block, 512, layers[3], strides=2, dilate=None,use_bias=use_bias,layer_name='layer4' )))
 
     if include_top:
-        resnet.add_module('avg_pool', GlobalAvgPool2d(name='avg_pool'))
+        resnet.add_module('avg_pool', AdaptiveAvgPool2d((1,1),name='avg_pool'))
         resnet.add_module('fc',Dense(num_classes,activation=None,name='fc'))
         resnet.add_module('softmax', SoftMax(name='softmax'))
     resnet.name=model_name
@@ -230,15 +213,14 @@ def ResNet18(include_top=True,
 
     if pretrained == True:
         download_model_from_google_drive(model_urls['resnet18'], dirname, 'resnet18.pth')
-        recovery_model = load(os.path.join(dirname, 'resnet18.pth'))
-        recovery_model = fix_layer(recovery_model)
+        recovery_model = fix_layer(load(os.path.join(dirname, 'resnet18.pth')))
         recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         resnet18.model = recovery_model
     else:
         resnet18.model = _make_recovery_model_include_top(resnet18.model, include_top=include_top, classes=classes, freeze_features=True)
 
     resnet18.model.input_shape = input_shape
-    resnet18.model.to(_device)
+    resnet18.model.to(get_device())
     return resnet18
 
 def ResNet50(include_top=True,

@@ -2,45 +2,31 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import inspect
+import builtins
 import math
 import os
-import uuid
-from collections import *
-from collections import deque
-from copy import copy, deepcopy
-from functools import partial
-from itertools import repeat
-import builtins
-import numpy as np
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from collections import abc
-from torch.nn import init
-from torch.nn.parameter import Parameter
-from trident.data.vision_transforms import Resize,Normalize
+from copy import deepcopy
 
-from trident.models.pretrained_utils import _make_recovery_model_include_top
+from trident import context
 from trident.backend.common import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, fix_layer, get_device, load
-from trident.data.image_common import *
+from trident.backend.pytorch_backend import Sequential, fix_layer, get_device, load
 from trident.data.utils import download_model_from_google_drive
-from trident.layers.pytorch_activations import get_activation, Identity, Relu
+from trident.data.vision_transforms import Resize, Normalize
+from trident.layers.pytorch_activations import Identity
 from trident.layers.pytorch_blocks import *
 from trident.layers.pytorch_layers import *
-from trident.layers.pytorch_normalizations import get_normalization
 from trident.layers.pytorch_pooling import *
+from trident.models.pretrained_utils import _make_recovery_model_include_top
 from trident.optims.pytorch_trainer import *
 
 __all__ = ['efficient_block', 'EfficientNet', 'EfficientNetB0', 'EfficientNetB1', 'EfficientNetB2', 'EfficientNetB3',
            'EfficientNetB4', 'EfficientNetB5', 'EfficientNetB6', 'EfficientNetB7']
 
-_session = get_session()
+ctx = context._context()
 
 
-_epsilon = _session.epsilon
-_trident_dir = _session.trident_dir
+_epsilon = ctx.epsilon
+_trident_dir = ctx.trident_dir
 
 DEFAULT_BLOCKS_ARGS = [
     {'kernel_size': 3, 'repeats': 1, 'filters_in': 32, 'filters_out': 16, 'expand_ratio': 1, 'id_skip': True,
