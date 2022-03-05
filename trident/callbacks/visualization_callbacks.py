@@ -707,8 +707,8 @@ class PrintGpuUtilizationCallback(VisualizationCallbackBase):
 
 
     def on_overall_batch_end(self, training_context):
-        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
-                self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0)):
+        if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] ) % self.frequency == 0) or (
+                self.unit == 'step' and (training_context['steps'] ) % self.frequency == 0)):
             self.print_gpu_utilization()
             if len(self.lines) > 0:
                 for line in self.lines:
@@ -717,7 +717,7 @@ class PrintGpuUtilizationCallback(VisualizationCallbackBase):
 
     def on_overall_epoch_end(self, training_context):
         if self.frequency > 0 and (self.unit == 'epoch' and training_context['current_batch'] == 0 and (
-                training_context['current_epoch'] + 1) % self.frequency == 0):
+                training_context['current_epoch'] ) % self.frequency == 0):
             self.print_gpu_utilization()
             if len(self.lines) > 0:
                 for line in self.lines:
