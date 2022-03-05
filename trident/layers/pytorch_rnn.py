@@ -645,17 +645,26 @@ class LSTM(RNNBase):
 
     def attention(self, lstm_output):
         batch_size, sequence_length, channels = int_shape(lstm_output)
-        if not hasattr(self, 'w_omega') or self.w_omega is None:
-            self.w_omega = Parameter(torch.zeros(channels, self.attention_size).to(get_device()))
-            self.u_omega = Parameter(torch.zeros(self.attention_size).to(get_device()))
+        if not hasattr(self, 'w_omega') :
+            self.register_parameter('w_omega',Parameter(torch.zeros((channels, self.attention_size)).to(get_device())))
+            self.register_parameter('u_omega',Parameter(torch.zeros((self.attention_size,1)).to(get_device())))
+            nn.init.uniform_(self.w_omega, -0.1, 0.1)
+            nn.init.uniform_(self.u_omega, -0.1, 0.1)
 
-        output_reshape = reshape(lstm_output, (-1, channels))
-        attn_tanh = torch.tanh(torch.mm(output_reshape, self.w_omega))
-        attn_hidden_layer = torch.mm(attn_tanh, reshape(self.u_omega, [-1, 1]))
-        exps = reshape(torch.exp(attn_hidden_layer), [-1, sequence_length])
-        alphas = exps / reshape(torch.sum(exps, 1), [-1, 1])
-        alphas_reshape = reshape(alphas, [-1, sequence_length, 1])
-        return lstm_output * alphas_reshape
+        # output_reshape = reshape(lstm_output, (-1, channels))
+        # attn_tanh = torch.tanh(torch.mm(output_reshape, self.w_omega))
+        # attn_hidden_layer = torch.mm(attn_tanh, reshape(self.u_omega, [-1, 1]))
+        #att_score = torch.softmax(score, dim=-1)
+        # alphas_reshape = reshape(alphas, [-1, sequence_length, 1])
+        # return lstm_output * alphas_reshape
+
+        #score = torch.matmul( torch.tanh(torch.matmul(lstm_output, self.w_omega)),self.u_omega)
+        u = torch.tanh(torch.matmul(lstm_output, self.w_omega))  # [batch, seq_len, hidden_dim*2]
+        att = torch.matmul(u, self.u_omega)  # [batch, seq_len, 1]
+        att_score = torch.softmax(att, dim=-1)
+        context = lstm_output * att_score  # [batch, seq_len, hidden_dim*2]
+        return context
+
 
     @overload
     @torch._jit_internal._overload_method  # noqa: F811
