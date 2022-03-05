@@ -4,6 +4,7 @@ from __future__ import division
 from __future__ import print_function
 import glob
 import gzip
+import os.path
 import subprocess
 import random
 import string
@@ -18,6 +19,7 @@ import copy
 import cv2
 import datetime
 from tqdm import tqdm
+from trident.context import sanitize_path
 from trident.backend.common import *
 from trident.data.text_transforms import ToHalfWidth, ChineseConvert,bpmf_phonetic
 
@@ -300,12 +302,16 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
     valid_sequence_start_at=['random','slide','follow_up','section_start']
     valid_mode=['next_word','skip_gram', 'cbow','onehot','1to1_seq2seq']
     if mode not in valid_mode:
-        raise  ValueError('{0} is not valid mode '.format(mode))
-
+        raise  ValueError('{0} is not valid mode({1}) '.format(mode,valid_mode))
+    if sequence_start_at not in valid_sequence_start_at:
+        raise  ValueError('{0} is not valid sequence_start_at({1}) '.format(sequence_start_at,valid_sequence_start_at))
+    if filname is not None:
+        filname=sanitize_path(filname)
     original_corpus = None
     corpus = None
     output_corpus=None
-    if filname is not None:
+    if filname is not None and os.path.exists(filname)and os.path.isfile(filname):
+
         with io.open(filname, encoding=encoding) as f:
             original_corpus = f.read().lower().replace('\u3000' ,' ')
             corpus=original_corpus.splitlines()
@@ -316,54 +322,56 @@ def load_text(filname=None, data=None, label=None,unit='char',mode='next_word',s
                 else:
                     new_corpus[-1]=new_corpus[-1]+section_delimiter
             corpus=new_corpus
+            output_corpus = new_corpus
+    else:
+        if data is not None:
+            if isinstance(data,str):
+                corpus = data.splitlines()
+            elif hasattr(data,"__iter__"):
+                corpus=data
+            new_corpus = []
+            for item in corpus:
+                if len(item) > 0:
+                    new_corpus.append(item)
+                else:
+                    new_corpus[-1] = new_corpus[-1] + section_delimiter
+            corpus = new_corpus
 
-    if data is not None:
-        if isinstance(data,str):
-            corpus = data.splitlines()
-        elif hasattr(data,"__iter__"):
-            corpus=data
-        new_corpus = []
-        for item in corpus:
-            if len(item) > 0:
-                new_corpus.append(item)
-            else:
-                new_corpus[-1] = new_corpus[-1] + section_delimiter
-        corpus = new_corpus
-
-    if label is not None:
-        if isinstance(label, str):
-            output_corpus = label.splitlines()
-        elif hasattr(label, "__iter__"):
-            output_corpus = label
-        new_corpus = []
-        for item in output_corpus:
-            if len(item) > 0:
-                new_corpus.append(item)
-            else:
-                new_corpus[-1] = new_corpus[-1] +section_delimiter
-        output_corpus = new_corpus
+        if label is not None:
+            if isinstance(label, str):
+                output_corpus = label.splitlines()
+            elif hasattr(label, "__iter__"):
+                output_corpus = label
+            new_corpus = []
+            for item in output_corpus:
+                if len(item) > 0:
+                    new_corpus.append(item)
+                else:
+                    new_corpus[-1] = new_corpus[-1] +section_delimiter
+            output_corpus = new_corpus
 
     dataprovider=None
+    provider_name=filname.split('/')[-1].strip().split('.')[0] if filname is not None else mode
     if mode=='next_word':
         corpus1=copy.deepcopy(corpus)
         corpus2= copy.deepcopy(output_corpus)
         data_seq=TextSequenceDataset(corpus1,sequence_length=sequence_length,is_onehot=is_onehot,symbol='input',sequence_offset=0,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         labels_seq =TextSequenceDataset(corpus2,sequence_length=sequence_length,is_onehot=is_onehot,symbol='label',sequence_offset=1,sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         traindata=Iterator(data=data_seq,label=labels_seq)
-        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0],traindata=traindata,sequence_length=sequence_length)
+        dataprovider = TextSequenceDataProvider(provider_name,traindata=traindata,sequence_length=sequence_length)
     elif mode=='skip_gram':
         corpus1 = copy.deepcopy(corpus)
         corpus2 = copy.deepcopy(corpus)
-        data_seq = TextSequenceDataset(corpus1, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at)
-        labels_seq = TextSequenceDataset(corpus2, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=[-1,1], sequence_start_at=sequence_start_at)
+        data_seq = TextSequenceDataset(corpus1, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
+        labels_seq = TextSequenceDataset(corpus2, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=[-1,1], sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
         traindata = Iterator(data=data_seq, label=labels_seq)
-        dataprovider = TextSequenceDataProvider(filname.split('/')[-1].strip().split('.')[0], traindata=traindata,sequence_length=sequence_length)
+        dataprovider = TextSequenceDataProvider(provider_name, traindata=traindata,sequence_length=sequence_length)
     elif mode == '1to1_seq2seq':
         if len(corpus)==len(output_corpus):
             data_seq = TextSequenceDataset(corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='input', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.corpus)
             labels_seq = TextSequenceDataset(output_corpus, sequence_length=sequence_length, is_onehot=is_onehot, symbol='label', sequence_offset=0, sequence_start_at=sequence_start_at,object_type=ObjectType.sequence_label)
             traindata = Iterator(data=data_seq, label=labels_seq)
-            dataprovider = TextSequenceDataProvider('1to1_seq2seq', traindata=traindata,sequence_length=sequence_length)
+            dataprovider = TextSequenceDataProvider(provider_name, traindata=traindata,sequence_length=sequence_length)
         else:
             raise  ValueError('data ({0}) and label({1}) should have the same length in 1to1_seq2seq mide.'.format(len(corpus),len(output_corpus)))
     if return_corpus:
@@ -762,18 +770,20 @@ def load_examples_data(dataset_name):
         masks = glob.glob(os.path.join(dirname, 'masks', '*.png'))
         imgs = list(sorted(imgs))
         masks = list(sorted(masks))
-        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb,symbol='image')
-        mskdata = MaskDataset(masks=masks, object_type=ObjectType.color_mask,symbol='mask')
 
         def parse_code(l):
             if len(l.strip().split("\t")) == 2:
                 a, b = l.replace('\t\t', '\t').strip().split("\t")
                 return tuple(int(i) for i in b.split(' ')), a
 
-        label_codes, label_names = zip(
-            *[parse_code(l) for l in open(os.path.join(dirname, "label_colors.txt"),encoding='utf-8-sig').readlines()])
+        palette=OrderedDict()
+        label_codes, label_names = zip( *[parse_code(l) for l in open(os.path.join(dirname, "label_colors.txt"),encoding='utf-8-sig').readlines()])
         for i in range(len(label_codes)):
-            mskdata.palette[label_names[i]] = label_codes[i]
+            palette[label_names[i]] = label_codes[i]
+
+        imgdata = ImageDataset(images=imgs, object_type=ObjectType.rgb, symbol='image')
+        mskdata = MaskDataset(masks=masks, object_type=ObjectType.color_mask, symbol='mask')
+        mskdata.palette=palette
 
         dataset = DataProvider(dataset_name=dataset_name, traindata=Iterator(data=imgdata, label=mskdata))
         print('get autodrive images :{0}'.format(len(dataset)))
@@ -1139,11 +1149,18 @@ def load_examples_data(dataset_name):
         chars.insert(3, '[PAD]')
         chars.insert(4, '[MASK]')
 
-        data.vocabs  =data_test.vocabs=simplifided_label.vocabs=simplifided_test_label.vocabs =  chars
+        data.vocabs  =data_test.vocabs=simplifided_label.vocabs=simplifided_test_label.vocabs = traditional_label.vocabs=traditional_test_label.vocabs= chars
         data.text2index=data_test.text2index  =simplifided_label.text2index=simplifided_test_label.text2index =  dict((c, i) for i, c in enumerate(chars))
         data.index2text  =data_test.index2text  =simplifided_label.index2text=simplifided_test_label.index2text=  dict((i, c) for i, c in enumerate(chars))
+
         traditional_label =  copy.deepcopy(data)
         traditional_test_label = copy.deepcopy(data_test)
+        traditional_label .text2index=data.text2index
+        traditional_test_label .text2index=data.text2index
+        traditional_label.index2text  =data.index2text
+        traditional_test_label.index2text  =data.index2text
+
+
         traditional_label.object_type =traditional_test_label.object_type = ObjectType.sequence_label
         traditional_label.symbol =traditional_test_label.symbol = 'traditional_label'
 
@@ -1151,6 +1168,10 @@ def load_examples_data(dataset_name):
         mask_test_label = copy.deepcopy(data_test)
         #mask_label.object_type =mask_test_label.object_type= ObjectType.corpus
         mask_label.symbol = mask_test_label.symbol = 'mask_label'
+        mask_label.text2index = data.text2index
+        mask_test_label.text2index = data.text2index
+        mask_label.index2text = data.index2text
+        mask_test_label.index2text = data.index2text
 
 
 
