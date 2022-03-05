@@ -437,7 +437,7 @@ def download_model_from_google_drive(file_id, dirname, filename=None, md5=None):
 
             if need_download:
                 session = requests.Session()
-                response = session.get(url, params={'id': file_id}, stream=True)
+                response = session.get(url, params={'id': file_id,'confirm':'t'}, stream=True)
                 token = _get_confirm_token(response)
                 if token:
                     params = {'id': file_id, 'confirm': token}
