@@ -109,6 +109,7 @@ class Dense(Layer):
         else:
             self.weights_norm = None
         self.activation = get_activation(activation)
+        self.decision_boundary_optimal=False
 
     def build(self, input_shape: TensorShape):
         if not self._built:
@@ -130,10 +131,6 @@ class Dense(Layer):
 
     def forward(self, x, **kwargs):
         # x=enforce_singleton(x)
-        # if ndim(x) > 2:
-        #     x = squeeze(x)
-        # shp = None
-
         if hasattr(self, 'weights_norm') and self.weights_norm is not None:
             x = F.linear(x, self.weights_norm(self.weight), self.bias)
         else:
@@ -141,6 +138,8 @@ class Dense(Layer):
 
         if self.activation is not None:
             x = self.activation(x)
+
+
         return x
 
     def extra_repr(self):
@@ -488,11 +487,17 @@ class SoftMax(Layer):
             self.noise_intensity = 0.005
         if self.training:
             if self.add_noise:
-                noise = self.noise_intensity * torch.randn(x.shape, dtype=dtype.float32,device=x.device).detach()
+                _mean=x.mean()
+                _std=x.var().sqrt()
+                if is_nan(_mean):
+                    _mean=0.0
+                if is_nan(_std):
+                    _std=0.02
+                noise = self.noise_intensity * random_normal_like(x,mean=_mean, std=_std,dtype=x.dtype).to(x.device).detach()
                 x = x + noise
             return F.log_softmax(x, dim=self.axis)
         else:
-            return torch.exp(F.log_softmax(x, dim=self.axis))
+            return torch.softmax(x, dim=self.axis)
 
 
 
