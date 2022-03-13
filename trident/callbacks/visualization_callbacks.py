@@ -701,9 +701,10 @@ class PrintGpuUtilizationCallback(VisualizationCallbackBase):
         super(PrintGpuUtilizationCallback, self).__init__(frequency, unit)
         self.lines = []
     def print_gpu_utilization(self):
-        memory_map_list=get_gpu_memory_map()
-        for map in memory_map_list:
-            self.lines.append(blue_color('[{0}] {1} '.format(map.value_list[1],map.value_list[2]))+'|'+orange_color(' {0:>3}°C {1:>3}% '.format(int(map.value_list[-2]),int(map.value_list[3])))+'|'+blue_color(' {0} /{1} MB  {2:.2%}'.format(int(map.value_list[4]),map.value_list[6],map.value_list[-1])))
+        if is_gpu_available():
+            memory_map_list=get_gpu_memory_map()
+            for map in memory_map_list:
+                self.lines.append(blue_color('[{0}] {1} '.format(map.value_list[1],map.value_list[2]))+'|'+orange_color(' {0:>3}°C {1:>3}% '.format(int(map.value_list[-2]),int(map.value_list[3])))+'|'+blue_color(' {0} /{1} MB  {2:.2%}'.format(int(map.value_list[4]),map.value_list[6],map.value_list[-1])))
 
 
     def on_overall_batch_end(self, training_context):
