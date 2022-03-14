@@ -24,11 +24,11 @@ from trident.optims.losses import _check_logsoftmax_logit
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call, Layer,Sequential
     from trident.backend.pytorch_ops import to_numpy, arange, cast, clip, sqrt, int_shape, argmax, softmax, ndim, exp, \
-        expand_dims
+        expand_dims,is_gpu_available
 
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import try_map_args_and_call, Layer,Sequential
-    from trident.backend.tensorflow_ops import to_numpy, arange, cast, clip, sqrt, int_shape, zeros_like, ones_like, argmax, softmax, ndim, exp, not_equal, expand_dims
+    from trident.backend.tensorflow_ops import to_numpy, arange, cast, clip, sqrt, int_shape, zeros_like, ones_like, argmax, softmax, ndim, exp, not_equal, expand_dims,is_gpu_available
 
 if is_in_ipython() or is_in_colab():
     from IPython import display
