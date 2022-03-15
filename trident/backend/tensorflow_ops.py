@@ -1,4 +1,6 @@
 """trident tensorflow basic operation."""
+import os
+os.environ['TRIDENT_BACKEND'] = 'tensorflow'
 import collections
 from copy import deepcopy
 import math
@@ -36,6 +38,7 @@ __all__ = ['Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tenso
            'gpt_gelu','moments','norm','l2_normalize','broadcast_to','expand_as','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_cross_entropy']
+
 
 ctx=get_session()
 Tensor=EagerTensor
@@ -272,26 +275,22 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
 
     Examples:
         >>> to_tensor(2)
-        <Tensor: shape=(), dtype=int32, numpy=2>
+        <tf.Tensor: shape=(), dtype=int64, numpy=2>
         >>> to_tensor([1.0,2.0,3.0],requires_grad=True)
-        <tf.Variable 'Variable:0' shape=(3,) dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00],
-        dtype=float32)>
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
         >>> to_tensor([1.0,2.0,3.0],requires_grad=False)
-        <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
         >>> to_tensor([1.0,2.0,3.0])
-        <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
         >>> to_tensor((1.0,2.0,3.0))
-        <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
+        <tf.Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 2.0000e+00, 3.0000e+00], dtype=float32)>
         >>> to_tensor(np.arange(0,5))
-        <Tensor: shape=(5,), dtype=float32, numpy=
-        array([0.0000e+00, 1.0000e+00, 2.0000e+00, 3.0000e+00, 4.0000e+00],
-        dtype=float32)>
+        <tf.Tensor: shape=(5,), dtype=int64, numpy=array([0, 1, 2, 3, 4], dtype=int64)>
 
     """
     if device is None:
-        device=ctx.device
-
-    if  'cuda' in device.lower() or 'gpu' in device.lower():
+        device=_get_device()
+    elif  'cuda' in device.lower() or 'gpu' in device.lower():
         device='/gpu:0'
     else:
         device="/cpu:0"
@@ -3802,7 +3801,7 @@ def random_choice(x: Tensor,n:int=1):
 
 
 
-def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype='float32', device=None,seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3840,7 +3839,7 @@ def random_normal(shape, mean=0.0, std=1.0, dtype='float32', seed=None):
     return tf.random.normal(to_list(shape),mean=mean,stddev=std,dtype=str2dtype(dtype))
 
 @numpy_compatible
-def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
+def random_normal_like(x, mean=0.0, std=1.0, dtype=None,device=None, seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3875,9 +3874,11 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype='float32', seed=None):
 
 
     """
-    return tf.random.normal(to_list(int_shape(x)),mean=mean,stddev=std,dtype=str2dtype(dtype))
+    if dtype is None:
+        dtype=x.dtype
+    return tf.random.normal(to_list(int_shape(x)),mean=mean,stddev=std,dtype=dtype)
 
-def random_uniform(shape, min_value=0.0, max_value=1.0, dtype='float32', seed=None):
+def random_uniform(shape, min_value=0.0, max_value=1.0, dtype='float32', device=None,seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -3950,7 +3951,7 @@ def random_uniform(shape, min_value=0.0, max_value=1.0, dtype='float32', seed=No
     name = 'random_uniform')
 
 @numpy_compatible
-def random_uniform_like(x,  min_value=0.0, max_value=1.0, dtype='float32', seed=None):
+def random_uniform_like(x,  min_value=0.0, max_value=1.0, dtype=None,device=None, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -4014,10 +4015,12 @@ def random_uniform_like(x,  min_value=0.0, max_value=1.0, dtype='float32', seed=
     Raises:
       ValueError: If `dtype` is integral and `maxval` is not specified.
     """
+    if dtype is None:
+        dtype=x.dtype
     return tf.random.uniform(shape=to_list(int_shape(x)),
                              minval=min_value,
                              maxval=max_value,
-                             dtype=str2dtype(dtype),
+                             dtype=dtype,
                              seed=seed,
                              name='random_uniform')
 

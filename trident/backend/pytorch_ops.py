@@ -329,7 +329,10 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
     elif isinstance(x, np.ndarray):
+        if x.dtype==np.float64:
+            x=x.astype(np.float32)
         dtype = str2dtype(str(x.dtype).replace('numpy', 'Dtype'))
+
     elif isinstance(x, Tensor) and 'float' not in str(x.dtype):
         dtype=x.dtype
     elif isinstance(x, Tensor) and 'float'in str(x.dtype):
@@ -3850,7 +3853,7 @@ def random_choice(x: Tensor, n: int = 1):
         return [x[idx] for idx in idxes[:n]]
 
 
-def random_normal(shape, mean=0.0, std=1.0, dtype=None, seed=None):
+def random_normal(shape, mean=0.0, std=1.0, dtype=None, device=None,seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3891,11 +3894,13 @@ def random_normal(shape, mean=0.0, std=1.0, dtype=None, seed=None):
             dtype = str2dtype(dtype)
     if dtype is None:
         dtype = _float_dtype
-    return cast(torch.normal(mean=mean, std=std, size=shape), cast_dtype=dtype)
+    if device is None:
+        device = get_device()
+    return torch.normal(mean=mean, std=std, size=shape,dtype=dtype,device=device)
 
 
 @numpy_compatible
-def random_normal_like(x, mean=0.0, std=1.0, dtype=None, seed=None):
+def random_normal_like(x, mean=0.0, std=1.0, dtype=None, device=None,seed=None):
     """Outputs random values from a normal distribution.
 
     In this case, we are setting both the global and operation-level seed to
@@ -3942,10 +3947,10 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=None, seed=None):
     if is_tensor(mean):
         mean = mean.item()
 
-    return cast(torch.normal(mean=mean, std=std, size=x.shape), cast_dtype=dtype).to(_get_device())
+    return torch.normal(mean=mean, std=std, size=x.shape,dtype=x.dtype,device=x.device)
 
 
-def random_uniform(shape, min_value=0.0, max_value=None, dtype=None, seed=None):
+def random_uniform(shape, min_value=0.0, max_value=None, dtype=None,device=None, seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -4021,7 +4026,7 @@ def random_uniform(shape, min_value=0.0, max_value=None, dtype=None, seed=None):
 
 
 @numpy_compatible
-def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=None, seed=None):
+def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=None, device=None,seed=None):
     """Outputs random values from a uniform distribution.
 
     The generated values follow a uniform distribution in the range
@@ -4091,6 +4096,7 @@ def random_uniform_like(x, min_value=0.0, max_value=1.0, dtype=None, seed=None):
         dtype = str2dtype(dtype)
 
     t = torch.zeros(int_shape(x), dtype=x.dtype)
+
     t.uniform_(min_value, max_value)
     return t
 
