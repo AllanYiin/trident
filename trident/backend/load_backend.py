@@ -112,7 +112,8 @@ elif _session.backend == 'tensorflow':
             print(e)
 
     else:
-        os.environ.pop("CUDA_VISIBLE_DEVICES")
+        if "CUDA_VISIBLE_DEVICES" in os.environ:
+            os.environ.pop("CUDA_VISIBLE_DEVICES")
         set_session('device', '/cpu:0')
 
     from trident.backend.tensorflow_ops import *
