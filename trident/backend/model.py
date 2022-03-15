@@ -5,7 +5,7 @@ from __future__ import print_function
 
 import builtins
 # import pysnooper
-#from torch import autograd
+# from torch import autograd
 import copy
 import inspect
 import json
@@ -18,13 +18,12 @@ from typing import Callable
 
 import numpy as np
 
-from trident.backend.common import to_list, format_time, get_terminal_size, get_session, get_backend, \
-    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format,  cyan_color, get_class,camel2snake
+from trident import context
 from trident.backend import dtype
-
+from trident.backend.common import to_list, format_time, get_terminal_size, get_backend, \
+    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format, cyan_color, get_class, camel2snake
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
-from trident import context
 from trident.data.image_common import *
 from trident.data.vision_transforms import Unnormalize
 from trident.loggers.history import HistoryBase
@@ -725,8 +724,7 @@ class ModelBase(object):
                     loss_weight = to_tensor(loss_weight, 'float32')
                     #print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
                     #print(self.train_data.value_list[-1])
-                    this_loss = loss_weight * try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
-                                                                    self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
+                    this_loss = loss_weight * try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
 
                     if isinstance(this_loss, tuple):
                         overall_loss = to_tensor(0.0, requires_grad=True)
@@ -772,10 +770,10 @@ class ModelBase(object):
             this_loss = to_tensor(0.0, requires_grad=True)
             if 'model' in v.signature.inputs:
                 reg_weight=v.signature.inputs['reg_weight'].default if 'reg_weight' in v.signature.inputs and hasattr(v.signature.inputs['reg_weight'],'default') else 1e-6
+
                 this_loss = v(self._model,reg_weight=reg_weight) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
             elif 'output' in v.signature.inputs:
-                this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[
-                                                                                                                                           'stop_update'] < 1 else to_tensor(0.0)
+                this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[   'stop_update'] < 1 else to_tensor(0.0)
             if not any_abnormal_number(this_loss):
                 # a leaf Variable that requires grad connotused in an in-place operation.
                 self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss  # self.training_context[
