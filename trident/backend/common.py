@@ -533,7 +533,6 @@ class device:
 
 
 class TensorShape(object):
-    # TODO: __reduce__
     """
 
     Examples:
