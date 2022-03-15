@@ -73,7 +73,14 @@ def sanitize_path(path):
 
     """
     if isinstance(path, str):
-        return os.path.normpath(path.strip()).replace('\\', '/')
+        curdir = '.'
+        is_curdir=False
+        if path.startswith(curdir):
+            is_curdir=True
+        new_path= os.path.normpath(path.strip()).replace('\\', '/')
+        if is_curdir:
+            new_path=os.path.join(curdir,new_path)
+        return new_path
     else:
         return path
 
