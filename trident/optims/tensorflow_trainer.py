@@ -1,7 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import tempfile
+
 import copy
 import gc
 import inspect
@@ -10,28 +10,31 @@ import os
 import random
 import shutil
 import sys
+import tempfile
 import time
 import uuid
 from functools import partial
-import tempfile
+
 import numpy as np
 import tensorflow as tf
 
 from trident import __version__
 from trident import context
-from trident.backend.common import *
-from trident.backend.model import ModelBase,progress_bar
-from trident.backend.opencv_backend import array2image, image2array
-from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call,DTYPE_MAPPING,fix_keras_module
 from trident.backend import dtype
+from trident.backend.common import *
+from trident.backend.model import ModelBase, progress_bar
+from trident.backend.opencv_backend import array2image, image2array
+from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call, \
+    DTYPE_MAPPING, fix_keras_module
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_ops import is_tensor
 from trident.backend.tensorflow_serialization import save, load_pthtar
 from trident.backend.tensorspec import *
+from trident.callbacks import LambdaCallback
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
 from trident.data.data_provider import DataProvider
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
-from trident.data.image_common import *
+#from trident.data.image_common import *
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
 from trident.layers.tensorflow_layers import *
@@ -41,11 +44,11 @@ from trident.optims.tensorflow_metrics import get_metric
 from trident.optims.tensorflow_optimizers import get_optimizer
 from trident.optims.tensorflow_regularizers import *
 from trident.optims.trainers import TrainingPlan
-from trident.callbacks import LambdaCallback
 
 # from tensorflow.python.framework.ops import EagerTensor
 
-__all__ = ['Model', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel', 'ImageSegmentationModel', 'FaceLandmarkModel', 'FaceRecognitionModel',
+__all__ = ['Model', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel', 'ImageSegmentationModel',
+           'FaceLandmarkModel', 'FaceRecognitionModel',
            'LanguageModel']
 ctx = context._context()
 
@@ -72,14 +75,13 @@ class Model(ModelBase):
         self.batch_index = 0
         self.filter_index = 1
         self._enable_tensorboard = False
-        self.summary_writer = None
         self.accumulate_grads_inteval = 1
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
         if output is None:
             raise ValueError('There is at least one output')
-        elif  'keras' in output.__module__:
-            output._is_keras=True
+        elif 'keras' in output.__module__:
+            output._is_keras = True
             output = fix_keras_module(output)
             output.compile(optimizer='Adam', loss='categorical_crossentropy', metrics=['accuracy'])
             self._model = output
@@ -114,12 +116,18 @@ class Model(ModelBase):
                 if not isinstance(inputs, dict):
                     for i in range(len(inputs)):
                         inp = to_tensor(inputs[i])
-                        output._signature.inputs['input{0}'.format(i)] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False, optional=False,
-                                                                                                   name='input{0}'.format(i))
+                        output._signature.inputs['input{0}'.format(i)] = TensorSpec.tensor_to_spec(inp,
+                                                                                                   need_exclude_batch_axis=True,
+                                                                                                   is_singleton=False,
+                                                                                                   optional=False,
+                                                                                                   name='input{0}'.format(
+                                                                                                       i))
                 else:
                     for k, v in inputs.items():
                         inp = to_tensor(v)
-                        output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=k)
+                        output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True,
+                                                                                is_singleton=False, optional=False,
+                                                                                name=k)
             self._model.signature = self._model._signature
 
         elif isinstance(output, (Layer, tf.Module)):
@@ -134,20 +142,28 @@ class Model(ModelBase):
                     for i in range(len(inputs)):
                         k = output._signature.inputs.key_list[i]
                         inp = to_tensor(inputs[i])
-                        output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True, is_singleton=False,
-                                                                                optional=output._signature.inputs[k].optional, name=k)
+                        output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True,
+                                                                                is_singleton=False,
+                                                                                optional=output._signature.inputs[
+                                                                                    k].optional, name=k)
                 else:
                     available_items = output._signature.inputs.key_list.copy()
                     for k, v in inputs.items():
                         if k in output._signature.inputs.key_list:
-                            output._signature.inputs[k] = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True, is_singleton=False,
-                                                                                    optional=output._signature.inputs[k].optional, name=k)
+                            output._signature.inputs[k] = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,
+                                                                                    is_singleton=False,
+                                                                                    optional=output._signature.inputs[
+                                                                                        k].optional, name=k)
                             available_items.remove(k)
                         else:
                             for sk in available_items:
                                 if sk.lower() == k.lower():
-                                    output._signature.inputs[sk] = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True, is_singleton=False,
-                                                                                             optional=output._signature.inputs[sk].optional, name=sk)
+                                    output._signature.inputs[sk] = TensorSpec.tensor_to_spec(v,
+                                                                                             need_exclude_batch_axis=True,
+                                                                                             is_singleton=False,
+                                                                                             optional=
+                                                                                             output._signature.inputs[
+                                                                                                 sk].optional, name=sk)
                                     available_items.remove(sk)
                                     break
 
@@ -155,7 +171,9 @@ class Model(ModelBase):
                 if not isinstance(input_shape, dict):
                     for i in range(len(input_shape)):
                         k = output._signature.inputs.key_list[i]
-                        output._signature.inputs[k].shape = input_shape[i] if isinstance(input_shape[i], TensorShape) else TensorShape([None] + input_shape[i])
+                        output._signature.inputs[k].shape = input_shape[i] if isinstance(input_shape[i],
+                                                                                         TensorShape) else TensorShape(
+                            [None] + input_shape[i])
                         output._signature.inputs[k].dtype = dtype.float32
                         for module in output.modules():
                             if isinstance(module, Embedding):
@@ -179,16 +197,13 @@ class Model(ModelBase):
             # input_shape = unpack_singleton(input_shape)
             #
 
-
-
         if isinstance(output, (Layer, tf.Module)):
             output.is_root = True
-            output.nodes=OrderedDict()
+            output.nodes = OrderedDict()
             for name, mod in output.named_modules():
                 if isinstance(mod, Layer):
                     mod.nodes = output.nodes
                     mod.relative_name = name
-
 
             out = None
             if inputs is not None:
@@ -215,7 +230,8 @@ class Model(ModelBase):
 
             if is_tensor(out) and len(output._signature.outputs) == 1:
                 output._signature.outputs[output._signature.outputs.key_list[0]].shape = tensor_to_shape(out)
-                output._signature.outputs[output._signature.outputs.key_list[0]].dtype = DTYPE_MAPPING[out.dtype] if out.dtype in DTYPE_MAPPING else out.dtype
+                output._signature.outputs[output._signature.outputs.key_list[0]].dtype = DTYPE_MAPPING[
+                    out.dtype] if out.dtype in DTYPE_MAPPING else out.dtype
 
             elif isinstance(out, OrderedDict):
                 for k, v in out.item_list:
@@ -223,12 +239,14 @@ class Model(ModelBase):
 
             elif isinstance(out, (list, tuple)):
                 for i in range(len(out)):
-                    output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]), name='output_{0}'.format(i))
+                    output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
+                                                                                 name='output_{0}'.format(i))
 
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (tf.Module)) for m in output]):
             output_list = []
             model_list = []
-            dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device()) if not is_tensor(inputs) else inputs.to(get_device())
+            dummay_input = to_tensor(input_shape.get_dummy_tensor()).to(get_device()) if not is_tensor(
+                inputs) else inputs.to(get_device())
 
             for op in output:
                 if isinstance(op, (Layer, tf.Module)):
@@ -242,8 +260,10 @@ class Model(ModelBase):
             self._model = model
             self.name = model.name
             for i in range(len(output_list)):
-                self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='output_{0}'.format(i))
-                self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]), name='target_{0}'.format(i))
+                self._outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]),
+                                                                   name='output_{0}'.format(i))
+                self._targets['target_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(output_list[i]),
+                                                                   name='target_{0}'.format(i))
 
         elif isinstance(output, (np.ndarray, Tensor)):
             pass
@@ -265,7 +285,7 @@ class Model(ModelBase):
     def device(self):
         return get_device()
 
-    def train(self,**kwargs):
+    def train(self, **kwargs):
         if self._model is not None and isinstance(self._model, Tensor):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
@@ -288,7 +308,7 @@ class Model(ModelBase):
 
     @property
     def layers(self):
-        if getattr(self._model,'_is_keras',False):
+        if getattr(self._model, '_is_keras', False):
             return self._model.layers
         elif self._model is not None and isinstance(self._model, Layer):
             return self._model.nodes
@@ -374,11 +394,15 @@ class Model(ModelBase):
 
         data_ds = NumpyDataset(data=train_x, symbol="input")
         label_ds = LabelDataset(labels=train_y, symbol="target")
-        dataprovider = DataProvider(traindata=Iterator(data=data_ds, label=label_ds, minibatch_size=batch_size, is_shuffle=shuffle, buffer_size=max_queue_size, workers=workers))
+        dataprovider = DataProvider(
+            traindata=Iterator(data=data_ds, label=label_ds, minibatch_size=batch_size, is_shuffle=shuffle,
+                               buffer_size=max_queue_size, workers=workers))
         if validation_split > 0:
             data_test_ds = NumpyDataset(data=train_x, symbol="input")
             label_test_ds = LabelDataset(labels=train_y, symbol="target")
-            dataprovider.testdata = Iterator(data=data_test_ds, label=label_test_ds, minibatch_size=validation_batch_size, is_shuffle=shuffle, buffer_size=max_queue_size,
+            dataprovider.testdata = Iterator(data=data_test_ds, label=label_test_ds,
+                                             minibatch_size=validation_batch_size, is_shuffle=shuffle,
+                                             buffer_size=max_queue_size,
                                              workers=workers)
 
         plan = TrainingPlan() \
@@ -393,10 +417,10 @@ class Model(ModelBase):
 
     def with_optimizer(self, optimizer, **kwargs):
         params = None
-        if getattr(self._model,'_is_keras',False):
-            params=self._model.weights
+        if getattr(self._model, '_is_keras', False):
+            params = self._model.weights
         else:
-            params=[self._model] if is_tensor(self._model) else self._model.parameters()
+            params = [self._model] if is_tensor(self._model) else self._model.parameters()
         if isinstance(optimizer, str):
             optimizer_class = get_optimizer(optimizer)
             self.optimizer = optimizer_class(params, **kwargs)
@@ -408,7 +432,7 @@ class Model(ModelBase):
 
         return self
 
-    def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         alias = name
 
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
@@ -427,7 +451,8 @@ class Model(ModelBase):
                     alias = alias + '_' + str(len(dup_keys) + 1)
                 self._losses[alias] = loss_class(**kwargs) if len(kwargs) > 0 else loss_class()
 
-        elif inspect.isclass(loss) and loss.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
+        elif inspect.isclass(
+                loss) and loss.__class__.__name__ == "type":  # The loss is a class but not initialized yet.
             alias = loss.__class__.__name__ if alias is None or len(alias) == 0 else alias
             if alias in self._losses:
                 dup_keys = [key for key in self._losses.key_list if alias + '_' in key]
@@ -453,26 +478,31 @@ class Model(ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
 
-        signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
+        signature = self._losses[alias].signature if hasattr(self._losses[alias], "signature") else None
         self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
         ctx.print(self._losses[alias].signature)
 
-        #check whether the model is end by SoftMax
+        # check whether the model is ended by SoftMax
         if isinstance(list(self._model.modules())[-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
             self._losses[alias].is_logsoftmax = True
-        elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(list(self._model.modules())[-1][-1], SoftMax) and hasattr(
-                self._losses[alias], 'is_logsoftmax'):
+        elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(list(self._model.modules())[-1][-1],
+                                                                                    SoftMax) and hasattr(
+            self._losses[alias], 'is_logsoftmax'):
             self._losses[alias].is_logsoftmax = True
-        elif isinstance(list(self._model.modules())[-1], Dense) and list(self._model.modules())[-1].activation == log_softmax and hasattr(self._losses[alias], 'is_logsoftmax'):
+        elif isinstance(list(self._model.modules())[-1], Dense) and list(self._model.modules())[
+            -1].activation == log_softmax and hasattr(self._losses[alias], 'is_logsoftmax'):
             self._losses[alias].is_logsoftmax = True
-        elif isinstance(list(self._model.modules())[-1], ModuleDict) and self._losses[alias].signature is not None and hasattr(self._losses[alias], 'is_logsoftmax'):
+        elif isinstance(list(self._model.modules())[-1], ModuleDict) and self._losses[
+            alias].signature is not None and hasattr(self._losses[alias], 'is_logsoftmax'):
             for k, v in list(self._model.modules())[-1].items():
                 if isinstance(list(v.modules())[-1], SoftMax) and k in self._losses[alias].signature.inputs:
                     self._losses[alias].is_logsoftmax = True
-                elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],SoftMax) and k in self._losses[
+                elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],
+                                                                                  SoftMax) and k in self._losses[
                     alias].signature.inputs:
                     self._losses[alias].is_logsoftmax = True
-                elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[-1].activation == log_softmax and k in self._losses[alias].signature.inputs:
+                elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[
+                    -1].activation == log_softmax and k in self._losses[alias].signature.inputs:
                     self._losses[alias].is_logsoftmax = True
 
         self.loss_weights[alias] = float(loss_weight)
@@ -599,16 +629,16 @@ class Model(ModelBase):
             the model self
 
         """
-        sys.stderr.write('automatic mixed precision training only enable when using pytorch 1.6 (or higher) as backend and cuda is available.')
+        sys.stderr.write(
+            'automatic mixed precision training only enable when using pytorch 1.6 (or higher) as backend and cuda is available.')
 
-        #if ctx.amp_available:
+        # if ctx.amp_available:
         # self.is_autocast_enabled = True
         # self.gradscaler = torch.cuda.amp.GradScaler()
         # sys.stdout.write('Automatic Mixed Precision:{0}.\n'.format('Turn On'))
         # else:
         #     print(
         #         'automatic mixed precision training only enable when using pytorch 1.6 (or higher) as backend and cuda is available.')
-
 
         return self
 
@@ -670,8 +700,10 @@ class Model(ModelBase):
     def do_on_batch_end(self):
         super().do_on_batch_end()
         self.training_context['time_batch_end'] = time.time()
-        self.training_context['time_batch_progress'] += (self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
-        self.training_context['time_epoch_progress'] += (self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
+        self.training_context['time_batch_progress'] += (
+                self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
+        self.training_context['time_epoch_progress'] += (
+                self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
 
         if (self.training_context['steps'] + 1) % ctx.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
@@ -684,7 +716,8 @@ class Model(ModelBase):
                     temp[k] = self.training_context['tmp_losses'][k][-1][-1]
             if 'total_losses' not in temp:
                 temp['total_losses'] = to_numpy(self.training_context['current_loss']).mean()
-            ctx.print('{ ' + ', '.join(['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
+            ctx.print('{ ' + ', '.join(
+                ['{0}: {1}'.format(k, adaptive_format(v, value_type='loss')) for k, v in temp.items()]) + ' }')
 
     def do_on_data_received(self, train_data, test_data):
 
@@ -697,7 +730,8 @@ class Model(ModelBase):
             [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
             try:
 
-                data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context['data_feed']
+                data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context[
+                    'data_feed']
                 if isinstance(self._model, Layer):
                     inshapes = self.inputs.value_list
                     outshapes = self.targets.value_list
@@ -726,8 +760,10 @@ class Model(ModelBase):
                                     available_fields.remove('input')
                                 elif len(self._model.signature.inputs.key_list) == 1:
                                     for item in available_fields:
-                                        data_shape = train_data[item].shape if len(train_data[item].shape) > 2 else TensorShape([None])
-                                        if 'target' not in item and 'output' != item and data_shape == inshapes[0].shape:
+                                        data_shape = train_data[item].shape if len(
+                                            train_data[item].shape) > 2 else TensorShape([None])
+                                        if 'target' not in item and 'output' != item and data_shape == inshapes[
+                                            0].shape:
                                             data_feed[arg] = item
                                             available_fields.remove(item)
                                             break
@@ -758,7 +794,8 @@ class Model(ModelBase):
                                     elif len(available_fields) > 0:
                                         target_shape = outshapes
                                         for item in available_fields:
-                                            data_shape = list(train_data[item].shape) if len(train_data[item].shape) > 1 else [None]
+                                            data_shape = list(train_data[item].shape) if len(
+                                                train_data[item].shape) > 1 else [None]
                                             if target_shape == data_shape:
                                                 data_feed[arg] = item
                                                 available_fields.remove(item)
@@ -785,10 +822,12 @@ class Model(ModelBase):
         # convert to tensor
         try:
             data_feed = self.training_context['data_feed']
-            input_list = [data_feed['input'] if arg == 'x' and 'input' in data_feed else data_feed[arg] for arg in self._model.signature.inputs.key_list]
+            input_list = [data_feed['input'] if arg == 'x' and 'input' in data_feed else data_feed[arg] for arg in
+                          self._model.signature.inputs.key_list]
             for item in train_data.key_list:
-                if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[item].dtype.kind in {'U', 'S'}:
-                    train_data[item] =[s.decode() for s in train_data[item]]
+                if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[
+                    item].dtype.kind in {'U', 'S'}:
+                    train_data[item] = [s.decode() for s in train_data[item]]
                 else:
                     train_data[item] = to_tensor(train_data[item], device=get_device())
 
@@ -796,7 +835,8 @@ class Model(ModelBase):
                     train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[item].dtype.kind in {'U', 'S'}:
+                    if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[
+                        item].dtype.kind in {'U', 'S'}:
                         test_data[item] = [s.decode() for s in test_data[item]]
                     else:
                         test_data[item] = to_tensor(test_data[item], device=get_device())
@@ -806,13 +846,15 @@ class Model(ModelBase):
 
         except:
             PrintException()
-        train_data, test_data = super().do_on_data_received(self.training_context['train_data'], self.training_context['test_data'])
+        train_data, test_data = super().do_on_data_received(self.training_context['train_data'],
+                                                            self.training_context['test_data'])
         self.training_context['train_data'] = train_data
         self.training_context['test_data'] = test_data
         return train_data, test_data
 
     def do_calculate_forward(self, is_training=True):
-        data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(self.training_context['test_data']) == 0 else \
+        data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(
+            self.training_context['test_data']) == 0 else \
             self.training_context['test_data']
         data_feed = self.training_context['data_feed']
         model = self.training_context['current_model']
@@ -820,7 +862,8 @@ class Model(ModelBase):
             data['output'] = self._model
             if is_training and self.use_output_as_loss:
                 this_loss = data['output'].sum()
-                self.training_context['losses'].collect(model.signature.outputs.key_list[0], self.training_context['steps'], this_loss)
+                self.training_context['losses'].collect(model.signature.outputs.key_list[0],
+                                                        self.training_context['steps'], this_loss)
                 self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
         else:
             if not is_training:
@@ -843,7 +886,8 @@ class Model(ModelBase):
                 if is_training and self.use_output_as_loss:
                     this_loss = output.sum()
                     self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
-                    self.training_context['losses'].collect(signature.outputs.key_list[0], self.training_context['steps'], to_scalar(this_loss.copy()))
+                    self.training_context['losses'].collect(signature.outputs.key_list[0],
+                                                            self.training_context['steps'], to_scalar(this_loss.copy()))
 
     def do_on_loss_calculation_start(self):
         super().do_on_loss_calculation_start()
@@ -868,22 +912,24 @@ class Model(ModelBase):
 
     def do_gradient_update(self, log_gradients=False):
         accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
-        need_backward = self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[ 'stop_update'])
+        need_backward = self.training_context['stop_update'] == 0 or (
+                0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
+            'stop_update'])
         is_layer = isinstance(self._model, (Layer, tf.Module))
 
         if is_layer:
             self._model.train()
 
         if need_backward:
-            if not accumulate_grads :
+            if not accumulate_grads:
                 super().on_optimization_step_start()
-                #self.training_context['grads_and_vars']=zip( self.training_context['accum_gradient'], vars)
+                # self.training_context['grads_and_vars']=zip( self.training_context['accum_gradient'], vars)
 
                 if log_gradients:
                     self.log_gradient(self.training_context['grads_and_vars'])
                 self.optimizer.step(self.training_context['grads_and_vars'])
                 if self.accumulation_steps > 1:
-                    self.training_context['accum_gradient']=None
+                    self.training_context['accum_gradient'] = None
                 self.do_on_optimization_step_end()
 
         else:
@@ -893,24 +939,28 @@ class Model(ModelBase):
                 if is_layer:
                     self._model.zero_grad()
 
-
         if self.accumulation_steps > 1:
-            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss'].copy()))
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
+                                                        to_scalar(self.training_context['current_loss'].copy()))
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
         if self.accumulation_steps == 1:
-            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'], to_scalar(self.training_context['current_loss']))
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
+                                                        to_scalar(self.training_context['current_loss']))
             if self.training_context['is_collect_data']:
                 steps, values = self.training_context['tmp_losses'].get_series('total_losses')
-                self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
+                self.training_context['losses'].collect('total_losses', self.training_context['steps'],
+                                                        to_scalar(to_numpy(values).mean()))
                 if self.training_context['current_batch'] > 0:
                     self.training_context['tmp_losses'].reset()
         else:
             steps, values = self.training_context['tmp_losses'].get_series('total_losses')
-            self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
+            self.training_context['losses'].collect('total_losses', self.training_context['steps'],
+                                                    to_scalar(to_numpy(values).mean()))
             if self.training_context['current_batch'] > 0:
                 self.training_context['tmp_losses'].reset()
+
     def do_on_excution_exception(self):
         super().do_on_excution_exception()
         self.save_model()
@@ -940,7 +990,9 @@ class Model(ModelBase):
             is_abnormal = True
             for para in self._model.parameters():
                 if any_abnormal_number(para):
-                    para.data.copy_(where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+                    para.data.copy_(
+                        where(is_abnormal_number(para), random_normal_like(para, mean=0, std=0.02).to(get_device()),
+                              para))
         if is_tensor(self._model) and any_abnormal_number(self._model):
             is_abnormal = True
 
@@ -973,14 +1025,14 @@ class Model(ModelBase):
                 self._model.eval()
                 self._model.cpu()
 
-                #tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
-                #temfolder = tempfile.gettempdir()
+                # tempfd, temppath = tempfile.mkstemp(prefix=filename, suffix=ext)
+                # temfolder = tempfile.gettempdir()
                 with tempfile.TemporaryDirectory() as temfolder:
                     tempfilename = filename + '_' + str(uuid.uuid4().node)
                     temppath = os.path.join(temfolder, tempfilename + ext)
 
                     try:
-                        with open(temppath,'wb') as f:
+                        with open(temppath, 'wb') as f:
                             with tf.device('/cpu:0'):
                                 save({
                                     'state_dict': self._model.state_dict(),
@@ -988,7 +1040,7 @@ class Model(ModelBase):
                                     'trident_version': __version__,
                                     'tensorflow_version': tf.version.VERSION,
                                     'signature': self._model.signature
-                                },f,is_compressed=True)
+                                }, f, is_compressed=True)
 
                         if os.path.exists(save_path):
                             os.remove(save_path)
@@ -1016,7 +1068,7 @@ class Model(ModelBase):
                         if os.path.exists(save_path):
                             os.remove(save_path)
                             shutil.move(temppath2, save_path)
-                            #os.rename(move_path2, save_path)
+                            # os.rename(move_path2, save_path)
                         else:
                             shutil.move(temppath2, save_path)
                     except Exception as e:
@@ -1025,7 +1077,6 @@ class Model(ModelBase):
                             if os.path.exists(save_path):
                                 shutil.move(save_path, save_path + '._')
                             shutil.move(temppath2, save_path)
-
 
                 with tf.device(get_device()):
                     self._model.train()
@@ -1047,7 +1098,6 @@ class Model(ModelBase):
                 make_dir_if_need(sanitize_path(save_path))
                 save_path = sanitize_path(save_path)
 
-
                 temfolder = tempfile.gettempdir()
                 tempfilename = filename + '_' + str(uuid.uuid4().node)
                 temppath = os.path.join(temfolder, tempfilename + ext)
@@ -1068,7 +1118,6 @@ class Model(ModelBase):
                         if os.path.exists(save_path):
                             shutil.move(save_path, save_path + '._')
                         shutil.move(temppath, save_path)
-
 
                 gc.collect()
                 self._model.train()
@@ -1099,7 +1148,8 @@ class Model(ModelBase):
                     # os.rename(move_path, save_path)
                 else:
                     shutil.move(temppath, save_path)
-                    sys.stdout.write( 'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
+                    sys.stdout.write(
+                        'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
             except Exception as e:
                 ctx.print(e)
                 if os.path.exists(temppath):
@@ -1164,7 +1214,8 @@ class Model(ModelBase):
 
         if 'backend' in state_dict and state_dict['backend'] != 'tensorflow':
             raise RuntimeError(
-                'The model archive {0} is a {1}-based model, but current backend is Tensorflow, so cannot load model properly.'.format(file_path, state_dict['backend']))
+                'The model archive {0} is a {1}-based model, but current backend is Tensorflow, so cannot load model properly.'.format(
+                    file_path, state_dict['backend']))
 
         if "state_dict" in state_dict.keys():
             pretrained_dict = state_dict['state_dict']
@@ -1177,7 +1228,9 @@ class Model(ModelBase):
                 value = pretrained_dict[key]
                 if is_tensor(value) and any_abnormal_number(value):
                     has_abnormal = True
-                    pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                    pretrained_dict[key] = where(is_nan(value),
+                                                 random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(
+                                                     value.dtype), value)
                 if is_tensor(value) and ndim(value) == 0:
                     pretrained_dict[key] = to_tensor(value.item())
 
@@ -1189,7 +1242,8 @@ class Model(ModelBase):
             # Dropout and Batch normalization will behavior change!!!
 
             self._model.eval()
-        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
+        if "signature" in state_dict.keys() and (
+                self._model.signature is None or state_dict['signature'] != self._model.signature):
             self._model.signature = state_dict['signature']
         self._model.to(get_device())
 
@@ -1204,9 +1258,11 @@ class Model(ModelBase):
         else:
             raise ValueError('In tensorflow ,grads should be list in eager mode')
 
-    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch=None, done=False,
+    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch=None,
+                    done=False,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
-                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False, is_out_sample_evaluation=False, **kwargs):
+                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,
+                    is_out_sample_evaluation=False, **kwargs):
         with tf.device(get_device()):
             try:
                 self.training_context['current_epoch'] = current_epoch
@@ -1218,7 +1274,7 @@ class Model(ModelBase):
                 self.training_context['log_gradients'] = log_gradients
                 self.training_context['log_weights'] = log_weights
                 self.training_context['current_model'] = self._model
-                self.training_context['accumulate_grads'] =None
+                self.training_context['accumulate_grads'] = None
 
                 if self.training_context['current_batch'] == 0:
                     if self.training_context['current_epoch'] == 0:
@@ -1242,7 +1298,8 @@ class Model(ModelBase):
                 self.training_context['current_lr'] = self.optimizer.lr
                 self.batch_loss_history.collect('epoch', self.training_context['steps'], current_epoch)
                 self.batch_metric_history.collect('epoch', self.training_context['steps'], current_epoch)
-                is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if self.training_context['total_batch'] is not None else done
+                is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if \
+                    self.training_context['total_batch'] is not None else done
 
                 self.do_on_batch_start()
                 for callback in self.callbacks:
@@ -1253,17 +1310,19 @@ class Model(ModelBase):
                 for callback in self.callbacks:
                     callback.on_data_received(self.training_context)
 
-                if (not self.training_context['skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
+                if (not self.training_context[
+                    'skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
                     self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
-
 
                 with tf.GradientTape() as grad_tape:
                     grad_tape.watch(self._model.trainable_variables)
 
-                    if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
+                    if 'skip_generate_output' not in self.training_context or self.training_context[
+                        'skip_generate_output'] == False:
                         try:
                             if self.output_fn is not None and callable(self.output_fn):
-                                self.output_fn(self,self.training_context, is_training=True, is_autocast_enabled=self.is_autocast_enabled)
+                                self.output_fn(self, self.training_context, is_training=True,
+                                               is_autocast_enabled=self.is_autocast_enabled)
                             else:
                                 self.do_calculate_forward(is_training=True)
 
@@ -1277,14 +1336,16 @@ class Model(ModelBase):
 
                     # losss
                     for k, v in self._losses.items():
-                        if not hasattr(v, 'start_epoch') or (hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
+                        if not hasattr(v, 'start_epoch') or (
+                                hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
 
                             try:
                                 loss_weight = to_tensor(1.0)
                                 if k in self.loss_weights:
                                     loss_weight = self.loss_weights[k]
                                 loss_weight = to_tensor(loss_weight, 'float32')
-                                this_loss = loss_weight * try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                this_loss = loss_weight * try_map_args_and_call(v, self.train_data,
+                                                                                self.training_context['data_feed'],
                                                                                 self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
 
                                 if isinstance(this_loss, tuple):
@@ -1292,31 +1353,39 @@ class Model(ModelBase):
                                     for i in range(len(this_loss)):
                                         if any_abnormal_number(this_loss[i]):
                                             sys.stderr.write(
-                                                'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
+                                                'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(
+                                                    k))
                                         else:
                                             # a leaf Variable that requires grad connotused in an in-place operation.
                                             overall_loss = overall_loss + this_loss[i]
-                                    self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
+                                    self.training_context['current_loss'] = self.training_context[
+                                                                                'current_loss'] + overall_loss
 
                                     if hasattr(v, 'as_metric') and v.as_metric == True:
-                                        self.training_context['tmp_metrics'].collect(camel2snake(k),self.training_context['steps'],to_numpy(overall_loss))
+                                        self.training_context['tmp_metrics'].collect(camel2snake(k),
+                                                                                     self.training_context['steps'],
+                                                                                     to_numpy(overall_loss))
 
-
-                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'], overall_loss)
+                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
+                                                                                overall_loss)
 
                                 else:
                                     if any_abnormal_number(this_loss):
                                         sys.stderr.write(
-                                            'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
+                                            'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(
+                                                k))
                                     else:
                                         # a leaf Variable that requires grad connotused in an in-place operation.
-                                        self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
+                                        self.training_context['current_loss'] = self.training_context[
+                                                                                    'current_loss'] + this_loss
 
                                     if hasattr(v, 'as_metric') and v.as_metric == True:
-                                        self.training_context['tmp_metrics'].collect(camel2snake(k),self.training_context['steps'],to_numpy(this_loss))
+                                        self.training_context['tmp_metrics'].collect(camel2snake(k),
+                                                                                     self.training_context['steps'],
+                                                                                     to_numpy(this_loss))
 
-
-                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'], this_loss)
+                                    self.training_context['tmp_losses'].collect(k, self.training_context['steps'],
+                                                                                this_loss)
                             except Exception as e:
                                 ctx.print(e)
                                 PrintException()
@@ -1326,28 +1395,37 @@ class Model(ModelBase):
                     for k, v in self._regs.items():
                         this_loss = to_tensor(0.0, requires_grad=True)
                         if 'model' in v.signature.inputs:
-                            this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
+                            this_loss = v(self._model) if self.training_context['stop_update'] < 1 else to_tensor(0.0,
+                                                                                                                  requires_grad=True)
                         elif 'output' in v.signature.inputs:
-                            this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[ 'stop_update'] < 1 else  to_tensor(0.0)
+                            this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                                              self.is_autocast_enabled) if self.training_context[
+                                                                                               'stop_update'] < 1 else to_tensor(
+                                0.0)
                         if not any_abnormal_number(this_loss):
                             # a leaf Variable that requires grad connotused in an in-place operation.
-                            self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss  # self.training_context[
+                            self.training_context['current_loss'] = self.training_context[
+                                                                        'current_loss'] + this_loss  # self.training_context[
                         # 'current_loss'] + this_loss
 
-                        self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
+                        self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'],
+                                                                    this_loss)
 
                 vars = grad_tape.watched_variables()
-                grads = grad_tape.gradient(self.training_context['current_loss'], vars, unconnected_gradients=tf.UnconnectedGradients.NONE)
+                grads = grad_tape.gradient(self.training_context['current_loss'], vars,
+                                           unconnected_gradients=tf.UnconnectedGradients.NONE)
 
-                need_backward = self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[ 'stop_update'])
-                if need_backward :
+                need_backward = self.training_context['stop_update'] == 0 or (
+                        0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
+                    'stop_update'])
+                if need_backward:
                     if self.training_context['accum_gradient'] is None:
-                        self.training_context['accum_gradient']=grads
+                        self.training_context['accum_gradient'] = grads
                     else:
-                        self.training_context['accum_gradient'] = [(acum_grad + grad) for acum_grad, grad in zip(self.training_context['accum_gradient'], grads)]
+                        self.training_context['accum_gradient'] = [(acum_grad + grad) for acum_grad, grad in
+                                                                   zip(self.training_context['accum_gradient'], grads)]
 
-
-                self.training_context['grads_and_vars'] = zip( self.training_context['accum_gradient'] , vars)
+                self.training_context['grads_and_vars'] = zip(self.training_context['accum_gradient'], vars)
                 # for this_grad,this_var in zip(grads, vars):
                 #     if this_var.ref() not in   self.training_context['accum_gradient']:
                 #         self.training_context['accum_gradient'][this_var.ref()]=this_grad
@@ -1368,9 +1446,11 @@ class Model(ModelBase):
                     elif is_tensor(self._model):
                         self.log_weight(weghts=self._model)
 
-                if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and self.training_context['stop_update'] < 1:
+                if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and \
+                        self.training_context['stop_update'] < 1:
                     if self.output_fn is not None and callable(self.output_fn):
-                        self.output_fn(self,self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
+                        self.output_fn(self, self.training_context, is_training=False,
+                                       is_autocast_enabled=self.is_autocast_enabled)
                     else:
                         self.do_calculate_forward(is_training=False)
                 self.do_calculate_metrics()
@@ -1381,8 +1461,8 @@ class Model(ModelBase):
 
                         # check
                         if len(steps) > 0:
-
-                            self.training_context['metrics'].collect(k, self.training_context['steps'], to_numpy(values).mean())
+                            self.training_context['metrics'].collect(k, self.training_context['steps'],
+                                                                     to_numpy(values).mean())
                     self.training_context['tmp_metrics'].reset()
 
                 # ON_BATCH_END
@@ -1400,8 +1480,11 @@ class Model(ModelBase):
                         test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
                         metric_value = test_values[-1]
                         history_metric_value = to_scalar(test_values[-1])
-                        verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value, prev_value=test_values, value_type='metric', name=k)))
-                    out_sample_evaluation_str = cyan_color(self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
+                        verbose.append('{0}: {1}'.format(k,
+                                                         adaptive_format(history_metric_value, prev_value=test_values,
+                                                                         value_type='metric', name=k)))
+                    out_sample_evaluation_str = cyan_color(
+                        self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
                     ctx.print(out_sample_evaluation_str)
                 # self.training_context['steps'] += 1
             except KeyboardInterrupt as k:
@@ -1416,7 +1499,8 @@ class Model(ModelBase):
             if self._model._is_keras:
                 self._model.summary()
             else:
-                if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None:
+                if not hasattr(self._model,
+                               '_signature') or self._model._signature is None or self._model._signature.inputs is None:
                     self._model._signature = get_signature(self._model, self._model._name)
                 summary(self._model, [item for item in self._model._signature.inputs.value_list])
             return self
@@ -1453,13 +1537,15 @@ class Model(ModelBase):
             return np.expand_dims(image_backend_adaption(img_data))
         if isinstance(img_data, np.ndarray):
             for fc in self._preprocess_flow:
-                if self._model is not None and self.signature is not None and len(self.signature) > 1 and self.input_spec is not None:
+                if self._model is not None and self.signature is not None and len(
+                        self.signature) > 1 and self.input_spec is not None:
                     img_data = fc(img_data, spec=self.input_spec)
                 else:
                     img_data = fc(img_data)
             img_data = np.expand_dims(image_backend_adaption(img_data))
             if self.input_spec is None:
-                self.input_spec = TensorSpec(shape=tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=False), object_type=ObjectType.rgb, name='input')
+                self.input_spec = TensorSpec(shape=tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=False),
+                                             object_type=ObjectType.rgb, name='input')
 
             return img_data
         else:
@@ -1487,7 +1573,7 @@ class Model(ModelBase):
         return self.__class__.__name__
 
     def __repr__(self):
-        # We treat the extra repr like the sub-module, one item per line
+        # We treat the extra repr like the submodule, one item per line
         extra_lines = []
         extra_repr = self.extra_repr()
         # empty string will be split into list ['']
@@ -1544,7 +1630,7 @@ class Model(ModelBase):
             if get_backend() == 'pytorch':
                 try:
                     from trident.loggers.pytorch_tensorboard import SummaryWriter
-                    self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                    ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
 
                 except Exception as e:
                     ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
@@ -1553,7 +1639,7 @@ class Model(ModelBase):
             elif get_backend() == 'tensorflow':
                 try:
                     from trident.loggers.tensorflow_tensorboard import SummaryWriter
-                    self.summary_writer = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                    ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
                 except Exception as e:
                     ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
                     ctx.print(e)
@@ -1661,9 +1747,10 @@ class MuiltiNetwork(Model):
             self._networks[k].with_optimizer(optimizer=optimizer, **kwargs)
         return self
 
-    def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         for k in self._networks.keys():
-            self._networks[k].with_loss(loss, loss_weight=loss_weight, start_epoch=start_epoch,as_metric=as_metric, name=name, **kwargs)
+            self._networks[k].with_loss(loss, loss_weight=loss_weight, start_epoch=start_epoch, as_metric=as_metric,
+                                        name=name, **kwargs)
 
         return self
 
@@ -1798,7 +1885,8 @@ class MuiltiNetwork(Model):
                     else:
                         metric_value = np.array(batch_values).mean()
 
-                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, batch_values, value_type='metric', name=k)))
+                metric_strings.append(
+                    '{0}: {1} '.format(k, adaptive_format(metric_value, batch_values, value_type='metric', name=k)))
 
         loss_value = None
         loss_steps, loss_values = self.batch_loss_history.get_series('total_losses')
@@ -1810,11 +1898,13 @@ class MuiltiNetwork(Model):
             else:
                 loss_value = to_numpy(loss_values).astype(np.float32).mean()
         step_time = self.training_context['time_batch_progress']
-        progress_bar(step_time, self.training_context['current_batch'], self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
-                           'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
-                                                                                  self.training_context['current_lr'],
-                                                                                  self.training_context['current_epoch']),
-                           name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
+        progress_bar(step_time, self.training_context['current_batch'],
+                     self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
+                     'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(
+                         adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
+                         self.training_context['current_lr'],
+                         self.training_context['current_epoch']),
+                     name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_batch_progress'] = 0
 
     def print_epoch_progress(self, *args, **kwargs):
@@ -1824,20 +1914,25 @@ class MuiltiNetwork(Model):
         for net in self._networks.value_list:
             for k in net.epoch_metric_history.key_list:
                 if k != 'epoch':
-                    metric_strings.append('{0}: {1}'.format(k, adaptive_format(net.epoch_metric_history.get_last(k)[-1], net.batch_metric_history.get_series(k)[-1], 'metric', k)))
+                    metric_strings.append('{0}: {1}'.format(k, adaptive_format(net.epoch_metric_history.get_last(k)[-1],
+                                                                               net.batch_metric_history.get_series(k)[
+                                                                                   -1], 'metric', k)))
 
         for k in self.epoch_metric_history.key_list:
             if k != 'epoch':
-                metric_strings.append('{0}: {1}'.format(k, adaptive_format(self.epoch_metric_history.get_last(k)[-1], None, 'metric', k)))
+                metric_strings.append(
+                    '{0}: {1}'.format(k, adaptive_format(self.epoch_metric_history.get_last(k)[-1], None, 'metric', k)))
 
         step_time = self.training_context['time_epoch_progress']
         total_losses = 0
         if 'total_losses' in self.epoch_loss_history:
             total_losses = self.epoch_loss_history['total_losses'][-1][-1]
         progress_bar(step_time, self.training_context['current_epoch'] + 1, self.training_context['total_epoch'],
-                           'Loss: {0}| {1} | lr: {2:<10.3e}'.format(adaptive_format(total_losses, value_type='loss'), ', '.join(metric_strings),
-                                                                    self._networks.value_list[0].training_context['current_lr']),
-                           name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
+                     'Loss: {0}| {1} | lr: {2:<10.3e}'.format(adaptive_format(total_losses, value_type='loss'),
+                                                              ', '.join(metric_strings),
+                                                              self._networks.value_list[0].training_context[
+                                                                  'current_lr']),
+                     name=self.name.ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_epoch_progress'] = 0
 
 
@@ -1850,9 +1945,11 @@ class ImageClassificationModel(Model):
         self._lab2idx = {}
         if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
             self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+                self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and \
+                self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.classification_label
 
     @property
@@ -1919,7 +2016,8 @@ class ImageRegressionModel(Model):
         super(ImageRegressionModel, self).__init__(inputs, input_shape, output)
         if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
             self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+                self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
     def infer_single_image(self, img):
@@ -1933,7 +2031,8 @@ class ImageRegressionModel(Model):
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
+                            isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             if isinstance(self._model, Layer):
@@ -1956,11 +2055,12 @@ class ImageDetectionModel(Model):
         object.__setattr__(self, 'nms_threshold', 0.3)
         if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
             self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+                self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
     def infer_single_image(self, img, scale=1):
-        if isinstance(self._model,Layer) and self._model.built:
+        if isinstance(self._model, Layer) and self._model.built:
             self._model.to(self.device)
             self._model.eval()
 
@@ -1971,7 +2071,8 @@ class ImageDetectionModel(Model):
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
+                            isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(get_device()).to(self._model.weights[0].value().dtype)
@@ -2038,14 +2139,17 @@ class ImageSegmentationModel(Model):
                 img = img[:, :, :3]
             rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func,
+                                                                                                image_backend_adaption):
                     img = func(img, spec=self._model.input_spec)
 
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
+                            isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
 
             img = image_backend_adaption(img)
-            inp = cast(to_tensor(np.expand_dims(img, 0)).to(self._model.get_root().device), self._model.weights[0].data.dtype)
+            inp = cast(to_tensor(np.expand_dims(img, 0)).to(self._model.get_root().device),
+                       self._model.weights[0].data.dtype)
             result = argmax(self._model(inp)[0], axis=-1)
             result = to_numpy(result)
             if self.class_names is None or len(self.class_names) == 0:
@@ -2065,9 +2169,11 @@ class ImageGenerationModel(Model):
         super(ImageGenerationModel, self).__init__(inputs, input_shape, output)
         if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
             self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+                self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and \
+                self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.rgb
 
     @property
@@ -2109,9 +2215,11 @@ class FaceLandmarkModel(Model):
 
         if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
             self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+                self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and \
+                self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.landmarks
 
     def infer_single_image(self, img):
@@ -2126,9 +2234,11 @@ class FaceLandmarkModel(Model):
                 img = img[:, :, :3]
             rescale_scale = 1.0
             for func in self.preprocess_flow:
-                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func, image_backend_adaption):
+                if (inspect.isfunction(func) or isinstance(func, Transform)) and not isinstance(func,
+                                                                                                image_backend_adaption):
                     img = func(img, spec=self._model.input_spec)
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
+                            isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
 
             img = image_backend_adaption(img)
@@ -2154,9 +2264,11 @@ class FaceRecognitionModel(Model):
         self.preprocess_flow = []
         if self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type is None:
             self._model._signature.inputs[self._model._signature.inputs.key_list[0]].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and self._model.signature.inputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+                self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
-        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and self._model.signature.outputs.value_list[0].object_type is None:
+        if self._model.signature is not None and len(self._model.signature.outputs.value_list) > 0 and \
+                self._model.signature.outputs.value_list[0].object_type is None:
             self._model.signature.outputs.value_list[0].object_type = ObjectType.embedding
 
     def infer_single_image(self, img):
@@ -2171,7 +2283,8 @@ class FaceRecognitionModel(Model):
             for func in self.preprocess_flow:
                 if (inspect.isfunction(func) or isinstance(func, Transform)) and func is not image_backend_adaption:
                     img = func(img, spec=self._model.input_spec)
-                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (isinstance(func, Transform) and func.name == 'resize'):
+                    if (inspect.isfunction(func) and func.__qualname__ == 'resize.<locals>.img_op') or (
+                            isinstance(func, Transform) and func.name == 'resize'):
                         rescale_scale = func.scale
             img = image_backend_adaption(img)
             inp = to_tensor(np.expand_dims(img, 0)).to(self._model.device).to(self._model.weights[0].data.dtype)
@@ -2196,7 +2309,8 @@ class LanguageModel(Model):
         if isinstance(self._model, Layer) and any_abnormal_number(self._model):
             for para in self._model.parameters():
                 if any_abnormal_number(para.value()):
-                    para.assign(where(is_nan(para), random_normal_like(para.value(), mean=0, std=0.02).to(para.device), para))
+                    para.assign(
+                        where(is_nan(para), random_normal_like(para.value(), mean=0, std=0.02).to(para.device), para))
 
         if save_path is not None:
             pass
@@ -2311,7 +2425,8 @@ class LanguageModel(Model):
 
         if 'backend' in state_dict and state_dict['backend'] != 'tensorflow':
             raise RuntimeError(
-                'The model archive {0} is a {1}-based model, but current backend is Tensorflow, so cannot load model properly.'.format(file_path, state_dict['backend']))
+                'The model archive {0} is a {1}-based model, but current backend is Tensorflow, so cannot load model properly.'.format(
+                    file_path, state_dict['backend']))
 
         if "state_dict" in state_dict.keys():
             pretrained_dict = state_dict['state_dict']
@@ -2324,7 +2439,9 @@ class LanguageModel(Model):
                 value = pretrained_dict[key]
                 if is_tensor(value) and any_abnormal_number(value):
                     has_abnormal = True
-                    pretrained_dict[key] = where(is_nan(value), random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(value.dtype), value)
+                    pretrained_dict[key] = where(is_nan(value),
+                                                 random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(
+                                                     value.dtype), value)
                 if is_tensor(value) and ndim(value) == 0:
                     pretrained_dict[key] = to_tensor(value.item())
 
@@ -2336,6 +2453,7 @@ class LanguageModel(Model):
             # Dropout and Batch normalization will behavior change!!!
 
             self._model.eval()
-        if "signature" in state_dict.keys() and (self._model.signature is None or state_dict['signature'] != self._model.signature):
+        if "signature" in state_dict.keys() and (
+                self._model.signature is None or state_dict['signature'] != self._model.signature):
             self._model.signature = state_dict['signature']
         self._model.to(get_device())

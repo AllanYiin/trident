@@ -54,7 +54,7 @@ from trident.callbacks import LambdaCallback
 from trident.layers.pytorch_layers import *
 
 from trident.callbacks.lr_schedulers import get_lr_scheduler, AdjustLRCallbackBase, AdjustLRCallback
-from trident.data.image_common import *
+#from trident.data.image_common import *
 
 __all__ = ['Model', 'MuiltiNetwork', 'ImageClassificationModel', 'ImageRegressionModel', 'ImageDetectionModel',
            'ImageGenerationModel',
@@ -106,8 +106,6 @@ class Model(model.ModelBase):
         self.batch_index = 0
         self.filter_index = 1
         self._enable_tensorboard = False
-        self.summary_writer = None
-        self.accumulate_grads_inteval = 1
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
         if hasattr(output, '_signature'):
@@ -324,7 +322,7 @@ class Model(model.ModelBase):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
             self._model.train()
-        elif self._model is not None and isinstance(self._model, nn.Module) :
+        elif self._model is not None and isinstance(self._model, nn.Module):
             self._model.train()
         else:
             raise ValueError('There is no built model ,nothing to learn')
@@ -334,7 +332,7 @@ class Model(model.ModelBase):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
             self._model.eval()
-        elif self._model is not None and isinstance(self._model, nn.Module) :
+        elif self._model is not None and isinstance(self._model, nn.Module):
             self._model.eval()
         else:
             raise ValueError('There is no built model ,nothing to evaluate')
@@ -353,31 +351,33 @@ class Model(model.ModelBase):
                 **kwargs
                 ):
         self.with_optimizer(optimizer, lr=2e-3, betas=(0.9, 0.999))
-        if loss is not None and (isinstance(loss, str) or callable(loss) or inspect.isfunction(loss) or inspect.isclass(loss)):
+        if loss is not None and (
+                isinstance(loss, str) or callable(loss) or inspect.isfunction(loss) or inspect.isclass(loss)):
             self.with_loss(loss, loss_weight=loss_weights)
         else:
             if loss is None:
                 loss = [CrossEntropyLoss]
-            elif not  isinstance(loss, (tuple, list, dict) ):
-                loss=[loss]
+            elif not isinstance(loss, (tuple, list, dict)):
+                loss = [loss]
 
-            if loss_weights is None :
-                loss_weights=[1]*len(loss)
-            elif isinstance(loss_weights,numbers.Number):
+            if loss_weights is None:
+                loss_weights = [1] * len(loss)
+            elif isinstance(loss_weights, numbers.Number):
                 loss_weights = [loss_weights] * len(loss)
-            elif len(loss_weights)!=len(loss):
+            elif len(loss_weights) != len(loss):
                 loss_weights = [1] * len(loss)
 
-            if isinstance(loss,  (list, tuple) ):
-                for l,w in zip(loss,loss_weights):
+            if isinstance(loss, (list, tuple)):
+                for l, w in zip(loss, loss_weights):
                     self.with_loss(l, loss_weight=w)
 
             elif isinstance(loss, dict):
-                for k,v,w in zip(loss.items(),loss_weights):
-                    self.with_loss(v, loss_weight=w,name=k)
+                for k, v, w in zip(loss.items(), loss_weights):
+                    self.with_loss(v, loss_weight=w, name=k)
 
-
-        if metrics is not None and (isinstance(metrics, str) or callable(metrics) or inspect.isfunction(metrics) or inspect.isclass(metrics)):
+        if metrics is not None and (
+                isinstance(metrics, str) or callable(metrics) or inspect.isfunction(metrics) or inspect.isclass(
+            metrics)):
             self.with_metric(metrics)
         else:
             if metrics is None:
@@ -465,7 +465,6 @@ class Model(model.ModelBase):
     def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         alias = name
 
-
         if (alias is None or len(alias) == 0) and hasattr(loss, '__name__'):
             alias = loss.__name__
 
@@ -509,30 +508,33 @@ class Model(model.ModelBase):
             else:
                 self._losses[alias] = partial(loss, **kwargs)
 
-
-        signature =self._losses[alias] .signature if hasattr(self._losses[alias] , "signature") else None
+        signature = self._losses[alias].signature if hasattr(self._losses[alias], "signature") else None
         self._losses[alias].signature = get_signature(self._losses[alias], alias) if signature is None else signature
         ctx.print(self._losses[alias].signature)
 
-        # check whether the model is end by SoftMax
-        if self._model is not None and isinstance(self._model,Layer):
-            print(alias,list(self._model.modules())[-1].__class__.__name__)
-            if isinstance(list(self._model.modules())[-1],SoftMax) and hasattr(self._losses[alias],'is_logsoftmax'):
-                self._losses[alias].is_logsoftmax=True
-            elif isinstance(list(self._model.modules())[-1],Sequential) and isinstance(list(self._model.modules())[-1][-1],SoftMax) and hasattr(self._losses[alias],'is_logsoftmax'):
-                self._losses[alias].is_logsoftmax=True
-            elif isinstance(list(self._model.modules())[-1],Dense) and list(self._model.modules())[-1].activation==log_softmax and hasattr(self._losses[alias],'is_logsoftmax'):
-                self._losses[alias].is_logsoftmax=True
-            elif isinstance(list(self._model.modules())[-1],ModuleDict) and self._losses[alias].signature is not None and  hasattr(self._losses[alias],'is_logsoftmax'):
-                for k,v in list(self._model.modules())[-1].items():
-                    if isinstance(list(v.modules())[-1],SoftMax) and k in self._losses[alias].signature.inputs:
+        # check whether the model is ended by SoftMax
+        if self._model is not None and isinstance(self._model, Layer):
+            print(alias, list(self._model.modules())[-1].__class__.__name__)
+            if isinstance(list(self._model.modules())[-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax = True
+            elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(
+                    list(self._model.modules())[-1][-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax = True
+            elif isinstance(list(self._model.modules())[-1], Dense) and list(self._model.modules())[
+                -1].activation == log_softmax and hasattr(self._losses[alias], 'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax = True
+            elif isinstance(list(self._model.modules())[-1], ModuleDict) and self._losses[
+                alias].signature is not None and hasattr(self._losses[alias], 'is_logsoftmax'):
+                for k, v in list(self._model.modules())[-1].items():
+                    if isinstance(list(v.modules())[-1], SoftMax) and k in self._losses[alias].signature.inputs:
                         self._losses[alias].is_logsoftmax = True
-                    elif isinstance(list(v.modules())[-1],Sequential) and  isinstance(list(v.modules())[-1][-1],SoftMax)  and k in self._losses[alias].signature.inputs:
+                    elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],
+                                                                                      SoftMax) and k in self._losses[
+                        alias].signature.inputs:
                         self._losses[alias].is_logsoftmax = True
-                    elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[-1].activation == log_softmax and k in self._losses[alias].signature.inputs:
+                    elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[
+                        -1].activation == log_softmax and k in self._losses[alias].signature.inputs:
                         self._losses[alias].is_logsoftmax = True
-
-
 
         # for k, v in kwargs.items():
         #     if signature is not None:
@@ -744,9 +746,9 @@ class Model(model.ModelBase):
         super().do_on_batch_end()
         self.training_context['time_batch_end'] = time.time()
         self.training_context['time_batch_progress'] += (
-                    self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
+                self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
         self.training_context['time_epoch_progress'] += (
-                    self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
+                self.training_context['time_batch_end'] - self.training_context['time_batch_start'])
         if (self.training_context['steps'] + 1) % ctx.epoch_equivalent == 0:
             if self.warmup > 0 and self.warmup == (self.training_context['steps'] + 1) // ctx.epoch_equivalent:
                 self.adjust_learning_rate(self.training_context['base_lr'])
@@ -769,7 +771,7 @@ class Model(model.ModelBase):
             return self.training_context['train_data'], self.training_context['test_data']
         if self.training_context['steps'] == 0 and (
                 'data_feed' not in self.training_context or len(self.training_context['data_feed']) == 0 or len(
-                [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
+            [v for v in self.training_context['data_feed'].value_list if v is None]) > 0):
             try:
                 data_feed = OrderedDict() if 'data_feed' not in self.training_context else self.training_context[
                     'data_feed']
@@ -899,8 +901,10 @@ class Model(model.ModelBase):
 
     def do_gradient_update(self, log_gradients=False):
         try:
-            accumulate_grads = (self.training_context['steps']+1) % self.accumulation_steps != 0
-            need_backward = self.training_context['stop_update'] == 0 or (0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context['stop_update'])
+            accumulate_grads = (self.training_context['steps'] + 1) % self.accumulation_steps != 0
+            need_backward = self.training_context['stop_update'] == 0 or (
+                    0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
+                'stop_update'])
             is_layer = isinstance(self._model, (Layer, nn.Module))
 
             if is_layer:
@@ -909,27 +913,24 @@ class Model(model.ModelBase):
                 if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
                     if self.gradscaler is None:
                         self.gradscaler = torch.cuda.amp.GradScaler()
+
                     self.gradscaler.scale(self.training_context['current_loss'] / self.accumulation_steps).backward(
                         retain_graph=self.training_context['retain_graph'])
 
                 else:
 
-                    (self.training_context['current_loss'] / self.accumulation_steps).backward(
-                        retain_graph=self.training_context['retain_graph'])
-
-
+                    (self.training_context['current_loss']).backward(retain_graph=self.training_context['retain_graph'])
 
                 if not accumulate_grads:
                     # only check once every epoch start.
                     if is_layer and self.grad_clipping_by_norm:
 
                         if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
+                            self.gradscaler.unscale_(self.optimizer)
                             torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
 
                         else:
                             torch.nn.utils.clip_grad_norm_(self._model.parameters(), self.grad_clipping_threshold)
-
-
 
                     super().on_optimization_step_start()
 
@@ -937,17 +938,18 @@ class Model(model.ModelBase):
                         self.log_gradient()
                     # amp support
                     if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                        self.gradscaler.unscale_(self.optimizer)
                         self.gradscaler.step(self.optimizer)
                         self.gradscaler.update()
+                        self.optimizer.zero_grad()
                     elif is_tpu_available():
                         import torch_xla.core.xla_model as xm
                         ctx.print('current_loss device', self.training_context['current_loss'].device)
                         xm.optimizer_step(self.optimizer, barrier=True)
+                        self.optimizer.zero_grad()
                     else:
                         self.optimizer.step(self.get_current_loss)
+                        self.optimizer.zero_grad()
 
-                    self.optimizer.zero_grad()
                     if is_tensor(self._model):
                         pass
                         # if self._model.grad is not None:
@@ -962,23 +964,24 @@ class Model(model.ModelBase):
 
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1 if \
-                self.training_context['stop_update'] > 1 else self.training_context['stop_update']
-                if not self.training_context['retain_graph'] and not accumulate_grads:
-                    if is_layer:
-                        self._model.zero_grad()
-                if accumulate_grads:
-                    if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                        if self.gradscaler is None:
-                            self.gradscaler = torch.cuda.amp.GradScaler()
-                        self.gradscaler.scale(self.training_context['current_loss'] / self.accumulation_steps).backward(
-                            retain_graph=self.training_context['retain_graph'])
-
-                    else:
-                        (self.training_context['current_loss'] / self.accumulation_steps).backward(
-                            retain_graph=self.training_context['retain_graph'])
+                    self.training_context['stop_update'] > 1 else self.training_context['stop_update']
+                # if not self.training_context['retain_graph'] and not accumulate_grads:
+                #     if is_layer:
+                #         self._model.zero_grad()
+                # if accumulate_grads:
+                #     if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
+                #         if self.gradscaler is None:
+                #             self.gradscaler = torch.cuda.amp.GradScaler()
+                #         self.gradscaler.scale(self.training_context['current_loss'] ).backward(
+                #             retain_graph=self.training_context['retain_graph'])
+                #
+                #     else:
+                #         (self.training_context['current_loss'] / self.accumulation_steps).backward(
+                #             retain_graph=self.training_context['retain_graph'])
 
             if self.accumulation_steps > 1:
-                self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss'].copy()))
+                self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
+                                                            to_scalar(self.training_context['current_loss'].copy()))
 
 
         except Exception as e:
@@ -987,16 +990,19 @@ class Model(model.ModelBase):
 
     def do_on_optimization_step_end(self):
         super().do_on_optimization_step_end()
-        if  self.accumulation_steps==1:
-            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],to_scalar(self.training_context['current_loss']))
-            if self.training_context['is_collect_data']  :
-                steps, values =self.training_context['tmp_losses'].get_series('total_losses')
-                self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
-                if self.training_context['current_batch']>0:
+        if self.accumulation_steps == 1:
+            self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
+                                                        to_scalar(self.training_context['current_loss']))
+            if self.training_context['is_collect_data']:
+                steps, values = self.training_context['tmp_losses'].get_series('total_losses')
+                self.training_context['losses'].collect('total_losses', self.training_context['steps'],
+                                                        to_scalar(to_numpy(values).mean()))
+                if self.training_context['current_batch'] > 0:
                     self.training_context['tmp_losses'].reset()
         else:
             steps, values = self.training_context['tmp_losses'].get_series('total_losses')
-            self.training_context['losses'].collect('total_losses', self.training_context['steps'],to_scalar(to_numpy(values).mean()))
+            self.training_context['losses'].collect('total_losses', self.training_context['steps'],
+                                                    to_scalar(to_numpy(values).mean()))
             if self.training_context['current_batch'] > 0:
                 self.training_context['tmp_losses'].reset()
 
@@ -1043,13 +1049,11 @@ class Model(model.ModelBase):
         else:
             save_path = self.training_context['save_path']
 
-
-
         if isinstance(self._model, nn.Module) and not is_abnormal:
             try:
                 folder, filename, ext = split_path(save_path)
                 if not os.path.exists(folder):
-                    folder=os.path.join(get_trident_dir(),'models')
+                    folder = os.path.join(get_trident_dir(), 'models')
                 if filename == '':
                     filename = self.name
                 ext = '.pth.tar'
@@ -1060,7 +1064,7 @@ class Model(model.ModelBase):
                 self._model.eval()
                 self._model.cpu()
 
-                #temfolder = tempfile.gettempdir()
+                # temfolder = tempfile.gettempdir()
                 with tempfile.TemporaryDirectory() as temfolder:
                     tempfilename = filename + '_' + str(uuid.uuid4().node)
                     temppath = os.path.join(temfolder, tempfilename + ext)
@@ -1078,7 +1082,7 @@ class Model(model.ModelBase):
                         if os.path.exists(save_path):
                             os.remove(save_path)
                             shutil.move(temppath, save_path)
-                            #os.rename(move_path, save_path)
+                            # os.rename(move_path, save_path)
                         else:
                             shutil.move(temppath, save_path)
 
@@ -1086,9 +1090,8 @@ class Model(model.ModelBase):
                         ctx.print(e)
                         if os.path.exists(temppath):
                             if os.path.exists(save_path):
-                                shutil.move(save_path, save_path+'._')
+                                shutil.move(save_path, save_path + '._')
                             shutil.move(temppath, save_path)
-
 
                     ext = '.pth'
                     save_path = save_path.replace('.pth.tar', '.pth')
@@ -1102,14 +1105,14 @@ class Model(model.ModelBase):
                         if os.path.exists(save_path):
                             os.remove(save_path)
                             shutil.move(temppath2, save_path)
-                            #os.rename(move_path2, save_path)
+                            # os.rename(move_path2, save_path)
                         else:
                             shutil.move(temppath2, save_path)
                     except Exception as e:
                         ctx.print(e)
                         if os.path.exists(temppath2):
                             if os.path.exists(save_path):
-                                shutil.move(save_path, save_path+'._')
+                                shutil.move(save_path, save_path + '._')
                             shutil.move(temppath2, save_path)
 
                 self._model.to(get_device())
@@ -1146,7 +1149,8 @@ class Model(model.ModelBase):
                     # os.rename(move_path, save_path)
                 else:
                     shutil.move(temppath, save_path)
-                    sys.stdout.write('Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
+                    sys.stdout.write(
+                        'Yor model is a Tensor not a tf.Module, it has saved as numpy array(*.npy) successfully. ')
             except Exception as e:
                 ctx.print(e)
                 if os.path.exists(temppath):
@@ -1166,7 +1170,7 @@ class Model(model.ModelBase):
             import_or_install('onnx')
             self._model.eval()
             # if input_shape is None:
-            _dtype=list(self._model.parameters())[0].dtype
+            _dtype = list(self._model.parameters())[0].dtype
             dummy_input = tuple([to_tensor(spec.shape.get_dummy_tensor(batch_size=batch_size)).to(_dtype) for spec in
                                  self.signature.inputs.value_list])
             dummy_input = unpack_singleton(dummy_input)
@@ -1201,7 +1205,7 @@ class Model(model.ModelBase):
             #     dynamic_axes[inp] = [0]
             # for out in self.outputs.key_list:
             #     dynamic_axes[out] = [0]
-            #temfolder = tempfile.gettempdir()
+            # temfolder = tempfile.gettempdir()
             with tempfile.TemporaryDirectory() as temfolder:
                 tempfilename = filename + '_' + str(uuid.uuid4().node)
                 temppath = os.path.join(temfolder, tempfilename + ext)
@@ -1299,7 +1303,7 @@ class Model(model.ModelBase):
                         pretrained_dict[key] = to_tensor(value.item())
 
                 if has_abnormal:
-                    sys.stderr.write(self._model._name + '  has_abnormal detected and  fixed!!\n')
+                    sys.stderr.write(self.training_context['training_name'] + '  has_abnormal detected and  fixed!!\n')
                 self._model.load_state_dict(pretrained_dict, strict=False)
                 ctx.print('Model loaded!')
                 # must switch to evluate first beforeinference or training
@@ -1315,7 +1319,7 @@ class Model(model.ModelBase):
         # self.rebinding_input_output(self._model.input_shape)
         if not hasattr(self._model,
                        '_signature') or self._model._signature is None or self._model._signature.inputs is None or len(
-                self._model._signature.outputs) == 0:
+            self._model._signature.outputs) == 0:
             self._model._signature = get_signature(self._model, self._model._name)
         summary(self._model, [item for item in self._model._signature.inputs.value_list])
         return self
@@ -1390,7 +1394,7 @@ class Model(model.ModelBase):
         return self.__class__.__name__
 
     def __repr__(self):
-        # We treat the extra repr like the sub-module, one item per line
+        # We treat the extra repr like the submodule, one item per line
         extra_lines = []
         extra_repr = self.extra_repr()
         # empty string will be split into list ['']
@@ -1458,7 +1462,8 @@ class Model(model.ModelBase):
             if get_backend() == 'pytorch':
                 try:
                     from trident.loggers.pytorch_tensorboard import SummaryWriter
-                    self.training_context['summary_writer'] = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                    ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
+
 
                 except Exception as e:
                     ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
@@ -1467,7 +1472,7 @@ class Model(model.ModelBase):
             elif get_backend() == 'tensorflow':
                 try:
                     from trident.loggers.tensorflow_tensorboard import SummaryWriter
-                    self.training_context['summary_writer'] = SummaryWriter(os.path.join(working_directory, 'Logs'))
+                    ctx.try_enable_tensorboard(SummaryWriter(os.path.join(working_directory, 'Logs')))
                 except Exception as e:
                     ctx.print('Tensorboard initialize failed, please check the installation status about Tensorboard.')
                     ctx.print(e)
@@ -1735,12 +1740,10 @@ class ImageClassificationModel(Model):
 
     @class_names.setter
     def class_names(self, value):
-        if self._class_names is None or  self._class_names != value:
+        if self._class_names is None or self._class_names != value:
             self._class_names = value
             self._lab2idx = {v: k for k, v in enumerate(self._class_names)}
             self._idx2lab = {k: v for k, v in enumerate(self._class_names)}
-
-
 
     def index2label(self, idx: int):
         if self._idx2lab is None or len(self._idx2lab.items()) == 0:
@@ -1759,7 +1762,7 @@ class ImageClassificationModel(Model):
             return self._lab2idx[label]
 
     def infer_single_image(self, img, topk=1):
-        if  (isinstance(self._model, nn.Module) and (not hasattr(self._model,'built') or self._model.built) ):
+        if (isinstance(self._model, nn.Module) and (not hasattr(self._model, 'built') or self._model.built)):
             self._model.eval()
             img = image2array(img)
             if img.shape[-1] == 4:
