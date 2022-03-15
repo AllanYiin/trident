@@ -203,9 +203,10 @@ class _ClassificationLoss(Loss):
         "Check that `out` and `targ` have the same number of elements and flatten them."
         ndim_output = ndim(output)
         ndim_target = ndim(target)
+
         if ndim(output) > 2:
             if self.axis == 1:
-                output = output.view(output.size(0), output.size(1), -1)
+                output = output.view(output.size(0), output.size(1), -1)  # N,C,H,W => N,C,H*W
                 if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
                     target = target.view(target.size(0), -1)
                 elif ndim_target == ndim_output and target.dtype != Dtype.long:
@@ -1008,15 +1009,9 @@ class FocalLoss(_ClassificationLoss):
         Returns:
 
             """
-        #
 
         alpha = ones((output.size(self.axis))) * (1 - self.alpha)
         alpha[0] = self.alpha
-
-        if ndim(output) > 2 and self.axis == 1:
-            output = output.view(output.size(0), output.size(1), -1)  # N,C,H,W => N,C,H*W
-            output = output.transpose(1, 2)  # N,C,H*W => N,H*W,C
-            output = output.contiguous().view(-1, output.size(2))  # N,H*W,C => N*H*W,C
 
         if self.is_target_onehot and target.dtype != Dtype.long:
             target = argmax(target, self.axis)
@@ -1030,9 +1025,6 @@ class FocalLoss(_ClassificationLoss):
         pt = exp(-ce_loss)
         alpha = alpha.gather(0, target)
         focal_loss = alpha * ((1 - pt) ** self.gamma) * ce_loss
-
-        # loss = -1 * ((1 - pt) ** self.gamma) *( logpt*alpha)
-
         return focal_loss
 
 
