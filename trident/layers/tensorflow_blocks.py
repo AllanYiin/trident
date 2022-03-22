@@ -29,7 +29,7 @@ from trident.layers.tensorflow_layers import *
 
 _tf_data_format = 'channels_last'
 
-__all__ = ['Conv1d_Block', 'Conv2d_Block', 'TransConv2d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite', 'For']
+__all__ = ['FullConnect_Block','Conv1d_Block', 'Conv2d_Block', 'TransConv2d_Block', 'DepthwiseConv2d_Block', 'SeparableConv2d_Block', 'ShortCut2d', 'ConcateBlock', 'SqueezeExcite', 'For']
 
 _session = get_session()
 
@@ -53,7 +53,7 @@ class FullConnect_Block(Layer):
     def __init__(self, num_filters=None,
                  activation=None, normalization=None, use_spectral=False, use_bias=False,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
-                 keep_output=False, sequence_rank='cna', **kwargs):
+                 keep_output=False, sequence_rank='fna'):
         super(FullConnect_Block, self).__init__(name=name, keep_output=keep_output)
 
         if sequence_rank in ['fna', 'naf', 'afn']:
@@ -62,8 +62,6 @@ class FullConnect_Block(Layer):
             self.sequence_rank = 'fna'
 
         self.num_filters = num_filters
-
-
 
         self.use_bias = use_bias
 

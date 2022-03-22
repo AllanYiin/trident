@@ -52,7 +52,7 @@ class FullConnect_Block(Layer):
     def __init__(self, num_filters=None,
                  activation=None, normalization=None, use_spectral=False, use_bias=False,
                  add_noise=False, noise_intensity=0.005, dropout_rate=0, name=None, depth_multiplier=None,
-                 keep_output=False, sequence_rank='cna', **kwargs):
+                 keep_output=False, sequence_rank='fna', **kwargs):
         super(FullConnect_Block, self).__init__(name=name, keep_output=keep_output)
 
         if sequence_rank in ['fna', 'naf', 'afn']:
