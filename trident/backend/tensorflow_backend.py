@@ -536,28 +536,9 @@ def _forward_unimplemented(self, *input: Any) -> None:
 
 def Parameter(data, trainable=True, name=None):
     return tf.Variable(initial_value = data,trainable = trainable,dtype=data.dtype,name=name)
-#
-# class Parameter(tf.Variable):
-#     def __init__(self,  data, trainable=True, **kwargs):
-#         """
-#         Args:
-#             name (str) :name of the layer.
-#             keep_output (bool) :whether need to kept output tensor in execution time.
-#
-#
-#         """
-#         return tf.V
-#
-#
-#         super(Parameter, self).__init__(initial_value = data,trainable = trainable,dtype=data.dtype)
-#
-#     @property
-#     def trainable(self):
-#         return self.trainable
-#
-#     @trainable.setter
-#     def trainable(self, value):
-#         self.trainable = value
+
+
+
 
 class Layer(tf.Module):
     """Trident extened tf.Module as base layer class.
@@ -1555,9 +1536,11 @@ class Layer(tf.Module):
 
     @tf.Module.with_name_scope
     def _call_impl(self, *input, **kwargs):
-        # Maintains info about the `Layer.call` stack.
+        forward_call = self.forward
+
+        # Do not call functions when jit is used
         full_backward_hooks, non_full_backward_hooks = [], []
-        if len(self._backward_hooks) > 0 or len(_global_backward_hooks) > 0:
+        if self._backward_hooks or _global_backward_hooks:
             full_backward_hooks, non_full_backward_hooks = self._get_backward_hooks()
 
         is_all_numpy = False
@@ -1573,19 +1556,15 @@ class Layer(tf.Module):
                 input = to_tensor(input, device=get_device())
                 input = (input,)
 
-        for hook in itertools.chain(
-                _global_forward_pre_hooks.values(),
-                self._forward_pre_hooks.values()):
-            result = hook(self, input)
-            if result is not None:
-                if not isinstance(result, tuple):
-                    result = (result,)
-                input = result
+        if _global_forward_pre_hooks or self._forward_pre_hooks:
+            for hook in (*_global_forward_pre_hooks.values(), *self._forward_pre_hooks.values()):
+                result = hook(self, input)
+                if result is not None:
+                    if not isinstance(result, tuple):
+                        result = (result,)
+                    input = result
 
-        #bw_hook = None
-        #if len(full_backward_hooks) > 0:
-            #bw_hook = BackwardHook(self, full_backward_hooks)
-            #input = bw_hook.setup_input_hook(input)
+
 
 
         if not self._built:
@@ -1597,43 +1576,57 @@ class Layer(tf.Module):
                 if self.is_root:
                     if self._signature is None:
                         self._signature = get_signature(self)
-                    if self._signature is not None and len(self.signature.inputs) > 0:
+                    if self._signature is not None and len(self._signature.inputs) > 0:
                         self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
-
-                # dont do it  in tensorflow
-                # del inp
+                del inp
             elif isinstance(inp, (tuple, list)):
                 if isinstance(inp[0], numbers.Number):
                     self.input_shape = TensorShape(list(inp))
                 else:
-                    shp = tensor_to_shape(inp[0], need_exclude_batch_axis=True)
-                    self.input_filters = shp[self.filter_index]
-                    self.forward(*inp)
+                    out = self.forward(*inp)
+                    # shp =[ tensor_to_shape(i, need_exclude_batch_axis=True,is_singleton=False) for i in inp]
+                    # self.build(*shp)
             else:
-                self.input_shape = TensorShape(list(input))
+                self.input_shape = TensorShape(list(inp))
                 print('input shou be tensor or tuple of tensor')
 
             self._built = True
 
+        bw_hook = None
+        if full_backward_hooks:
+            bw_hook = hooks.BackwardHook(self, full_backward_hooks)
+            input = bw_hook.setup_input_hook(input)
+
+
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
         try:
             with tf.device(get_device()):
+
                 result = self.forward(*input, **kwargs)
+                result = unpack_singleton(result)
+
                 if hasattr(self, 'keep_output') and self.keep_output == True:
                     # make a op
-                    self._output_tensor = identity(unpack_singleton(result))
+                    self._output_tensor = result
                 if self._output_shape is None or is_built == False:
-                    output = tf.stop_gradient(unpack_singleton(result))
+                    output = result
                     if is_tensor(output):  # one output
                         self._output_shape = tensor_to_shape(output)
                     elif isinstance(output, (list, tuple)):
-                        output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                        output_shape = tuple(
+                            [tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
                         # if not isinstance(item, (list,tuple)) lstm
                         self._output_shape = unpack_singleton(output_shape)
-            for hook in self._forward_hooks.values():
-                hook_result = hook(self, input, result)
-                if hook_result is not None:
-                    result = hook_result
+
+                if _global_forward_hooks or self._forward_hooks:
+                    for hook in (*_global_forward_hooks.values(), *self._forward_hooks.values()):
+                        hook_result = hook(self, input, result)
+                        if hook_result is not None:
+                            result = hook_result
+
+                if bw_hook:
+                    result = bw_hook.setup_output_hook(result)
+
             if is_all_numpy == True and self.training == False and self.is_root == True:
                 if is_tensor(result):
                     return to_numpy(result)
