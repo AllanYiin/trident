@@ -454,6 +454,8 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
     """
     if isinstance(x,numbers.Number) or (is_tensor(x) and ndim(x)==0):
         return TensorShape([None])
+    elif isinstance(x, str) or (isinstance(x, list) and len(x) > 0 and isinstance(x[0], str)):
+        return TensorShape([None])
     if need_exclude_batch_axis and is_singleton==False:
         shp=list(int_shape(x))
         if len(shp)==0:
