@@ -144,13 +144,16 @@ class Dense(Layer):
         return x
 
 class Embedding(Layer):
-    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = None,
+    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = 0,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
-                 sparse: bool = False, _weight: Optional[tf.Tensor] = None, filter_index=-1, keep_output: bool = False, name: Optional[str] = None) -> None:
+                 sparse: bool = False, _weight: Optional[tf.Tensor] = None, filter_index=-1, keep_output: bool = False, name: Optional[str] = None, add_noise=False,
+                 noise_intensity=0.005) -> None:
         super(Embedding, self).__init__(keep_output=keep_output, name=name)
         self.filter_index = filter_index
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
+        self.add_noise = add_noise
+        self.noise_intensity = noise_intensity
 
         self.register_parameter('weight', None)
         if padding_idx is not None:
@@ -180,7 +183,9 @@ class Embedding(Layer):
            # self.to(self.device)
             #init.normal_(self.weight)
             if self.padding_idx is not None:
-                 self.weight[self.padding_idx].fill_(0)
+                padding_tensor=np.ones((self.num_embeddings,1))
+                padding_tensor[self.padding_idx]=0
+                self.weight.assign(self.weight.value()*to_tensor(padding_tensor))
         self.sparse = sparse
 
 
@@ -201,12 +206,27 @@ class Embedding(Layer):
 
     def forward(self, x, **kwargs) :
         dtype = x.dtype
+        if self.padding_idx is not None:
+            padding_tensor=np.ones((self.num_embeddings,1))
+            padding_tensor[self.padding_idx]=0
+            self.weight.assign(self.weight.value()*to_tensor(padding_tensor))
+
         if dtype != tf.int32 :
             x = math_ops.cast(x,tf.int32)
         if isinstance(self.weight, sharded_variable.ShardedVariable):
-            x = embedding_ops.embedding_lookup_v2(self.weight.variables,x )
+            x = embedding_ops.embedding_lookup_v2(self.weight.variables,x,max_norm=self.max_norm,name=self.name)
         else:
-            x = embedding_ops.embedding_lookup_v2(self.weight, x)
+            x = embedding_ops.embedding_lookup_v2(self.weight, x,max_norm=self.max_norm,name=self.name)
+
+        if self.add_noise == True and self.training == True:
+            _mean=x.mean()
+            _std=x.std()
+            if is_abnormal_number(_mean):
+                _mean=0
+            if is_abnormal_number(_std):
+                _std=0.02
+            noise = self.noise_intensity * random_normal_like(x, mean=_mean, std=_std, dtype=x.dtype).detach().to(x.device)
+            x = x + noise
         return x
 
 
