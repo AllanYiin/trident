@@ -431,6 +431,8 @@ def int_shape(x):
     [3, 3, 7]
 
     """
+    if x is None:
+        return None
     return tuple(x.shape.as_list())
 
 
