@@ -518,7 +518,7 @@ class LayerNorm(Layer):
     .. _`Layer Normalization`: https://arxiv.org/abs/1607.06450
 
     """
-    def __init__(self,  eps=1e-5, affine=True,name=None, **kwargs):
+    def __init__(self,  eps=1e-5, affine=True,name=None, axis=-1,**kwargs):
         """
     Args:
         normalized_shape (int or list or torch.Size): input shape from an expected input
@@ -554,6 +554,7 @@ class LayerNorm(Layer):
 
         self.eps = eps
         self.affine = affine
+        self.axis=axis
 
 
     def build(self, input_shape:TensorShape):
@@ -565,10 +566,9 @@ class LayerNorm(Layer):
 
 
     def forward(self, x, **kwargs) :
+        x_mean, x_variance = moments(x, axis=self.axis, keepdims=True)
 
-        mean = x.mean(dim=self.axis, keepdim=True).detach()
-        std = x.std(dim=self.axis, keepdim=True).detach()
-        return self.weight * (x - mean) / (std + self._eps) +self.bias
+        return self.weight * (x - x_mean) / (tf.math.sqrt(x_variance) + self.eps) +self.bias
 
 
 LayerNorm2d=LayerNorm
