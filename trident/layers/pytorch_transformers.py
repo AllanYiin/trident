@@ -2,45 +2,24 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import builtins
-import inspect
+
 import math
-from collections import OrderedDict
-from functools import partial, wraps, update_wrapper
-from itertools import islice
-from itertools import repeat
 
-import numpy as np
 import torch
-from torch import  Tensor
-import torch.nn as nn
 
-import torch.nn.functional as F  # import torch functions
-import torch.utils.hooks as hooks
-from torch._jit_internal import List
-from collections import abc
-from torch.nn import Module
-from torch.nn import init
-from torch.nn.parameter import Parameter
-from trident.layers.pytorch_layers import Embedding,Dropout,Dense
-
-from trident.layers.pytorch_normalizations import LayerNorm
-
-from trident.layers.pytorch_activations import Identity, Gelu
-
-from trident.layers.pytorch_blocks import ShortCut, FullConnect_Block
-
-from trident.backend.common import *
+from trident.backend.pytorch_backend import Layer, Sequential, get_device, ModuleList,Parameter,Tensor
 from trident.backend.pytorch_ops import *
-from trident.backend.pytorch_backend import Layer, Sequential,get_device,ModuleList
-
+from trident.layers.pytorch_activations import Gelu
+from trident.layers.pytorch_blocks import FullConnect_Block
+from trident.layers.pytorch_layers import Embedding, Dropout, Dense
+from trident.layers.pytorch_normalizations import LayerNorm
 
 __all__ = ['Mlp','BERT','BERTEmbedding','PositionalEmbedding','PositionwiseFeedForward','DropPath','Attention','MultiHeadedAttention','SublayerConnection','TransformerBlock']
 
 def Mlp(hidden_features=None, out_features=None,dropout_rate=0):
     return Sequential(
         FullConnect_Block(num_filters=hidden_features,activation=Gelu(),dropout_rate=dropout_rate,normalization=None),
-        FullConnect_Block(num_filters=out_features, activation=Gelu(), dropout_rate=dropout_rate,normalization=None),
+        FullConnect_Block(num_filters=out_features, activation=None, dropout_rate=dropout_rate,normalization=None),
     )
 
 
@@ -71,13 +50,13 @@ class PositionwiseFeedForward(Layer):
 
     def __init__(self, d_model, d_ff, dropout_rate=0.1):
         super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = Dense(num_filters= d_ff)
+        self.w_1 = Dense(num_filters= d_ff,activation=Gelu())
         self.w_2 = Dense(num_filters= d_model)
         self.dropout = Dropout(dropout_rate)
-        self.activation = Gelu()
+
 
     def forward(self, x):
-        return self.w_2(self.dropout(self.activation(self.w_1(x))))
+        return self.w_2(self.dropout(self.w_1(x)))
 
 #
 # class PositionEmbeddingSine(Layer):
@@ -159,14 +138,14 @@ class BERTEmbedding(Layer):
         sum of all these features are output of BERTEmbedding
     """
 
-    def __init__(self, vocab_size, embedding_dim,cls_idx=0,sep_idx=1,unk_idx=2,pad_idx=3,mask_idx=4, dropout_rate=0.1, add_noise=False,noise_intensity=0.05):
+    def __init__(self, vocab_size, embedding_dim,cls_idx=1,sep_idx=2,unk_idx=3,pad_idx=0,mask_idx=4, dropout_rate=0.1, add_noise=False,noise_intensity=0.05):
         """
         :param vocab_size: total vocab size
         :param embed_size: embedding size of token embedding
         :param dropout: dropout rate
         """
         super().__init__()
-        self.token = Embedding(num_embeddings=vocab_size,embedding_dim=embedding_dim,padding_idx=3,add_noise=add_noise,noise_intensity=noise_intensity)
+        self.token = Embedding(num_embeddings=vocab_size,embedding_dim=embedding_dim,padding_idx=pad_idx,add_noise=add_noise,noise_intensity=noise_intensity)
         self.position = PositionalEmbedding(d_model=self.token.embedding_dim)
         self.segment = Embedding(num_embeddings=3,embedding_dim=self.token.embedding_dim,padding_idx=0)
         self.cls_idx=cls_idx
@@ -233,18 +212,23 @@ class Attention(Layer):
     """
     Compute 'Scaled Dot Product Attention
     """
+    def __init__(self, dropout_rate=0.1):
+        super().__init__()
+        self.dropout = Dropout(dropout_rate)
 
-    def forward(self, query, key, value, mask=None, dropout=None):
+    def forward(self, query, key, value, mask=None):
         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(query.size(-1))
 
         if mask is not None:
             scores = scores.masked_fill(mask == 0, -1e9 if scores.dtype == torch.float32 else -1e+4)
         p_attn = softmax(scores,axis=-1)
 
-        if dropout is not None:
-            p_attn = dropout(p_attn)
+        if self.dropout is not None:
+            p_attn = self.dropout(p_attn)
 
         return torch.matmul(p_attn, value), p_attn
+
+
 
 class MultiHeadedAttention(Layer):
     """
@@ -261,24 +245,24 @@ class MultiHeadedAttention(Layer):
 
         self.linear_layers = ModuleList([Dense(d_model) for _ in range(3)])
         self.output_linear = Dense(d_model)
-        self.attention = Attention()
+        self.attention = Attention(dropout_rate=dropout_rate)
 
-        self.dropout = Dropout(dropout_rate)
-
-    def forward(self, query, key, value, mask=None):
-        batch_size = query.size(0)
-
+    def forward(self, x, mask=None):
+        batch_size = x.size(0)
         # 1) Do all the linear projections in batch from d_model => h x d_k
-        query, key, value = [l(x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
-                             for l, x in zip(self.linear_layers, (query, key, value))]
+        query=self.linear_layers[0](x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
+        key = self.linear_layers[1](x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
+        value = self.linear_layers[2](x).view(batch_size, -1, self.h, self.d_k).transpose(1, 2)
 
         # 2) Apply attention on all the projected vectors in batch.
-        x, attn = self.attention(query, key, value, mask=mask, dropout=self.dropout)
+        x, attn = self.attention(query, key, value, mask=mask)
 
         # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous().view(batch_size, -1, self.h * self.d_k)
 
         return self.output_linear(x)
+
+
 
 class SublayerConnection(Layer):
     """
@@ -286,10 +270,10 @@ class SublayerConnection(Layer):
     Note for code simplicity the norm is first as opposed to last.
     """
 
-    def __init__(self, size, dropout_rate=0.0):
+    def __init__(self, dropout_rate=0.0):
         super(SublayerConnection, self).__init__()
-        self.norm = LayerNorm(size)
-        self.dropout = Dropout(dropout_rate)
+        self.norm = LayerNorm()
+        self.dropout = DropPath(dropout_rate)
 
 
     def forward(self, x,sublayer):
@@ -302,23 +286,25 @@ class TransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden, dropout_rate=0.1):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden=None, dropout_rate=0.1):
         """
-        :param hidden: hidden size of transformer
+        param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
         :param feed_forward_hidden: feed_forward_hidden, usually 4*hidden_size
         :param dropout: dropout rate
         """
 
         super().__init__()
+        if feed_forward_hidden is None:
+            feed_forward_hidden=4*hidden
         self.attention = MultiHeadedAttention(h=attn_heads, d_model=hidden)
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
-        self.input_sublayer = SublayerConnection(size=hidden, dropout_rate=dropout_rate)
-        self.output_sublayer = SublayerConnection(size=hidden, dropout_rate=dropout_rate)
+        self.input_sublayer = SublayerConnection( dropout_rate=dropout_rate)
+        self.output_sublayer = SublayerConnection(dropout_rate=dropout_rate)
         self.dropout = Dropout(dropout_rate=dropout_rate)
 
     def forward(self, x, mask=None):
-        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, _x, _x, mask=mask))
+        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, mask=mask))
         x = self.output_sublayer(x, self.feed_forward)
         return self.dropout(x)
 
@@ -327,9 +313,9 @@ class BERT(Layer):
     BERT model : Bidirectional Encoder Representations from Transformers.
     """
 
-    def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1,pad_idx=3):
+    def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1,pad_idx=0):
         """
-        :param vocab_size: vocab_size of total words
+        param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
         :param n_layers: numbers of Transformer blocks(layers)
         :param attn_heads: number of attention heads
@@ -347,7 +333,7 @@ class BERT(Layer):
         self.feed_forward_hidden = hidden * 4
 
         # embedding for BERT, sum of positional, segment, token embeddings
-        self.embedding = BERTEmbedding(vocab_size=vocab_size, embedding_dim=hidden)
+        self.embedding = BERTEmbedding(vocab_size=vocab_size, embedding_dim=hidden,pad_idx=self.pad_idx)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate) )
 
@@ -360,10 +346,11 @@ class BERT(Layer):
             segments_tensor = zeros_like(x, dtype=x.dtype).to(get_device())
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        mask = (x != self.pad_idx).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1).detach()
+        mask = (x != self.pad_idx).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
 
         # embedding the indexed sequence to sequence of vectors
         x = self.embedding(x, segments_tensor)
+
 
         # running over multiple transformer blocks
         for name,transformer in self.named_children():
