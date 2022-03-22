@@ -13,6 +13,7 @@ from types import MethodType
 import random
 import numpy as np
 import tensorflow as tf
+
 from tensorflow.python.ops import state_ops, sparse_ops
 from tensorflow.python.training import moving_averages
 from tensorflow.python.eager import core as _core
@@ -592,17 +593,19 @@ def cuda(x:tf.Tensor, device:int=None):
         return x
 
 def to(x, *args):
-    if 'cpu' in args:
-        return cpu(x)
-    elif 'gpu' in args or 'cuda' in args:
-        return cuda(x)
-    elif 'float' in args:
-        return cast(x,tf.float32)
-    elif 'long' in args:
-        return cast(x,tf.int64)
-    elif 'int' in args:
-        return cast(x,tf.int32)
-    elif isinstance(args,tf.dtypes):
+    args=unpack_singleton(args)
+    if isinstance(args,str):
+        if 'cpu' in args:
+            return cpu(x)
+        elif 'gpu' in args or 'cuda' in args:
+            return cuda(x)
+        elif 'float' in args:
+            return cast(x,tf.float32)
+        elif 'long' in args:
+            return cast(x,tf.int64)
+        elif 'int' in args:
+            return cast(x,tf.int32)
+    elif isinstance(args,dtypes.DType):
         return cast(x, args)
     else:
         return x
