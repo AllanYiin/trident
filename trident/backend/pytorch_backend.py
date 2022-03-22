@@ -219,9 +219,9 @@ _global_forward_hooks = OrderedDict()
 def register_module_forward_pre_hook(hook: Callable[..., None]) -> RemovableHandle:
     r"""Registers a forward pre-hook common to all modules.
 
-    .. warning ::
+    warning ::
 
-        This adds global state to the `nn.module` module
+        This adds global state to the `nn.module` module,
         and it is only intended for debugging/profiling purposes.
 
     The hook will be called every time before :func:`forward` is invoked.
@@ -251,9 +251,9 @@ def register_module_forward_pre_hook(hook: Callable[..., None]) -> RemovableHand
 def register_module_forward_hook(hook: Callable[..., None]) -> RemovableHandle:
     r"""Registers a global forward hook for all the modules
 
-    .. warning ::
+    warning ::
 
-        This adds global state to the `nn.module` module
+        This adds global state to the `nn.module` module,
         and it is only intended for debugging/profiling purposes.
 
     The hook will be called every time after :func:`forward` has computed an output.
@@ -263,7 +263,7 @@ def register_module_forward_hook(hook: Callable[..., None]) -> RemovableHandle:
 
     The input contains only the positional arguments given to the module.
     Keyword arguments won't be passed to the hooks and only to the ``forward``.
-    The hook can modify the output. It can modify the input inplace but
+    The hook can modify the output. It can modify the input inplace, but
     it will not have effect on forward since this is called after
     :func:`forward` is called.
 
@@ -285,8 +285,8 @@ def register_module_backward_hook(
 ) -> RemovableHandle:
     r"""Registers a backward hook common to all the modules.
 
-    .. warning ::
-        This adds global state to the `nn.module` module
+    warning ::
+        This adds global state to the `nn.module` module,
         and it is only intended for debugging/profiling purposes.
 
         The current implementation will not have the presented behavior
@@ -346,11 +346,11 @@ class Layer(nn.Module):
 
 
     Attributes :
-        training (bool): If True, means in the training phase, else in the infer or evaluation phase.
+        training (bool): If True, means in the training phase, else in the evaluation phase.
 
         rank (int): The number of the spatial related axes.
 
-        _modules (OrderedDict) : storage of all the sub-modules.
+        _modules (OrderedDict) : storage of all the submodules.
 
         _parameters (OrderedDict) : storage of all the tranable weights.
 
@@ -386,7 +386,7 @@ class Layer(nn.Module):
 
         Args:
             name (str) :name of the layer.
-            keep_output (bool) :whether need to kept output tensor in execution time.
+            keep_output (bool) :whether you need to kept output tensor in execution time.
 
 
         """
@@ -425,7 +425,7 @@ class Layer(nn.Module):
 
         self.dump_patches = True
 
-    # Trick mypy into not applying contravariance rules to inputs by defining
+    # Trick mypy into not applying contravariance rules to input by defining
     # forward as a value, rather than a function.  See also
     # https://github.com/python/mypy/issues/8795
     def _forward_unimplemented(self, *input: Any, **kwargs) -> None:
@@ -480,7 +480,7 @@ class Layer(nn.Module):
 
     @property
     def nodes(self):
-        """"The whole tree structured OrderedDict { uuid : module } , for module to access any node in this structures, ex. Shortcut"""
+        """The whole tree structured OrderedDict { uuid : module } , for module to access any node in these structures, ex. Shortcut"""
         return self._nodes
 
     @nodes.setter
@@ -985,7 +985,7 @@ class Layer(nn.Module):
     def output(self):
         """
             Retrieves the output tensor(s) of a layer.
-            for memory saving issue, we don'tb prefer to keep every input/output
+            for memory saving issue, we don't prefer to keep every input/output
             tensor in every layer.You should set self.keep_output flag to True, and then
             retrive the output tensor when the calll() is executing.
         Returns
@@ -1012,10 +1012,10 @@ class Layer(nn.Module):
         input_shape[0] = 1
         self.eval()
         x = cast(torch.randn(*input_shape, requires_grad=False), self.input_spec.dtype)
-        torch_out = self(x)
+        _out = self(x)
         folder, filename, ext = split_path(file_path)
         if filename == '':
-            filenam = self.name
+            filename= self.name
         ext = '.onnx_'
         save_path = sanitize_path(os.path.join(folder, filename + ext))
         make_dir_if_need(save_path)
@@ -1239,7 +1239,7 @@ class Layer(nn.Module):
                     object.__setattr__(self, name, value)
 
     def __repr__(self):
-        # We treat the extra repr like the sub-module, one item per line
+        # We treat the extra repr like the submodule, one item per line
         extra_lines = []
         extra_repr = self.extra_repr()
         # empty string will be split into list ['']
@@ -1606,7 +1606,7 @@ class ModuleDict(Layer):
     """
 
     def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False, is_multicasting=False, **kwargs) -> None:
-        super(ModuleDict, self).__init__(name=None, keep_output=False, **kwargs)
+        super(ModuleDict, self).__init__(name=name, keep_output=keep_output, **kwargs)
         self.uuid = uuid.uuid4().node
         self.is_multicasting = is_multicasting
         if modules is not None:
@@ -1672,7 +1672,7 @@ class ModuleDict(Layer):
         r"""Update the :class:`~torch.nn.ModuleDict` with the key-value pairs from a
         mapping or an iterable, overwriting existing keys.
 
-        .. note::
+        note::
             If :attr:`modules` is an ``OrderedDict``, a :class:`~torch.nn.ModuleDict`, or
             an iterable of key-value pairs, the order of new elements in it is preserved.
 
@@ -1726,7 +1726,6 @@ class ModuleDict(Layer):
 
     def forward(self, x, **kwargs):
         if self.is_multicasting:
-
             # x = enforce_singleton(x)
             results = OrderedDict()
             for name, module in self.items():
@@ -2183,7 +2182,7 @@ def get_human_readable_count(number):
     shift = -3 * (num_groups - 1)
     number = number * (10 ** shift)
     index = num_groups - 1
-    return '{int(number):,d} {labels[index]}'
+    return '{0:,d} {1}'.format(int(number),labels[index])
 
 
 def try_map_args_and_call(fn, data: OrderedDict, data_feed=None, is_autocast_enabled=False):
@@ -2496,6 +2495,9 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
     module._signature = get_signature(module)
     module.signature = get_signature(module)
 
+    def getweights(module):
+        return list(module.parameters())
+
     def get_uid(prefix=''):
         module._uid_prefixs[prefix] += 1
         return module._uid_prefixs[prefix]
@@ -2510,6 +2512,7 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
                 if hasattr(node, 'default_name') and node.default_name == "sequential_1":
                     return node
             return module
+
 
     for name, mod in module.named_modules():
         if mod != module:
@@ -2548,6 +2551,10 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
 
         if not hasattr(mod, 'get_root'):
             setattr(mod, 'get_root', MethodType(get_root, mod))
+
+        if not hasattr(mod, 'weights'):
+            cls = type(mod)
+            cls.weights = property(lambda self: list(self.parameters()))
         if hasattr(mod, 'dims'):
             mod.axis = mod.dims
         if hasattr(module, 'keepdim'):
