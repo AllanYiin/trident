@@ -255,7 +255,7 @@ def to_numpy(x) -> np.ndarray:
                 with context.eager_mode():
                     return x.numpy()
             with x.graph.as_default():
-                return x.eval(session=get_session((x,)))
+                return x.eval(session=tf.compat.v1.Session())
 
         except:
             raise ValueError("Unsupported type")
@@ -566,6 +566,7 @@ def cpu(x:tf.Tensor):
     if x.device!= '/cpu:0':
         with tf.device('/cpu:0'):
             return tf.identity(x)
+    return x
 
 def cuda(x:tf.Tensor, device:int=None):
     r"""Moves all model parameters and buffers to the GPU.
@@ -601,6 +602,8 @@ def to(x, *args):
         return cast(x,tf.int64)
     elif 'int' in args:
         return cast(x,tf.int32)
+    elif isinstance(args,tf.dtypes):
+        return cast(x, args)
     else:
         return x
 
@@ -1881,9 +1884,9 @@ def where(flag, value_if_true=None, value_if_false=None, name='where'):
     """
 
     if value_if_true is None and value_if_false is None:
-        return tf.where(flag)
+        return tf.where(flag,name=name)
     else:
-        return tf.where(flag, value_if_true, value_if_false)
+        return tf.where(flag, value_if_true, value_if_false,name=name)
 
 
 ############################
@@ -2460,7 +2463,7 @@ lrelu = leaky_relu
 def smooth_relu(x:Tensor, upper_limit=None,name='smooth_relu'):
     if upper_limit is not None:
         return clip(tf.math.log(1 + tf.math.exp(x)), -np.inf, upper_limit)
-    return tf.math.log(1 + tf.math.exp(x))
+    return tf.math.log(1 + tf.math.exp(x),name=name)
 
 
 @numpy_compatible
@@ -2489,11 +2492,33 @@ def crelu(x,axis=-1,name='crelu'):
     """
     return tf.nn.crelu(x,axis=axis,name=name)
 
+
+
 @numpy_compatible
-def p_relu(x:Tensor, upper_limit=None,name='p_relu'):
-    if upper_limit is not None:
-        return clip(tf.keras.layers.PReLU()(x), -np.inf, upper_limit)
-    return tf.keras.layers.PReLU()(x)
+def p_relu(x:Tensor, weight,name='p_relu'):
+    """Parametric Rectified Linear Unit.
+      It follows:
+      ```
+        f(x) = alpha * x for x < 0
+        f(x) = x for x >= 0
+      ```
+      where `alpha` is a learned parameters , it's a 1-D array, the length equal 1 or input_filters.
+
+    Args:
+        x (Tensor): input tensor.
+        weight: (1 or None)  if None num_parameters will equal to input_filters .
+
+    Returns:
+        (Tensor): output tensor and get same shape with x.
+
+
+    """
+    pos = relu(x)
+    neg = -weight * relu(-x)
+    return tf.math.add(pos ,neg,name=name)
+
+
+
 
 @numpy_compatible
 def swish(x:Tensor,name='swish'):
@@ -2648,11 +2673,11 @@ def hard_swish(x:Tensor,name='hard_swish'):
         https://arxiv.org/abs/1905.02244
 
     """
-    return x * hard_sigmoid(x)
+    return x * hard_sigmoid(x,name=name)
 
 @numpy_compatible
 def logit(x:Tensor,name='logit'):
-    return tf.math.log(x / (1 - x))
+    return tf.math.log(x / (1 - x),name=name)
 
 @numpy_compatible
 def log_log(x:Tensor,name='log_log'):
@@ -2719,7 +2744,7 @@ def mish(x:Tensor,name='mish'):
         https://arxiv.org/abs/1908.08681v1
 
     """
-    return x * tf.nn.tanh(tf.nn.softplus(x))
+    return x * tf.nn.tanh(tf.nn.softplus(x),name=name)
 
 @numpy_compatible
 def hard_mish(x:Tensor,name='hard_mish'):
