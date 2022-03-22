@@ -50,7 +50,7 @@ _pair = _ntuple(2)
 _triple = _ntuple(3)
 _quadruple = _ntuple(4)
 
-__all__ = ['Dense','Embedding' ,'Flatten', 'Concatenate', 'Concate', 'Add', 'Subtract','Scale', 'Conv1d', 'Conv2d', 'Conv3d', 'TransConv1d',
+__all__ = ['Dense','Embedding' ,'Flatten', 'Concatenate', 'Concate', 'Add', 'Subtract','Scale', 'Aggregation','Conv1d', 'Conv2d', 'Conv3d', 'TransConv1d',
            'TransConv2d', 'TransConv3d', 'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'SeparableConv2d',
            'GatedConv2d','Upsampling2d', 'Reshape', 'Dropout', 'Lambda', 'SoftMax', 'Noise']
 
