@@ -223,7 +223,7 @@ class Embedding(Layer):
     keep_output: bool
     name: str
 
-    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = 3,
+    def __init__(self, embedding_dim: int, num_embeddings: Optional[int] = None, padding_idx: Optional[int] = 0,
                  max_norm: Optional[float] = None, norm_type: float = 2., scale_grad_by_freq: bool = False,
                  sparse: bool = False, _weight: Optional[Tensor] = None, keep_output: bool = False, name: Optional[str] = None, add_noise=False,
                  noise_intensity=0.005) -> None:
