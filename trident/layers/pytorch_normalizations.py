@@ -10,14 +10,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.parameter import Parameter
-
-from trident.backend.common import epsilon, get_function, get_session, enforce_singleton,get_class,TensorShape
+from trident import context
+from trident.backend.common import epsilon, get_function, enforce_singleton,get_class,TensorShape
 from trident.backend.pytorch_backend import Layer,get_device
 from trident.backend.pytorch_ops import *
 
 __all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','AdaptiveInstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']
-_session = get_session()
-_epsilon=_session.epsilon
+ctx = context._context()
+_epsilon=ctx.epsilon
 
 def instance_std(x, eps=1e-5):
     rank=len(x.shape)-2
@@ -539,8 +539,6 @@ class LayerNorm(Layer):
             self.register_parameter('bias', Parameter(zeros(*self.normalized_shape)))
             self._built=True
     def forward(self, x, **kwargs):
-
-
         x= F.layer_norm(x, self.normalized_shape, self.weight, self.bias, self.eps)
         return x
         # mean = x.mean(dim=self.axis, keepdim=True).detach()
