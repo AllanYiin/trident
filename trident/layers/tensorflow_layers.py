@@ -52,7 +52,7 @@ _quadruple = _ntuple(4)
 
 __all__ = ['Dense','Embedding' ,'Flatten', 'Concatenate', 'Concate', 'Add', 'Subtract','Scale', 'Aggregation','Conv1d', 'Conv2d', 'Conv3d', 'TransConv1d',
            'TransConv2d', 'TransConv3d', 'DepthwiseConv1d', 'DepthwiseConv2d', 'DepthwiseConv3d', 'SeparableConv2d',
-           'GatedConv2d','Upsampling2d', 'Reshape', 'Dropout', 'Lambda', 'SoftMax', 'Noise']
+           'GatedConv2d','Upsampling2d', 'Reshape', 'Dropout', 'Lambda', 'SoftMax', 'Noise','Permute']
 
 _session = get_session()
 
@@ -496,23 +496,20 @@ class Aggregation(Layer):
         elif self.mode == 'min':
             x =  tf.math.reduce_min(x, axis=self.axis, keepdims=self.keepdims)
         elif self.mode == 'first':
-            begin=[0]*x.ndim()
-            size=[-1]*x.ndim()
-            size[self.axis]=1
+            begin=[0]*len(int_shape(x))
 
-            x = tf.slice(x,begin,size)
+            size=list(int_shape(x))
+            size[self.axis]=1
+            x=tf.slice(x,begin=begin,size=size)
+
             if self.keepdims:
                 x = expand_dims(x, axis=self.axis)
         elif self.mode == 'last':
-            shp=int_shape(x)
-            begin = [0] * x.ndim()
-            size = [-1] * x.ndim()
-            begin[self.axis] =shp[self.axis] -1
+            begin = [0] * len(int_shape(x))
+            begin[self.axis] = -1
+            size = list(int_shape(x))
             size[self.axis] = 1
-
-            x = tf.slice(x, begin, size)
-            if self.keepdims:
-                x = expand_dims(x, axis=self.axis)
+            x = tf.slice(x, begin=begin, size=size)
         return x
 
 
@@ -1518,7 +1515,23 @@ class Reshape(Layer):
     def extra_repr(self):
         s = 'target_shape={0}'.format(self.target_shape)
 
+class Permute(Layer):
+    """Permute Layer
 
+    """
+
+    def __init__(self, *args, name=None):
+        """
+        Permute the input tensor
+        Args:
+            *shape (ints): new shape, WITHOUT specifying batch size as first
+            dimension, as it will remain unchanged.
+        """
+        super(Permute, self).__init__(name=name)
+        self.pattern = args
+
+    def forward(self, x, **kwargs):
+        return permute(x, self.pattern)
 
 
 
