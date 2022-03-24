@@ -295,7 +295,7 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
         self.is_target_onehot = None
         self.from_logits = None
 
-        if output.max() > 0 or self.is_logsoftmax is None or not self.is_logsoftmax:
+        if reduce_max(output) > 0 or self.is_logsoftmax is None or not self.is_logsoftmax:
             if reduce_min(output) >= 0:
                 self.is_logsoftmax = False
                 if _check_logit(output, self.axis):
@@ -316,7 +316,7 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
                 self.from_logits = False
 
             if (ndim(target) == ndim(output) and 'float' in str(
-                    target.dtype) and target.min() >= 0 and target.max() <= 1):
+                    target.dtype) and target.min() >= 0 and reduce_max(target) <= 1):
                 self.is_target_onehot = True
         else:
             output = clip(output, min=-12, max=-1e-7)
@@ -324,7 +324,7 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
         if target.dtype == str2dtype('long'):
             self.is_target_onehot = False
         elif target.dtype != str2dtype('long') and (
-                target.min() >= 0 and target.max() <= 1 and abs(target.sum(-1).mean() - 1) < 1e-4):
+                target.min() >= 0 and reduce_max(target) <= 1 and abs(target.sum(-1).mean() - 1) < 1e-4):
             target = clip(target, min=1e-8, max=1 - 1e-8)
             self.is_target_onehot = True
 

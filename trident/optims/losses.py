@@ -214,7 +214,7 @@ def _check_logit(x:Tensor,axis=None):
         if axis is None:
             axis = -1
     if isinstance(x,np.ndarray):
-        if 0 <= x.min()<= x.max() <= 1:
+        if 0 <= reduce_min(x)<= reduce_max(x) <= 1:
             return abs(1 - x.sum(axis=axis)).mean() < 0.05
         return False
     elif _backend == 'pytorch':
