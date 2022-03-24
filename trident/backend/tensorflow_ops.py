@@ -4492,6 +4492,7 @@ _FUN_NAMES = [
     # source_fun, target_fun
     ('to_numpy', to_numpy),
     ('detach', detach),
+    ('to', to),
     ('cpu', cpu),
     ('cuda', cuda),
     ('copy', copy),
