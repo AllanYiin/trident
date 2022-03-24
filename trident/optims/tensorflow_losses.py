@@ -24,7 +24,7 @@ from trident.backend.tensorflow_backend import *
 from trident.backend.tensorflow_ops import *
 from trident.data.dataset import *
 
-from trident.optims.losses import Loss, _check_logsoftmax_logit
+from trident.optims.losses import Loss, _check_logsoftmax_logit,_check_logit
 
 # def cosine_similarity(target, output):
 #     assert target.ndim == 2
@@ -171,7 +171,7 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
             raise ValueError('output and target have diffent elements.')
 
     def build(self, output, target, **kwargs):
-        print('build')
+
         if self.num_classes is None:
             self.num_classes = int_shape(output)[self.axis]
 
@@ -636,7 +636,7 @@ class CrossEntropyLoss(_ClassificationLoss):
 
         self.need_target_onehot = False
 
-    @tf.function
+
     def calculate_loss(self, output, target):
         """
         The usual cross-entropy cost is defined as:
@@ -822,7 +822,7 @@ class F1ScoreLoss(_ClassificationLoss):
 
         self.need_target_onehot = True
 
-    @tf.function
+
     def calculate_loss(self, output, target):
         with ops.name_scope(self.name, "f1_score_loss", [output, target]) as name:
             output = ops.convert_to_tensor(output, name="output")
@@ -883,7 +883,7 @@ class FocalLoss(_ClassificationLoss):
         self.normalized = normalized
         self.need_target_onehot = True
 
-    @tf.function
+
     def calculate_loss(self, output, target):
         """
 

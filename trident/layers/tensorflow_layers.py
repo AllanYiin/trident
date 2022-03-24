@@ -1591,7 +1591,7 @@ class SingleImageLayer(Layer):
                 self.input_filters =input_shape[self.filter_index]
                 self._built = True
 
-    @tf.function
+
     def forward(self, x, **kwargs):
         return expand_dims(self.weight, 0)
 
