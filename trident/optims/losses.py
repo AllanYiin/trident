@@ -188,23 +188,13 @@ def _check_logsoftmax_logit(x:Tensor,axis=1):
     elif _backend == 'tensorflow':
         if axis is None:
             axis = -1
-    if isinstance(x, np.ndarray):
+    x = to_numpy(x)
 
-        if reduce_max(x) <= 0:
-            output_exp = exp(x)
-            return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
-        return False
-    elif _backend == 'pytorch':
-        with torch.no_grad():
-            if reduce_max(x)<=0:
-                output_exp=exp(x)
-                return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
-            return False
-    elif _backend == 'tensorflow':
-        if reduce_max(x)<=0:
-            output_exp=exp(x).copy().detach()
-            return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
-        return False
+    if reduce_max(x) <= 0:
+        output_exp = exp(x)
+        return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
+    return False
+    
 
 def _check_logit(x:Tensor,axis=None):
     if _backend == 'pytorch':
@@ -213,19 +203,11 @@ def _check_logit(x:Tensor,axis=None):
     elif _backend == 'tensorflow':
         if axis is None:
             axis = -1
-    if isinstance(x,np.ndarray):
-        if 0 <= reduce_min(x)<= reduce_max(x) <= 1:
-            return abs(1 - x.sum(axis=axis)).mean() < 0.05
-        return False
-    elif _backend == 'pytorch':
-        with torch.no_grad():
-            if 0<=reduce_min(x)<=reduce_max(x)<=1 :
-                return abs(1 - x.sum(axis=axis)).mean() < 0.05
-            return False
-    elif _backend == 'tensorflow':
-        if 0<=reduce_min(x)<=reduce_max(x)<=1 :
-            return abs(1 - x.sum(axis=axis)).mean() < 0.05
-        return False
+    x = to_numpy(x)
+    if 0 <= reduce_min(x)<= reduce_max(x) <= 1:
+        return abs(1 - x.sum(axis=axis)).mean() < 0.05
+    return False
+
 
 
 
