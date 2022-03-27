@@ -41,7 +41,7 @@ __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabl
 
            'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode', 'adaptive_format', 'num_cpus',
            'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
-           'gray_color', 'yellow_color','magenta_color','violet_color','open_browser','launchTensorBoard','launchMLFlow']
+           'gray_color', 'yellow_color','magenta_color','violet_color','open_browser','launchTensorBoard','launchMLFlow','seg_as_sentence']
 
 # In some cases, these basic types are shadowed by corresponding
 # top-level values.  The underscore variants let us refer to these
@@ -1890,3 +1890,41 @@ def launchMLFlow():
     print('mlflow ui')
     os.system('mlflow ui')
     return
+
+alphabets = "([A-Za-z])"
+numbers = "([0-9])"
+prefixes = "(Mr|St|Mrs|Ms|Dr)[.]"
+suffixes = "(Inc|Ltd|Jr|Sr|Co)"
+starters = "(Mr|Mrs|Ms|Dr|He\s|She\s|It\s|They\s|Their\s|Our\s|We\s|But\s|However\s|That\s|This\s|Wherever)"
+acronyms = "([A-Z][.][A-Z][.](?:[A-Z][.])?)"
+websites = "[.](com|net|org|io|gov)"
+
+def seg_as_sentence(txt):
+    txt = re.sub(prefixes, "\\1<prd>", txt)
+    txt = re.sub(websites, "<prd>\\1", txt)
+    if "Ph.D" in txt: txt = txt.replace("Ph.D.", "Ph<prd>D<prd>")
+    txt = re.sub("\s" + alphabets + "[.] ", " \\1<prd> ", txt)
+    txt = re.sub(acronyms + " " + starters, "\\1<stop> \\2", txt)
+    txt = re.sub(alphabets + "[.]" + alphabets + "[.]" + alphabets + "[.]", "\\1<prd>\\2<prd>\\3<prd>", txt)
+    txt = re.sub(alphabets + "[.]" + alphabets + "[.]", "\\1<prd>\\2<prd>", txt)
+    txt = re.sub(numbers + "[.]" + numbers, "\\1<prd>\\2", txt)
+    txt = re.sub(" " + suffixes + "[.] " + starters, " \\1<stop> \\2", txt)
+    txt = re.sub(" " + suffixes + "[.]", " \\1<prd>", txt)
+    txt = re.sub(" " + alphabets + "[.]", " \\1<prd>", txt)
+
+    if "”" in txt: txt = txt.replace(".”", "”.")
+    if "\"" in txt: txt = txt.replace(".\"", "\".")
+    if "!" in txt: txt = txt.replace("!\"", "\"!")
+    if "?" in txt: txt = txt.replace("?\"", "\"?")
+    txt = re.sub('(\.\.\.)([^”’])', "<prd><prd><prd><stop>", txt)
+    txt = txt.replace(".", ".<stop>")
+    txt = txt.replace("?", "?<stop>")
+    txt = txt.replace("!", "!<stop>")
+    txt = txt.replace("<prd>", ".")
+
+    txt = re.sub('([。！？\?])([^”’])', r"\1<stop>\2", txt)
+    txt = re.sub('(\.{6})([^”’])', r"\1\<stop>\2", txt)
+    txt = re.sub('([。！？\?][”’])([^，。！？\?])', r"\1\<stop>\2", txt)
+    txt = txt.rstrip()
+    sentences = txt.split("<stop>")
+    return sentences
