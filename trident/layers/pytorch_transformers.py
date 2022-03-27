@@ -220,7 +220,7 @@ class Attention(Layer):
         scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(query.size(-1))
 
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, -1e9 if scores.dtype == torch.float32 else -1e+4)
+            scores = scores.masked_fill(mask, -1e9 if scores.dtype == torch.float32 else -1e+4)
         p_attn = softmax(scores,axis=-1)
 
         if self.dropout is not None:
@@ -303,6 +303,7 @@ class TransformerBlock(Layer):
         self.output_sublayer = SublayerConnection(dropout_rate=dropout_rate)
         self.dropout = Dropout(dropout_rate=dropout_rate)
 
+
     def forward(self, x, mask=None):
         x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, mask=mask))
         x = self.output_sublayer(x, self.feed_forward)
@@ -336,6 +337,29 @@ class BERT(Layer):
         self.embedding = BERTEmbedding(vocab_size=vocab_size, embedding_dim=hidden,pad_idx=self.pad_idx)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate) )
+        self.decoder = Dense(num_filters=vocab_size)
+
+    def build(self, input_shape: TensorShape):
+        if not self._built:
+            if len(input_shape.dims) == 1:
+                self.input_filters = input_shape.dims[0]
+            else:
+                self.input_filters = input_shape[self.filter_index]
+            if self.num_filters is None:
+                self.num_filters = int(self.input_filters * self.depth_multiplier)
+            self.embedding.build(input_shape)
+            input_shape=self.embedding.output_shape
+            for name, transformer in self.named_children():
+                if 'transformer_block' in name:
+                    transformer.build(input_shape)
+                    input_shape = transformer.output_shape
+            self.decoder.build(input_shape)
+            self.embedding.weight.share_memory()
+            self.decoder.weight=self.embedding.weight
+
+
+            self.to(get_device())
+            self._built = True
 
     def forward(self, x,segments_tensor=None):
         if int_shape(x)[1]==2:
@@ -346,7 +370,7 @@ class BERT(Layer):
             segments_tensor = zeros_like(x, dtype=x.dtype).to(get_device())
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        mask = (x != self.pad_idx).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
+        mask = (x == self.pad_idx).unsqueeze(1).repeat(1, x.size(1), 1).unsqueeze(1)
 
         # embedding the indexed sequence to sequence of vectors
         x = self.embedding(x, segments_tensor)

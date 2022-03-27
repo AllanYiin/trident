@@ -1083,7 +1083,7 @@ class Layer(nn.Module):
                 if isinstance(inp[0], numbers.Number):
                     self.input_shape = TensorShape(list(inp))
                 else:
-                    out = self.forward(*inp)
+                    out = self.forward(*inp, **kwargs)
                     # shp =[ tensor_to_shape(i, need_exclude_batch_axis=True,is_singleton=False) for i in inp]
                     # self.build(*shp)
             else:

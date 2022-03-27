@@ -326,17 +326,8 @@ def _is_not_trainable_variable(obj):
 # This is thread-local to allow building separate models in different threads
 # concurrently, but comes at the cost of not being able to build one model
 # across threads.
-_GRAPH = threading.local()
 
 
-def get_graph():
-    if context.executing_eagerly():
-        global _GRAPH
-        if not getattr(_GRAPH, 'graph', None):
-            _GRAPH.graph = func_graph.FuncGraph('trident_graph')
-        return _GRAPH.graph
-    else:
-        return ops.get_default_graph()
 
 
 # A global dictionary mapping graph objects to an index of counters used
@@ -1583,7 +1574,7 @@ class Layer(tf.Module):
                 if isinstance(inp[0], numbers.Number):
                     self.input_shape = TensorShape(list(inp))
                 else:
-                    out = self.forward(*inp)
+                    out = self.forward(*inp, **kwargs)
                     # shp =[ tensor_to_shape(i, need_exclude_batch_axis=True,is_singleton=False) for i in inp]
                     # self.build(*shp)
             else:

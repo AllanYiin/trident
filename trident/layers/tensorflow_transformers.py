@@ -210,9 +210,9 @@ class Attention(Layer):
 
         if mask is not None:
             if scores.dtype == tf.float32:
-                scores=where(mask == 0,-1e9,scores)
+                scores=where(mask == 1,-1e9,scores)
             else:
-                scores = where(mask == 0, -1e+4, scores)
+                scores = where(mask == 1, -1e+4, scores)
 
         p_attn = softmax(scores,axis=-1)
 
@@ -339,7 +339,7 @@ class BERT(Layer):
             segments_tensor = zeros_like(x, dtype=x.dtype).to(get_device())
         # attention masking for padded token
         # torch.ByteTensor([batch_size, 1, seq_len, seq_len)
-        mask =tf.expand_dims(tf.tile(tf.expand_dims(x != self.pad_idx,1),(1, int_shape(x)[1], 1)),1).to(x.dtype)
+        mask =tf.expand_dims(tf.tile(tf.expand_dims(x == self.pad_idx,1),(1, int_shape(x)[1], 1)),1).to(x.dtype)
 
         # embedding the indexed sequence to sequence of vectors
         x = self.embedding(x, segments_tensor)
