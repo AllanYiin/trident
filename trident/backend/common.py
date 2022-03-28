@@ -1891,26 +1891,26 @@ def launchMLFlow():
     os.system('mlflow ui')
     return
 
-alphabets = "([A-Za-z])"
-numbers = "([0-9])"
-prefixes = "(Mr|St|Mrs|Ms|Dr)[.]"
-suffixes = "(Inc|Ltd|Jr|Sr|Co)"
-starters = "(Mr|Mrs|Ms|Dr|He\s|She\s|It\s|They\s|Their\s|Our\s|We\s|But\s|However\s|That\s|This\s|Wherever)"
-acronyms = "([A-Z][.][A-Z][.](?:[A-Z][.])?)"
-websites = "[.](com|net|org|io|gov)"
+_alphabets = "([A-Za-z])"
+_numbers = "([0-9])"
+_prefixes = "(Mr|St|Mrs|Ms|Dr)[.]"
+_suffixes = "(Inc|Ltd|Jr|Sr|Co)"
+_starters = "(Mr|Mrs|Ms|Dr|He\s|She\s|It\s|They\s|Their\s|Our\s|We\s|But\s|However\s|That\s|This\s|Wherever)"
+_acronyms = "([A-Z][.][A-Z][.](?:[A-Z][.])?)"
+_websites = "[.](com|net|org|io|gov)"
 
 def seg_as_sentence(txt):
-    txt = re.sub(prefixes, "\\1<prd>", txt)
-    txt = re.sub(websites, "<prd>\\1", txt)
+    txt = re.sub(_prefixes, "\\1<prd>", txt)
+    txt = re.sub(_websites, "<prd>\\1", txt)
     if "Ph.D" in txt: txt = txt.replace("Ph.D.", "Ph<prd>D<prd>")
-    txt = re.sub("\s" + alphabets + "[.] ", " \\1<prd> ", txt)
-    txt = re.sub(acronyms + " " + starters, "\\1<stop> \\2", txt)
-    txt = re.sub(alphabets + "[.]" + alphabets + "[.]" + alphabets + "[.]", "\\1<prd>\\2<prd>\\3<prd>", txt)
-    txt = re.sub(alphabets + "[.]" + alphabets + "[.]", "\\1<prd>\\2<prd>", txt)
-    txt = re.sub(numbers + "[.]" + numbers, "\\1<prd>\\2", txt)
-    txt = re.sub(" " + suffixes + "[.] " + starters, " \\1<stop> \\2", txt)
-    txt = re.sub(" " + suffixes + "[.]", " \\1<prd>", txt)
-    txt = re.sub(" " + alphabets + "[.]", " \\1<prd>", txt)
+    txt = re.sub("\s" + _alphabets + "[.] ", " \\1<prd> ", txt)
+    txt = re.sub(_acronyms + " " + _starters, "\\1<stop> \\2", txt)
+    txt = re.sub(_alphabets + "[.]" + _alphabets + "[.]" + _alphabets + "[.]", "\\1<prd>\\2<prd>\\3<prd>", txt)
+    txt = re.sub(_alphabets + "[.]" + _alphabets + "[.]", "\\1<prd>\\2<prd>", txt)
+    txt = re.sub(_numbers + "[.]" + _numbers, "\\1<prd>\\2", txt)
+    txt = re.sub(" " + _suffixes + "[.] " + _starters, " \\1<stop> \\2", txt)
+    txt = re.sub(" " + _suffixes + "[.]", " \\1<prd>", txt)
+    txt = re.sub(" " + _alphabets + "[.]", " \\1<prd>", txt)
 
     if "”" in txt: txt = txt.replace(".”", "”.")
     if "\"" in txt: txt = txt.replace(".\"", "\".")
