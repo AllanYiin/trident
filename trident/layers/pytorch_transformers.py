@@ -6,7 +6,7 @@ from __future__ import print_function
 import math
 
 import torch
-
+from trident.backend.common import TensorShape
 from trident.backend.pytorch_backend import Layer, Sequential, get_device, ModuleList,Parameter,Tensor
 from trident.backend.pytorch_ops import *
 from trident.layers.pytorch_activations import Gelu
@@ -329,6 +329,7 @@ class BERT(Layer):
         self.attn_heads = attn_heads
         self.pad_idx=pad_idx
         self.dropout_rate=dropout_rate
+        self.num_filters=hidden
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
         self.feed_forward_hidden = hidden * 4
@@ -339,27 +340,21 @@ class BERT(Layer):
             self.add_module('transformer_block{0}'.format(i),TransformerBlock(hidden, attn_heads, hidden * 4, dropout_rate) )
         self.decoder = Dense(num_filters=vocab_size)
 
-    def build(self, input_shape: TensorShape):
-        if not self._built:
-            if len(input_shape.dims) == 1:
-                self.input_filters = input_shape.dims[0]
-            else:
-                self.input_filters = input_shape[self.filter_index]
-            if self.num_filters is None:
-                self.num_filters = int(self.input_filters * self.depth_multiplier)
-            self.embedding.build(input_shape)
-            input_shape=self.embedding.output_shape
-            for name, transformer in self.named_children():
-                if 'transformer_block' in name:
-                    transformer.build(input_shape)
-                    input_shape = transformer.output_shape
-            self.decoder.build(input_shape)
-            self.embedding.weight.share_memory()
-            self.decoder.weight=self.embedding.weight
-
-
-            self.to(get_device())
-            self._built = True
+    # def build(self, input_shape: TensorShape):
+    #     if not self._built:
+    #         #self.embedding.build(input_shape)
+    #         input_shape=self.embedding.output_shape
+    #         for name, transformer in self.named_children():
+    #             if 'transformer_block' in name:
+    #                 transformer.build(input_shape)
+    #                 input_shape = transformer.output_shape
+    #         self.decoder.build(input_shape)
+    #         self.embedding.weight.share_memory()
+    #         self.decoder.weight=self.embedding.weight
+    #
+    #
+    #         self.to(get_device())
+    #         self._built = True
 
     def forward(self, x,segments_tensor=None):
         if int_shape(x)[1]==2:
