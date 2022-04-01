@@ -519,19 +519,27 @@ class LabelDataset(Dataset):
     def __init__(self, labels, object_type=ObjectType.classification_label, class_names=None, symbol="label",
                  **kwargs):
         super().__init__(labels, symbol=symbol, object_type=object_type, **kwargs)
-        self.dtype = np.int64
-
         self.class_names = {}
-        self._lab2idx = {}
-        self._idx2lab = {}
         if class_names is not None:
             self.class_names = class_names
+        self._lab2idx = {}
+        self._idx2lab = {}
+        language = context._context().locale
+        self.__default_language__ = language
 
+        if isinstance(labels[0],str):
+            self.class_names[language]=list(sorted(set(self.items)))
+            self.class_names['en-US'] = list(sorted(set(self.items)))
+            self._lab2idx = dict(zip(self.class_names[language], range(len(self.class_names[language]))))
+            self._idx2lab = dict(zip(range(len(self.class_names[language])), self.class_names[language]))
+
+
+        self.dtype = np.int64
         self.transform_funcs = []
 
         shp = None
         if isinstance(self.items[0], numbers.Number):
-            shp = TensorShape([0])
+            shp = TensorShape([None])
         else:
             shp = TensorShape(self.items)
         self._element_spec = TensorSpec(shape=shp, name=self.symbol, object_type=self.object_type, dtype=self.dtype)
@@ -550,7 +558,11 @@ class LabelDataset(Dataset):
         if index >= len(self.items):
             index = index % len(self.items)
         label = self.items[index]
-        return label
+        if  label in self._lab2idx :
+            return self._lab2idx[label]
+        else:
+            return label
+
 
     def data_transform(self, label_data):
         label_data = label_backend_adaptive(label_data, self.class_names)
@@ -878,77 +890,111 @@ class RandomNoiseDataset(Dataset):
 #
 
 class TextSequenceDataset(Dataset):
-    def __init__(self, corpus=None, is_onehot=False, sequence_offset=0, storage_unit='section', section_delimiter='\n\n', stopwords=None, sequence_length: int = 64,
-                 sequence_start_at='random',
+    def __init__(self, corpus=None, vocabs=None,is_onehot=False, sequence_offset=0, storage_unit='section', section_delimiter='\n', stopwords=None, sequence_length: int = 64,
+                 sequence_start_at='random',min_sequence_length=3,stride=1,
                  include_segment_ids=False, include_mask_ids=False, object_type=ObjectType.corpus, symbol=None, **kwargs):
         super().__init__(None, symbol=symbol, object_type=object_type, **kwargs)
-        valid_sequence_start_at = ['random', 'slide', 'follow_up', 'section_start', 'word_start', 'next_section_start']
+        valid_sequence_start_at = ['random', 'slide', 'follow_up', 'section_start','sentence_start',  'word_start', 'next_section_start']
+        valid_storage_unit =['section','sentence']
+        self.sequence_offset = sequence_offset
+        self.stride=stride
         self.sequence_length = sequence_length
+        if storage_unit in valid_storage_unit:
+            self.storage_unit = storage_unit
         if sequence_start_at in valid_sequence_start_at:
             self.sequence_start_at = sequence_start_at
         else:
             self.sequence_start_at = 'random'
         self.length_index = OrderedDict()
+        self.padding_token='[PAD]'
+        self.cls_token = '[CLS]'
+        self.sep_token = '[SEP]'
+        self.mask_token = '[MASK]'
+        self.unknown_token = '[UNK]'
+        self.min_sequence_length=min_sequence_length
         self.vocabs_frequency = OrderedDict()
         self.transform_funcs = []
         if len(section_delimiter) == 2:
             self.section_delimiter = section_delimiter
         else:
-            self.section_delimiter = '\n\n'
-        self.storage_unit = storage_unit
+            self.section_delimiter = '\n'
+
         self.vocabs = None
+        if vocabs is not None:
+            self.vocabs =vocabs
+
         self.text2index = None
         self.index2text = None
         self.is_onehot = is_onehot
         self.is_paired_process = False
         self.is_spatial = True
         self.add_corpus(corpus)
-        self.sequence_offset = sequence_offset
-        self.dtype = np.float32 if self.is_onehot else np.int64
 
+
+        self.dtype = np.float32 if self.is_onehot else np.int64
         self.is_paired_process = False
 
+
+    @property
+    def element_spec(self):
+        return self._element_spec
+
+    @element_spec.setter
+    def element_spec(self, value):
+        self._element_spec = value
+
     def add_corpus(self, corpus):
-        if hasattr(corpus, "__iter__"):
-            self.items.extend(corpus)
-            if self.vocabs is None:
+        if corpus is  not None:
+            if isinstance(corpus, str):
+                corpus=corpus.splitlines()
 
-                chars = sorted(list(set(''.join(corpus))))
-                chars.insert(0, '[CLS]')
-                chars.insert(1, '[SEP]')
-                chars.insert(2, '[UNK]')
-                chars.insert(3, '[PAD]')
-                chars.insert(4, '[MASK]')
-                print('total distinct chars:', len(chars))
-                self.vocabs = chars
-                self.text2index = dict((c, i) for i, c in enumerate(chars))
-                self.index2text = dict((i, c) for i, c in enumerate(chars))
-                self.vocabs_frequency = OrderedDict((c, 1) for i, c in enumerate(chars))
-                for ch in list(''.join(corpus)):
-                    self.vocabs_frequency[ch] += 1
 
+            if hasattr(corpus, "__iter__"):
+                corpus=[t for t in corpus if len(t)>self.min_sequence_length]
+                self.items.extend(corpus)
             else:
-                new_chars = sorted(list(set(''.join(corpus))))
-                new_chars = [ch for ch in new_chars if ch not in self.vocabs]
-                new_chars = list(sorted(set(''.join(new_chars))))
-                for ch in new_chars:
-                    self.vocabs.append(ch)
-                    self.text2index[ch] = len(self.vocabs) - 1
-                    self.index2text[len(self.vocabs) - 1] = ch
-                    self.vocabs_frequency[ch] = 1
+                raise ValueError('corpus should be a collection.')
 
-                for ch in list(''.join(corpus)):
-                    self.vocabs_frequency[ch] += 1
+            if self.vocabs is None:
+                if len(self.items)>0:
+                    chars = sorted(list(set(''.join(self.items))))
+                    chars.insert(0, '[PAD]')
+                    chars.insert(1, '[CLS]')
+                    chars.insert(2, '[SEP]')
+                    chars.insert(3, '[UNK]')
+                    chars.insert(4, '[MASK]')
+                    print('total distinct chars:', len(chars))
+                    self.vocabs = chars
 
-            self.length_index = OrderedDict()
-            total_len = 0
-            for i in range(len(self.items)):
-                total_len += (len(self.items[i]) + 2)
-                self.length_index[i] = total_len
+            if self.vocabs  is not None and hasattr(self.vocabs, "__iter__"):
+                self.text2index = dict((c, i) for i, c in enumerate(self.vocabs ))
+                self.index2text = dict((i, c) for i, c in enumerate(self.vocabs ))
+                self.vocabs_frequency = OrderedDict((c, 1) for i, c in enumerate(self.vocabs ))
+                self.length_index = OrderedDict()
+
+                def start_thread(func, name=None, args=[]):
+                    threading.Thread(target=func, name=name, args=args).start()
+
+                def process_statistics():
+                    total_len = 0
+                    for i in range(len(self.items)):
+                        for ch in list(self.items[i]):
+                            if ch not in self.vocabs_frequency:
+                                self.vocabs_frequency[ch] = 0
+                            self.vocabs_frequency[ch] += 1
+
+                        total_len += (len(self.items[i]) + 2)
+                        self.length_index[i] = total_len
+                        if i==0:
+                            self._element_spec = TensorSpec(shape=tensor_to_shape(self[0]), name=self.symbol,object_type=self.object_type, is_spatial=True)
+
+                if len(self.items)<500000:
+                    process_statistics()
+
+                else:
+                    start_thread(process_statistics, args=[])
 
 
-        else:
-            raise ValueError('corpus should be a collection.')
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -960,9 +1006,9 @@ class TextSequenceDataset(Dataset):
         return next(itertools.islice(iterator, idx, None))
 
     def __len__(self):
-        if self.sequence_start_at == 'random':
+        if self.sequence_start_at  in [  'random']:
             return self.length_index.value_list[-1]
-        elif self.sequence_start_at == 'section_start':
+        elif self.sequence_start_at in [ 'section_start','next_section_start']:
             return len(self.items)
 
     def __getitem__(self, index: int):
