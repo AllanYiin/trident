@@ -716,7 +716,7 @@ class Model(model.ModelBase):
 
     def do_on_epoch_end(self):
         super().do_on_epoch_end()
-        if self.model is not None and is_gpu_available() and self.model.device == 'cuda':
+        if self.model is not None and is_gpu_available() and get_device() == 'cuda':
             torch.cuda.synchronize()
             torch.cuda.empty_cache()
             gc.collect()
@@ -737,7 +737,7 @@ class Model(model.ModelBase):
         self.training_context['time_batch_start'] = time.time()
 
         if (self.training_context['steps'] + 1) % 100 == 0:
-            if self.model.device == 'cuda':
+            if is_gpu_available() and get_device() == 'cuda':
                 torch.cuda.synchronize()
                 torch.cuda.empty_cache()
                 gc.collect()
@@ -890,10 +890,11 @@ class Model(model.ModelBase):
 
         except:
             PrintException()
-        train_data, test_data = super().do_on_data_received(self.training_context['train_data'],
-                                                            self.training_context['test_data'])
-        self.training_context['train_data'] = train_data
-        self.training_context['test_data'] = test_data
+            self.training_context['train_data'] = train_data
+            self.training_context['test_data'] = test_data
+        gc.collect()
+        train_data, test_data = super().do_on_data_received(self.training_context['train_data'],self.training_context['test_data'])
+
         return train_data, test_data
 
     def get_current_loss(self):

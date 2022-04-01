@@ -572,7 +572,7 @@ class TensorShape(object):
                 dims = [d for d in dims]
             self._dims = [d for d in dims]
         elif isinstance(dims, (tuple, list)):  # Most common case.
-            self._dims = [d if isinstance(d, numbers.Integral) else None if d is None else d.item() if hasattr(d, "item") else d.numpy() for d in dims]
+            self._dims = [d if isinstance(d, numbers.Integral) else None  for d in dims]
         elif isinstance(dims, TensorShape):
             self._dims = dims.dims
         else:
