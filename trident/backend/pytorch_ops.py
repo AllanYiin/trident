@@ -53,7 +53,7 @@ def _get_device():
 
     """
     if get_session().device is None:
-        _set_device("cuda" if torch.cuda.is_available() else 'tpu' if is_tpu_available() else "cpu")
+        _set_device("cuda" if torch.cuda.is_available() else 'xpu' if is_tpu_available() else "cpu")
     return get_session().device
 
 
@@ -61,11 +61,11 @@ def _set_device(device='cpu'):
     device = device.lower().replace('gpu', 'cuda')
     if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
-    if device == 'tpu' and not is_tpu_available():
+    if device == 'xpu' and not is_tpu_available():
         raise ValueError('Tpu is not available...')
     try:
         device_ = device
-        if device == 'tpu':
+        if device == 'xpu':
             import torch_xla.core.xla_model as xm
             device_ = xm.xla_device()
         set_session('device', device_)
@@ -322,7 +322,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
         tensor([0, 1, 2, 3, 4])
 
     """
-    if is_tpu_available() and (device == 'tpu' or device is None):
+    if is_tpu_available() and (device == 'xpu' or device is None):
         import torch_xla.core.xla_model as xm
         device = xm.xla_device()
     #input_dtype = dtype
@@ -643,7 +643,15 @@ def to(x, *args, **kwargs):
                 if 'cpu' in arg:
                     x = x.cpu()
                 elif 'gpu' in arg or 'cuda' in arg:
-                    x = x.cuda()
+                    if is_gpu_available():
+                        x = x.cuda()
+                    else:
+                        x=x.cpu()
+                elif 'tpu' in arg or 'xpu' in arg:
+                    if is_tpu_available():
+                        x = x.xpu()
+                    else:
+                        x=x.cpu()
                 else:
                     try:
                         x = cast(x, str2dtype(arg))
@@ -5369,6 +5377,14 @@ def shear(tensor: Tensor, shear: Tensor) -> Tensor:
 
     # warp using the affine transform
     return affine(tensor, shear_matrix[..., :2, :3])
+
+
+
+
+
+
+
+
 
 
 _FUN_NAMES = [
