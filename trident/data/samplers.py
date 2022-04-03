@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
+import builtins
 import copy
 import inspect
 import itertools
@@ -110,7 +112,7 @@ class BatchSampler(Sampler):
         [[0, 1, 2], [3, 4, 5], [6, 7, 8]]
     """
 
-    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=True, sample_filter=None):
+    def __init__(self, data_source, batch_size=1, is_shuffle=True, drop_last=True, sample_filter=None,dynamic_padding=False):
         super().__init__(data_source)
         if not isinstance(batch_size, int) or isinstance(batch_size, bool) or batch_size <= 0:
             raise ValueError("batch_size should be a positive integeral value, "
@@ -122,6 +124,7 @@ class BatchSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
         self.is_shuffle = is_shuffle
+        self.dynamic_padding=dynamic_padding
 
 
 
@@ -156,6 +159,8 @@ class BatchSampler(Sampler):
                     if len(batch_data) == self.batch_size:
                         returnData = copy.deepcopy(self.data_source.data_template)
                         unzip_batch_data = list(zip(*batch_data))
+
+                        _dynamaic_paddings=[]
                         for i in range(len(unzip_batch_data)):
                             if check_same_size(*unzip_batch_data[i]):
                                 try:
@@ -163,11 +168,19 @@ class BatchSampler(Sampler):
                                         returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i]],dtype=np.string_)
                                     else:
                                         returnData[returnData.key_list[i]] = np.array([array for array in unzip_batch_data[i] ])
+                                        if  self.data_source.parent is not None and self.data_source.parent .dynamic_padding and 'int' in  str(returnData[returnData.key_list[i]] .dtype):
+                                             _dynamaic_paddings.append(np.max(np.argwhere(returnData[returnData.key_list[i]]!=0)[:,1]))
                                 except Exception as e:
                                     print([array.shape for array in unzip_batch_data[i] ])
                             else:
                                 print([array.shape for array in unzip_batch_data[i] ])
                                 batch_data=[]
+                        if self.data_source.parent is not None and self.data_source.parent .dynamic_padding:
+                            final_sequence_length=builtins.max(_dynamaic_paddings)
+                            for k in returnData.key_list:
+                                if 'int' in  str(returnData[k] .dtype):
+                                    returnData[k]=returnData[k][:,:final_sequence_length+1]
+
 
                         if self.data_source.mode=='tuple':
                             yield tuple(returnData.value_list)
