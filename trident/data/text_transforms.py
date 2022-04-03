@@ -1,25 +1,17 @@
 import builtins
-import os
 import copy
-import math
-
-import random
-import inspect
-import string
-import sys
-from functools import wraps
-from typing import Sequence, Tuple, Dict, Union, Optional
-import collections
-import numpy as np
-
-from trident.backend.tensorspec import TensorSpec, object_type_inference, ObjectType
-
-from trident.backend.common import OrderedDict
-from trident.backend.common import *
-from trident.backend.tensorspec import TensorSpec, object_type_inference
-from trident.data.utils import download_file_from_google_drive, unpickle
-from trident.backend import numpy_ops
 import numbers
+import os
+import random
+import string
+
+import numpy as np
+from trident.backend import numpy_ops
+from trident.backend.common import *
+from trident.backend.tensorspec import TensorSpec
+from trident.data.transform import TextTransform
+from trident.data.utils import download_file_from_google_drive, unpickle
+
 
 if get_backend() == 'pytorch':
     #from trident.backend.pytorch_backend import get_device
@@ -27,7 +19,8 @@ if get_backend() == 'pytorch':
 elif get_backend() == 'tensorflow':
     #from trident.backend.tensorflow_backend import get_device
     from trident.backend.tensorflow_ops import *
-from trident.data.transform import TextTransform
+
+
 
 __all__ = ['bpmf_phonetic', 'numbers_string', 'alphabets', 'chinese_characters', 'RandomSwapChar', 'RandomInsertChar', 'ToHalfWidth', 'RandomMask', 'BopomofoConvert', 'ChineseConvert',
            'RandomHomophonicTypo', 'RandomHomomorphicTypo', 'VocabsMapping']
@@ -381,7 +374,7 @@ class VocabsMapping(TextTransform):
 
     """
 
-    def __init__(self, mapping_dict=None, sequence_length=None,output_type='list', unkown_token=None, pad_token=None, cls_token=None, sep_token=None, name='random_swap_char', **kwargs):
+    def __init__(self, mapping_dict=None, output_type='list', unkown_token=None, pad_token=None, cls_token=None, sep_token=None, name='random_swap_char', **kwargs):
         super().__init__()
         if output_type in ['list', 'array', 'string']:
             self.output_type = output_type
@@ -396,7 +389,7 @@ class VocabsMapping(TextTransform):
         self.pad_token = pad_token
         if self.pad_token is None and isinstance(self.mapping_dict, dict) and '[PAD]' in self.mapping_dict:
             self.pad_token = '[PAD]'
-        self.sequence_length=sequence_length
+
         self.name = name
 
     def _apply_corpus(self, corpus, spec: TensorSpec):
@@ -405,7 +398,7 @@ class VocabsMapping(TextTransform):
         if self.mapping_dict is None or len(self.mapping_dict) == 0:
             return corpus
         else:
-            seq_len=self.sequence_length if self.sequence_length is not None else len(corpus)
+            seq_len= len(corpus)
             for k in range(seq_len):
                 word=corpus[k] if k< len(corpus) else self.pad_token
                 if word in self.mapping_dict:
@@ -436,7 +429,7 @@ class VocabsMapping(TextTransform):
                         else:
                             raise ValueError('{0} {1} cannot mapping properly.'.format(sample_item.__class__.__name__, sample_item))
 
-            if self.output_type == 'list':
+            if is_list or self.output_type == 'list':
                 return out_str
             elif self.output_type == 'array' and isinstance(out_str[0], np.ndarray):
                 return np.array(out_str)
@@ -607,11 +600,11 @@ class RandomMask(TextTransform):
                             # if len(out_str)>2 and out_str[-2]!='[MASK]' and out_str[-1]=='[MASK]':
                             #     rr=rr*0.75
                             if rr < self.convert_ratio and char != ' ' and char not in string.punctuation and char not in string.digits:
-                                rr1 = random.random()
-                                if rr1 < 0.1:
-                                    out_str.append('[UNK]')
-                                else:
-                                    out_str.append('[MASK]')
+                                # rr1 = random.random()
+                                # if rr1 < 0.1:
+                                #     out_str.append('[UNK]')
+                                # else:
+                                out_str.append('[MASK]')
                             else:
                                 out_str.append(char)
 
@@ -781,9 +774,9 @@ class RandomHomomorphicTypo(TextTransform):
         if char in self.chardict and char not in string.digits and char not in string.punctuation and char not in string.ascii_letters and char not in bpmf_phonetic:
             embedding = to_tensor(expand_dims(self.chardict[char], 0)).to('cpu')
             results = element_cosine_distance(embedding, self.all_embedding, -1)[0]
-            top10 = argsort(results, axis=0)[:5]
+            top10 = to_numpy(argsort(results, axis=0)[:5])
             results = to_numpy(results)
-            similar_chars = [self.chardict.key_list[idx.item()] for idx in top10 if self.chardict.key_list[idx.item()] != char and results[idx.item()] > 0.8]
+            similar_chars = [self.chardict.key_list[int(idx)] for idx in top10 if self.chardict.key_list[int(idx)] != char and results[int(idx)] > 0.8]
             max_freq = -15.5
             return_char = char
             for similar_char in similar_chars:
