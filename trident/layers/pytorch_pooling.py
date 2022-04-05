@@ -780,8 +780,7 @@ class GlobalAvgPool2d(Layer):
 
     def forward(self, x, **kwargs):
 
-        N,C,H,W=x.size()
-        x = x.view(N, C, -1).mean(dim=-1, keepdim=self.keepdims)
+        x = x.mean(dim=[2,3], keepdim=self.keepdims)
         return x
 
 
