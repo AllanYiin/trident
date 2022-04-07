@@ -53,6 +53,7 @@ class ImageDataProvider(object):
 
     def __init__(self, dataset_name='', traindata=None, testdata=None, batch_size=8, mode='tuple', **kwargs):
         self.__name__ = dataset_name
+        self.dynamic_padding=False
         self.uuid = uuid.uuid4().node
         self.traindata = traindata
         if isinstance(self.traindata, Iterator):
@@ -804,19 +805,29 @@ class TextSequenceDataProvider(object):
 
     def index2text(self, idx: int):
         index2textdict = None
-        if self.scenario == 'test' and self.testdata is not None:
-            index2textdict = self.testdata.data.index2text
+
+        if isinstance(self.traindata.data,TextSequenceDataset):
+            index2textdict = self.traindata.data.index2text
+        elif isinstance(self.traindata.data, ZipDataset) and any([isinstance(ds,TextSequenceDataset) for ds in self.traindata.data.items]):
+            index2textdict = [ds for ds in self.traindata.data.items if isinstance(ds,TextSequenceDataset) ][0].index2text
+        elif isinstance(self.traindata.label,TextSequenceDataset):
+            index2textdict = self.traindata.label.index2text
         else:
-            if isinstance(self.traindata.data, ZipDataset):
-                index2textdict = self.traindata.data.items[0].index2text
-            else:
-                index2textdict = self.traindata.data.index2text
-        return index2textdict[idx]
+            index2textdict = self.traindata.data.index2text
+        if idx in index2textdict:
+            return  index2textdict[idx]
+        else:
+            return '[UNK]'
+
 
     def text2index(self, text_data: str):
         text2indexdict = None
-        if self.scenario == 'test' and self.testdata is not None:
-            text2indexdict = self.testdata.data.text2index
+        if isinstance(self.traindata.data,TextSequenceDataset):
+            text2indexdict = self.traindata.data.text2index
+        elif isinstance(self.traindata.data, ZipDataset) and any([isinstance(ds,TextSequenceDataset) for ds in self.traindata.data.items]):
+            text2indexdict = [ds for ds in self.traindata.data.items if isinstance(ds,TextSequenceDataset) ][0].text2index
+        elif isinstance(self.traindata.label,TextSequenceDataset):
+            text2indexdict = self.traindata.label.text2index
         else:
             text2indexdict = self.traindata.data.text2index
         if text_data in text2indexdict:
