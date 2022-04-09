@@ -310,13 +310,26 @@ class MultiHeadedAttention(Layer):
 class MaskedMultiHeadedAttention(Layer):
     """
     Take in model size and number of heads.
+            Tensor          Type            Shape
+        ===========================================================================
+        q               float           (..., query_len, dims)
+        k               float           (..., kv_len, dims)
+        v               float           (..., kv_len, dims)
+        past (*)        float           (..., past_len, dims)
+        mask            bool            (..., query_len, past_len + kv_len)
+        ---------------------------------------------------------------------------
+        output 1        float           (..., query_len, dims)
+        output 2 (*)    float           (..., past_len + kv_len, dims)
+        ===========================================================================
+
     """
 
     def __init__(self, attn_heads, d_model, dropout_rate=0.1, max_seq_length=512, is_cross_attention=False,
-                 layer_idx=None, scale_attn_weights=True, scale_attn_by_inverse_layer_idx=False,
+                 layer_idx=None, use_cache=True,scale_attn_weights=True, scale_attn_by_inverse_layer_idx=False,
                  output_attentions=False):
         super().__init__()
         assert d_model % attn_heads == 0
+        self.use_cache=use_cache
         self.max_seq_length = max_seq_length
         self.register_buffer(
             "bias",
@@ -398,7 +411,7 @@ class MaskedMultiHeadedAttention(Layer):
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def forward(self, x, attention_mask=None, head_mask=None, encoder_hidden_states=None,encoder_attention_mask=None):
+    def forward(self, x, attention_mask=None, head_mask=None,layer_past=None, encoder_hidden_states=None,encoder_attention_mask=None):
         hidden_states = x
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -417,15 +430,15 @@ class MaskedMultiHeadedAttention(Layer):
         key = self._split_heads(key, self.attn_heads, self.d_k)
         value = self._split_heads(value, self.attn_heads, self.d_k)
 
-        # if layer_past is not None:
-        #     past_key, past_value = layer_past
-        #     key = torch.cat((past_key, key), dim=-2)
-        #     value = torch.cat((past_value, value), dim=-2)
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key = torch.cat((past_key, key), dim=-2)
+            value = torch.cat((past_value, value), dim=-2)
 
-        # if use_cache is True:
-        #     present = (key, value)
-        # else:
-        present = None
+        if self.use_cache is True:
+            present = (key, value)
+        else:
+            present = None
         #
         # if self.reorder_and_upcast_attn:
         #     attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
@@ -495,7 +508,7 @@ class GptTransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden=None,layer_idx=None, is_cross_attention=False,dropout_rate=0.1):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden=None,layer_idx=None, is_cross_attention=False,dropout_rate=0.1,use_cache=True):
         """
         param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -507,11 +520,12 @@ class GptTransformerBlock(Layer):
 
         if feed_forward_hidden is None:
             feed_forward_hidden = 4 * hidden
+        self.use_cache=use_cache
         self.layer_idx=layer_idx
         self.d_model=hidden
         self.attn_heads=attn_heads
         self.ln_1 =LayerNorm(eps=1e-5)
-        self.attn = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=hidden, dropout_rate=dropout_rate,layer_idx=layer_idx)
+        self.attn = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=hidden, dropout_rate=dropout_rate,layer_idx=layer_idx,use_cache=use_cache)
         self.ln_2 = LayerNorm(eps=1e-5)
         self.is_cross_attention=is_cross_attention
         if self.is_cross_attention:
@@ -521,7 +535,7 @@ class GptTransformerBlock(Layer):
         self.mlp = ConvFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
 
 
-    def forward(self, x, attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None):
+    def forward(self, x, attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None,layer_past=None):
             hidden_states=x
             residual = x
             hidden_states = self.ln_1(hidden_states)
@@ -529,6 +543,7 @@ class GptTransformerBlock(Layer):
                 hidden_states,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
+                layer_past=layer_past,
                 #output_attentions=output_attentions,
             )
             attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
@@ -564,10 +579,12 @@ class GptTransformerBlock(Layer):
             # residual connection
             hidden_states = residual + feed_forward_hidden_states
 
-            # if use_cache:
-            #     outputs = (hidden_states,) + outputs
-            # else:
-            outputs = (hidden_states,) + outputs[1:]
+            if self.use_cache:
+                outputs = (hidden_states,) + outputs
+            else:
+                outputs = (hidden_states,) + outputs[1:]
+
+
 
             return outputs  # hidden_states, present, (attentions, cross_attentions)
 
@@ -580,7 +597,7 @@ class BERT(Layer):
     """
 
     def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1, pad_idx=0,
-                 max_seq_length=512):
+                 max_seq_length=512,output_mode='last_hidden_layer'):
         """
         param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -590,6 +607,9 @@ class BERT(Layer):
         """
 
         super().__init__()
+        valid_output_mode=['last_hidden_layer','sum_last_4_hidden','sum_all_hidden']
+        if output_mode in valid_output_mode:
+            self.output_mode=output_mode
         self.max_seq_length = max_seq_length
         self.hidden = hidden
         self.n_layers = n_layers
@@ -640,9 +660,16 @@ class BERT(Layer):
         x = self.embedding(x, segments_tensor)
 
         # running over multiple transformer blocks
-        for name, transformer in self.named_children():
+        outputs=[]
+        for i,(name, transformer) in enumerate(self.named_children()):
             if 'transformer_block' in name:
                 x = transformer.forward(x, mask)
+                if self.output_mode == 'sum_last_4_hidden' and i >= self.n_layers - 4:
+                    outputs.append(x)
+                elif self.output_mode == 'sum_all_hidden' :
+                    outputs.append(x)
+            if len(outputs)>0:
+                x=reduce_mean(stack(outputs,axis=0),axis=0)
         return x
 
 class GPT2(Layer):
@@ -651,7 +678,7 @@ class GPT2(Layer):
     """
 
     def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1, pad_idx=0,
-                 max_seq_length=512):
+                 max_seq_length=512,use_cache=True):
         """
         param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -662,6 +689,7 @@ class GPT2(Layer):
 
         super().__init__()
         self.max_seq_length = max_seq_length
+        self.use_cache=use_cache
         self.hidden = hidden
         self.n_layers = n_layers
         self.attn_heads = attn_heads
@@ -681,23 +709,38 @@ class GPT2(Layer):
         self.position =Embedding(num_embeddings=max_seq_length, embedding_dim=hidden)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),
-                GptTransformerBlock(attn_heads=self.attn_heads, hidden=self.hidden,feed_forward_hidden=self.feed_forward_hidden, dropout_rate=dropout_rate))
+                GptTransformerBlock(attn_heads=self.attn_heads, hidden=self.hidden,feed_forward_hidden=self.feed_forward_hidden, dropout_rate=dropout_rate,use_cache=use_cache))
 
 
-    def forward(self, x, inputs_embeds=None,position_ids=None):
+    def forward(self, x, inputs_embeds=None,position_ids=None,layer_past=None):
         input_shape = x.size()
+        if layer_past is None:
+            past_length = 0
+        else:
+            past_length = layer_past[0][0].size(-2)
+
         if inputs_embeds is None:
             inputs_embeds=self.token(x)
         if position_ids is None:
             position_ids = torch.arange(0, input_shape[-1] , dtype=torch.long, device=x.device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
         position_embeds=self.position(position_ids)
+
+
+
         hidden_states = inputs_embeds + position_embeds
         hidden_states = self.drop(hidden_states)
+        presents = () if self.use_cache else None
         for name, transformer in self.named_children():
             if 'transformer_block' in name:
-                hidden_states = transformer(hidden_states)
+                outputs = transformer(hidden_states,attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None,layer_past=layer_past)
+                hidden_states = outputs[0]
+                if self.use_cache is True:
+                    presents = presents + (outputs[1],)
+
         hidden_states=self.norm(hidden_states)
+
+
         logits=self.out(hidden_states)
         return logits
 
