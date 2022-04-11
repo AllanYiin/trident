@@ -492,6 +492,8 @@ def int_shape(x: Tensor):
 
     """
 
+    if x is None or not hasattr(x,'shape'):
+        return []
     return [d for d in x.shape]  # if isinstance(x,np.ndarray)  else  [d for d in  x.size()]
 
 
@@ -863,6 +865,8 @@ def less(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dtype=N
     """
     if dtype is None:
         dtype = Dtype.bool
+    if not is_tensor(left):
+        left=to_tensor(left)
     right = to_tensor(right, dtype=left.dtype, device=left.device)
     return left.lt(right).to(dtype)
 
@@ -891,7 +895,8 @@ def equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dtype=
         tensor([[False, False,  True]])
 
     """
-
+    if not is_tensor(left):
+        left=to_tensor(left)
     right = to_tensor(right, dtype=left.dtype, device=left.device)
     return left.eq(right).to(dtype)
 
@@ -915,6 +920,8 @@ def greater(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dtyp
 
     """
 
+    if not is_tensor(left):
+        left=to_tensor(left)
     right = to_tensor(right, dtype=left.dtype, device=left.device)
     return left.gt(right).to(dtype)
 
@@ -938,6 +945,8 @@ def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number]
         tensor([0., 1., 1.])
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     right = to_tensor(right, dtype=left.dtype, device=left.device)
     return left.ge(right).to(dtype)
 
@@ -961,6 +970,8 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], dt
         tensor([1., 0., 1.])
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     right = to_tensor(right, dtype=left.dtype, device=left.device) if not is_tensor(right) else right
     return left.ne(right).to(dtype)
 
@@ -984,6 +995,8 @@ def less_equal(left: Tensor, right: Union[Tensor, np.ndarray, numbers.Number], d
         tensor([1., 1., 0.])
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     right = to_tensor(right, dtype=left.dtype, device=left.device)
     return left.le(right).to(dtype)
 

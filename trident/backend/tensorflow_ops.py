@@ -2,6 +2,7 @@
 import os
 os.environ['TRIDENT_BACKEND'] = 'tensorflow'
 import collections
+import threading
 from copy import deepcopy
 import math
 import builtins
@@ -26,7 +27,7 @@ from tensorflow.python.framework.ops  import composite_tensor
 from tensorflow.python.ops import math_ops
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session,TensorShape
 from trident.backend import dtype as Dtype
-__all__ = ['Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor','to_scalar', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
+__all__ = ['get_graph','Tensor','CompositeTensor','is_gpu_available','is_tensor',  'is_tensor_like','to_numpy', 'to_tensor','to_scalar', 'ndim','numel', 'int_shape','tensor_to_shape','str2dtype','cast', 'is_sparse', 'is_nan', 'is_inf',
            'is_abnormal_number', 'any_nan', 'any_inf', 'any_abnormal_number','logical_and','logical_or','logical_xor','logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort','topk', 'maximum', 'minimum', 'floor',
            'ceil', 'round', 'dot', 'sqrt','rsqrt' ,'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add', 'subtract',
@@ -46,6 +47,18 @@ Tensor=EagerTensor
 CompositeTensor=composite_tensor.CompositeTensor
 FLOAT32MAX=np.finfo(float).max
 FLOAT32MIN=np.finfo(float).min
+
+
+_GRAPH = threading.local()
+def get_graph():
+    if context.executing_eagerly():
+        global _GRAPH
+        if not getattr(_GRAPH, 'graph', None):
+            _GRAPH.graph = func_graph.FuncGraph('trident_graph')
+        return _GRAPH.graph
+    else:
+        return ops.get_default_graph()
+
 
 
 def numpy_compatible(func):
@@ -227,26 +240,38 @@ def to_numpy(x) -> np.ndarray:
         return np.array(x.dims)
     elif isinstance(x, np.ndarray):
         return x
-    elif isinstance(x, tf.Variable):
-        return x.value()._copy_nograd().numpy()
-    elif context.executing_eagerly() and isinstance(x, EagerTensor):
-        return x._copy_nograd().numpy()
-    elif isinstance(x, tf.TensorShape):
-        return np.array(deepcopy(x).as_list())
-    elif isinstance(x, Tensor):
-        return  ops.convert_to_tensor_v2(x)._copy_nograd().numpy()
+    elif isinstance(x, (list, tuple,numbers.Number)):
+        return np.array(x)
     elif isinstance(x, (list,tuple)):
         return np.asarray(x)
+    elif tf.executing_eagerly() or isinstance(x, tf.__internal__.EagerTensor):
+            return x.numpy()
+    elif not getattr(x, '_in_graph_mode', True):
+            # This is a variable which was created in an eager context, but is being
+            # evaluated from a Graph.
+            with tf.__internal__.eager_context.eager_mode():
+                return x.numpy()
+
+    elif tf.compat.v1.executing_eagerly_outside_functions():
+            # This method of evaluating works inside the Keras FuncGraph.
+            with tf.init_scope():
+                return x.numpy()
+
+
+    # elif context.executing_eagerly() and isinstance(x, EagerTensor):
+    #     return x._copy_nograd().numpy()
+    elif isinstance(x, tf.TensorShape):
+        return np.array(deepcopy(x).as_list())
     elif hasattr(x, '__len__') and len(x) > 1 and all( [isinstance(k, (list, tuple,numbers.Number, np.ndarray)) for k in x]):
         x=unpack_singleton(x)
         return np.array([x])
+
     # elif isinstance(x, ops.Tensor):
     #     sess = tf.compat.v1.Session()
     #     x= sess.run(x)
     #     return x
 
-    elif isinstance(x, (list, tuple,numbers.Number)):
-        return np.array(x)
+
     else:
         try:
 
@@ -255,8 +280,10 @@ def to_numpy(x) -> np.ndarray:
                 # evaluated from a Graph.
                 with context.eager_mode():
                     return x.numpy()
-            with x.graph.as_default():
-                return x.eval(session=tf.compat.v1.Session())
+            with x.graph.as_default()as sess:
+                return x.eval(session=sess)
+
+
 
         except:
             raise ValueError("Unsupported type")
@@ -431,9 +458,9 @@ def int_shape(x):
     [3, 3, 7]
 
     """
-    if x is None:
+    if x is None or not hasattr(x,'shape'):
         return None
-    return tuple(x.shape.as_list())
+    return x.shape.as_list()
 
 
 
@@ -773,7 +800,8 @@ def less(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dty
        <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 0.0000e+00], dtype=float32)>
 
     """
-
+    if not is_tensor(left):
+        left=to_tensor(left)
     return tf.cast(tf.less(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
@@ -801,6 +829,8 @@ def equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=Dt
         >>> equal(to_tensor([1,2,3]), 3).cpu()
         <tf.Tensor: shape=(3,), dtype=bool, numpy=array([False, False,  True])>
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     return tf.cast(tf.equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
@@ -824,6 +854,8 @@ def greater(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtype=
         <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     return tf.cast(tf.greater(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
@@ -846,6 +878,8 @@ def greater_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],
         <Tensor: shape=(3,), dtype=float32, numpy=array([0.0000e+00, 1.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     return tf.cast(tf.greater_equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
@@ -868,6 +902,8 @@ def not_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dtyp
         <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 0.0000e+00, 1.0000e+00], dtype=float32)>
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     return tf.cast(tf.not_equal(left, right,name=name),dtype,name='cast')
 
 @numpy_compatible
@@ -890,6 +926,8 @@ def less_equal(left: Tensor, right: Union[Tensor, np.ndarray,numbers.Number],dty
         <Tensor: shape=(3,), dtype=float32, numpy=array([1.0000e+00, 1.0000e+00, 0.0000e+00], dtype=float32)>
 
     """
+    if not is_tensor(left):
+        left=to_tensor(left)
     return tf.cast(tf.less_equal(left, right,name=name), dtype,name='cast')
 
 @numpy_compatible
@@ -2712,7 +2750,6 @@ def softmax(x:Tensor, axis=-1,name='softmax'):
     return tf.nn.softmax(x, axis=axis,name=name)
 
 @numpy_compatible
-@tf.function
 def log_softmax(x:Tensor, axis=-1, name='log_softmax'):
     """Activation function for computing log_sum_exp while determining
     This will be used to determine unaveraged confidence loss across
@@ -4615,7 +4652,7 @@ _FUN_NAMES = [
 for target_fun_name,source_fun in _FUN_NAMES:
     if not hasattr(tf.Tensor,target_fun_name):
         setattr(tf.Tensor, target_fun_name, source_fun)
-    elif target_fun_name in ["to","float","int","long","sum","mean"]:
+    elif target_fun_name in ["to","float","int","long","sum","mean","min","max"]:
         setattr(tf.Tensor, target_fun_name, source_fun)
 del _FUN_NAMES
 
