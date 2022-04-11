@@ -1242,16 +1242,21 @@ class WingLoss(_PairwiseLoss):
         Returns:
 
         """
+        if ndim(target)==2:
+            target=target.reshape((target.size(0),-1,2))
+        if ndim(output) == 2:
+            output = output.reshape((output.size(0), -1, 2))
+        target = target.detach()
         delta_y = (target - output).abs()
         c = self.omega * (1.0 - log(1.0 + self.omega / self.epsilon))
 
         losses = where(
-            greater(delta_y, self.omega, dtype=Dtype.bool),
+            greater(self.omega,delta_y),
             self.omega * log(1.0 + delta_y / self.epsilon),
             delta_y - c
         )
 
-        return reduce_mean(losses, [1, 2])
+        return losses
 
 
 class AdaptiveWingLoss(_PairwiseLoss):

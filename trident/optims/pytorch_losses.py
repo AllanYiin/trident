@@ -2,40 +2,34 @@ from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
-import numbers
-import sys
-from typing import Callable, Any
-
-from tqdm import tqdm
 import builtins
 import math
+import numbers
+import sys
 from math import *
-import string
+from typing import Callable, Any
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
 from torch.nn.modules.loss import _Loss
-
-from trident.backend.tensorspec import ObjectType, object_type_inference
-
-from trident.layers.pytorch_layers import Dense
+from tqdm import tqdm
 
 from trident import context
-from trident.backend.model import ModelBase
 from trident.backend import dtype as Dtype
 from trident.backend.common import *
+from trident.backend.model import ModelBase
 from trident.backend.pytorch_backend import *
 from trident.backend.pytorch_ops import *
+from trident.backend.tensorspec import ObjectType, object_type_inference
 from trident.data.dataset import *
 from trident.layers.pytorch_activations import sigmoid
+from trident.layers.pytorch_layers import Dense
 from trident.optims.losses import Loss, _check_logsoftmax_logit, _check_logit
 
-# from trident.optims.pytorch_trainer import Model
-
-
-_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+_device = get_device()
 __all__ = ['_ClassificationLoss', 'MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss',
            'SmoothL1Loss', 'L2Loss', 'CosineSimilarityLoss',
            'ExponentialLoss', 'ItakuraSaitoLoss', 'MS_SSIMLoss', 'DiceLoss', 'ActiveContourLoss', 'WingLoss',
@@ -61,13 +55,13 @@ class _ClassificationLoss(Loss):
         """
 
         Args:
-            axis (int): the position where the classes is.
+            axis (int): the position where the classes are.
             sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
             number of classes.
             from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
             ignore_index (int or list of int):
             cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-            less than 1..
+            less than 1
             is_target_onehot (bool): Is the target tensor in onehot format?
             label_smooth (bool): Should use label smoothing?
             reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
@@ -80,7 +74,7 @@ class _ClassificationLoss(Loss):
             insteaded.
             is_target_onehot (bool):  If True, means we have confirmed (not just declare) the target is transformed as  one-hot format
             reduction(str): The aggregation function for loss, available options are 'sum', 'mean 'and 'batch_mean', default is 'mean'
-            axis (None or int): The axis we according with for loss calculation. Default is 1.
+            axis (None or int): The axis we according to for loss calculation. Default is 1.
             from_logits (bool):If True, means  the sum of all probability will equal 1.
             is_logsoftmax (bool):If True, means model  use SoftMax as last layer or use any equivalent calculation.
             sample_weight(1D tensor):The loss weight for all classes.
@@ -131,7 +125,7 @@ class _ClassificationLoss(Loss):
                         if dp_ds.symbol in self.signature.inputs:
                             ds = dp_ds
                         # maybe duplicate
-                        elif ds.object_type in self.valid_target_object_type and ds.object_type == inferred_target_object_type:
+                        elif dp_ds.object_type in self.valid_target_object_type and dp_ds.object_type == inferred_target_object_type:
                             ds = dp_ds
                 else:
                     ds = dp.traindata.label
@@ -328,7 +322,7 @@ class _ClassificationLoss(Loss):
 
     # def calculate_loss(self, output, target, **kwargs):
     #     """ Calculate the unaggregate loss.
-    #     The loss function calculation logic should define here., please dont't aggregate the loss in this phase.
+    #     The loss function calculation logic should define here., please don't aggregate the loss in this phase.
     #
     #     Args:
     #         output (tf.Tensor):
@@ -403,13 +397,13 @@ class _PairwiseLoss(Loss):
         """
 
         Args:
-            axis (int): the position where the classes is.
+            axis (int): the position where the classes are.
             sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
             number of classes.
             from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
             ignore_index (int or list of int):
             cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-            less than 1..
+            less than 1
             is_target_onehot (bool): Is the target tensor in onehot format?
             label_smooth (bool): Should use label smoothing?
             reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
@@ -422,7 +416,7 @@ class _PairwiseLoss(Loss):
             insteaded.
             is_target_onehot (bool):  If True, means we have confirmed (not just declare) the target is transformed as  one-hot format
             reduction(str): The aggregation function for loss, available options are 'sum', 'mean 'and 'batch_mean', default is 'mean'
-            axis (None or int): The axis we according with for loss calculation. Default is 1.
+            axis (None or int): The axis we according to for loss calculation. Default is 1.
             from_logits (bool):If True, means  the sum of all probability will equal 1.
             is_logsoftmax (bool):If True, means model  use SoftMax as last layer or use any equivalent calculation.
             sample_weight(1D tensor):The loss weight for all classes.
@@ -516,7 +510,7 @@ class _PairwiseLoss(Loss):
 
     def calculate_loss(self, output, target, **kwargs):
         """ Calculate the unaggregate loss.
-        The loss function calculation logic should define here., please dont't aggregate the loss in this phase.
+        The loss function calculation logic should define here., please don't aggregate the loss in this phase.
 
         Args:
             output (tf.Tensor):
@@ -572,13 +566,13 @@ class CrossEntropyLoss(_ClassificationLoss):
 
     The loss can be described as:
 
-    .. math::
+    math::
         \text{loss}(x, class) = -\log\left(\frac{\exp(x[class])}{\sum_j \exp(x[j])}\right)
                        = -x[class] + \log\left(\sum_j \exp(x[j])\right)
 
     or in the case of the :attr:`weight` argument being specified:
 
-    .. math::
+    math::
         \text{loss}(x, class) = weight[class] \left(-x[class] + \log\left(\sum_j \exp(x[j])\right)\right)
 
     The losses are averaged across observations for each minibatch.
@@ -590,13 +584,13 @@ class CrossEntropyLoss(_ClassificationLoss):
 
 
     Args:
-        axis (int): the position where the classes is.
+        axis (int): the position where the classes are.
         sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
         number of classes.
         from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
         ignore_index (int or list of int):
         cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
+        less than 1ㄡ
         is_target_onehot (bool): Is the target tensor in onehot format?
         label_smooth (bool): Should use label smoothing?
         reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
@@ -685,6 +679,7 @@ class CrossEntropyLoss(_ClassificationLoss):
                     unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
                     unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),
                                              pow(1 - clip(unbalance_weight, min=1e-7), 3.5))
+
             sample_weight = unbalance_weight
 
             target_shape = target.shape
@@ -699,7 +694,7 @@ class CrossEntropyLoss(_ClassificationLoss):
             return nn.functional.nll_loss(output, target.long(), weight=sample_weight, reduction='none')
 
         else:
-            unbalance_weight = ones([self.num_classes]).to(_float_dtype)
+            sample_weight = ones([self.num_classes]).to(_float_dtype)
             if self.auto_balance and self.label_statistics is not None:
                 if self.num_classes == len(self.label_statistics):
                     unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
@@ -730,7 +725,7 @@ class NLLLoss(_ClassificationLoss):
 
     The `input` given through a forward call is expected to contain
     log-probabilities of each class. `input` has to be a Tensor of size either
-    :math:`(minibatch, C)` or :math:`(minibatch, C, d_1, d_2, ..., d_K)`
+    :math:`(minibatch, C)` or :math:`(minibatch, C, d_1, d_2, ㄡ., d_K)`
     with :math:`K \geq 1` for the `K`-dimensional case (described later).
 
     Obtaining log-probabilities in a neural network is easily achieved by
@@ -744,7 +739,7 @@ class NLLLoss(_ClassificationLoss):
 
     The unreduced (i.e. with :attr:`reduction` set to ``'none'``) loss can be described as:
 
-    .. math::
+    math::
         \ell(x, y) = L = \{l_1,\dots,l_N\}^\top, \quad
         l_n = - w_{y_n} x_{n,y_n}, \quad
         w_{c} = \text{weight}[c] \cdot \mathbb{1}\{c \not= \text{ignore\_index}\},
@@ -753,7 +748,7 @@ class NLLLoss(_ClassificationLoss):
     :math:`N` is the batch size. If :attr:`reduction` is not ``'none'``
     (default ``'mean'``), then
 
-    .. math::
+    ㄡ math::
         \ell(x, y) = \begin{cases}
             \sum_{n=1}^N \frac{1}{\sum_{n=1}^N w_{y_n}} l_n, &
             \text{if reduction} = \text{'mean';}\\
@@ -762,7 +757,7 @@ class NLLLoss(_ClassificationLoss):
         \end{cases}
 
     Can also be used for higher dimension inputs, such as 2D images, by providing
-    an input of size :math:`(minibatch, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`,
+    an input of size :math:`(minibatch, C, d_1, d_2, ㄡ., d_K)` with :math:`K \geq 1`,
     where :math:`K` is the number of dimensions, and a target of appropriate shape
     (see below). In the case of images, it computes NLL loss per-pixel.
 
@@ -792,14 +787,14 @@ class NLLLoss(_ClassificationLoss):
 
     Shape:
         - Input: :math:`(N, C)` where `C = number of classes`, or
-          :math:`(N, C, d_1, d_2, ..., d_K)` with :math:`K \geq 1`
+          :math:`(N, C, d_1, d_2, ㄡ., d_K)` with :math:`K \geq 1`
           in the case of `K`-dimensional loss.
         - Target: :math:`(N)` where each value is :math:`0 \leq \text{targets}[i] \leq C-1`, or
-          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case of
+          :math:`(N, d_1, d_2, ㄡ., d_K)` with :math:`K \geq 1` in the case of
           K-dimensional loss.
         - Output: scalar.
           If :attr:`reduction` is ``'none'``, then the same size as the target: :math:`(N)`, or
-          :math:`(N, d_1, d_2, ..., d_K)` with :math:`K \geq 1` in the case
+          :math:`(N, d_1, d_2, ㄡ., d_K)` with :math:`K \geq 1` in the case
           of K-dimensional loss.
 
     Examples:
@@ -864,7 +859,7 @@ class NLLLoss(_ClassificationLoss):
 class F1ScoreLoss(_ClassificationLoss):
     """
     This operation computes the f-measure between the output and target. If beta is set as one,
-    its called the f1-scorce or dice similarity coefficient. f1-scorce is monotonic in jaccard distance.
+    it's called the f1-scorce or dice similarity coefficient. f1-scorce is monotonic in jaccard distance.
 
     f-measure = (1 + beta ** 2) * precision * recall / (beta ** 2 * precision + recall)
 
@@ -875,13 +870,13 @@ class F1ScoreLoss(_ClassificationLoss):
     Args:
         beta: greater than one weights recall higher than precision, less than one for the opposite.
         Commonly chosen values are 0.5, 1 or 2.
-        axis (int): the position where the classes is.
+        axis (int): the position where the classes are.
         sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
         number of classes.
         from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
         ignore_index (int or list of int):
         cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
+        less than 1
         label_smooth (bool): Should use label smoothing?
         reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
             'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
@@ -939,9 +934,9 @@ class F1ScoreLoss(_ClassificationLoss):
         target.detach()
 
         tp = reduce_sum(target * output * sample_weight, axis=self.axis)
-        tn = ((1 - target) * (1 - output))
-        fp = ((1 - target) * output)
-        fn = (target * (1 - output))
+        # tn = ((1 - target) * (1 - output))
+        # fp = ((1 - target) * output)
+        # fn = (target * (1 - output))
         precision = tp / reduce_sum(output, axis=self.axis)
         recall = tp / reduce_sum(target, axis=self.axis)
         return 1 - (1 + self.beta ** 2) * precision * recall / (self.beta ** 2 * precision + recall)
@@ -953,13 +948,13 @@ class FocalLoss(_ClassificationLoss):
     See :class:`~pytorch_toolbelt.losses.FocalLoss` for details.
 
     Args:
-        axis (int): the position where the classes is.
+        axis (int): the position where the classes are.
         sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
         number of classes.
         from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
         ignore_index (int or list of int):
         cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
+        less than 1
         is_target_onehot (bool): Is the target tensor in onehot format?
         label_smooth (bool): Should use label smoothing?
         reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
@@ -1088,13 +1083,13 @@ class DiceLoss(_ClassificationLoss):
     This is particularly useful when you have an unbalanced training set.
 
     Args:
-        axis (int): the position where the classes is.
+        axis (int): the position where the classes are.
         sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
         number of classes.
         from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
         ignore_index (int or list of int):
         cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
+        less than 1
         label_smooth (bool): Should use label smoothing?
         reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
             'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
@@ -1210,13 +1205,13 @@ class ActiveContourLoss(_ClassificationLoss):
     This is particularly useful when you have an unbalanced training set.
 
     Args:
-        axis (int): the position where the classes is.
+        axis (int): the position where the classes are.
         sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
         number of classes.
         from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
         ignore_index (int or list of int):
         cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
+        less than 1.
         label_smooth (bool): Should use label smoothing?
         reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
             'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
@@ -1326,7 +1321,7 @@ class GeneralizedDiceLoss(_ClassificationLoss):
 
     Compute the generalised Dice loss defined in:
 
-        Sudre, C. et. al. (2017) Generalised Dice overlap as a deep learning
+        Sudre, C. et al. (2017) Generalised Dice overlaps as a deep learning
         loss function for highly unbalanced segmentations. DLMIA 2017.
 
     Reference:
@@ -1334,13 +1329,13 @@ class GeneralizedDiceLoss(_ClassificationLoss):
 
 
     Args:
-        axis (int): the position where the classes is.
+        axis (int): the position where the classes are.
         sample_weight (Tensor): means the weights of  classes , it shoud be a 1D tensor and length the same as
         number of classes.
         from_logits (bool): whether the output tensor is normalized as a probability (total equal to 1)
         ignore_index (int or list of int):
         cutoff (None or decimal): the cutoff point of probability for classification, should be None of a number
-        less than 1..
+        less than 1
         label_smooth (bool): Should use label smoothing?
         reduction (string): the method to aggrgate loss. None means no need to aggregate, 'mean' means average loss,
             'sum' means the summation of losses,'batch_mean' means average loss cross the batch axis then
@@ -1635,16 +1630,22 @@ class WingLoss(_PairwiseLoss):
         Returns:
 
         """
+
+        if ndim(target)==2:
+            target=target.reshape((target.size(0),-1,2))
+        if ndim(output) == 2:
+            output = output.reshape((output.size(0), -1, 2))
         target = target.detach()
         delta_y = (target - output).abs()
         c = self.omega * (1.0 - log(1.0 + self.omega / self.epsilon))
         losses = where(
-            greater(delta_y, self.omega),
+            greater(self.omega,delta_y),
             self.omega * log(1.0 + delta_y / self.epsilon),
             delta_y - c
         )
 
         return losses
+
 
 
 class AdaptiveWingLoss(_PairwiseLoss):
@@ -2145,13 +2146,13 @@ class TripletLoss(_Loss):
 
     The loss function for each sample in the mini-batch is:
 
-    .. math::
+    math::
         L(a, p, n) = \max \{d(a_i, p_i) - d(a_i, n_i) + {\rm margin}, 0\}
 
 
     where
 
-    .. math::
+     math::
         d(x_i, y_i) = \left\lVert {\bf x}_i - {\bf y}_i \right\rVert_p
 
     Args:
@@ -2187,7 +2188,7 @@ class TripletLoss(_Loss):
     >>> output = triplet_loss(anchor, positive, negative)
     >>> output.backward()
 
-    .. _Learning shallow convolutional feature descriptors with triplet losses:
+     _Learning shallow convolutional feature descriptors with triplet losses:
         http://www.bmva.org/bmvc/2016/papers/paper119/index.html
     """
     __constants__ = ['margin', 'p', 'eps', 'swap', 'reduction']
@@ -2213,7 +2214,7 @@ TripletMarginLoss = TripletLoss
 
 
 class HardTripletLoss(_Loss):
-    """Hard/Hardest Triplet Loss
+    """Hard Triplet Loss
     (pytorch implementation of https://omoindrot.github.io/triplet-loss)
 
     For each anchor, we get the hardest positive and hardest negative to form a triplet.
@@ -2249,7 +2250,7 @@ class HardTripletLoss(_Loss):
         return distances
 
     def _get_anchor_positive_triplet_mask(self, labels):
-        # Return a 2D mask where mask[a, p] is True iff a and p are distinct and have same label.
+        # Return a 2D mask where mask[a, p] is True iff a and p are distinct and have same labeled.
 
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -2496,7 +2497,10 @@ class EdgeLoss(_Loss):
 class TransformInvariantLoss(nn.Module):
     def __init__(self, loss: _Loss, embedded_func: Layer):
         super(TransformInvariantLoss, self).__init__()
-        self.loss = MSELoss(reduction='mean')
+        if loss is not None:
+            self.loss=loss
+        else:
+            self.loss = MSELoss(reduction='mean')
         self.coverage = 110
         self.rotation_range = 20
         self.zoom_range = 0.1
