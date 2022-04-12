@@ -196,6 +196,8 @@ def download_file_from_google_drive(file_id, dirname=None, filename=None, md5=No
         dirname=os.path.join(get_trident_dir(),'downloads')
     if not filename:
         filename = file_id
+
+    fpath = os.path.join(dirname, filename)
     _h = _read_h(dirname)
 
     dest_path = os.path.join(dirname, filename)
@@ -208,15 +210,13 @@ def download_file_from_google_drive(file_id, dirname=None, filename=None, md5=No
     else:
         try:
             session = requests.Session()
-            response = session.get(url, params={'id': file_id}, stream=True)
-            content_type = response.headers.get('content-type')
-
-
+            response = session.get(url, params={'id': file_id, 'confirm': 't'}, stream=True)
             token = _get_confirm_token(response)
             if token:
                 params = {'id': file_id, 'confirm': token}
                 response = session.get(url, params=params, stream=True)
-            _save_response_content(response, dest_path)
+            _save_response_content(response, fpath)
+            _write_h(dirname, True, False, filename)
         except Exception as e:
             _write_h(dirname, False, False, filename)
             print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
@@ -347,16 +347,15 @@ def get_file_from_google_drive(file_name, file_id):
         pass
     try:
         session = requests.Session()
-        response = session.get(url, params={'id': file_id}, stream=True)
-        content_type = response.headers.get('content-type')
-        filename = file_id + '.' + content_type.split('/')[-1]
-        fpath = os.path.join(dirname, filename)
-
+        response = session.get(url, params={'id': file_id, 'confirm': 't'}, stream=True)
         token = _get_confirm_token(response)
         if token:
             params = {'id': file_id, 'confirm': token}
             response = session.get(url, params=params, stream=True)
         _save_response_content(response, fpath)
+        _write_h(dirname, True, False, filename)
+
+
     except Exception as e:
         print('***Cannot download data, so the data provider cannot initialized.\n', flush=True)
         print('***Please check your internet or download  files from following url in another computer, \n and then put them into {0}\n {1} '.format(dirname,
