@@ -1004,8 +1004,8 @@ class FocalLoss(_ClassificationLoss):
         Returns:
 
             """
-
-        alpha = ones((output.size(self.axis))) * (1 - self.alpha)
+        num_classes=output.size(self.axis)
+        alpha = ones((num_classes)) * (1 - self.alpha)
         alpha[0] = self.alpha
 
         if self.is_target_onehot and target.dtype != Dtype.long:
@@ -1018,7 +1018,8 @@ class FocalLoss(_ClassificationLoss):
 
         ce_loss = nn.functional.nll_loss(output, target.long(), reduction='none')
         pt = exp(-ce_loss)
-        alpha = alpha.gather(0, target)
+
+        alpha = alpha.gather(0, target.view(-1)).reshape(target.size())
         focal_loss = alpha * ((1 - pt) ** self.gamma) * ce_loss
         return focal_loss
 
