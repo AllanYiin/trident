@@ -617,6 +617,7 @@ class BERT(Layer):
         self.pad_idx = pad_idx
         self.dropout_rate = dropout_rate
         self.num_filters = hidden
+        self.norm = LayerNorm()
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
         self.feed_forward_hidden = hidden * 4
@@ -668,8 +669,9 @@ class BERT(Layer):
                     outputs.append(x)
                 elif self.output_mode == 'sum_all_hidden' :
                     outputs.append(x)
-            if len(outputs)>0:
-                x=reduce_mean(stack(outputs,axis=0),axis=0)
+        if len(outputs)>0:
+            x=reduce_mean(stack(outputs,axis=0),axis=0)
+        x = self.norm(x)
         return x
 
 class GPT2(Layer):
@@ -713,7 +715,7 @@ class GPT2(Layer):
 
 
     def forward(self, x, inputs_embeds=None,position_ids=None,layer_past=None):
-        input_shape = x.size()
+        input_shape = x.size() if x is not None else inputs_embeds.size()[:-1]
         if layer_past is None:
             past_length = 0
         else:
@@ -730,15 +732,20 @@ class GPT2(Layer):
 
         hidden_states = inputs_embeds + position_embeds
         hidden_states = self.drop(hidden_states)
+        all_hidden_states= ()
         presents = () if self.use_cache else None
         for name, transformer in self.named_children():
             if 'transformer_block' in name:
                 outputs = transformer(hidden_states,attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None,layer_past=layer_past)
                 hidden_states = outputs[0]
+                all_hidden_states = all_hidden_states + (hidden_states,)
                 if self.use_cache is True:
                     presents = presents + (outputs[1],)
 
+
+
         hidden_states=self.norm(hidden_states)
+        all_hidden_states = all_hidden_states + (hidden_states,)
 
 
         logits=self.out(hidden_states)
