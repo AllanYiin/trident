@@ -23,12 +23,12 @@ from trident.misc.visualization_utils import *
 from trident.optims.losses import _check_logsoftmax_logit
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call, Layer,Sequential
-    from trident.backend.pytorch_ops import to_numpy, arange, cast, clip, sqrt, int_shape, argmax, softmax, ndim, exp, \
+    from trident.backend.pytorch_ops import to_numpy, arange, cast, clip, sqrt, int_shape, argmax, softmax, ndim, exp, reduce_max,\
         expand_dims,is_gpu_available
 
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_backend import try_map_args_and_call, Layer,Sequential
-    from trident.backend.tensorflow_ops import to_numpy, arange, cast, clip, sqrt, int_shape, zeros_like, ones_like, argmax, softmax, ndim, exp, not_equal, expand_dims,is_gpu_available
+    from trident.backend.tensorflow_ops import to_numpy, arange, cast, clip, sqrt, int_shape, zeros_like, ones_like, argmax, softmax, ndim, exp, not_equal, expand_dims,is_gpu_available,reduce_max
 
 if is_in_ipython() or is_in_colab():
     from IPython import display
@@ -206,7 +206,7 @@ class GanTileImageCallback(VisualizationCallbackBase):
         dataprovider = enforce_singleton(ctx.get_data_provider())
         self.accumulate_sample = False
         self.sample_enough = False
-        if dataprovider.minibatch_size < row * row:
+        if dataprovider.batch_size < row * row:
             self.accumulate_sample = True
         self.tile_images_list = []
         self.output_arr = []
@@ -224,7 +224,7 @@ class GanTileImageCallback(VisualizationCallbackBase):
         if self.reverse_image_transform is None:
             self.reverse_image_transform = dataprovider.reverse_image_transform
 
-        output = to_numpy(model(data[data_feed['input']])) if data_feed['input'] in data else to_numpy(data['output'])
+        output = to_numpy(model(data[data_feed['x']])) if data_feed['x'] in data else to_numpy(data['output'])
         model.train()
 
 
@@ -249,6 +249,13 @@ class GanTileImageCallback(VisualizationCallbackBase):
     def on_batch_end(self, training_context):
         if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
                 self.unit == 'step' and (training_context['steps'] + 1) % self.frequency == 0) or not self.sample_enough):
+            if self.sample_enough:
+                self.tile_images_list = []
+                self.output_arr = []
+                self.sample_enough = False
+            self.plot_tile_image(training_context)
+        if 0<self.frequency < 500 and ((self.unit == 'batch' and (training_context['steps'] + 1) % 10 == 0) or (
+                self.unit == 'step' and ( training_context['steps'] + 1) %10== 0) or not self.sample_enough):
             if self.sample_enough:
                 self.tile_images_list = []
                 self.output_arr = []
@@ -302,7 +309,10 @@ class SegTileImageCallback(VisualizationCallbackBase):
         if 'tensor' in model.__class__.__name__.lower():
             output = to_numpy(model.clone())
         elif isinstance(model, Layer):
-            output = to_numpy(data[data_feed[model.signature.outputs.key_list[0]]].copy())
+            for k in model.signature.outputs.key_list:
+                if k in data and ndim(data[k])>=4:
+                    output = to_numpy(data[k].copy())
+                    break
         mask_type=None
         output_arr=output.copy()
         if _check_logsoftmax_logit(output_arr) or reduce_max(output_arr)<=0:
@@ -311,7 +321,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
             mask_type=dataprovider.traindata.label.object_type
             mask = to_numpy(data[dataprovider.traindata.label.symbol])
         elif isinstance(dataprovider.traindata.label, ZipDataset):
-            for ds in dataprovider.traindata.label._datasets:
+            for ds in dataprovider.traindata.label.items:
                 if isinstance(ds, MaskDataset):
                     mask_type =ds.object_type
                     mask = to_numpy(data[ds.symbol])

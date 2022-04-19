@@ -789,10 +789,10 @@ class GanTrainingPlan(TrainingPlan):
 
         generator.training_context['gan_role'] = 'generator'
         if generator.optimizer is None:
-            generator.with_optimizer(Adam, 2e-4, betas=(0.5, 0.999))
+            generator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
         generator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
         if not any([isinstance(cb, TileImageCallback) for cb in generator.callbacks]):
-            generator.with_callbacks(GanTileImageCallback(frequency=50, unit='batch'))
+            generator.with_callbacks(GanTileImageCallback(frequency=50, unit='batch', imshow=True))
 
         self.generator = generator
         return self.add_training_item(self.generator, name=name, start_epoch=0)
@@ -803,13 +803,14 @@ class GanTrainingPlan(TrainingPlan):
 
         discriminator.training_context['gan_role'] = 'discriminator'
         if discriminator.optimizer is None:
-            discriminator.with_optimizer(Adam, 2e-4, betas=(0.5, 0.999))
+            discriminator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
         discriminator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
         self.discriminator = discriminator
-        # if not self.is_generator_first:
-        #     self.discriminator.training_context['retain_graph'] = True
-        # else:
-        #     self.discriminator.training_context['retain_graph'] = False
+        #self.discriminator.training_context['skip_generate_output'] = True
+        if not self.is_generator_first:
+            self.discriminator.training_context['retain_graph'] = True
+        else:
+            self.discriminator.training_context['retain_graph'] = False
         return self.add_training_item(self.discriminator, name=name, start_epoch=0)
 
     def with_label_smoothing(self, one_side=True):
@@ -1031,18 +1032,19 @@ class GanTrainingPlan(TrainingPlan):
             self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss', loss_weight=0.5)
         elif self.gan_type == 'lsgan':  # least squared
             def g_loss(d_fake, real_label):
-                return MSELoss()(d_fake, real_label)
+                return MSELoss()(d_fake, real_label.detach())
 
-            self.generator.with_loss(g_loss)
+            self.generator.with_loss(g_loss, loss_weight=0.5)
 
             def real_loss(d_real, real_label):
-                return MSELoss()(d_real, real_label)
+                return MSELoss()(d_real, real_label.detach())
 
             def fake_loss(d_fake, fake_label):
-                return MSELoss()(d_fake, fake_label)
+                return MSELoss()(d_fake, fake_label.detach())
 
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(fake_loss, loss_weight=0.5)
+            self.discriminator.training_context['retain_graph'] = False
         elif self.gan_type == 'lsgan1':  # loss sensitive
             def g_loss(d_fake, real_label):
                 return MSELoss(d_fake, real_label)
@@ -1109,11 +1111,9 @@ class GanTrainingPlan(TrainingPlan):
             self.is_condition_gan = True
 
         self.generator.data_feed = OrderedDict()
-        self.generator.data_feed[
-            'input'] = data_provider.traindata.data.symbol if self.is_condition_gan else data_provider.traindata.unpair
+        self.generator.data_feed['x'] = data_provider.traindata.data.symbol if self.is_condition_gan else data_provider.traindata.unpair.symbol
         self.generator.data_feed['img_fake'] = 'output'
-        self.generator.data_feed[
-            'img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
+        self.generator.data_feed['img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
         self.generator.data_feed['d_fake'] = 'd_fake'
         self.generator.data_feed['d_real'] = 'd_real'
         self.generator.data_feed['real_label'] = 'real_label'
@@ -1127,8 +1127,7 @@ class GanTrainingPlan(TrainingPlan):
         ctx.print('generator data_feed:{0}'.format(self.generator.data_feed))
 
         self.discriminator.data_feed = OrderedDict()
-        self.discriminator.data_feed[
-            'input'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
+        self.discriminator.data_feed['x'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
         self.discriminator.data_feed[
             'img_real'] = data_provider.traindata.label.symbol if self.is_condition_gan else data_provider.traindata.data.symbol
         self.discriminator.data_feed['img_fake'] = 'img_fake'
@@ -1179,9 +1178,8 @@ class GanTrainingPlan(TrainingPlan):
                 traindata[training_context['data_feed']['img_fake']] = self.generator(
                     traindata[data_provider.traindata.data.symbol if self.is_condition_gan else 'noise']).detach()
             else:
-                traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data'][
-                    'output'].detach()
-            traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']])
+                traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data']['output'].detach()
+            traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']].detach())
 
             traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
             if self._use_label_smoothing is not None:
@@ -1194,7 +1192,8 @@ class GanTrainingPlan(TrainingPlan):
 
         def d_get_dreal(training_context):
             traindata = training_context['train_data']
-            traindata['d_real'] = traindata['output']
+            traindata['d_real'] =self.discriminator(traindata['image'])
+            traindata['output']=traindata['d_real']
             traindata['real_label'] = ones_like(traindata['output']).detach().to(get_device())
             if self._use_label_smoothing is not None:
                 traindata['real_label'] = random_uniform_like(traindata['output'], 0.9, 1).detach().to(get_device())
@@ -1340,15 +1339,13 @@ class GanTrainingPlan(TrainingPlan):
                                 should_collect_data = True
 
                                 dis_k = 1
-                                if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context[
-                                    'gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[
-                                    'metrics']:
+                                if self.gan_type not in ['began', 'ebgan'] and trainitem.training_context['gan_role'] == 'discriminator' and 'd_fake' in trainitem.training_context[ 'tmp_metrics'] and len(trainitem.training_context[ 'tmp_metrics']['d_fake'])>0:
 
                                     if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                            trainitem.training_context['metrics']['d_fake'][-1][1] < 0.1:
+                                            trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] < 0.1:
                                         dis_k = 1
-                                    if trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
-                                            trainitem.training_context['metrics']['d_fake'][-1][1] > 0.3:
+                                    elif trainitem.training_context['gan_role'] == 'discriminator' and dis_k == 1 and \
+                                            trainitem.training_context['tmp_metrics'].get_last('d_fake')[-1] > 0.3:
                                         dis_k = 1
                                 if (trainitem.training_context['gan_role'] == 'discriminator' and mbs % dis_k == 0) or (
                                         trainitem.training_context['gan_role'] == 'generator' and mbs % 1 == 0):
@@ -1374,6 +1371,7 @@ class GanTrainingPlan(TrainingPlan):
                                                       log_weights=keep_weights_history,
                                                       accumulate_grads=False,
                                                       is_out_sample_evaluation=need_out_sample_evaluation)
+                                trainitem.steps += 1
                             self.steps += 1
 
                             if ctx.enable_tensorboard and len(
@@ -1503,8 +1501,8 @@ class CycleGanTrainingPlan(TrainingPlan):
             self.optimizerG = Adam(itertools.chain(self.netG_A.parameters(), self.netG_B.parameters()), lr=2e-4,
                                    betas=(0.5, 0.999))
         # generator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
-        # if not any([isinstance(cb, TileImageCallback) for cb in generator.callbacks]):
-        #     generator.with_callbacks(GanTileImageCallback(batch_inteval=50))
+        if not any([isinstance(cb, TileImageCallback) for cb in generator.callbacks]):
+            generator.with_callbacks(GanTileImageCallback(frequency=50))
         return self.add_training_item(self.netG_A, name='netG_A', start_epoch=0).add_training_item(self.netG_B,
                                                                                                    name='netG_B',
                                                                                                    start_epoch=0)

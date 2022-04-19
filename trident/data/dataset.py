@@ -17,15 +17,16 @@ from typing import TypeVar, Tuple, Optional, Iterator, Dict
 
 import cv2
 import numpy as np
+
 from trident import context
+# from trident.backend.numpy_ops import DTYPE_MAPPING
+from trident.backend import dtype as Dtype
 from trident.backend import iteration_tools
 from trident.backend.common import *
-#from trident.backend.numpy_ops import DTYPE_MAPPING
-from trident.backend import dtype as Dtype
 from trident.backend.opencv_backend import file2array
-from trident.backend.tensorspec import TensorSpec,ObjectType
+from trident.backend.tensorspec import TensorSpec, ObjectType
 from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, \
-    array2image,TensorShape
+    array2image, TensorShape
 from trident.data.label_common import label_backend_adaptive
 from trident.data.mask_common import mask_backend_adaptive, color2label
 from trident.data.samplers import *
@@ -453,7 +454,8 @@ class MaskDataset(Dataset):
             elif self.object_type == ObjectType.label_mask:
                 if '.png' in mask:
                     mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
-                    mask = mask[:, :, 1]
+                    if mask.ndim==3:
+                        mask = mask[:, :, 1]
                 else:
                     mask = file2array(mask, flag=cv2.IMREAD_UNCHANGED)
 
@@ -697,7 +699,7 @@ class RandomNoiseDataset(Dataset):
 
     def __getitem__(self, index: int):
         if self.random_mode == 'normal':
-            return (np.random.standard_normal(self.shape) - 0.5) * 2
+            return np.random.standard_normal(self.shape)
         elif self.random_mode == 'uniform':
             return np.random.uniform(-1, 1, self.shape)
 
@@ -1144,6 +1146,9 @@ class Iterator(object):
         elif data is not None and isinstance(data, (Dataset, ZipDataset, TextSequenceDataset)):
             self._data = data
             self._data.parent = self
+            if isinstance(data,ZipDataset):
+                for ds in data.items:
+                    ds.parent = self
 
         if label is not None and isinstance(label, tuple):
             self._label = Dataset.zip(*label)
@@ -1151,10 +1156,16 @@ class Iterator(object):
         elif label is not None and (inspect.isgenerator(label) or isinstance(label, (Dataset, ZipDataset, TextSequenceDataset))):
             self._label = label
             self._label.parent = self
+            if isinstance(label,ZipDataset):
+                for ds in label.items:
+                    ds.parent = self
 
         if unpair is not None and isinstance(unpair, Dataset):
             self._unpair = unpair
             self._unpair.parent = self
+            if isinstance(unpair,ZipDataset):
+                for ds in unpair.items:
+                    ds.parent = self
 
         if self._data is None:
             self._data = NumpyDataset(symbol="")

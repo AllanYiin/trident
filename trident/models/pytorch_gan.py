@@ -209,7 +209,7 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
         layers.append(Dense(256 * initial_size * initial_size, activation=None, name='fc'))
         layers.append(Reshape((256, initial_size, initial_size), name='reshape'))
 
-        if upsample_mode == UpsampleMode.pixel_shuffle.value:
+        if upsample_mode == "pixel_shuffle":
             layers.append(Conv2d_Block((3, 3), 256, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False, activation=activation, normalization=generator_norm))
         else:
             layers.append(Conv2d_Block((3, 3), 256, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False, activation=activation, normalization=generator_norm,
@@ -225,39 +225,42 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
             if use_dilation:
                 dilation = 2 if current_width >= 64 else 1
 
-            if upsample_mode == UpsampleMode.transpose.value:
+            if upsample_mode == 'transpose':
                 layers.append(
                     TransConv2d_Block((3, 3), depth_multiplier=1, strides=scale, auto_pad=True, padding_mode='replicate',
                                       use_spectral=use_spectral, use_bias=False, activation=activation,
                                       normalization=generator_norm, dilation=dilation,
                                       name='transconv_block{0}'.format(i)))
-            elif upsample_mode == UpsampleMode.pixel_shuffle.value:
-                if i > 0:
-                    layers.append(Conv2d_Block((3, 3), depth_multiplier=4, strides=1, auto_pad=True, use_spectral=use_spectral,
-                                               use_bias=False, activation=activation, normalization=generator_norm,
-                                               padding_mode='replicate'))
-                    # filter = filter * 4
-                layers.append(Upsampling2d(scale_factor=scale, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
+            elif upsample_mode == 'pixel_shuffle':
+
                 # filter = filter // (scale * scale)
+                layers.append(Upsampling2d(scale_factor=scale, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
+
+                if i > 0:
+                    # filter = filter * 4
+                    layers.append(Conv2d_Block((3, 3), depth_multiplier=4, strides=1, auto_pad=True, use_spectral=use_spectral,
+                                     use_bias=False, activation=activation, normalization=generator_norm,
+                                     padding_mode='replicate'))
             else:
+                layers.append(Upsampling2d(scale_factor=scale, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
+
                 if i > 0:
                     layers.append(
                         Conv2d_Block((3, 3), depth_multiplier=2, strides=1, auto_pad=True, use_spectral=use_spectral,
                                      use_bias=False, activation=activation, normalization=generator_norm,
                                      padding_mode='replicate'))
 
-                layers.append(Upsampling2d(scale_factor=scale, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
 
-            if generator_build_block == BuildBlockMode.base.value:
+            if generator_build_block =='base':
                 layers.append(Conv2d_Block((3, 3), num_filters=filter, strides=1, auto_pad=True, padding_mode='replicate',
                                            use_spectral=use_spectral, use_bias=False, activation=activation,
                                            normalization=generator_norm, dilation=dilation,
                                            name='base_block{0}'.format(i)))
-            elif generator_build_block == BuildBlockMode.resnet.value:
+            elif generator_build_block == 'resnet':
                 layers.extend(resnet_block(num_filters=filter, strides=1, activation=activation, use_spectral=use_spectral,
                                            normalization=generator_norm, dilation=dilation,
                                            name='resnet_block{0}'.format(i)))
-            elif generator_build_block == BuildBlockMode.bottleneck.value:
+            elif generator_build_block == 'bottleneck':
                 layers.append(bottleneck_block(num_filters=filter, strides=1, activation=activation, use_spectral=use_spectral,
                                                normalization=generator_norm, dilation=dilation,
                                                name='resnet_block{0}'.format(i)))
@@ -287,11 +290,11 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
                     Conv2d_Block((3, 3), num_filters=filter, strides=2, auto_pad=True, use_spectral=use_spectral, use_bias=False,
                                  activation=activation, normalization=discriminator_norm,
                                  name='base_block{0}'.format(i)))
-            elif discriminator_build_block == BuildBlockMode.resnet.value:
+            elif discriminator_build_block == 'resnet':
                 layers.extend(resnet_block(num_filters=filter, strides=2, activation=activation, use_spectral=use_spectral,
                                            normalization=discriminator_norm, name='resnet_block{0}'.format(i)))
 
-            elif discriminator_build_block == BuildBlockMode.bottleneck.value:
+            elif discriminator_build_block == 'bottleneck':
                 layers.append(
                     bottleneck_block(num_filters=filter, strides=2, reduce=2, activation=activation, use_spectral=use_spectral,
                                      normalization=discriminator_norm, name='bottleneck_block{0}'.format(i)))
@@ -301,14 +304,14 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
         if use_self_attention:
             layers.insert(-2, SelfAttention(8, name='self_attention'))
         if use_dropout:
-            layers.insert(-1, Dropout(0.5))
-        layers.append(Conv2d_Block((3, 3), 128, strides=2, auto_pad=True, use_bias=False, activation='leaky_relu', use_spectral=use_spectral, normalization=discriminator_norm,
+            layers.insert(-1, Dropout(0.2))
+        layers.append(Conv2d_Block((3, 3), 128, strides=2, auto_pad=True, use_bias=False, activation='leaky_relu', use_spectral=None, normalization=None,
                                    name='last_conv'))
-        layers.append(Flatten()),
+        layers.append(GlobalAvgPool2d()),
         if use_minibatch_discrimination:
             layers.append(MinibatchDiscriminationLayer(name='minibatch_dis'))
         layers.append(Dense(1, use_bias=False, name='fc'))
-        layers.append(Sigmoid())
+        # layers.append(Sigmoid())
         dis = Sequential(layers, name='discriminator')
         out = dis(to_tensor(TensorShape([None, 3, image_width, image_width]).get_dummy_tensor()).to(get_device()))
         if use_spectral:
@@ -343,13 +346,13 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
                 filter = filter + 32
             if use_dilation:
                 dilation = 2 if i < 2 else 1
-            if build_block == BuildBlockMode.base.value:
+            if build_block == 'base':
                 layers['downsample_block{0}'.format(i)] = Conv2d_Block((3, 3), filter, strides=2, auto_pad=True, use_spectral=use_spectral, use_bias=False, activation=activation,
                                                                        normalization=normalization, name='base_block{0}'.format(i))
-            elif build_block == BuildBlockMode.resnet.value:
+            elif build_block == 'resnet':
                 layers['downsample_block{0}'.format(i)] = Sequential(
                     resnet_block(filter, strides=2, activation=activation, use_spectral=use_spectral, normalization=normalization, name='resnet_block{0}'.format(i)))
-            elif build_block == BuildBlockMode.bottleneck.value:
+            elif build_block == 'bottleneck':
                 layers['downsample_block{0}'.format(i)] = bottleneck_block(num_filters=filter, strides=2, reduce=4, activation=activation, use_spectral=use_spectral,
                                                                            normalization=normalization, name='bottleneck_block{0}'.format(i))
             if use_self_attention and i == 2:
@@ -368,7 +371,7 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
                                                                                         use_spectral=use_spectral, use_bias=False, activation=activation,
                                                                                         normalization=normalization, dilation=dilation,
                                                                                         name='transconv_block{0}'.format(size_change - i - 1))
-            elif upsample_mode == UpsampleMode.pixel_shuffle.value:
+            elif upsample_mode =='pixel_shuffle':
                 layers['upsampling{0}'.format(size_change - i - 1)] = Sequential(
                     Conv2d_Block((3, 3), num_filters=4 * filter, strides=1, auto_pad=True,
                                  use_spectral=use_spectral, use_bias=False, activation=activation,
@@ -384,15 +387,15 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
                     Upsampling2d(scale_factor=2, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, size_change - i - 1))
                 )
 
-            if build_block == BuildBlockMode.base.value:
+            if build_block == 'base':
                 layers['upsampling_block{0}'.format(size_change - i - 1)] = Conv2d_Block((3, 3), filter, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False,
                                                                                          activation=activation, normalization=normalization, dilation=dilation,
                                                                                          name='base_block{0}'.format(size_change - i - 1))
-            elif build_block == BuildBlockMode.resnet.value:
+            elif build_block == 'resnet':
                 layers['upsampling_block{0}'.format(size_change - i - 1)] = Sequential(resnet_block(filter, strides=1, activation=activation, use_spectral=use_spectral,
                                                                                                     normalization=normalization, dilation=dilation,
                                                                                                     name='resnet_block{0}'.format(size_change - i - 1)))
-            elif build_block == BuildBlockMode.bottleneck.value:
+            elif build_block == 'bottleneck':
                 layers['upsampling_block{0}'.format(size_change - i - 1)] = bottleneck_block(filter, strides=1, activation=activation, use_spectral=use_spectral,
                                                                                              normalization=normalization, dilation=dilation,
                                                                                              name='resnet_block{0}'.format(size_change - i - 1))
@@ -459,7 +462,7 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
 
     gen = Model(
         input_shape=input_shape if generator_network_type == 'autoencoder' else (noise_shape),
-        output=build_autoencoder('generator',use_skip_connections=use_skip_connections) if generator_network_type != 'autoencoder' else build_autoencoder('generator', use_skip_connections=use_skip_connections))
+        output=build_autoencoder('generator', use_skip_connections=use_skip_connections) if generator_network_type == 'autoencoder' else build_generator())
     gen.model.name = 'generator'
 
     dis = ImageClassificationModel(input_shape=(3, image_width, image_width), output=build_autoencoder('discriminator',use_skip_connections=use_skip_connections) if discriminator_network_type == 'autoencoder' else build_discriminator())
