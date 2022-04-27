@@ -226,7 +226,7 @@ class ZipDataset(Dataset):
             object.__setattr__(self, name, value)
 
     def __len__(self) -> int:
-        return len(self.items)
+        return len(self.items[0])
 
 
 class NumpyDataset(Dataset):
@@ -971,7 +971,7 @@ class TextSequenceDataset(Dataset):
             if self.vocabs  is not None and hasattr(self.vocabs, "__iter__"):
                 self.text2index = dict((c, i) for i, c in enumerate(self.vocabs ))
                 self.index2text = dict((i, c) for i, c in enumerate(self.vocabs ))
-                self.vocabs_frequency = OrderedDict((c, 1) for i, c in enumerate(self.vocabs ))
+                self.vocabs_frequency = OrderedDict((c, 1) for i, c in enumerate(self.vocabs))
                 self.length_index = OrderedDict()
 
                 def start_thread(func, name=None, args=[]):
@@ -995,6 +995,21 @@ class TextSequenceDataset(Dataset):
 
                 else:
                     start_thread(process_statistics, args=[])
+    def update_vocabs(self,corpus):
+        cnt=len(self.vocabs)
+        chars = list(sorted(set(self.vocabs[5:]+list(corpus))))
+        chars.insert(0, '[PAD]')
+        chars.insert(1, '[CLS]')
+        chars.insert(2, '[SEP]')
+        chars.insert(3, '[UNK]')
+        chars.insert(4, '[MASK]')
+        print('total distinct chars: {0}=>{1}', cnt,len(chars))
+        self.vocabs = chars
+        self.text2index = dict((c, i) for i, c in enumerate(self.vocabs))
+        self.index2text = dict((i, c) for i, c in enumerate(self.vocabs))
+        for i, c in enumerate(self.vocabs):
+            if c not in self.vocabs_frequency:
+                self.vocabs_frequency[c] = 1
 
 
 
