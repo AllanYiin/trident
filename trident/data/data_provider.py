@@ -20,7 +20,7 @@ from trident import context
 from trident.misc.ipython_utils import is_in_ipython
 
 from trident.data.vision_transforms import Unnormalize, Normalize
-
+from trident.data.image_common import image_backend_adaption,reverse_image_backend_adaption
 from trident.data.transform import Transform
 
 try:

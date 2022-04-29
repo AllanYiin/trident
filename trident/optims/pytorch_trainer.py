@@ -41,7 +41,7 @@ from trident.backend import model
 from trident.data.mask_common import color2label
 from trident.data.transform import Transform
 from trident.backend.opencv_backend import array2image, image2array
-
+from trident.data.image_common import image_backend_adaption,reverse_image_backend_adaption
 from trident.data.dataset import Iterator, NumpyDataset, LabelDataset
 from trident.optims.trainers import TrainingPlan
 from trident.data.data_provider import DataProvider
