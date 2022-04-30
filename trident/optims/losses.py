@@ -17,6 +17,7 @@ if _backend == 'pytorch':
     import torch
     from trident.backend.pytorch_ops import *
 
+
 elif _backend == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_ops import *
@@ -54,7 +55,7 @@ class Loss(object):
     ```
     """
 
-    def __init__(self, reduction='mean', sample_weight=None, axis=None, enable_ohem=False, ohem_ratio=3.5, input_names=None, output_names=None,name=None, **kwargs):
+    def __init__(self, reduction='mean', sample_weight=None, axis=None, enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,name=None, **kwargs):
         """Initializes `Loss` class.
         Args:
           reduction: (Optional) Type of `tf.keras.losses.Reduction` to apply to
@@ -75,7 +76,7 @@ class Loss(object):
         self.sample_weight = sample_weight
         self.axis = axis
         self.enable_ohem = enable_ohem
-        self.ohem_ratio = ohem_ratio
+        self.ohem_thresh = ohem_thresh
         self._signature = get_signature(self)
         self.input_names=input_names
         self.output_names=output_names
@@ -145,8 +146,8 @@ class Loss(object):
             loss = where(is_nan(loss), zeros_like(loss, requires_grad=True), loss)
         return loss
 
-    def _do_ohem(self, output: Tensor, target: Tensor):
-        pass
+    def _do_ohem(self, loss: Tensor):
+        return loss
 
     @property
     def signature(self):
@@ -194,7 +195,7 @@ def _check_logsoftmax_logit(x:Tensor,axis=1):
         output_exp = exp(x)
         return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
     return False
-    
+
 
 def _check_logit(x:Tensor,axis=None):
     if _backend == 'pytorch':
