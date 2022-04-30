@@ -130,7 +130,7 @@ def str2dtype(dtype):
     return np.float32
 
 
-def cast(x, dtype):
+def cast(x:np.ndarray, dtype:np.dtype):
     """Casts a tensor to a new type.
 
     The operation casts `x` (in case of `Tensor`) or `x.values`
@@ -163,21 +163,8 @@ def cast(x, dtype):
         TypeError: If `x` cannot be cast to the `dtype`.
 
     """
-    if isinstance(dtype, np.dtype):
-        if dtype == np.float64:
-            return x.astype(np.float64)
-        elif dtype == np.float16 :
-            return x.astype(np.float16)
-        elif dtype == np.float32:
-            return x.astype(np.float32)
-        elif dtype == np.int64:
-            return x.astype(np.int64)
-        elif dtype == np.int32:
-            return x.astype(np.int32)
-        elif dtype == np.int16:
-            return x.astype(np.int16)
-        else:
-            return x.astype(np.float32)
+
+    return x.astype(dtype)
 
 
 ############################
@@ -663,8 +650,8 @@ def matmul(a, b, transpose_a=False, transpose_b=False):
      it simply calls the `tf.matmul()` function, so the following lines are
      equivalent:
 
-     >>> d = a @ b @ [[10], [11]]
-     >>> d = matmul(tf.matmul(a, b), [[10], [11]])
+        >>> d = a @ b @ [[10], [11]]
+        >>> d = matmul(tf.matmul(a, b), [[10], [11]])
 
      Args:
        a: `Tensor` and rank > 1.
@@ -1267,10 +1254,11 @@ def element_cosine_distance(v1, v2, axis=-1):
     Returns:
 
     """
-    reduce_dim = -1
-    cos = np.sum((v1 * v2),axis=reduce_dim,keepdims=False) / (
-            np.sqrt(np.sum((v1 * v1),axis=reduce_dim, keepdims=False))* np.sqrt(np.sum((v2 * v2),axis=reduce_dim,
-                                                                                 keepdims=False)))
+    x_normalized = l2_normalize(v1, axis=axis, keepdims=True)
+    y_normalized = l2_normalize(v2, axis=axis, keepdims=True)
+
+    cos = matmul(x_normalized, y_normalized, False, True)
+
     return cos
 
 
@@ -1428,7 +1416,7 @@ def reduce_max(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     if axis is None:
         return np.max(x)
     elif isinstance(axis, int):
-        arr, idx = np.max(x,axis=axis, keepdims=keepdims)
+        arr= np.max(x,axis=axis, keepdims=keepdims)
         return arr
     elif isinstance(axis, list):
         axis = sorted(axis)
@@ -1488,7 +1476,7 @@ def reduce_min(x:np.ndarray, axis=None, keepdims=False, **kwargs):
     if axis is None:
         return np.min(x)
     elif isinstance(axis, int):
-        arr, idx = np.min(x,axis=axis, keepdims=keepdims)
+        arr= np.min(x,axis=axis, keepdims=keepdims)
         return arr
     elif isinstance(axis, list):
         axis = sorted(axis)
@@ -2249,7 +2237,7 @@ def moments(x:np.ndarray, axis, keepdims=True):
     return norm_mean, norm_variance
 
 
-def l2_normalize(x:np.ndarray, eps=epsilon()):
+def l2_normalize(x: np.ndarray, axis=1, keepdims=True, eps=epsilon()):
     """
 
     Args:
@@ -2261,7 +2249,9 @@ def l2_normalize(x:np.ndarray, eps=epsilon()):
 
 
     """
-    return x / np.sqrt(np.square(x).sum() + eps)
+    if ndim(x) == 1:
+        axis = 0
+    return x / np.sqrt(np.sum(np.square(x),axis=axis,keepdims=keepdims) + eps)
 
 
 ############################
@@ -3209,11 +3199,12 @@ D65 = [0.95047, 1.00000, 1.08883]
 
 
 def lab_f(t:np.ndarray):
-    return where(t > 0.008856451679035631, cast(t.pow(1.0 / 3.0),cast_dtype=t.dtype), cast(t * 7.787037037037035 + 0.13793103448275862,cast_dtype=t.dtype))
+    k=1/3.0
+    return np.where(t > 0.008856451679035631,np.power(t,k), t * 7.787037037037035 + 0.13793103448275862)
 
 
 def lab_finv(t:np.ndarray):
-    return where(t > 0.20689655172413793, cast(t.pow(3.0),cast_dtype=t.dtype), cast(0.12841854934601665 * (t - 0.13793103448275862),cast_dtype=t.dtype))
+    return np.where(t > 0.20689655172413793, np.power(t,3.0), 0.12841854934601665 * (t - 0.13793103448275862))
 
 
 def lab2xyz(lab:np.ndarray, wref=None):
@@ -3362,6 +3353,74 @@ def gray2rgb(gray:np.ndarray):
 ############################
 ## bounding box
 ###########################
+
+
+def xywh2xyxy(boxes:np.ndarray, image_size=None):
+    """
+    Args:
+        boxes (tensor or ndarray):
+            boxes  with xywh  (centerx,centery,width, height) format
+            boxes shape should be [n,m] m>=4
+        image_size (size): (height, width)
+    Returns
+        xyxy (x1,y1,x2,y2)
+    """
+    """Convert [x1 y1 w h] box format to [x1 y1 x2 y2] format."""
+    if not isinstance(boxes, np.ndarray):
+        boxes=to_numpy(boxes)
+    if isinstance(boxes,np.ndarray):
+        class_info = None
+        if boxes.shape[-1] > 4:
+            class_info = boxes[:, 4:]
+            boxes = boxes[:, :4]
+        x1y1 = np.clip(boxes[:, 0:2] - boxes[:, 2:4] / 2, 0)
+        x2y2 = np.clip(x1y1 + boxes[:, 2:4], 0)
+        if class_info is not None:
+            boxes = np.concatenate([x1y1, x2y2, class_info], axis=-1)
+        else:
+            boxes = np.concatenate([x1y1, x2y2], axis=-1)
+        return boxes
+
+    else:
+        raise TypeError('Argument xywh must be a list, tuple, numpy array or tensor.')
+
+
+def xyxy2xywh(boxes:np.ndarray):
+    """Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format."""
+    if not isinstance(boxes, np.ndarray):
+        boxes=to_numpy(boxes)
+    if isinstance(boxes,np.ndarray):
+        class_info = None
+        if boxes.ndim == 1:
+            boxes = np.expand_dims(boxes, 0)
+        if boxes.shape[-1] > 4:
+            class_info = boxes[:, 4:]
+            boxes = boxes[:, :4]
+        cxcy=(boxes[:, 2:4] + boxes[:, 0:2]) / 2  # cx, cy
+        wh=boxes[:, 2:4] - boxes[:, 0:2]
+        if class_info is not None:
+            boxes = np.concatenate([cxcy, wh, class_info], axis=-1)
+            return boxes
+        else:
+            boxes = np.concatenate([cxcy, wh], axis=-1)
+            return boxes
+    else:
+        raise TypeError('Argument xyxy must be a list, tuple, or numpy array.')
+
+
+def box_area(boxes: np.ndarray) :
+    """
+    Computes the area of a set of bounding boxes, which are specified by its
+    (x1, y1, x2, y2) coordinates.
+
+    Arguments:
+        boxes (Tensor[N, 4]): boxes for which the area will be computed. They
+            are expected to be in (x1, y1, x2, y2) format
+
+    Returns:
+        area (Tensor[N]): area for each box
+    """
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
 def bbox_iou(bboxes1:np.ndarray, bboxes2:np.ndarray):
