@@ -95,7 +95,7 @@ def get_device():
 
     """
     if ctx.device is None:
-        set_device("cuda" if torch.cuda.is_available() else 'tpu' if is_tpu_available() else  "cpu")
+        set_device("cuda" if torch.cuda.is_available() else 'xpu' if is_tpu_available() else  "cpu")
 
     return get_session().device
 
@@ -106,17 +106,17 @@ def set_device(device=None):
         if is_gpu_available():
             device='cuda'
         elif is_tpu_available():
-            device='xla'
+            device='xpu'
         else:
             device='cpu'
     device = device.lower().replace('gpu', 'cuda')
     if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
-    if device == 'tpu' and not is_tpu_available():
+    if device == 'xpu' and not is_tpu_available():
         raise ValueError('Tpu is not available...')
     try:
         device_=device
-        if device=='tpu':
+        if device=='xpu':
             import torch_xla.core.xla_model as xm
             device_ = xm.xla_device()
         set_session('device', device_)
@@ -722,7 +722,7 @@ class Layer(nn.Module):
         Returns:
             Module: self
         """
-        if is_tpu_available() and (device == 'tpu' or device is None):
+        if is_tpu_available() and (device == 'xpu' or device is None):
             import torch_xla.core.xla_model as xm
             device = xm.xla_device()
         return self._apply(lambda t: t.xpu(device))
@@ -1122,7 +1122,7 @@ class Layer(nn.Module):
             if is_tensor(output):  # one output
                 self._output_shape = tensor_to_shape(output)
             elif isinstance(output, (list, tuple)):
-                output_shape = tuple([tensor_to_shape(item) for item in output if not isinstance(item, (list, tuple))])
+                output_shape = tuple([tensor_to_shape(item) for item in output if item is not None and not isinstance(item, (list, tuple))])
                 # if not isinstance(item, (list,tuple)) lstm
                 self._output_shape = unpack_singleton(output_shape)
 
@@ -1924,11 +1924,15 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
                 summary[m_key]["keep_output"] = False
             input = iteration_tools.flatten([input], iterable_types=(list, tuple))
             input = unpack_singleton([item for item in input if item is not None])
-            if isinstance(input, (list, tuple)):
+
+            if isinstance(input, (list, tuple)) and len(input)>0:
                 summary[m_key]["input_shape"] = list(int_shape(input[0]))
+            elif isinstance(input, dict) and len(input)>0:
+                summary[m_key]["input_shape"] = list(int_shape(list(input.values())[0]))
             elif is_tensor(input):
                 summary[m_key]["input_shape"] = list(int_shape(input))
-            summary[m_key]["input_shape"][0] = batch_size
+            if "input_shape" in summary[m_key]  and  len(summary[m_key]["input_shape"])>0:
+                summary[m_key]["input_shape"][0] = batch_size
 
             output = iteration_tools.flatten([output], iterable_types=(list, tuple))
             output = unpack_singleton([item for item in output if item is not None])
