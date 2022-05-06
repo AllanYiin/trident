@@ -362,22 +362,20 @@ class ImageDataProvider(object):
     def label_statistics(self):
         if isinstance(self.traindata.label, LabelDataset):
             unique, counts = np.unique(np.array(self.traindata.label.items), return_counts=True)
-            class_names_mapping = self.class_names[list(self.class_names.keys())[0]]
+            ls=OrderedDict(zip(unique,counts))
 
-            unique = [class_names_mapping[s] if s in class_names_mapping else class_names_mapping[int(s)] if isinstance(
-                class_names_mapping, list) else str(s) for s in unique]
-            max_len = get_string_actual_length(unique) + 5
-            for i in range(len(unique)):
-                s = unique[i]
-                current_name = class_names_mapping[str(unique[i])] if not isinstance(s,
-                                                                                     numbers.Integral) and isinstance(
-                    class_names_mapping, dict) and unique[i] in class_names_mapping else class_names_mapping[
-                    int(s)] if isinstance(s, numbers.Integral) and isinstance(class_names_mapping, list) and isinstance(
-                    s, numbers.Integral) < len(class_names_mapping) else str(unique[i])
+            class_names_mapping = self.class_names[self.__default_language__] if self.__default_language__ in self.class_names else  self.class_names[list(self.class_names.keys())[0]] if len(self.class_names)>0 else None
+            max_len=15
+            if class_names_mapping is not None:
+                max_len = int(get_string_actual_length(class_names_mapping) )+ 5
+
+            for i in range(len(ls)):
+                label,_ = list(ls.items())[i]
+                current_name = class_names_mapping[label] if class_names_mapping is not None and len(class_names_mapping)==len(ls) else ''
                 # class_name = ''.join([' '] * max_len) if class_names_mapping is None or len(class_names_mapping) == 0 else self.index2label(unique[i]) + ''.join([' '] * (max_len - get_string_actual_length(self.index2label(unique[i]))))
-                bar = ['█'] * int(builtins.round(50 * counts[i] / float(len(self.traindata.label.items))))
-                print('{0:<10} {1} {2:<50} {3:,} ({4:.3%})'.format(s, current_name, ''.join(bar), counts[i],
-                                                                   counts[i] / float(len(self.traindata.label.items))))
+                bar = [blue_color('█')] * int(builtins.round(50 * counts[i] / float(len(self.traindata.label.items))))
+
+                print('{0:<5} {1} {2:<50} {3:,} ({4:.3%})'.format(label,(current_name+''.join([' ']*max_len))[:max_len], ''.join(bar), counts[i], counts[i] / float(len(self.traindata.label.items))))
 
     def _next_index(self):
         return self.__next__()
