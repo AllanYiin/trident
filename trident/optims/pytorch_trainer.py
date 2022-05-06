@@ -152,25 +152,20 @@ class Model(model.ModelBase):
             output.train()
             # c._signature = get_signature(output)
 
-            if inputs is not None and not isinstance(inputs, (tuple, list, dict)):
-                inputs = (inputs,)
+
             if input_shape is not None and not isinstance(input_shape, (tuple, list, dict)):
                 input_shape = (input_shape,)
-            if isinstance(output, Combine):
-                output._signature = Signature(name=output.__class__.__name__)
-                for i in range(len(inputs)):
-                    output._signature.inputs['x_{0}'.format(i)] = TensorSpec(TensorShape([None]))
-            else:
-                output._signature = get_signature(output, output.__class__.__name__)
-            if inputs is not None and len(output.signature.inputs) >= len(inputs) > 0:
+
+            if inputs is not None and not isinstance(inputs, (tuple, list, dict)):
+                inputs = (inputs,)
+            elif inputs is not None and len(output.signature.inputs) >= len(inputs) > 0:
                 if not isinstance(inputs, dict):
                     for i in range(len(inputs)):
                         k = output._signature.inputs.key_list[i]
                         inp = to_tensor(inputs[i])
                         output._signature.inputs[k] = TensorSpec.tensor_to_spec(inp, need_exclude_batch_axis=True,
                                                                                 is_singleton=False,
-                                                                                optional=output._signature.inputs[
-                                                                                    k].optional, name=k)
+                                                                                optional=output._signature.inputs[k].optional, name=k)
                 else:
                     available_items = output.signature.inputs.key_list.copy()
                     for k, v in inputs.items():
@@ -233,7 +228,15 @@ class Model(model.ModelBase):
                 inputs = unpack_singleton(inputs)
                 args = None
                 if isinstance(inputs, dict):
-                    out = output(*list(inputs.values()))
+                    inp=OrderedDict()
+                    for k,v in output.signature.inputs.item_list:
+                        if k in inputs:
+                            inp[k]=inputs[k]
+                        elif v.optional:
+                            inp[k]=v.default
+                        else:
+                            inp[k] = to_tensor(v.get_dummy_tensor()).to(get_device())
+                    out = output(*inp.value_list)
                 elif isinstance(inputs, (list, tuple)):
                     out = output(*inputs)
                 else:
@@ -256,9 +259,16 @@ class Model(model.ModelBase):
                 output._signature.outputs[output._signature.outputs.key_list[0]].dtype = DTYPE_MAPPING[
                     out.dtype] if out.dtype in DTYPE_MAPPING else out.dtype
 
-            elif isinstance(out, OrderedDict):
-                for k, v in out.item_list:
-                    output.signature.outputs[k] = TensorSpec(shape=tensor_to_shape(v), name=k)
+            elif is_instance(out, 'OrderedDict'):
+                for k, v in out.__dict__.items():
+                    spec=TensorSpec.tensor_to_spec(v,need_exclude_batch_axis=True, name=k)
+                    if k in output.signature.outputs:
+                        spec.optional=output.signature.outputs[k].optional
+                        spec.default=output.signature.outputs[k].default
+                    elif v is None:
+                        spec.optional =True
+                        spec.default=None
+                    output.signature.outputs[k] = spec
 
             elif isinstance(out, (list, tuple)):
                 for i in range(len(out)):

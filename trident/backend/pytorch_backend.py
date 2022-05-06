@@ -35,7 +35,7 @@ from torch._jit_internal import _copy_to_script_wrapper
 from torch.nn.parameter import Parameter
 from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec
+    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec,is_instance
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
@@ -1938,6 +1938,8 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
             output = unpack_singleton([item for item in output if item is not None])
             if isinstance(output, (list, tuple)):
                 summary[m_key]["output_shape"] = list(int_shape(output[0]))
+            elif is_instance(output,'OrderedDict'):
+                summary[m_key]["output_shape"] = list(int_shape(output.__dict__[list(output.__dict__.keys())[0]]))
             elif is_tensor(output):
                 summary[m_key]["output_shape"] = list(int_shape(output))
             summary[m_key]["output_shape"][0] = batch_size
@@ -1994,7 +1996,23 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
     model.eval()
 
     # batch_size of 2 for batchnorm
-    x = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) if spec.optional == False else spec.default for spec in model._signature.inputs.value_list]
+    # if module.signature is not None:
+    #     input_tensor = [to_tensor(module.signature.inputs.value_list[k].get_dummy_tensor()) for k in  range(module.signature.inputs.value_list) if not module.signature.inputs.value_list[k].optional or k==0]
+    #
+    inps=OrderedDict()
+    for v in input_specs:
+        k=v.name
+        if v.shape is not None and v.shape._dims!=[None]:
+            inps[k] =to_tensor(v.get_dummy_tensor(),device=get_device())
+        elif v.optional:
+            inps[k]=v.default
+        elif v.shape is None:
+            inps[k]=None
+        else:
+            inps[k] = None
+
+
+    #x = [to_tensor(inps[n].get_dummy_tensor(),device=get_device())  for n in range(len(inps)) if inps[n].optional == False or  inps[n].shape._dims!=[None]]
     # p    rint(type(x[0]))
 
     # create properties
@@ -2006,7 +2024,7 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
 
     # make a forward pass
     # print(x.shape)
-    model(*x)
+    model(*inps.value_list)
 
     # remove these hooks
     for h in hooks:
@@ -2565,42 +2583,42 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
             value = getattr(module, 'keepdim')
             setattr(module, 'keepdims', value)
 
-    def register_hook(module):
-        def hook(module, input, output):
-            # class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
-            input = iteration_tools.flatten([input], iterable_types=(list, tuple))
-            input = unpack_singleton([item for item in input if item is not None])
-
-            if isinstance(input, (list, tuple)):
-                module._input_shape = tuple([tensor_to_shape(t, need_exclude_batch_axis=True, is_singleton=False) for t in input])
-                module.input_shape = module._input_shape
-            elif is_tensor(input):
-                module._input_shape = tensor_to_shape(input, need_exclude_batch_axis=True, is_singleton=False)
-                module.input_shape = module._input_shape
-
-            output = iteration_tools.flatten([output], iterable_types=(list, tuple))
-            output = unpack_singleton([item for item in output if item is not None])
-            if isinstance(output, (list, tuple)):
-                module._output_shape = tuple([tensor_to_shape(t, need_exclude_batch_axis=True, is_singleton=False) for t in output])
-                module.output_shape = module._output_shape
-            elif is_tensor(output):
-                module._output_shape = tensor_to_shape(output, need_exclude_batch_axis=True, is_singleton=False)
-                module.output_shape = module._output_shape
-
-            hooks.append(module.register_forward_hook(hook))
-
-    hooks = []
-
-    # register hook
-    module.apply(register_hook)
-
-    if input_tensor is None:
-        input_tensor = to_tensor(TensorShape(input_shape).get_dummy_tensor())
-    # make a forward pass
-    # print(x.shape)
-    module(input_tensor)
-
-    # remove these hooks
-    for h in hooks:
-        h.remove()
+    # def register_hook(module):
+    #     def hook(module, input, output):
+    #         # class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
+    #         input = iteration_tools.flatten([input], iterable_types=(list, tuple))
+    #         input = unpack_singleton([item for item in input if item is not None])
+    #
+    #         if isinstance(input, (list, tuple)):
+    #             module._input_shape = tuple([tensor_to_shape(t, need_exclude_batch_axis=True, is_singleton=False) for t in input])
+    #             module.input_shape = module._input_shape
+    #         elif is_tensor(input):
+    #             module._input_shape = tensor_to_shape(input, need_exclude_batch_axis=True, is_singleton=False)
+    #             module.input_shape = module._input_shape
+    #
+    #         output = iteration_tools.flatten([output], iterable_types=(list, tuple))
+    #         output = unpack_singleton([item for item in output if item is not None])
+    #         if isinstance(output, (list, tuple)):
+    #             module._output_shape = tuple([tensor_to_shape(t, need_exclude_batch_axis=True, is_singleton=False) for t in output])
+    #             module.output_shape = module._output_shape
+    #         elif is_tensor(output):
+    #             module._output_shape = tensor_to_shape(output, need_exclude_batch_axis=True, is_singleton=False)
+    #             module.output_shape = module._output_shape
+    #
+    #         hooks.append(module.register_forward_hook(hook))
+    #
+    # hooks = []
+    #
+    # # register hook
+    # module.apply(register_hook)
+    #
+    # if module.signature is not None:
+    #     input_tensor = [to_tensor(module.signature.inputs.value_list[k].get_dummy_tensor()) for k in  range(module.signature.inputs.value_list) if not module.signature.inputs.value_list[k].optional or k==0]
+    #     # make a forward pass
+    #     # print(x.shape)
+    #     module(*input_tensor)
+    #
+    # # remove these hooks
+    # for h in hooks:
+    #     h.remove()
     return module
