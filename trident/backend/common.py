@@ -31,7 +31,7 @@ from typing import Iterable, Generator, Union, Tuple, Any, overload, NewType, Di
 import numpy as np
 
 __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabled', 'set_autocast_enabled', 'get_backend', 'get_plateform', 'get_image_backend', 'get_trident_dir',
-           'epsilon', 'floatx', 'import_or_install','compile_and_install_module',
+           'epsilon', 'floatx', 'import_or_install','compile_and_install_module','is_instance',
            'check_keys', 'make_sure', 'if_none', 'camel2snake', 'snake2camel', 'to_onehot', 'to_list', 'addindent', 'format_time',
            'get_time_suffix', 'get_file_modified_time', 'get_function', 'get_class', 'get_terminal_size', 'gcd', 'get_divisors', 'isprime',
            'next_prime', 'prev_prime', 'nearest_prime', 'PrintException', 'TensorShape', 'unpack_singleton', 'enforce_singleton',
@@ -1864,10 +1864,16 @@ def is_instance(instance, check_class):
     if not inspect.isclass(instance) and inspect.isclass(check_class):
         mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
         return check_class.__module__ + '.' + check_class.__qualname__ in mro_list
-    elif  isinstance(check_class, str):
+    elif inspect.isclass(instance) and isinstance(check_class, str):
+        mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__mro__]
+        mro_list2 = [b.__qualname__ for b in instance.__mro__]
+        return check_class in mro_list or check_class in mro_list2
+    elif not inspect.isclass(instance) and isinstance(check_class, str):
         mro_list = [b.__module__ + '.' + b.__qualname__ for b in instance.__class__.__mro__]
         mro_list2 = [b.__qualname__ for b in instance.__class__.__mro__]
         return check_class in mro_list or check_class in mro_list2
+    elif isinstance(check_class,tuple):
+        return any([ is_instance(instance, cc) for cc in check_class])
     else:
         if not inspect.isclass(check_class):
             print(red_color('Input check_class {0} should a class, but {1}'.format(check_class,type(check_class))))
