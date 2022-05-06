@@ -2,13 +2,56 @@ import copy
 import inspect
 import numbers
 import sys
-from collections import Counter
+import collections
+from collections import Counter ,abc
 from enum import Enum
 from inspect import signature
 from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, is_instance
 from trident.backend import dtype
-from typing import Optional, Union, overload
+import typing
+from typing import Optional, Union,Dict,Tuple,List, overload
 import numpy as np
+
+
+class _AnnotatedAlias(typing._GenericAlias, _root=True):
+    """Runtime representation of an annotated type.
+    At its core 'Annotated[t, dec1, dec2, ...]' is an alias for the type 't'
+    with extra annotations. The alias behaves like a normal typing alias,
+    instantiating is the same as instantiating the underlying type, binding
+    it to types is also the same.
+    """
+
+    def __init__(self, origin, metadata):
+        if isinstance(origin, _AnnotatedAlias):
+            metadata = origin.__metadata__ + metadata
+            origin = origin.__origin__
+        super().__init__(origin, origin)
+        self.__metadata__ = metadata
+
+    def copy_with(self, params):
+        assert len(params) == 1
+        new_type = params[0]
+        return _AnnotatedAlias(new_type, self.__metadata__)
+
+    def __repr__(self):
+        return (f"typing_extensions.Annotated[{typing._type_repr(self.__origin__)}, "
+                f"{', '.join(repr(a) for a in self.__metadata__)}]")
+
+    def __reduce__(self):
+        return operator.getitem, (
+            Annotated, (self.__origin__,) + self.__metadata__
+        )
+
+    def __eq__(self, other):
+        if not isinstance(other, _AnnotatedAlias):
+            return NotImplemented
+        if self.__origin__ != other.__origin__:
+            return False
+        return self.__metadata__ == other.__metadata__
+
+    def __hash__(self):
+        return hash((self.__origin__, self.__metadata__))
+
 
 __all__ = ['TensorSpec', 'ObjectType', 'assert_input_compatibility', 'assert_spec_compatibility', 'get_python_function_arguments', 'get_signature', 'ExpectDataType',
            'object_type_inference', 'distict_color_count']
@@ -240,10 +283,21 @@ class TensorSpec(object):
 
     @classmethod
     def tensor_to_spec(cls, t, object_type: ObjectType = None, need_exclude_batch_axis=True, is_singleton=False, optional=False, name=None):
-        if isinstance(t,str):
+        if is_tensor(t) and ndim(t) == 0:
+            t=t.item()
+        elif isinstance(t,np.ndarray) and ndim(t) == 0:
+            t=t[0]
+        if t is None:
+            return cls(shape=TensorShape([None]), dtype=type(None), object_type=object_type,
+                       optional=True,
+                       default=None,name=name)
+        elif isinstance(t,str):
             return cls(shape=TensorShape([None]), dtype=str, object_type=object_type,
-                       optional=optional,
-                       name=name)
+                       optional=True,
+                       default=t,name=name)
+        elif isinstance(t, (numbers.Number,bool)) :
+            return cls(shape=TensorShape([None]), dtype=type(t), object_type=object_type, optional=True,
+                   default=t,name=name)
         else:
             t = to_tensor(t)
             return cls(shape=tensor_to_shape(t, need_exclude_batch_axis=need_exclude_batch_axis, is_singleton=is_singleton), dtype=t.dtype, object_type=object_type, optional=optional,
@@ -256,7 +310,7 @@ class TensorSpec(object):
 
     @dtype.setter
     def dtype(self, value):
-        return value
+        self._dtype= value
 
     @property
     def name(self):
@@ -351,6 +405,25 @@ class TensorSpec(object):
                                                  ' is incompatible  ' +
                                                  ': expected shape=' + str(spec.shape) +
                                                  ', found shape=' + str(shape))
+
+
+    def get_dummy_tensor(self,batch_size=2):
+        shape = [d for d in self.shape._dims] if self.shape is not None else None
+
+
+        if shape is not None and len(shape)>=1:
+            if shape[0] is None:
+                shape[0] = batch_size
+            else:
+                shape = [batch_size, ] + shape
+            if any([d in str(self.dtype)  for d in ['int64','long']]):
+                return np.random.uniform(0, 1,shape).astype(np.int64)
+            else:
+                return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1)
+        elif str(self.dtype)=='str' or self.optional:
+            return self.default
+        else:
+            return None
 
     def __hash__(self):
         return hash((self._shape_tuple, self.dtype))
@@ -591,7 +664,52 @@ def get_signature(fn, name=None):
     #     sig1.outputs=sig2.outputs
     #     return sig1
 
+    def get_origin(tp):
+        """Get the unsubscripted version of a type.
+        This supports generic types, Callable, Tuple, Union, Literal, Final, ClassVar
+        and Annotated. Return None for unsupported types. Examples::
+            get_origin(Literal[42]) is Literal
+            get_origin(int) is None
+            get_origin(ClassVar[int]) is ClassVar
+            get_origin(Generic) is Generic
+            get_origin(Generic[T]) is Generic
+            get_origin(Union[T, int]) is Union
+            get_origin(List[Tuple[T, T]][int]) == list
+            get_origin(P.args) is P
+        """
+        if isinstance(tp, _AnnotatedAlias):
+            return Annotated
 
+        if is_instance(tp, ('_GenericAlias', '_typing_GenericAlias','_BaseGenericAlias',
+                           'ParamSpecArgs', 'ParamSpecKwargs')):
+            return tp.__origin__
+        if tp is typing.Generic:
+            return typing.Generic
+        return None
+
+    def get_args(tp):
+        """Get type arguments with all substitutions performed.
+        For unions, basic simplifications used by Union constructor are performed.
+        Examples::
+            get_args(Dict[str, int]) == (str, int)
+            get_args(int) == ()
+            get_args(Union[int, Union[T, int], str][int]) == (int, str)
+            get_args(Union[int, Tuple[T, int]][str]) == (int, Tuple[str, int])
+            get_args(Callable[[], T][int]) == ([], int)
+        """
+        if isinstance(tp, _AnnotatedAlias):
+            return (tp.__origin__,) + tp.__metadata__
+        if is_instance(tp, ('typing._GenericAlias', '_typing_GenericAlias')):
+            if getattr(tp, "_special", False):
+                return ()
+            res = tp.__args__
+            if len(res)==2 and is_instance(res[0], ('typing._GenericAlias', '_typing_GenericAlias')):
+                if is_instance(res[1],'dict'):
+                    res = [s for s in list(res[1].__dict__) if not s.startswith('__')]
+            elif get_origin(tp) is abc.Callable and res[0] is not Ellipsis:
+                res = (list(res[:-1]), res[-1])
+            return res
+        return ()
     base_fn = fn
     signature = base_fn._signature if hasattr(fn, '_signature') else  None
     if signature is None:
@@ -601,14 +719,19 @@ def get_signature(fn, name=None):
     sig = inspect.signature(base_fn)
     paras = list(sig.parameters.items())
 
-    returns = sig.return_annotation
+    returns = get_args(sig.return_annotation)
+
     if sig.return_annotation is not inspect._empty and returns is not None:
         if isinstance(returns, str):
             signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
+        elif isinstance(returns, list):
+            for r in returns:
+                if isinstance(r,str):
+                    signature.outputs[r] = TensorSpec(TensorShape([None]), optional=False, name=r)
         elif returns is Tensor:
             signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
         else:
-            if returns is not None:
+            if returns is not None and returns is not _GenericAlias:
                 for i in range(len(returns)):
                     signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))
     else:

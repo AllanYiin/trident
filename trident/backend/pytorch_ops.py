@@ -521,7 +521,8 @@ def tensor_to_shape(x: Tensor, need_exclude_batch_axis=True, is_singleton=False)
         shp = list(int_shape(x))
         if len(shp) == 0:
             pass
-        shp[0] = None
+        else:
+            shp[0] = None
         return TensorShape(shp)
     elif need_exclude_batch_axis and is_singleton == True:
         return TensorShape([None] + int_shape(x))
