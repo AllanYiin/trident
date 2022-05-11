@@ -234,8 +234,10 @@ class Model(model.ModelBase):
                             inp[k]=inputs[k]
                         elif v.optional:
                             inp[k]=v.default
-                        else:
+                        elif v.shape is not None and v.ndim>1:
                             inp[k] = to_tensor(v.get_dummy_tensor()).to(get_device())
+                        else:
+                            inp[k] = None
                     out = output(*inp.value_list)
                 elif isinstance(inputs, (list, tuple)):
                     out = output(*inputs)
@@ -254,12 +256,12 @@ class Model(model.ModelBase):
             self._model = output
             # self._model.signature.inputs.value_list[0]=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
 
-            if is_tensor(out) and len(output._signature.outputs) == 1:
+            if is_tensor(out) :
                 output._signature.outputs[output._signature.outputs.key_list[0]].shape = tensor_to_shape(out)
                 output._signature.outputs[output._signature.outputs.key_list[0]].dtype = DTYPE_MAPPING[
                     out.dtype] if out.dtype in DTYPE_MAPPING else out.dtype
 
-            elif is_instance(out, 'OrderedDict'):
+            elif is_instance(out, 'dict'):
                 for k, v in out.__dict__.items():
                     spec=TensorSpec.tensor_to_spec(v,need_exclude_batch_axis=True, name=k)
                     if k in output.signature.outputs:
@@ -524,7 +526,7 @@ class Model(model.ModelBase):
 
         # check whether the model is ended by SoftMax
         if self._model is not None and isinstance(self._model, Layer):
-            print(alias, list(self._model.modules())[-1].__class__.__name__)
+            #print(alias, list(self._model.modules())[-1].__class__.__name__)
             if isinstance(list(self._model.modules())[-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
                 self._losses[alias].is_logsoftmax = True
             elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(
@@ -539,8 +541,7 @@ class Model(model.ModelBase):
                     if isinstance(list(v.modules())[-1], SoftMax) and k in self._losses[alias].signature.inputs:
                         self._losses[alias].is_logsoftmax = True
                     elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],
-                                                                                      SoftMax) and k in self._losses[
-                        alias].signature.inputs:
+                                                                                      SoftMax) and k in self._losses[alias].signature.inputs:
                         self._losses[alias].is_logsoftmax = True
                     elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[
                         -1].activation == log_softmax and k in self._losses[alias].signature.inputs:
@@ -1326,13 +1327,11 @@ class Model(model.ModelBase):
             self._model.signature = state_dict['signature']
         self._model.to(get_device())
 
-    def summary(self):
+    def summary(self,inputs=None):
         # self.rebinding_input_output(self._model.input_shape)
-        if not hasattr(self._model,
-                       '_signature') or self._model._signature is None or self._model._signature.inputs is None or len(
-            self._model._signature.outputs) == 0:
+        if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None or len(self._model._signature.outputs) == 0:
             self._model._signature = get_signature(self._model, self._model._name)
-        summary(self._model, [item for item in self._model._signature.inputs.value_list])
+        summary(self._model, input_specs=self.signature.inputs.value_list,inputs=inputs)
         return self
 
     def predict(self, input):
