@@ -22,7 +22,7 @@ elif _backend == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_ops import *
 
-__all__ = ['Loss','_check_logit','_check_logsoftmax_logit']
+__all__ = ['Loss','_check_logit','_check_logsoftmax_logit','_check_softmax']
 
 
 class Loss(object):
@@ -189,13 +189,25 @@ def _check_logsoftmax_logit(x:Tensor,axis=1):
     elif _backend == 'tensorflow':
         if axis is None:
             axis = -1
-    x = to_numpy(x)
 
     if reduce_max(x) <= 0:
-        output_exp = exp(x)
-        return abs(1-reduce_mean(output_exp.sum(axis=axis)))<0.05
+        output_exp = exp(x).sum(axis=axis)
+        return reduce_mean(abs(1-output_exp))<0.2
     return False
 
+
+def _check_softmax(x:Tensor,axis=1):
+    if _backend == 'pytorch':
+        if axis is None:
+            axis = 1
+    elif _backend == 'tensorflow':
+        if axis is None:
+            axis = -1
+
+    if reduce_min(x) >=0 and reduce_max(x) <=1:
+        output= x.sum(axis=axis)
+        return reduce_mean(abs(1-output))<0.2
+    return False
 
 def _check_logit(x:Tensor,axis=None):
     if _backend == 'pytorch':
