@@ -27,7 +27,7 @@ from trident.backend.tensorspec import ObjectType, object_type_inference
 from trident.data.dataset import *
 from trident.layers.pytorch_activations import sigmoid
 from trident.layers.pytorch_layers import Dense
-from trident.optims.losses import Loss, _check_logsoftmax_logit, _check_logit
+from trident.optims.losses import Loss, _check_logsoftmax_logit, _check_logit,_check_softmax
 
 _device = get_device()
 __all__ = ['_ClassificationLoss', 'MSELoss', 'CrossEntropyLoss', 'NLLLoss', 'BCELoss', 'F1ScoreLoss', 'L1Loss',
@@ -204,14 +204,14 @@ class _ClassificationLoss(Loss):
                 if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
                     target = target.view(target.size(0), -1)
                 elif ndim_target == ndim_output and target.dtype != Dtype.long:
-                    target = target.view(target.size(0), target.size(1), -1)
+                    target = target.reshape((target.size(0), target.size(1), -1))
             elif self.axis == -1:
                 output = output.view(output.size(0), -1, output.size(-1))
                 output = output.transpose(2, 1).contiguous()
                 if ndim_target == ndim_output - 1 and target.dtype == Dtype.long:
                     target = target.view(target.size(0), -1)
                 elif ndim_target == ndim_output and target.dtype != Dtype.long:
-                    target = target.view(target.size(0), -1, target.size(-1))
+                    target = target.reshape((target.size(0), -1, target.size(-1)))
                     target = target.transpose(2, 1).contiguous()
             return output, target
         elif ndim(output) <= 2:
@@ -299,8 +299,7 @@ class _ClassificationLoss(Loss):
                 target.min() >= 0 and target.max() <= 1 and abs(target.sum(self.axis) - 1).mean() < 1e-4):
             self.is_target_onehot = True
 
-        if target.dtype == Dtype.long and self.need_target_onehot == True and (
-                self.is_target_onehot == False or self.is_target_onehot is None):
+        if target.dtype == Dtype.long and self.need_target_onehot == True and (self.is_target_onehot == False or self.is_target_onehot is None):
             target = make_onehot(target, num_classes=self.num_classes, axis=self.axis).to(get_device())
             self.is_target_onehot = True
         if self.label_smooth:
@@ -441,6 +440,7 @@ class _PairwiseLoss(Loss):
             else:
                 return output, target
 
+
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
 
@@ -468,20 +468,6 @@ class _PairwiseLoss(Loss):
 
         return output, target
 
-    def _do_ohem(self, loss: Tensor):
-        if self.enable_ohem and ndim(loss)>0:
-            loss=loss.view(-1)
-            loss, _ = torch.sort(loss, descending=True)
-
-            n_min=int(len(loss)*self.ohem_thresh)
-
-            # if loss[self.n_min] > self.ohem_thresh:
-            #     loss = loss[loss > self.ohem_thresh]
-            # else:
-            loss = loss[:n_min]
-            return loss
-        else:
-            return loss
 
     def calculate_loss(self, output, target, **kwargs):
         """ Calculate the unaggregate loss.
@@ -520,6 +506,20 @@ class _PairwiseLoss(Loss):
             PrintException()
             raise e
 
+    def _do_ohem(self, loss: Tensor):
+        if self.enable_ohem and ndim(loss)>0:
+            loss=loss.view(-1)
+            loss, _ = torch.sort(loss, descending=True)
+
+            n_min=int(len(loss)*self.ohem_thresh)
+
+            # if loss[self.n_min] > self.ohem_thresh:
+            #     loss = loss[loss > self.ohem_thresh]
+            # else:
+            loss = loss[:n_min]
+            return loss
+        else:
+            return loss
 
 class CrossEntropyLoss(_ClassificationLoss):
     r"""This criterion combines :func:`nn.LogSoftmax` and :func:`nn.NLLLoss` in one single class.
@@ -663,8 +663,11 @@ class CrossEntropyLoss(_ClassificationLoss):
             # gather_unbalance_weight=unbalance_weight.gather(1,target.unsqueeze(-1))
             # gather_unbalance_weight=torch.index_select(sample_weight, -1, target.reshape((-1))).reshape(target_shape).unsqueeze(1).detach()
 
-            if not self.is_logsoftmax or not self.from_logits:
-                output = clip(log_softmax(output, axis=self.axis), min=-12, max=0)
+            if not self.is_logsoftmax :
+                if _check_softmax(output):
+                    output=log(output+1e-12)
+                else:
+                    output = log_softmax(output, axis=self.axis)
             target = target.detach()
             sample_weight = sample_weight.detach()
             return nn.functional.nll_loss(output, target.long(), weight=sample_weight, reduction='none')
@@ -678,10 +681,12 @@ class CrossEntropyLoss(_ClassificationLoss):
                                              pow(1 - clip(unbalance_weight, min=1e-7), 3.5))
                     sample_weight = unbalance_weight
 
-            if self.is_logsoftmax:
-                output = clip(exp(output), min=1e-7, max=1)
-            elif not self.from_logits:
-                output = softmax(output)
+            if not self.is_logsoftmax :
+                if _check_softmax(output):
+                    output = log(output + 1e-12)
+                else:
+                    output = log_softmax(output, axis=self.axis)
+
 
             new_shape = [1] * ndim(output)
             new_shape[1] = int_shape(output)[1]
@@ -896,9 +901,13 @@ class F1ScoreLoss(_ClassificationLoss):
 
     def calculate_loss(self, output, target, **kwargs):
         sample_weight = (self.sample_weight * self.ignore_index_weight).detach()
-        n_ = ndim(target) - ndim(sample_weight)
-        for n in range(n_):
-            sample_weight = expand_dims(sample_weight, 0)
+        sample_weight_shape=list(int_shape(output))
+        for n in range(len(sample_weight_shape)):
+            if n==self.axis and sample_weight_shape[n]==len(sample_weight):
+                pass
+            else:
+                sample_weight_shape[n]=1
+        sample_weight=sample_weight.reshape(sample_weight_shape)
 
         if self.is_logsoftmax:
             output = clip(exp(output), 1e-7, 1 - 1e-7)
@@ -989,7 +998,10 @@ class FocalLoss(_ClassificationLoss):
             self.is_target_onehot = False
 
         if not self.is_logsoftmax:
-            output = log_softmax(output)
+            if _check_softmax(output):
+                output = log(output + 1e-12)
+            else:
+                output = log_softmax(output, axis=self.axis)
             self.is_logsoftmax = True
 
         ce_loss = nn.functional.nll_loss(output, target.long(), reduction='none')
@@ -1035,8 +1047,8 @@ class BCELoss(_ClassificationLoss):
                                         min=1).to(_float_dtype).detach()
 
         if self.is_logsoftmax and reduce_max(output) <= 0:
-            output = clip(exp(output), 1e-7, 1 - 1e-7)
-        elif _check_logit(output, axis=self.axis):
+            output = exp(output)
+        elif _check_logit(output, axis=self.axis) or _check_softmax(output, axis=self.axis):
             pass
         else:
             output = torch.sigmoid(output)
@@ -1444,24 +1456,9 @@ class KLDivergenceLoss(_PairwiseLoss):
         Returns:
 
         """
-        sample_weight = (cast(self.sample_weight, output.dtype) * cast(self.ignore_index_weight, output.dtype)).detach()
 
-        if not self.is_logsoftmax and reduce_min(output) >= 0:
-            output = clip(log_softmax(output, axis=1), min=-12, max=-1e-7)
 
-        if ndim(output) == ndim(target) + 1:
-            target = make_onehot(target, self.num_classes, axis=1)
-        # print(9, 'output', output.shape, 'abnormal:', any_abnormal_number(output))
-
-        unbalance_weight = zeros(tuple([1] * (ndim(target) - 1) + [self.num_classes]))
-        if self.auto_balance and self.label_statistics is not None:
-            if int_shape(output)[self.axis] == len(self.label_statistics):
-                unbalance_weight = to_tensor(np.log(self.label_statistics.copy())).to(_float_dtype).detach()
-
-        target = target.detach()
-        sample_weight = expand_as(sample_weight, output)
-        unbalance_weight = expand_as(unbalance_weight, output)
-        loss = nn.functional.kl_div(output, target, reduction='none') * sample_weight * unbalance_weight
+        loss = nn.functional.kl_div(output, target, reduction='none')
 
         return loss.sum(1)
 
