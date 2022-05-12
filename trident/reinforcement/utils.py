@@ -1,15 +1,17 @@
 import gc
 import numbers
+import random
 import sys
+import copy
 from collections import namedtuple
 from numbers import Number
 from typing import Optional, Union, Any, Tuple
 import builtins
 import numpy as np
 
-from trident.backend.common import get_backend, OrderedDict, to_list
+from trident.backend.common import get_backend, OrderedDict,to_list,get_device
 
-__all__ = ['ReplayBuffer', 'Rollout', 'ActionStrategy', 'ObservationType']
+__all__ = ['ReplayBuffer', 'Rollout', 'ActionStrategy','ObservationType']
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
@@ -66,6 +68,8 @@ class ReplayBuffer(object):
 
     def __len__(self):
         return len(self.memory)
+
+
 
 
 class SegmentTree:
@@ -149,7 +153,6 @@ class SegmentTree:
         index = _get_prefix_sum_idx(value, self._bound, self._value)
         return index.item() if single else index
 
-
 def _get_prefix_sum_idx(
         value: np.ndarray, bound: int, sums: np.ndarray
 ) -> np.ndarray:
@@ -179,14 +182,12 @@ def _compile(self) -> None:
     _get_prefix_sum_idx(f64, 1, f64)
     _get_prefix_sum_idx(f32, 1, f64)
 
-
 def _setitem(tree: np.ndarray, index: np.ndarray, value: np.ndarray) -> None:
     """Numba version, 4x faster: 0.1 -> 0.024."""
     tree[index] = value
     while index[0] > 1:
         index //= 2
         tree[index] = tree[index * 2] + tree[index * 2 + 1]
-
 
 def _reduce(tree: np.ndarray, start: int, end: int) -> float:
     """Numba version, 2x faster: 0.009 -> 0.005."""
@@ -202,93 +203,102 @@ def _reduce(tree: np.ndarray, start: int, end: int) -> float:
     return result
 
 
+
 class Rollout(OrderedDict):
-    def __init__(self, enable=True, name='', *args, **kwargs):
+    def __init__(self,enable=True,only_cpu=True, name='', *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.name = name
+        self.name=name
+        self.enable = False
+        self.only_cpu=only_cpu
         self.enable = enable
-        self.only_cpu = kwargs.get('only_cpu', False)
 
     def __getattr__(self, name):
         if name in super().key_list:
             return super().__getitem__(name)
         elif name in self.__dict__:
-            return self.__dict__[name]
+            return object.__getattr__(self, name)
         else:
             return None
 
+
     def __setattr__(self, name: str, value) -> None:
-        if name in super().key_list:
-            super().__setitem__(name, value)
-        elif name in self.__dict__:
-            self.__dict__[name] = value
+        if name in ['only_cpu','name','enable'] or name in self.__dict__:
+            object.__setattr__(self, name, value)
+        elif name in super().key_list:
+            super().__setitem__(self,name,value)
         else:
-            self.__dict__[name] = value
+            object.__setattr__ (self,name, value)
 
-    def regist(self, data_name: str):
 
-        if self.enable and data_name not in self:
-            self[data_name] = []
 
-    def collect(self, data_name: str, value: (float, np.ndarray, Tensor)):
+    def regist(self,data_name:str):
+        if self.enable and data_name not in self.key_list:
+            self[data_name]=[]
+
+    def collect(self, data_name: str, value: (float,np.ndarray, Tensor)):
         if self.enable:
             if data_name not in self:
                 self.regist(data_name)
             if self.only_cpu:
-                if is_tensor(value) and ndim(value) == 0:
-                    value = to_numpy(value)[0]
-                else:
-                    value = to_numpy(value)
+                if isinstance(value,(numbers.Number,bool,np.bool_)) or value is None:
+                    pass
+                elif is_tensor(value) and ndim(value)==0:
+                    value=value.item()
+                elif is_tensor(value):
+                    value=value.cpu()
+                # else:
+                #     value = to_numpy(value)
             self[data_name].append(value)
 
     def reset(self):
         if self.enable:
-            for k, v in self.items():
-                v.clear()
+            for k in self.key_list:
+                del self[k]
+                self[k]=[]
             gc.collect()
 
-    def housekeeping(self, num_samples=1000):
+    def housekeeping(self,num_samples=1000):
         if self.enable:
             for k in self.key_list:
-                if len(self[k]) > num_samples:
-                    self[k] = self[k][-num_samples:]
+                if len(self[k])>num_samples:
+                    self[k]=[ self[k][n]  for n in range(len(self[k])) if n>=len(self[k])-num_samples]
             gc.collect()
 
-    def get(self, data_name):
 
+    def get(self,data_name):
         if self.enable and data_name in self and len(self[data_name]) > 0:
-            return self[data_name]
+            return [self[data_name][idx].copy().to(get_device()) if is_tensor(self[data_name][idx]) else copy.deepcopy(v[idx]) for idx in range(len(self[data_name]))]
         else:
             return []
 
-    def get_last(self, data_name):
-        if self.enable and data_name in self and len(self[data_name]) > 0:
+    def get_last(self,data_name):
+        if self.enable and data_name in self and len(self[data_name])>0:
             return self[data_name][-1]
         else:
             return None
 
-    def get_reverse(self, data_name):
-        if self.enable and data_name in self and len(self[data_name]) > 0:
-            return self[data_name][::-1]
+    def get_reverse(self,data_name):
+        if self.enable and data_name in self and len(self[data_name])>0:
+            return [self[data_name][idx].copy().to(get_device()) if is_tensor(self[data_name][idx]) else copy.deepcopy(v[idx]) for idx in range(len(self[data_name]))][::-1]
         else:
             return []
 
-    def get_normalized(self, data_name):
+    def get_normalized(self,data_name):
 
-        if self.enable and data_name in self and len(self[data_name]) > 3:
+        if self.enable and data_name in self and len(self[data_name])>3:
             try:
                 if is_tensor(self[data_name][0]):
-                    merge = concate(self[data_name], axis=0)
-                    merge_mean, merge_std = moments(merge, axis=0)
-                    merge = (merge - merge_mean) / merge_std
+                    merge=concate(self[data_name],axis=0)
+                    merge_mean,merge_std=moments(merge,axis=0)
+                    merge=(merge-merge_mean)/merge_std
                     return to_list(merge)
-                elif isinstance(self[data_name][0], np.ndarray):
-                    merge = np.concatenate(self[data_name], axis=0)
-                    merge = (merge - merge.mean()) / merge.std()
+                elif isinstance(self[data_name][0],np.ndarray):
+                    merge=np.concatenate(self[data_name],axis=0)
+                    merge=(merge-merge.mean())/merge.std()
                     return to_list(merge)
-                elif isinstance(self[data_name][0], numbers.Number):
+                elif isinstance(self[data_name][0],numbers.Number):
                     merge = np.array(self[data_name])
-                    merge = (merge - merge.mean()) / merge.std()
+                    merge=(merge-merge.mean())/merge.std()
                     return to_list(merge)
             except:
                 return self[data_name]
@@ -302,13 +312,13 @@ class Rollout(OrderedDict):
         if self.enable and data_name in self and len(self[data_name]) > 3:
             try:
                 if isinstance(self[data_name][0], numbers.Number):
-                    total_mean = builtins.sum(self[data_name]) / float(builtins.max(len(self[data_name]), 1))
-                    result = []
-                    running_sum = 0
+                    total_mean=builtins.sum(self[data_name])/float(builtins.max(len(self[data_name]),1))
+                    result=[]
+                    running_sum=0
                     for i in range(len(self[data_name])):
-                        running_sum += self[data_name][i]
-                        result.append((running_sum / (i + 1)) - total_mean)
-
+                        running_sum+=self[data_name][i]
+                        result.append((running_sum/(i+1))-total_mean)
+                 
                     return result
                 else:
                     raise ValueError('Only numeric data is supporte')
@@ -319,25 +329,42 @@ class Rollout(OrderedDict):
         else:
             return []
 
-    def get_samples(self, batch_size=8):
+    def get_samples(self, batch_size=8, recall_last=True):
         if self.enable:
-            can_sample = len(list(set([len(v) for v in self.value_list]))) == 1
-            indexs = random_choice(list(range(len(self.value_list[0]))),
-                                   builtins.min(batch_size, len(self.value_list[0])))
-            return_data = OrderedDict()
+            batch_size=builtins.min(batch_size,len(self.value_list[0]))
+            can_sample=len(list(set([len(v) for v in self.value_list])))==1
+            if recall_last  :
+                indexs = random.choices(list(range(len(self.value_list[0]))),k=batch_size if not recall_last else int(0.75 * batch_size))
+                indexs.extend(list(range(len(self.value_list[0])))[-1*(batch_size//4):])
+            else:
+                indexs = random.choices(list(range(len(self.value_list[0]))),k=batch_size )
+            return_data=OrderedDict()
             if can_sample:
-                for k, v in self.items():
-                    return_data[k] = [v[idx] for idx in indexs]
+                for k,v in self.items():
+                    return_data[k]=[v[idx].copy().to(get_device()) if is_tensor(v[idx]) else copy.deepcopy(v[idx]) for idx in indexs]
                 return return_data
             else:
                 raise ValueError('get_sample need all collection have same length.')
         else:
             return OrderedDict()
 
+    def get_snapshot(self):
+        new_rollout=Rollout()
+        for k,v in self.items():
+            new_rollout[k]=copy.deepcopy(v)
+        return new_rollout
+
     def __len__(self):
-        if len(self.value_list) == 0:
+        if len(self.value_list)==0:
             return 0
         return builtins.max([len(v) for v in self.value_list])
+
+
+
+
+
+
+
 
 # class PrioritizedReplayBuffer(ReplayBuffer):
 #     """Implementation of Prioritized Experience Replay. arXiv:1511.05952.
