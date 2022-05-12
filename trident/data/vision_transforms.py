@@ -30,7 +30,8 @@ __all__ = ['Resize','Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', '
            'RandomInvertColor', 'GrayScale', 'RandomGrayScale','RandomGridMask','GridMask','ToLowResolution',
            'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic','DetectionMixup']
 
-
+def _check_range_tuple(value):
+    return isinstance(value,tuple) and len(value)==2 and all([isinstance(v,numbers.Number) for v in value])
 
 def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=None, **kwargs):
     def randomize_wrapper(cls):
@@ -197,7 +198,7 @@ class Resize(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        h, w, th, tw, pad_vert, pad_horz = self._shape_info
+        h, w, eh, ew, th, tw, pad_vert, pad_horz = self._shape_info
 
         if not self.keep_aspect:
             return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
@@ -221,7 +222,7 @@ class Resize(VisionTransform):
             return output
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        h, w, th, tw, pad_vert, pad_horz = self._shape_info
+        h, w,eh, ew, th, tw, pad_vert, pad_horz = self._shape_info
         if h == th and w == tw:
             return coords
         coords[:, 0] = np.round(coords[:, 0] * (float(tw) / w))
@@ -232,8 +233,8 @@ class Resize(VisionTransform):
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w, th, tw, pad_vert, pad_horz = self._shape_info
-        if h == th and w == tw:
+        h, w,eh, ew,  th, tw, pad_vert, pad_horz = self._shape_info
+        if h == eh and w == ew:
             return mask
         mask_dtype = mask.dtype
         mask = mask.astype(np.float32)
@@ -269,14 +270,16 @@ class Resize(VisionTransform):
         eh, ew = self.output_size
 
         if not self.keep_aspect:
-            return h, w, eh, ew, 0, 0
+            th=eh
+            tw=ew
+            return h, w, eh, ew, th,tw,0, 0
         else:
             self.scale = min(float(eh) / h, float(ew) / w)
             th = int(builtins.round(h * self.scale, 0))
             tw = int(builtins.round(w * self.scale, 0))
             pad_vert = eh - th
             pad_horz = ew - tw
-            return h, w, th, tw, pad_vert, pad_horz
+            return h, w,eh, ew, th, tw, pad_vert, pad_horz
 
 class Unresize(VisionTransform):
     r"""
@@ -541,12 +544,14 @@ class RandomRescaleCrop(VisionTransform):
     def _apply_coords(self, coords, spec: TensorSpec):
         height, width ,padx,pady,th, tw, eh, ew, target_scale = self._shape_info
         try:
-            coords[:, 0] = np.clip(coords[:, 0]- padx , 0, tw)
-            coords[:, 1] = np.clip(coords[:, 1] - pady , 0, th)
-            coords = np.round(coords / target_scale).astype(np.int32)
+            coords[:, 0] = coords[:, 0]-padx
+            coords[:, 1] = coords[:, 1] -pady
+            coords = np.round(coords/target_scale).astype(np.int32)
+            adj_tw=tw/target_scale
+            adj_th=th/target_scale
 
-            coords[:, 0] = np.clip(coords[:, 0] +( (ew-tw)// target_scale)//2, 0, tw)
-            coords[:, 1] = np.clip(coords[:, 1] +( (ew-tw)// target_scale)//2, 0, th)
+            coords[:, 0] = np.clip(coords[:, 0] +(ew-adj_tw)//2, 0, ew)
+            coords[:, 1] = np.clip(coords[:, 1] +(eh-adj_th)//2, 0, eh)
             return coords
         except Exception as e:
             print(e, self._shape_info)
@@ -573,7 +578,7 @@ class RandomRescaleCrop(VisionTransform):
 
     def _get_shape(self, image):
         height, width = image.shape[:2]
-        area = height * width
+        #area = height * width
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
@@ -584,11 +589,11 @@ class RandomRescaleCrop(VisionTransform):
         padx,pady=0,0
 
         if 0 < ew < tw - 1 :
-            padx = np.random.randint(0, tw - ew)
+            padx = np.random.randint(0, (tw - ew)//2)
         elif 0<ew<= tw - 1:
             padx=0
         if 0 < eh < th - 1:
-            pady = np.random.randint(0, th - eh)
+            pady = np.random.randint(0, (th - eh)//2)
         elif 0 < eh<= th - 1:
             pady=0
         return height, width,padx,pady, th, tw, eh, ew, target_scale
@@ -870,7 +875,7 @@ class RandomTransformAffine(VisionTransform):
             mask_dtype = mask.dtype
             mask = mask.astype(np.float32)
 
-            mask = cv2.warpAffine(mask, mat_img, (width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0),flags=cv2.INTER_NEAREST)  # , borderMode=cv2.BORDER_REPLICATE
+            mask = cv2.warpAffine(mask, mat_img, dsize=(width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0),flags=cv2.INTER_NEAREST)  # , borderMode=cv2.BORDER_REPLICATE
             if spec.object_type==ObjectType.binary_mask:
                 mask[mask>=0.5]=1
                 mask[mask < 0.5] =0
@@ -888,8 +893,8 @@ class RandomTransformAffine(VisionTransform):
         self.output_size = (h, w)
 
         h, w = image.shape[0:2]
-        angle = np.random.uniform(-self.rotation_range, self.rotation_range) if self.rotation_range>0 else 0
-        scale = np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range>0 else 1
+        angle = np.random.uniform(self.rotation_range[0], self.rotation_range[1]) if _check_range_tuple(self.rotation_range) else  np.random.uniform(-self.rotation_range, self.rotation_range) if self.rotation_range>0 else 0
+        scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1]) if _check_range_tuple(self.zoom_range) else np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range>0 else 1
         tx = np.random.uniform(-self.shift_range, self.shift_range) * w
         ty = np.random.uniform(-self.shift_range, self.shift_range) * h
         M = np.eye(3)
