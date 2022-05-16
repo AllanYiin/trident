@@ -171,7 +171,7 @@ def array2image(arr:np.ndarray):
             pass
         elif (_backend!='tensorflow' and  arr.shape[0] in [3, 4] and arr.shape[2] not in [3, 4]):
             arr = arr.transpose([1, 2, 0])
-        elif _backend in ['pytorch', 'cntk'] and arr.ndim == 3 and arr.shape[0] in [3, 4] and arr.shape[2] not in [3, 4]:
+        elif _backend in ['pytorch', 'cntk'] and arr.ndim == 3 and arr.shape[0] in [3, 4] :#and arr.shape[2] not in [3, 4]:
             arr = arr.transpose([1, 2, 0])
         else:
             raise ValueError('3d image should be 3 or 4 channel. Got {} channel.'.format(arr.shape[0]))
