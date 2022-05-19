@@ -71,6 +71,35 @@ elif get_backend() == 'tensorflow':
     complex64 = tf.complex64
     complex128 = tf.complex128
     cfloat = tf.complex64
+
+if get_backend() == 'jax':
+    import jax.numpy as jnp
+    # type definition
+    bool = jnp.bool_
+
+    int8 =jnp.int8
+    byte = jnp.int8
+    int16 =  jnp.int16
+    short = jnp.int16
+    int32 =  jnp.int32
+    intc =    jnp.int32
+    int64 =   jnp.int64
+    intp =  jnp.int64
+
+    uint8 =   jnp.uint8
+    ubyte = jnp.uint8
+    float16 =  jnp.float16
+    half =  jnp.float16
+    float32 = jnp.float32
+    single =   jnp.float32
+    float64 =  jnp.float64
+    double =  jnp.float64
+    long =   jnp.int64
+    float=    jnp.float32
+    complex64 =    jnp.complex64
+    complex128 =jnp.complex128
+    cfloat   =None
+
 elif get_backend() == 'onnx':
     from onnx import onnx_pb
     bool = onnx_pb.TensorProto.BOOL
