@@ -1000,12 +1000,9 @@ class Layer(nn.Module):
         pass
 
     def copy(self):
-        """copy the layer
+        """Create a new FrozenDict with additional or replaced entries."""
 
-        Returns: The copy of this layer.
-
-        """
-        return self.clone()
+        return type(self)({**self})
 
     def save_onnx(self, file_path=''):
         input_shape = self._signature.inputs.value_list[0].shape.dims
