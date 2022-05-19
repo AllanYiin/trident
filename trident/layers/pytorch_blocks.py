@@ -119,7 +119,8 @@ class FullConnect_Block(Layer):
 
     def fuse(self):
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
-            shadow_fc = deepcopy(self.fc)
+            shadow_fc =type(self.fc)()
+            shadow_fc.load_state_dict(self.fc.state_dict())
             with torch.no_grad():
                 if self.sequence_rank == 'fna' or self.sequence_rank == 'afn':
                     bn_rv = self.norm.running_var.data.copy()
@@ -262,8 +263,8 @@ class Conv1d_Block(Layer):
     def fuse(self):
 
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
-            shadow_conv = type(self.conv)()  # get a new instance
-            shadow_conv.load_state_dict(shadow_conv.state_dict())
+            shadow_conv = type(self.conv)(kernel_size=self.conv.kernel_size)  # get a new instance
+            shadow_conv.load_state_dict(self.conv.state_dict())
             with torch.no_grad():
                 if self.sequence_rank == 'cna':
                     # sequential
@@ -410,8 +411,8 @@ class Conv2d_Block(Layer):
     def fuse(self):
 
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
-            shadow_conv = type(self.conv)()  # get a new instance
-            shadow_conv.load_state_dict(shadow_conv.state_dict())
+            shadow_conv = type(self.conv)(kernel_size=self.conv.kernel_size)  # get a new instance
+            shadow_conv.load_state_dict(self.conv.state_dict())
 
             with torch.no_grad():
                 if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
@@ -754,8 +755,8 @@ class DepthwiseConv2d_Block(Layer):
     def fuse(self):
 
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
-            shadow_conv = type(self.conv)()  # get a new instance
-            shadow_conv.load_state_dict(shadow_conv.state_dict())
+            shadow_conv = type(self.conv)(kernel_size=self.conv.kernel_size)  # get a new instance
+            shadow_conv.load_state_dict(self.conv.state_dict())
             with torch.no_grad():
                 if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
                     # sequential
@@ -895,8 +896,8 @@ class SeparableConv2d_Block(Layer):
     def fuse(self):
 
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
-            shadow_conv = type(self.conv)()  # get a new instance
-            shadow_conv.load_state_dict(shadow_conv.state_dict())
+            shadow_conv = type(self.conv)(kernel_size=self.conv.kernel_size)  # get a new instance
+            shadow_conv.load_state_dict(self.conv.state_dict())
             with torch.no_grad():
                 if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
                     # sequential
