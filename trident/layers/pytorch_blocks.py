@@ -298,7 +298,7 @@ class Conv1d_Block(Layer):
                         self.conv.weight.data.copy_(conv_w)
                         self.conv.use_bias =True
                         self.conv.bias = Parameter(conv_b)
-                        del self._modules['norm']
+                        self._modules['norm']=None
                         del dummy_input
                         del result1
                         del result2
@@ -411,7 +411,6 @@ class Conv2d_Block(Layer):
 
         if 'batchnorm' in self.norm.__class__.__name__.lower() and not self.use_spectral:
             shadow_conv =self.conv.copy()
-
             with torch.no_grad():
                 if self.sequence_rank == 'cna' or self.sequence_rank == 'acn':
                     # sequential
@@ -435,7 +434,7 @@ class Conv2d_Block(Layer):
                     shadow_conv.use_bias=True
                     shadow_conv.bias=Parameter(conv_b)
                     #test fusion effect
-                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).to(self.device)
                     result1=self.forward(dummy_input.copy())
                     result2=shadow_conv.forward(dummy_input.copy())
                     if self.activation is not None:
@@ -446,11 +445,14 @@ class Conv2d_Block(Layer):
                         self.conv.weight.data.copy_(conv_w)
                         self.conv.use_bias =True
                         self.conv.bias = Parameter(conv_b)
-                        del self._modules['norm']
+                        self._modules['norm']=None
                         del dummy_input
                         del result1
                         del result2
                         del shadow_conv
+                else:
+                    print(' sequence_rank not in  [cna,acn]')
+
 
 
 
@@ -771,13 +773,13 @@ class DepthwiseConv2d_Block(Layer):
                     bn_b = self.norm.bias.data.copy() if self.norm.affine else zeros_like(bn_rm)
                     bn_var_rsqrt = torch.rsqrt(bn_rv + bn_eps)
 
-                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 2)+[-1] )
+                    conv_w = conv_w * (bn_w * bn_var_rsqrt).reshape([-1] + [1] * (len(conv_w.shape) - 1))
                     conv_b = (conv_b - bn_rm) * bn_var_rsqrt * bn_w + bn_b
                     shadow_conv.weight.data.copy_(conv_w)
                     shadow_conv.use_bias=True
                     shadow_conv.bias=Parameter(conv_b)
                     #test fusion effect
-                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).cuda()
+                    dummy_input=random_normal([2]+self.input_shape.dims[1:],dtype=self.conv.weight.dtype).to(self.device)
                     result1=self.forward(dummy_input.copy())
                     result2=shadow_conv.forward(dummy_input.copy())
                     if self.activation is not None:
@@ -788,7 +790,7 @@ class DepthwiseConv2d_Block(Layer):
                         self.conv.weight.data.copy_(conv_w)
                         self.conv.use_bias =True
                         self.conv.bias = Parameter(conv_b)
-                        del self._modules['norm']
+                        self._modules['norm']=None
                     else:
                         ctx.print('diff',diff.mean(),diff.max())
                     del dummy_input
@@ -923,7 +925,7 @@ class SeparableConv2d_Block(Layer):
                     if self.activation is not None:
                         result2=self.activation(result2)
                     diff=to_numpy((result1-result2).abs())
-                    ctx.print('diff',diff.mean(),diff.max())
+                    ctx.print(self.relative_name,'diff',diff.mean(),diff.max(),flush=True)
                     if diff.mean()<1e-6 and diff.max()<1e-5:
                         self.conv.weight.data.copy_(conv_w)
                         self.conv.use_bias =True
@@ -933,6 +935,8 @@ class SeparableConv2d_Block(Layer):
                         del result1
                         del result2
                         del shadow_conv
+
+
 
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, depth_multiplier={depth_multiplier}, strides={strides}'
