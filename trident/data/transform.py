@@ -206,17 +206,10 @@ class VisionTransform(Transform):
         return mask
 
     def _apply_keypoints(self, keypoints,spec:TensorSpec):
-
-        if ndim(keypoints)==1:
-            N=keypoints.shape
-            keypoints=keypoints.reshape((N//2,2))
-        return keypoints
-        #return [[self._apply_coords(p, spec) for p in instance] for instance in keypoints]
-        # visibility=
-        # coords, visibility = keypoints[..., :2], keypoints[..., 2:]
-        # #trans_coords = [self._apply_coords(p,spec) for p in coords]
-        # trans_coords = self._apply_coords(coords, spec)
-        # return np.concatenate((trans_coords, visibility), axis=-1)
+        coords, visibility = keypoints[..., :2], keypoints[..., 2:]
+        #trans_coords = [self._apply_coords(p,spec) for p in coords]
+        trans_coords = self._apply_coords(coords, spec)
+        return np.concatenate((trans_coords, visibility), axis=-1)
 
     def _apply_polygons(self, polygons,spec:TensorSpec):
         return [[self._apply_coords(p,spec) for p in instance] for instance in polygons]
@@ -256,10 +249,10 @@ class TextTransform(Transform):
     def __init__(self, name=None):
         super().__init__(name=name)
         self._text_info = None
-        self.is_spatial=True
 
     def _precalculate(self, textdata, **kwargs):
-        return textdata
+        pass
+
 
 
     def apply_batch(self, inputs: Sequence[Tuple],spec:Optional[TensorSpec]=None):
