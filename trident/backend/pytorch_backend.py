@@ -1001,8 +1001,24 @@ class Layer(nn.Module):
 
     def copy(self):
         """Create a new FrozenDict with additional or replaced entries."""
-
-        return type(self)({**self})
+        sig = get_signature(type(self).__init__)
+        _args = OrderedDict()
+        for inp in sig.inputs.key_list:
+            if inp in self.__dict__:
+                _args[inp] = self.__dict__[inp]
+        shadow = type(self)(**_args)
+        shadow.build(self.input_shape)
+        for k, v in self.__dict__.items():
+            if k not in _args and k not in ['_modules', '_parameters', '_buffers']:
+                if is_tensor(v):
+                    shadow.__dict__[k] = to_tensor(to_numpy(v), dtype=v.dtype, device=v.device,
+                                                   requires_grad=v.requires_grad)
+                elif isinstance(v, (str, bool, numbers.Number)) or k in ['_nodes']:
+                    setattr(shadow, k, v)
+                else:
+                    setattr(shadow, k, copy.deepcopy(v))
+        shadow.load_state_dict(self.state_dict())
+        return shadow
 
     def save_onnx(self, file_path=''):
         input_shape = self._signature.inputs.value_list[0].shape.dims
