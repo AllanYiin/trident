@@ -23,6 +23,8 @@ else:
 
 import matplotlib.pyplot as plt
 from matplotlib.collections import PolyCollection
+from matplotlib.cm import get_cmap
+from matplotlib.colors import to_hex
 import matplotlib.patches as patches
 import matplotlib.font_manager
 import PIL
@@ -211,6 +213,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
 
 def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base='epoch', max_iteration=None,
                       save_path=None, imshow=False, **kwargs):
+    default_colors = [to_hex(i) for i in get_cmap('tab20').colors]
     colors = []
     line_type = ['-', '--', '-.', ':']
     fig = plt.gcf()
@@ -266,17 +269,18 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                 if k in metrics_need_plot:
                     legend_label = k
                     steps, values = metrics.get_series(k)
+                    line_color = default_colors[n]
 
                     values_np = np.array(values)
                     if first_axis_range is None:
                         first_axis_range = (values_np.min(), values_np.mean(), values_np.max())
                         first_axis_keys.append(k)
                         first_axis_limit=[first_axis_range[0],first_axis_range[2]]
-                        metric_ax1.plot(steps, values, label=legend_label)
+                        metric_ax1.plot(steps, values, color=line_color, label=legend_label)
                     else:
                         if second_axis_range is None and (values_np.mean() < first_axis_range[1] * 0.1 or values_np.mean() > first_axis_range[1] * 10):
                             second_axis_range = (values_np.min(), values_np.mean(), values_np.max())
-                            metric_ax2.plot(steps, values, label=legend_label)
+                            metric_ax2.plot(steps, values, color=line_color, label=legend_label)
                             second_axis_limit=[second_axis_range[0],second_axis_range[2]]
                             second_axis_keys.append(k)
                         elif second_axis_range is not None:
@@ -285,15 +289,15 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
                             distance=expand_dims(sqrt(reduce_sum((compare_array-this_array)**2,axis=-1)),0)
                             result = argmin(distance,axis=-1)[0]
                             if result == 0:
-                                metric_ax1.plot(steps, values, label=legend_label)
+                                metric_ax1.plot(steps, values, color=line_color, label=legend_label)
                                 first_axis_keys.append(k)
                                 first_axis_limit = [min(first_axis_limit[0],values_np.min()), max(first_axis_limit[1],values_np.max())]
                             else:
-                                metric_ax2.plot(steps, values, label=legend_label)
+                                metric_ax2.plot(steps, values, color=line_color, label=legend_label)
                                 second_axis_keys.append(k)
                                 second_axis_limit = [min(second_axis_limit[0], values_np.min()), max(second_axis_limit[1], values_np.max())]
                         else:
-                            metric_ax1.plot(steps, values, label=legend_label)
+                            metric_ax1.plot(steps, values, color=line_color, label=legend_label)
                             first_axis_limit = [min(first_axis_limit[0], values_np.min()), max(first_axis_limit[1], values_np.max())]
                             first_axis_keys.append(k)
 
@@ -310,7 +314,9 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
             legend_list=[]
             for i in range(len(metrics)):
                 item = metrics[i]
-                line_color = colors[i]
+                line_color=default_colors[i]
+                if len(colors)>1:
+                    line_color = colors[i]
                 if item.__class__.__name__ == 'HistoryBase':
                     for j in range(len(item.items())):
                         metrics_need_plot=metrics_names[i]
