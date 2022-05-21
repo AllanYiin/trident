@@ -1018,6 +1018,7 @@ class Layer(nn.Module):
                 else:
                     setattr(shadow, k, copy.deepcopy(v))
         shadow.load_state_dict(self.state_dict())
+        shadow.to(self.device)
         return shadow
 
     def save_onnx(self, file_path=''):
@@ -1916,7 +1917,7 @@ def print_network(net, verbose=False):
     logging.info('Total number of parameters: %d\n' % num_params)
 
 
-def summary(model, input_specs, batch_size=1, device="cuda"):
+def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
     def register_hook(module):
         def hook(module, input, output):
             # class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
@@ -2037,7 +2038,13 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
 
     # make a forward pass
     # print(x.shape)
-    model(*inps.value_list)
+    if inputs is not None:
+        if isinstance(inputs, OrderedDict):
+            model(*list(inps.values()))
+        else:
+            model(*inputs)
+    else:
+        model(*inps.value_list)
 
     # remove these hooks
     for h in hooks:
@@ -2103,7 +2110,7 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
         print(line_new)
 
     # assume 4 bytes/number (float on cuda).
-    total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional == False]).sum()
+    total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional == False and spec.shape is not None]).sum()
     total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
     total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
     total_size = total_params_size + total_output_size + total_input_size
