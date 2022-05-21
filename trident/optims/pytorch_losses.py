@@ -44,6 +44,14 @@ _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_en
 def _calculate_loss_unimplemented(self, output: Tensor, target: Tensor) -> None:
     raise NotImplementedError
 
+def _class_unique_value_process(uniques,counts):
+    uniques = to_numpy(uniques)
+    counts = to_numpy(counts)
+    counts=np.array([builtins.max(counts[i],1) if i in uniques else 1  for i in range(int(uniques.max()))])
+    uniques=np.array(list(range(int(uniques.max()))))
+    reweights=counts.sum()/(counts*len(counts))
+    return reweights,OrderedDict(zip(uniques, counts))
+
 
 class _ClassificationLoss(Loss):
     """Calculate loss for  complex classification task."""
@@ -133,7 +141,6 @@ class _ClassificationLoss(Loss):
                     pass
                 elif ds is not None:
                     if hasattr(ds, '_label_statistics') and ds._label_statistics is not None:
-
                         self.label_statistics = list(ds._label_statistics.values())
                     elif isinstance(ds, LabelDataset) or dp.traindata.label.object_type in [
                         ObjectType.classification_label]:
@@ -142,9 +149,9 @@ class _ClassificationLoss(Loss):
                             np.array([dp.traindata.label.items[i] for i in tqdm(range(len(dp.traindata.label.items)))]),
                             return_counts=True)
                         ctx.print('')
-                        reweights = np.maximum(counts, 0.01) / np.sum(counts).astype(np.float32)
+                        reweights,label_statistics=_class_unique_value_process(unique, counts)
                         self.label_statistics = reweights
-                        ds._label_statistics = OrderedDict(zip(unique, reweights))
+                        ds._label_statistics= label_statistics
 
                         del unique
                         del counts
@@ -156,15 +163,9 @@ class _ClassificationLoss(Loss):
                             np.concatenate([dp.traindata.label[i][:, 4] for i in tqdm(range(len(ds.items)))], axis=0),
                             dtype=Dtype.long, device='cpu'), return_counts=True)
                         ctx.print('')
-                        unique = to_list(to_numpy(unique))
-                        reweights = to_numpy(counts)
-                        if len(unique) != builtins.max(unique) + 1:
-                            reweights = np.array(
-                                [counts[unique.index(i)] if i in unique else 0.01 for i in range(len(unique))])
-                        reweights = np.maximum(reweights, 0.01) / np.sum(reweights).astype(np.float32)
-
+                        reweights, label_statistics = _class_unique_value_process(unique, counts)
                         self.label_statistics = reweights
-                        ds._label_statistics = OrderedDict(zip(unique, reweights))
+                        ds._label_statistics = label_statistics
                         del unique
                         del counts
 
@@ -172,26 +173,25 @@ class _ClassificationLoss(Loss):
                                                                                            ObjectType.color_mask,
                                                                                            ObjectType.binary_mask]:
                         ctx.print('Start retrive label class distribution for auto-balance in loss function.')
-                        unique, counts = torch.unique(
-                            to_tensor(np.stack([dp.traindata.label[i] for i in tqdm(range(len(dp.traindata.label)))]),
+                        sample_base=np.arange(len(dp.traindata.label))
+                        if len(sample_base)>1000:
+                            np.random.shuffle(sample_base)
+                            sample_base=sample_base[:1000]
+
+                        unique, counts = torch.unique(to_tensor(np.stack([dp.traindata.label[sample_base[i]] for i in tqdm(range(len(sample_base)))]),
                                       dtype=Dtype.long, device='cpu'), return_counts=True)
                         ctx.print('')
-                        unique = to_list(to_numpy(unique))
-                        reweights = to_numpy(counts)
-                        if len(unique) != builtins.max(unique) + 1:
-                            reweights = np.array([counts[unique.index(i)] if i in unique else 0 for i in
-                                                  range(builtins.max(unique) + 1)])
-                        reweights = np.maximum(reweights, 0.01) / np.sum(reweights).astype(np.float32)
+                        reweights, label_statistics = _class_unique_value_process(unique, counts)
                         self.label_statistics = reweights
-                        ds._label_statistics = OrderedDict(zip(unique, reweights))
+                        ds._label_statistics = label_statistics
                         del unique
                         del counts
 
                     elif isinstance(ds, TextSequenceDataset):
-                        chars_count = np.array(ds.vocabs_frequency.value_list).astype(np.float32)
-                        reweights = np.maximum(chars_count, 0.01) / np.sum(chars_count).astype(np.float32)
+                        reweights, label_statistics = _class_unique_value_process(np.arange(len(ds.vocabs_frequency.value_list)), ds.vocabs_frequency.value_list)
                         self.label_statistics = reweights
-                        ds._label_statistics = OrderedDict(zip(ds.vocabs, reweights))
+                        ds._label_statistics = label_statistics
+
 
     def flatten_check(self, output, target):
         "Check that `out` and `targ` have the same number of elements and flatten them."
