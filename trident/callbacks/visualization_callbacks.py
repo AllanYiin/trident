@@ -273,11 +273,12 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
 
 class SegTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', save_path: str = 'Results', reverse_image_transform=None,
+    def __init__(self, frequency=-1, unit='batch', rows=3,save_path: str = 'Results', reverse_image_transform=None,
                   palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False,**kwargs):
         super(SegTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
         self.is_in_colab = is_in_colab()
+        self.rows=rows
 
         self.palette = palette
         self.tile_image_name_prefix = name_prefix
@@ -286,6 +287,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
         self.background = to_numpy(background)
 
     def plot_tile_image(self, training_context):
+        legends=[]
         axis = 1
         if get_backend() == 'tensorflow':
             axis = -1
@@ -325,6 +327,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
                 if isinstance(ds, MaskDataset):
                     mask_type =ds.object_type
                     mask = to_numpy(data[ds.symbol])
+                    break
         if mask_type==ObjectType.label_mask or mask_type==ObjectType.color_mask:
             mask = label2color(mask, palette=self.palette).astype(np.uint8)
             if ndim(output_arr)==4:
@@ -338,7 +341,13 @@ class SegTileImageCallback(VisualizationCallbackBase):
             if get_backend() == 'tensorflow':
                 output_arr = output_arr[:, :, :, 1:2] * argmax(output_arr, axis)
             else:
-                output_arr = (output_arr[:, 1:2, :, :] * argmax(output_arr, axis)).transpose(0, 2, 3, 1)
+                if ndim(output_arr)==3:
+                    pass
+                elif ndim(output_arr)==4 and output_arr.shape[1]==1:
+                    output_arr=output_arr[:,0,:,:]
+                else:
+                    raise ValueError('Alpha mask should not have output channel>1')
+                    #output_arr = (output_arr[:, 1:2, :, :] * argmax(output_arr, axis=1)).transpose(0, 2, 3, 1)
         # if  ndim(output_arr)==4 and int_shape(output_arr)[1 if get_backend() == 'pytorch' else -1]>4:
         #     output_arr  = argmax(output_arr, 1 if get_backend() == 'pytorch' else -1)
         #
@@ -347,15 +356,18 @@ class SegTileImageCallback(VisualizationCallbackBase):
 
         input_arr = []
         input = to_numpy(input)
-        for i in range(len(input)):
+        for i in range(self.rows):
             input_arr.append(self.reverse_image_transform(input[i]))
         input_arr = np.stack(input_arr, axis=0)
         # input_arr=np.asarray(input_arr)
         tile_images_list.append(input_arr)
+        legends.append('input image')
 
         if mask_type==ObjectType.label_mask or mask_type==ObjectType.color_mask:
-            tile_images_list.append(mask)
-            tile_images_list.append(output_arr)
+            tile_images_list.append(mask[:self.rows])
+            legends.append('color_mask')
+            tile_images_list.append(output_arr[:self.rows])
+            legends.append('predict')
         else:
             target_arr = mask
 
@@ -373,13 +385,13 @@ class SegTileImageCallback(VisualizationCallbackBase):
             if 'alpha' not  in data:
                 target_arr[target_arr > 0] = 1
 
-            tile_images_list.append(target_arr * input_arr + (1 - target_arr) * background)
-
-            tile_images_list.append(output_arr * input_arr + (1 - output_arr) * background)
-
+            tile_images_list.append((target_arr * input_arr + (1 - target_arr) * background)[:self.rows])
+            legends.append('mask')
+            tile_images_list.append((output_arr * input_arr + (1 - output_arr) * background)[:self.rows])
+            legends.append('predict')
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        fig = tile_rgb_images(*tile_images_list, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True)
+        fig = tile_rgb_images(*tile_images_list, row=self.rows,save_path=os.path.join(self.save_path, self.tile_image_name_prefix),legend=legends, imshow=True)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/segtile_image', fig, global_step=training_context['steps'], close=True,
                                           walltime=time.time())
@@ -603,9 +615,9 @@ class PrintGradientsCallback(VisualizationCallbackBase):
 
                     for name, module in training_context['current_model'].named_modules():
                         if module.relative_name in self.first_layer or module.relative_name in self.last_layer:
-                            grads_data = [np.abs(np.reshape(to_numpy(pv.grad.data), -1)) for pk, pv in module._parameters.items() if
+                            grads_data = [np.abs(np.reshape(to_numpy(pv.grad.data).astype(np.float32), -1)) for pk, pv in module._parameters.items() if
                                           'bias' not in pk and pv is not None and pv.requires_grad and pv.grad is not None]
-                            weights_data = [np.abs(np.reshape(to_numpy(pv.data), -1)) for pk, pv in module._parameters.items() if
+                            weights_data = [np.abs(np.reshape(to_numpy(pv.data).astype(np.float32), -1)) for pk, pv in module._parameters.items() if
                                             'bias' not in pk and pv is not None and pv.requires_grad]
                             if ctx.enable_tensorboard and ctx.summary_writer is not None:
                                 ctx.summary_writer.add_histogram(
