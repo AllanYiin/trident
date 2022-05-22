@@ -1076,56 +1076,43 @@ class Model(model.ModelBase):
                 self._model.eval()
                 self._model.cpu()
 
-                # temfolder = tempfile.gettempdir()
-                with tempfile.TemporaryDirectory() as temfolder:
-                    tempfilename = filename + '_' + str(uuid.uuid4().node)
-                    temppath = os.path.join(temfolder, tempfilename + ext)
 
-                    try:
-                        with open(temppath, 'wb') as f:
-                            torch.save({
-                                'state_dict': self._model.state_dict(),
-                                'backend': 'pytorch',
-                                'trident_version': __version__,
-                                'pytorch_version': torch.__version__,
-                                'signature': self._model.signature
-                            }, f)
 
-                        if os.path.exists(save_path):
-                            os.remove(save_path)
-                            shutil.move(temppath, save_path)
-                            # os.rename(move_path, save_path)
-                        else:
-                            shutil.move(temppath, save_path)
+                try:
+                    with open(save_path+'_', 'wb') as f:
+                        torch.save({
+                            'state_dict': self._model.state_dict(),
+                            'backend': 'pytorch',
+                            'trident_version': __version__,
+                            'pytorch_version': torch.__version__,
+                            'signature': self._model.signature
+                        }, f)
 
-                    except Exception as e:
-                        ctx.print(e)
-                        if os.path.exists(temppath):
-                            if os.path.exists(save_path):
-                                shutil.move(save_path, save_path + '._')
-                            shutil.move(temppath, save_path)
+                    if os.path.exists(save_path):
+                        os.remove(save_path)
+                        os.rename(save_path+'_', save_path)
+                    else:
+                        shutil.move(save_path+'_', save_path)
 
-                    ext = '.pth'
-                    save_path = save_path.replace('.pth.tar', '.pth')
-                    tempfilename2 = filename + '_' + str(uuid.uuid4().node)
-                    temppath2 = os.path.join(temfolder, tempfilename2 + ext)
+                except Exception as e:
+                    ctx.print(e)
 
-                    try:
-                        with open(temppath2, 'wb') as f:
-                            save(self._model, f)
+                ext = '.pth'
+                save_path = save_path.replace('.pth.tar', '.pth')
 
-                        if os.path.exists(save_path):
-                            os.remove(save_path)
-                            shutil.move(temppath2, save_path)
-                            # os.rename(move_path2, save_path)
-                        else:
-                            shutil.move(temppath2, save_path)
-                    except Exception as e:
-                        ctx.print(e)
-                        if os.path.exists(temppath2):
-                            if os.path.exists(save_path):
-                                shutil.move(save_path, save_path + '._')
-                            shutil.move(temppath2, save_path)
+
+                try:
+                    with open(save_path+'_', 'wb') as f:
+                        save(self._model, f)
+
+                    if os.path.exists(save_path):
+                        os.remove(save_path)
+                        os.rename(save_path+'_', save_path)
+                    else:
+                        shutil.move(save_path+'_', save_path)
+                except Exception as e:
+                    ctx.print(e)
+
 
                 self._model.to(get_device())
                 self._model.train()
