@@ -150,13 +150,13 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
 
 def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **kwargs):
     make_dir_if_need(save_path)
-    distinct_row = list(set([len(ims) for ims in imgs]))
+    distinct_row =list(set([len(ims) for ims in imgs]))
     if len(distinct_row) > 1:
         raise ValueError('imgs should have same length, but got {0}'.format(distinct_row))
     else:
         distinct_row = unpack_singleton(distinct_row)
-    if 1 <= row < distinct_row:
-        distinct_row = row
+        if 1 <= row < distinct_row:
+            distinct_row = row
     suffix = get_time_suffix()
     if len(imgs) == 1 and distinct_row == 1:
         img = array2image(imgs[0][0])
@@ -178,14 +178,16 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
                 plt.gcf().show()
         return plt
     else:
-        fig = plt.gcf()
+        plt.clf()
+        fig=plt.gcf()
 
         #figure, ax = plt.subplots(2, 2)
         # fig.set_size_inches(len(imgs) * 2, row * 2)
-        plt.clf()
+
         plt.ion()  # is not None:
 
         for m in range(distinct_row * len(imgs)):
+
             plt.subplot(distinct_row, len(imgs), m + 1)
             if m < len(imgs) and legend is not None and  len(legend) == len(imgs):
                 plt.gca().set_title(legend[m])
@@ -193,7 +195,7 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
             plt.imshow(img, interpolation="nearest", animated=True)
             plt.axis("off")
         plt.tight_layout()
-        fig.tight_layout()
+
         if save_path is not None:
             filename = save_path.format(suffix)
             plt.savefig(filename, bbox_inches='tight')
