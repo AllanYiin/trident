@@ -16,7 +16,7 @@ from trident.backend.common import *
 from trident.data.bbox_common import box_area
 from trident.backend.tensorspec import ObjectType, get_signature
 from trident.backend.tensorspec import TensorSpec
-
+import matplotlib.pyplot as plt
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
@@ -648,8 +648,8 @@ class RandomCenterCrop(VisionTransform):
 
     def _apply_coords(self, coords, spec: TensorSpec):
         x, y, th, tw, eh, ew, h, w = self._shape_info
-        coords[:, 0] = (coords[:, 0] * true_divide(tw, w)).astype(np.int)
-        coords[:, 1] = (coords[:, 1] * (true_divide(th, h))).astype(np.int)
+        coords[:, 0] = (coords[:, 0] * true_divide(tw, w)).astype(np.int64)
+        coords[:, 1] = (coords[:, 1] * (true_divide(th, h))).astype(np.int64)
         coords[:, 0] -= builtins.max(int(round((tw - ew) / 2.0)), 0)
         coords[:, 1] -= builtins.max(int(round((th - eh) / 2.0)), 0)
         coords[:, 0] += builtins.max(ew - tw, 0) // 2
@@ -1817,7 +1817,7 @@ class CLAHE(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         image = image.astype(np.uint8)
         lab = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
-        lab_planes = cv2.split(lab)
+        lab_planes = list(cv2.split(lab))
         clahe = cv2.createCLAHE(clipLimit=self.clipLimit, tileGridSize=(self.gridsize, self.gridsize))
         lab_planes[0] = clahe.apply(lab_planes[0])
         lab = cv2.merge(lab_planes)
@@ -2105,7 +2105,7 @@ class RandomGridMask(VisionTransform):
             self.output_size = (h, w)
         hh = math.ceil((math.sqrt(h * h + w * w)))
         d2 = self.d2
-        d1 = None
+        d1 =self.d1
         if self.d2 is None:
             d2 = minimum(h, w)
         elif isinstance(self.d2, numbers.Number):
