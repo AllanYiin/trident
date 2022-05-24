@@ -132,6 +132,7 @@ class _Context:
     def __init__(self):
         self._thread_local_info = _ThreadLocalInfo()
         self._context_handle = OrderedDict()
+        self._errors_config=None
         self._initial_context()
 
     def __new__(cls, *args, **kwargs):

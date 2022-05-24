@@ -15,10 +15,11 @@ if sys.getdefaultencoding() != defaultencoding:
 PACKAGE_ROOT = os.path.dirname(__file__)
 PROJECT_ROOT = os.path.dirname(PACKAGE_ROOT)
 
-__version__ = '0.7.4'
+__version__ = '0.7.4.2'
 stderr.write('trident {0}\n'.format(__version__))
 
 from trident import context
+from trident import readable_errors
 from trident.backend import *
 import threading
 import random
