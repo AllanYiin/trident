@@ -791,7 +791,7 @@ class GanTrainingPlan(TrainingPlan):
         if generator.optimizer is None:
             generator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
         generator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
-        if not any([isinstance(cb, TileImageCallback) for cb in generator.callbacks]):
+        if not any([isinstance(cb, GanTileImageCallback) for cb in generator.callbacks]):
             generator.with_callbacks(GanTileImageCallback(frequency=50, unit='batch', imshow=True))
 
         self.generator = generator
@@ -1149,7 +1149,7 @@ class GanTrainingPlan(TrainingPlan):
 
         def g_get_dfake(training_context):
             traindata = training_context['train_data']
-            traindata['d_fake'] = self.discriminator(traindata['output'].to(get_device()))
+            traindata['d_fake'] = self.discriminator(self.generator(traindata['noise'])).to(get_device())
             if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
                 traindata['fake_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
@@ -1175,20 +1175,17 @@ class GanTrainingPlan(TrainingPlan):
                 traindata['measure'] = to_tensor(self.measure)
 
             if not self.is_generator_first and 'output' not in self.generator.training_context['train_data']:
-                traindata[training_context['data_feed']['img_fake']] = self.generator(
-                    traindata[data_provider.traindata.data.symbol if self.is_condition_gan else 'noise']).detach()
+                traindata[training_context['data_feed']['img_fake']] = self.generator(traindata[data_provider.traindata.data.symbol if self.is_condition_gan else 'noise']).detach()
             else:
                 traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data']['output'].detach()
             traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']].detach())
 
             traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
             if self._use_label_smoothing is not None:
-                traindata['real_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.02), 0.8,
-                                               1.2).detach().to(get_device())
+                traindata['real_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.02), 0.8,1.2).detach().to(get_device())
             traindata['fake_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
             if self._use_label_smoothing == 'two_side':
-                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,
-                                               0.2).detach().to(get_device())
+                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,0.2).detach().to(get_device())
 
         def d_get_dreal(training_context):
             traindata = training_context['train_data']
@@ -1199,8 +1196,7 @@ class GanTrainingPlan(TrainingPlan):
                 traindata['real_label'] = random_uniform_like(traindata['output'], 0.9, 1).detach().to(get_device())
             traindata['fake_label'] = zeros_like(traindata['output']).detach().to(get_device())
             if self._use_label_smoothing == 'two_side':
-                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,
-                                               0.2).detach().to(get_device())
+                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,.2).detach().to(get_device())
 
         data_provider = self._dataloaders.value_list[0]
 
