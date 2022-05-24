@@ -16,8 +16,7 @@ if is_in_ipython():
 
 if not is_in_colab:
     import matplotlib
-
-    matplotlib.use('TkAgg' if not is_in_ipython() and not is_in_colab() else 'NbAgg')
+    matplotlib.use('Qt4Agg' if not is_in_ipython() and not is_in_colab() else 'NbAgg')
 else:
     import matplotlib
 
@@ -158,6 +157,8 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
         if 1 <= row < distinct_row:
             distinct_row = row
     suffix = get_time_suffix()
+    fig = plt.gcf()
+    plt.ion()
     if len(imgs) == 1 and distinct_row == 1:
         img = array2image(imgs[0][0])
         if save_path is not None:
@@ -165,34 +166,35 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
             img.save(filename)
 
         if imshow:
-            plt.imshow(img)
+
             if is_in_ipython():
                 plt.axis("off")
+                plt.imshow(img)
                 plt.ioff()
-
                 display.display(plt.gcf())
             else:
                 plt.axis("off")
                 plt.imshow(img, interpolation="nearest", animated=True)
                 plt.ioff()
-                plt.gcf().show()
-        return plt
+
+        return fig
     else:
-        plt.clf()
-        fig=plt.gcf()
 
         #figure, ax = plt.subplots(2, 2)
         # fig.set_size_inches(len(imgs) * 2, row * 2)
 
-        plt.ion()  # is not None:
+        #plt.ion()  # is not None:
 
         for m in range(distinct_row * len(imgs)):
 
             plt.subplot(distinct_row, len(imgs), m + 1)
             if m < len(imgs) and legend is not None and  len(legend) == len(imgs):
                 plt.gca().set_title(legend[m])
-            img = array2image((imgs[int(m % len(imgs))][int(m // len(imgs))]))
-            plt.imshow(img, interpolation="nearest", animated=True)
+
+            img =(imgs[int(m % len(imgs))][int(m // len(imgs))])
+            if len(img.shape)==2:
+                img=np.stack([img,img,img],axis=-1)
+            plt.imshow( array2image(img), interpolation="nearest", animated=True)
             plt.axis("off")
         plt.tight_layout()
 
@@ -202,15 +204,14 @@ def tile_rgb_images(*imgs, row=3, save_path=None, imshow=False, legend=None, **k
             if ctx.enable_mlflow:
                 ctx.mlflow_logger.add_image(filename)
         if imshow:
-            # plSize = fig.get_size_inches()
-            # fig.set_size_inches((int(round(plSize[0] * 0.75, 0)), int(round(plSize[1] * 0.75, 0))))
             if is_in_ipython():
                 plt.ioff()
-                display.display(fig)
+                display.display(plt.gcf())
             else:
                 plt.ioff()
-                plt.show(block=False)
-        return fig
+                #plt.draw()
+                #plt.show(block=False)
+    return fig
 
 
 def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base='epoch', max_iteration=None,
@@ -403,8 +404,8 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
             display.display(plt.gcf())
         else:
             plt.ioff()
-            plt.draw()
-            plt.show(block=False)
+            # plt.draw()
+            # plt.show(block=False)
     return fig
 
 
@@ -599,7 +600,7 @@ def steps_histogram(grads, weights=None, sample_collected=None, bins=None, size=
     if imshow == True:
         if is_in_ipython() or is_in_colab():
             display.display(plt.gcf())
-            plt.close(fig)
+            #plt.close(fig)
         else:
             plt.ioff()
             plt.show(block=False)
@@ -653,8 +654,8 @@ def plot_confusion_matrix(cm, class_names, figsize=(16, 8), normalize=False, tit
     if fname is not None:
         plt.savefig(fname=fname)
 
-    if not noshow:
-        plt.show()
+    # if not noshow:
+    #     plt.show()
 
     return fig
 

@@ -244,7 +244,7 @@ class GanTileImageCallback(VisualizationCallbackBase):
             fig = tile_rgb_images(*self.tile_images_list, row=self.row, save_path=os.path.join(self.save_path, self.tile_image_name_prefix), imshow=True, legend=None)
             if ctx.enable_tensorboard and ctx.summary_writer is not None:
                 ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/tile_image', fig, global_step=training_context['steps'], close=True, walltime=time.time())
-            plt.close()
+            plt.close(fig)
 
     def on_batch_end(self, training_context):
         if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
@@ -273,7 +273,7 @@ class GanTileImageCallback(VisualizationCallbackBase):
 
 
 class SegTileImageCallback(VisualizationCallbackBase):
-    def __init__(self, frequency=-1, unit='batch', rows=3,save_path: str = 'Results', reverse_image_transform=None,
+    def __init__(self, frequency=-1, unit='batch', rows=3,save_path: str = None, reverse_image_transform=None,
                   palette=None, background=(120, 120, 120), name_prefix: str = 'segtile_image_{0}.png', imshow=False,**kwargs):
         super(SegTileImageCallback, self).__init__(frequency, unit, save_path, imshow)
         self.is_in_ipython = is_in_ipython()
@@ -391,11 +391,14 @@ class SegTileImageCallback(VisualizationCallbackBase):
             legends.append('predict')
         # if self.tile_image_include_mask:
         #     tile_images_list.append(input*127.5+127.5)
-        fig = tile_rgb_images(*tile_images_list, row=self.rows,save_path=os.path.join(self.save_path, self.tile_image_name_prefix),legend=legends, imshow=True)
+        save_path=None
+        if self.save_path is not None:
+            save_path = os.path.join(self.save_path, self.tile_image_name_prefix)
+        fig = tile_rgb_images(*tile_images_list, row=self.rows,save_path=save_path,legend=legends, imshow=True)
         if ctx.enable_tensorboard and ctx.summary_writer is not None:
             ctx.summary_writer.add_figure(training_context['training_name'] + '/plot/segtile_image', fig, global_step=training_context['steps'], close=True,
                                           walltime=time.time())
-        plt.close()
+        #plt.close()
 
     def on_batch_end(self, training_context):
         if self.frequency > 0 and ((self.unit == 'batch' and (training_context['steps'] + 1) % self.frequency == 0) or (
