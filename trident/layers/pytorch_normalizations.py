@@ -631,7 +631,7 @@ class SpectralNorm(Layer):
         torch.Size([40])
 
     """
-    def __init__(self, module, name='weight', power_iterations=1,in_sequence=False,**kwargs):
+    def __init__(self, module, name='spec_norm', power_iterations=1,in_sequence=False,**kwargs):
         super(SpectralNorm, self).__init__(in_sequence=in_sequence,name=name)
         self.module = module
         self.name = name
@@ -639,9 +639,9 @@ class SpectralNorm(Layer):
 
 
     def _update_u_v(self):
-        u = getattr(self.module, self.name + "_u")
-        v = getattr(self.module, self.name + "_v")
-        w = getattr(self.module, self.name + "_bar")
+        u = getattr(self.module,  "weight_u")
+        v = getattr(self.module, "weight_v")
+        w = getattr(self.module,  "weight_bar")
 
         height = w.data.shape[0]
         for _ in range(self.power_iterations):
@@ -650,7 +650,7 @@ class SpectralNorm(Layer):
 
         # sigma = torch.dot(u.data, torch.mv(w.view(height,-1).data, v.data))
         sigma = u.dot(w.view(height, -1).mv(v))
-        setattr(self.module, self.name, w / sigma.expand_as(w))
+        setattr(self.module, 'weight', w / sigma.expand_as(w))
 
     def _made_params(self):
         try:
@@ -663,7 +663,6 @@ class SpectralNorm(Layer):
                 return True
         except AttributeError:
             return False
-
 
     def _make_params(self):
 
@@ -683,6 +682,7 @@ class SpectralNorm(Layer):
         self.module.register_parameter('weight' + "_u", u)
         self.module.register_parameter('weight' + "_v", v)
         self.module.register_parameter('weight' + "_bar", w_bar)
+
     def build(self, input_shape:TensorShape):
         if not self._built:
             self.module.build(input_shape)
@@ -690,7 +690,6 @@ class SpectralNorm(Layer):
                 self._make_params()
             self._built = True
     def forward(self, x, **kwargs):
-
         if hasattr(self,'in_sequence') and self.in_sequence:
             x = x.permute(0, 2, 1)
         self._update_u_v()

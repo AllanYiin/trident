@@ -79,7 +79,7 @@ class FullConnect_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            fc = nn.utils.spectral_norm(fc)
+            fc = SpectralNorm(fc)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'fna') or not hasattr(self, 'sequence_rank'):
             self.add_module('fc', fc)
             self.add_module('norm', norm)
@@ -96,12 +96,7 @@ class FullConnect_Block(Layer):
             self.add_module('norm', norm)
         self._name = name
 
-    def build(self, input_shape: TensorShape):
-        if not self._built:
-            # if self.norm is not None:
-            #     self.norm.input_shape = self.conv.output_shape
-            self.to(self.device)
-            self._built = True
+
 
     def forward(self, x, **kwargs):
 
@@ -204,7 +199,8 @@ class Conv1d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            conv = nn.utils.spectral_norm(conv)
+        if self.use_spectral:
+            conv = SpectralNorm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.add_module('conv', conv)
             self.add_module('norm', norm)
@@ -220,13 +216,6 @@ class Conv1d_Block(Layer):
             self.add_module('conv', conv)
             self.add_module('norm', norm)
 
-    def build(self, input_shape: TensorShape):
-        if self._built == False:
-            if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm = None
-            self._built = True
 
     def forward(self, x, **kwargs):
 
@@ -361,7 +350,8 @@ class Conv2d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            conv = nn.utils.spectral_norm(conv)
+        if self.use_spectral:
+            conv = SpectralNorm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.sequence_rank = 'cna'
             self.add_module('conv', conv)
@@ -379,19 +369,6 @@ class Conv2d_Block(Layer):
             self.add_module('norm', norm)
         self._name = name
 
-    def build(self, input_shape: TensorShape):
-        if not self._built:
-
-            self.conv.input_shape = input_shape
-            if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm = None
-
-            # if self.norm is not None:
-            #     self.norm.input_shape = self.conv.output_shape
-            self.to(self.device)
-            self._built = True
 
     def forward(self, x, **kwargs):
 
@@ -452,14 +429,6 @@ class Conv2d_Block(Layer):
                         del shadow_conv
                 else:
                     print(' sequence_rank not in  [cna,acn]')
-
-
-
-
-
-
-
-
     def extra_repr(self):
         s = 'kernel_size={kernel_size}, {num_filters}, strides={strides}'
         if 'activation' in self.__dict__ and self.__dict__['activation'] is not None:
@@ -524,7 +493,8 @@ class Conv3d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            conv = nn.utils.spectral_norm(conv)
+        if self.use_spectral:
+                conv = SpectralNorm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.add_module('conv', conv)
             self.add_module('norm', norm)
@@ -545,10 +515,6 @@ class Conv3d_Block(Layer):
         if not self._built:
 
             self.conv.input_shape = input_shape
-            if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm = None
 
             # if self.norm is not None:
             #     self.norm.input_shape = self.conv.output_shape
@@ -611,7 +577,8 @@ class TransConv2d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            conv = nn.utils.spectral_norm(conv)
+        if self.use_spectral:
+            conv = SpectralNorm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.add_module('conv', conv)
             self.add_module('norm', norm)
@@ -635,11 +602,6 @@ class TransConv2d_Block(Layer):
         if self._built == False or self.conv is None:
             self.num_filters = self.input_filters * self.depth_multiplier if self.num_filters is None else self.num_filters
             self.conv.input_shape = input_shape
-            if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm = None
-
             self.to(self.device)
             self._built = True
 
@@ -706,7 +668,8 @@ class DepthwiseConv2d_Block(Layer):
         if isinstance(norm, SpectralNorm):
             self.use_spectral = True
             norm = None
-            conv = nn.utils.spectral_norm(conv)
+        if self.use_spectral:
+            conv = SpectralNorm(conv)
         if (hasattr(self, 'sequence_rank') and self.sequence_rank == 'cna') or not hasattr(self, 'sequence_rank'):
             self.add_module('conv', conv)
             self.add_module('norm', norm)
@@ -730,10 +693,6 @@ class DepthwiseConv2d_Block(Layer):
         if self._built == False or self.conv is None:
 
             self.conv.input_shape = input_shape
-            if self.use_spectral:
-                self.conv = nn.utils.spectral_norm(self.conv)
-                if self.norm is SpectralNorm:
-                    self.norm = None
 
             self.to(self.device)
             self._built = True
