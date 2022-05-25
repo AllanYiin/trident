@@ -19,7 +19,7 @@ from trident.backend.common import get_function, get_class, camel2snake,snake2ca
 from trident.backend.pytorch_backend import Layer,Parameter
 from trident.backend.pytorch_ops import *
 
-__all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu','CRelu','Silu', 'PRelu', 'Swish',
+__all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6','SquaredRelu', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu','CRelu','Silu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
            'LogLog', 'Mish','HardMish', 'Softmax', 'Gelu', 'GptGelu','SIREN', 'LogSoftmax', 'get_activation']
 
@@ -184,6 +184,45 @@ class LeakyRelu6(Layer):
         return s.format(**self.__dict__)
 
 
+class SquaredRelu(Layer):
+    """Rectified Linear Unit activation function.
+
+        Primer: Searching for Efficient Transformers for Language Modeling
+
+        ```
+        f(x) = max_value**2 if x >= max_value
+        f(x) = x**2 if threshold <= x < max_value
+        f(x) = 0 otherwise
+
+        ```
+
+    Examples:
+        >>> SquaredRelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+
+    """
+
+    def __init__(self,inplace=False,keep_output=False, name=None):
+        super(SquaredRelu, self).__init__(keep_output=keep_output,name=name)
+        self._built = True
+        self.inplace=inplace
+
+    def forward(self, x, **kwargs):
+        """
+        Args:
+        x: Input tensor.
+
+        Returns: output tensor
+
+        """
+        if not hasattr(self,'inplace'):
+            self.inplace=False
+        if self.inplace and not x.is_leaf:
+            return torch.square(torch.relu_(x))
+        else:
+            return torch.square(torch.relu(x))
+
+
+
 class SmoothRelu(Layer):
     """Smooth_relu activation Layer
 
@@ -293,13 +332,8 @@ class PRelu(Layer):
             self._built = True
 
     def forward(self, x, **kwargs):
-        
-        pos = relu(x)
-        reshape_shape =[1]*len(x.shape)
-        reshape_shape[1] =self.num_parameters
+        return F.prelu(x, self.weight)
 
-        neg = self.weight.view(*reshape_shape) * (x - abs(x)) * 0.5
-        return pos + neg
 
 
 class Sigmoid(Layer):
