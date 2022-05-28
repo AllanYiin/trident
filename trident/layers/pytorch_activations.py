@@ -19,7 +19,7 @@ from trident.backend.common import get_function, get_class, camel2snake,snake2ca
 from trident.backend.pytorch_backend import Layer,Parameter
 from trident.backend.pytorch_ops import *
 
-__all__ = ['Identity', 'Sigmoid', 'Tanh', 'Relu', 'Relu6','SquaredRelu', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu','CRelu','Silu', 'PRelu', 'Swish',
+__all__ = ['Identity', 'Sigmoid', 'Tanh','TanhExp','ExpTanh', 'Relu', 'Relu6','SquaredRelu', 'LeakyRelu', 'LeakyRelu6', 'SmoothRelu','CRelu','Silu', 'PRelu', 'Swish',
            'Elu', 'HardSigmoid', 'HardSwish', 'Selu', 'LecunTanh', 'SoftSign', 'SoftPlus', 'HardTanh', 'Logit',
            'LogLog', 'Mish','HardMish', 'Softmax', 'Gelu', 'GptGelu','SIREN', 'LogSoftmax', 'get_activation']
 
@@ -375,6 +375,51 @@ class Tanh(Layer):
     def forward(self, x, **kwargs):
         
         return tanh(x)
+
+
+class TanhExp(Layer):
+    """ TanhExp activation layer.
+     ```
+        f(x) =  x*tanh(exp(x))
+
+      ```
+
+    References:
+        TanhExp: A Smooth Activation Function with High Convergence Speed for Lightweight Neural Networks
+        https://arxiv.org/abs/2003.09855
+
+    Examples:
+        >>> TanhExp()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+
+    """
+
+    def __init__(self, keep_output=False, name='tanhexp'):
+        super(TanhExp, self).__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return x*torch.tanh(torch.exp(x))
+
+
+class ExpTanh(Layer):
+    """ ExpTanh activation layer.
+
+     ```
+        f(x) =  tanh(exp(x))
+
+      ```
+
+    Examples:
+        >>> ExpTanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+
+    """
+
+    def __init__(self, keep_output=False, name='exptanh'):
+        super(ExpTanh, self).__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return torch.tanh(torch.exp(x))
 
 
 class Swish(Layer):

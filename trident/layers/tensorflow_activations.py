@@ -16,7 +16,7 @@ from trident.backend.common import *
 from trident.backend.tensorflow_backend import Layer, Sequential
 from trident.backend.tensorflow_ops import *
 
-__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SmoothRelu','CRelu','Silu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu','SIREN', 'get_activation']
+__all__ = ['Identity','Sigmoid','Tanh','Relu','Relu6','LeakyRelu','LeakyRelu6','SquaredRelu','SmoothRelu','CRelu','Silu','PRelu','Swish','Elu','HardSigmoid','HardSwish','Selu','LecunTanh','SoftSign','SoftPlus','HardTanh','Logit','LogLog','Mish','HardMish','Softmax', 'Gelu', 'GptGelu','SIREN', 'get_activation']
 
 
 
@@ -66,6 +66,50 @@ class Tanh(Layer):
         return tanh(x)
 
 
+class TanhExp(Layer):
+    """ TanhExp activation layer.
+     ```
+        f(x) =  x*tanh(exp(x))
+
+      ```
+
+    References:
+        TanhExp: A Smooth Activation Function with High Convergence Speed for Lightweight Neural Networks
+        https://arxiv.org/abs/2003.09855
+
+    Examples:
+        >>> TanhExp()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+
+    """
+
+    def __init__(self, keep_output=False, name='tanhexp'):
+        super(TanhExp, self).__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return x * tf.math.tanh(tf.math.exp(x))
+
+
+class ExpTanh(Layer):
+    """ ExpTanh activation layer.
+
+     ```
+        f(x) =  tanh(exp(x))
+
+      ```
+
+    Examples:
+        >>> ExpTanh()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+
+    """
+
+    def __init__(self, keep_output=False, name='exptanh'):
+        super(ExpTanh, self).__init__(keep_output=keep_output, name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        return tf.math.tanh(tf.math.exp(x))
+
 
 class Relu(Layer):
     """Rectified Linear Unit activation function.
@@ -105,6 +149,38 @@ class Relu6(Layer):
         self._built = True
     def forward(self, x, **kwargs):
         return relu6(x)
+
+
+class SquaredRelu(Layer):
+    """Rectified Linear Unit activation function.
+
+        Primer: Searching for Efficient Transformers for Language Modeling
+
+        ```
+        f(x) = max_value**2 if x >= max_value
+        f(x) = x**2 if threshold <= x < max_value
+        f(x) = 0 otherwise
+
+        ```
+
+    Examples:
+        >>> SquaredRelu()(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+
+    """
+
+    def __init__(self,keep_output=False, name=None):
+        super(SquaredRelu, self).__init__(keep_output=keep_output,name=name)
+        self._built = True
+
+    def forward(self, x, **kwargs):
+        """
+        Args:
+        x: Input tensor.
+
+        Returns: output tensor
+
+        """
+        return tf.math.square(relu(x))
 
 
 
