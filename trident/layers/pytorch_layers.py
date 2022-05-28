@@ -784,7 +784,7 @@ class _ConvNd(Layer):
             if self.transposed:
                 self.weight = Parameter(torch.Tensor(int(self.input_filters), self.num_filters // self.groups, *self.kernel_size))
             else:
-                self.weight = Parameter(torch.Tensor(self.num_filters, self.input_filters // self.groups, *self.kernel_size))  #
+                self.weight = Parameter(torch.Tensor(int(self.num_filters), self.input_filters // self.groups, *self.kernel_size))  #
 
                 if self.separable:
                     self.pointwise = Parameter(torch.Tensor(int(self.input_filters * self.depth_multiplier), int(self.num_filters), 1, 1))
@@ -1073,7 +1073,7 @@ class Conv2d(_ConvNd):
                                      depthwise=False, separable=False, keep_output=keep_output, **kwargs)
 
         self.activation = get_activation(activation)
-        self.rank = 2
+        # self.rank = 2
 
     def conv2d_forward(self, x, **kwargs):
         # for backward compatibility
@@ -2367,6 +2367,10 @@ class Dropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x, **kwargs):
+        if not hasattr(self, 'inplace') and  'inplace' not in kwargs:
+            self.inplace = False
+        if self.inplace and not x.is_leaf:
+            self.inplace = True
         return F.dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
@@ -2386,6 +2390,10 @@ class AlphaDropout(Layer):
         self.dropout_rate = dropout_rate
 
     def forward(self, x, **kwargs):
+        if not hasattr(self, 'inplace') and  'inplace' not in kwargs:
+            self.inplace = False
+        if self.inplace and not x.is_leaf:
+            self.inplace = True
         return F.alpha_dropout(x, self.dropout_rate, self.training, self.inplace)
 
     def extra_repr(self):
