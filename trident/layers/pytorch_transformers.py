@@ -4,21 +4,20 @@ from __future__ import division
 from __future__ import print_function
 
 import math
-
+from typing import List, Tuple, Optional, Union, Callable, Any, Iterable,Iterator,Mapping, TypeVar,overload
 import torch
 from  torch import nn
 from torch.nn import functional as f
 from trident.backend.common import TensorShape
-from trident.backend.pytorch_backend import Layer, Sequential, get_device, ModuleList, Parameter, Tensor
+from trident.backend.pytorch_backend import Layer, Sequential, get_device, ModuleList, Parameter, Tensor,reset_name
 from trident.backend.pytorch_ops import *
-from trident.layers.pytorch_activations import Gelu,get_activation
+from trident.layers.pytorch_activations import Gelu,SquaredRelu,get_activation
 from trident.layers.pytorch_blocks import FullConnect_Block
 from trident.layers.pytorch_layers import Embedding, Dropout, Dense,SoftMax
 from trident.layers.pytorch_normalizations import LayerNorm
 
 __all__ = ['Mlp', 'BERT','GPT2', 'BERTEmbedding', 'PositionalEmbedding', 'PositionwiseFeedForward','ConvFeedForward', 'DropPath', 'Attention',
            'MultiHeadedAttention','MaskedMultiHeadedAttention', 'SublayerConnection', 'TransformerBlock','GptTransformerBlock']
-
 
 def Mlp(hidden_features=None, out_features=None, dropout_rate=0):
     return Sequential(
@@ -54,14 +53,14 @@ class PositionalEmbedding(Layer):
 class PositionwiseFeedForward(Layer):
     "Implements FFN equation."
 
-    def __init__(self, d_model, d_ff, dropout_rate=0.1):
+    def __init__(self, d_model, d_ff, activation=SquaredRelu,dropout_rate=0.1):
         super(PositionwiseFeedForward, self).__init__()
-        self.w_1 = Dense(num_filters=d_ff, activation=Gelu())
+        self.w_1 = Dense(num_filters=d_ff, activation=get_activation(activation))
         self.w_2 = Dense(num_filters=d_model)
         self.dropout = Dropout(dropout_rate)
 
     def forward(self, x):
-        return self.w_2(self.dropout(self.w_1(x)))
+        return self.dropout(self.w_2(self.w_1(x)))
 
 
 class Conv1D(Layer):
@@ -99,14 +98,14 @@ class Conv1D(Layer):
 class ConvFeedForward(Layer):
     "Implements FFN equation."
 
-    def __init__(self, d_model, d_ff, dropout_rate=0.1):
+    def __init__(self, d_model, d_ff, activation=SquaredRelu,dropout_rate=0.1):
         super(ConvFeedForward, self).__init__()
-        self.w_1 = Conv1D(num_filters=d_ff, activation=Gelu())
+        self.w_1 = Conv1D(num_filters=d_ff,activation=get_activation(activation))
         self.w_2 = Conv1D(num_filters=d_model)
         self.dropout = Dropout(dropout_rate)
 
     def forward(self, x):
-        return self.w_2(self.dropout(self.w_1(x)))
+        return self.dropout(self.w_2(self.w_1(x)))
 
 
 class BERTEmbedding(Layer):
@@ -326,9 +325,10 @@ class MaskedMultiHeadedAttention(Layer):
 
     def __init__(self, attn_heads, d_model, dropout_rate=0.1, max_seq_length=512, is_cross_attention=False,
                  layer_idx=None, use_cache=True,scale_attn_weights=True, scale_attn_by_inverse_layer_idx=False,
-                 output_attentions=False):
+                 output_attentions=True):
         super().__init__()
         assert d_model % attn_heads == 0
+
         self.use_cache=use_cache
         self.max_seq_length = max_seq_length
         self.register_buffer(
@@ -411,7 +411,7 @@ class MaskedMultiHeadedAttention(Layer):
         new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
         return tensor.view(new_shape)
 
-    def forward(self, x, attention_mask=None, head_mask=None,layer_past=None, encoder_hidden_states=None,encoder_attention_mask=None):
+    def forward(self, x, layer_past = None,attention_mask=None, head_mask=None, encoder_hidden_states=None,encoder_attention_mask=None):
         hidden_states = x
         if encoder_hidden_states is not None:
             if not hasattr(self, "q_attn"):
@@ -462,14 +462,18 @@ class SublayerConnection(Layer):
     Note for code simplicity the norm is first as opposed to last.
     """
 
-    def __init__(self, dropout_rate=0.0):
+    def __init__(self, dropout_rate=0.1,pre_norm=False):
         super(SublayerConnection, self).__init__()
         self.norm = LayerNorm(eps=1e-12)
+        self.pre_norm=pre_norm
         self.dropout = DropPath(dropout_rate)
 
     def forward(self, x, sublayer):
         "Apply residual connection to any sublayer with the same size."
-        return x + self.dropout(sublayer(self.norm(x)))
+        if self.pre_norm:
+            return x + self.dropout(sublayer(self.norm(x)))
+        else:
+            return self.norm(x + self.dropout(sublayer(x)))
 
 
 class TransformerBlock(Layer):
@@ -478,7 +482,7 @@ class TransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden=None, dropout_rate=0.1):
+    def __init__(self, hidden, attn_heads,feed_forward_hidden=None, pre_norm=False, dropout_rate=0.1):
         """
         param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -489,16 +493,18 @@ class TransformerBlock(Layer):
         super().__init__()
         if feed_forward_hidden is None:
             feed_forward_hidden = 4 * hidden
+        self.pre_norm = pre_norm
         self.attention = MultiHeadedAttention(attn_heads=attn_heads, d_model=hidden)
         self.feed_forward = PositionwiseFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
-        self.input_sublayer = SublayerConnection(dropout_rate=dropout_rate)
-        self.output_sublayer = SublayerConnection(dropout_rate=dropout_rate)
+        self.input_sublayer = SublayerConnection(dropout_rate=dropout_rate,pre_norm=pre_norm)
+        self.output_sublayer = SublayerConnection(dropout_rate=dropout_rate,pre_norm=pre_norm)
         self.dropout = Dropout(dropout_rate=dropout_rate)
 
     def forward(self, x, mask=None):
-        x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, mask=mask))
-        x = self.output_sublayer(x, self.feed_forward)
-        return self.dropout(x)
+        if self.pre_norm:
+            x = self.input_sublayer(x, lambda _x: self.attention.forward(_x, mask=mask))
+            x = self.output_sublayer(x, self.feed_forward)
+            return self.dropout(x)
 
 
 
@@ -508,7 +514,7 @@ class GptTransformerBlock(Layer):
     Transformer = MultiHead_Attention + Feed_Forward with sublayer connection
     """
 
-    def __init__(self, hidden, attn_heads, feed_forward_hidden=None,layer_idx=None, is_cross_attention=False,dropout_rate=0.1,use_cache=True):
+    def __init__(self, hidden, attn_heads, feed_forward_hidden=None,pre_norm=False,layer_idx=None, is_cross_attention=False,dropout_rate=0.1,use_cache=True):
         """
         param hidden: hidden size of transformer
         :param attn_heads: head sizes of multi-head attention
@@ -522,6 +528,7 @@ class GptTransformerBlock(Layer):
             feed_forward_hidden = 4 * hidden
         self.use_cache=use_cache
         self.layer_idx=layer_idx
+        self.pre_norm=pre_norm
         self.d_model=hidden
         self.attn_heads=attn_heads
         self.ln_1 =LayerNorm(eps=1e-5)
@@ -531,25 +538,100 @@ class GptTransformerBlock(Layer):
         if self.is_cross_attention:
             self.crossattention = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=hidden, dropout_rate=dropout_rate, is_cross_attention=True, layer_idx=layer_idx)
             self.ln_cross_attn =  LayerNorm(eps=1e-5)
+        else:
+            self.crossattention =None
+            self.ln_cross_attn =None
 
+        self.dropout_rate=dropout_rate
         self.mlp = ConvFeedForward(d_model=hidden, d_ff=feed_forward_hidden, dropout_rate=dropout_rate)
 
+    def __setattr__(self, name: str, value) -> None:
+        def remove_from(*dicts_or_sets):
+            for d in dicts_or_sets:
+                if name in d:
+                    if isinstance(d, dict):
+                        del d[name]
+                    else:
+                        d.discard(name)
 
-    def forward(self, x, attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None,layer_past=None):
+        params = self.__dict__.get('_parameters')
+        if isinstance(value, Parameter):
+            if params is None:
+                raise AttributeError(
+                    "cannot assign parameters before Module.__init__() call")
+            remove_from(self.__dict__, self._buffers, self._modules, self._non_persistent_buffers_set)
+            self.register_parameter(name, value)
+        elif params is not None and name in params:
+            if value is not None:
+                raise TypeError("cannot assign '{}' as parameter '{}' "
+                                "(torch.nn.Parameter or None expected)"
+                                .format(torch.typename(value), name))
+            self.register_parameter(name, value)
+        else:
+            modules = self.__dict__.get('_modules')
+            if isinstance(value, Layer):
+                if modules is None:
+                    raise AttributeError(
+                        "cannot assign module before Module.__init__() call")
+                remove_from(self.__dict__, self._parameters, self._buffers, self._non_persistent_buffers_set)
+                modules[name] = value
+                value.is_root = False
+                for mod in value.modules():
+                    if isinstance(mod, Layer) and mod.uuid != value.uuid:
+                        mod.is_root = False
+                reset_name(value, self._uid_prefixs)
+                value.relative_name = name if not hasattr(value,
+                                                          'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+            elif modules is not None and name in modules:
+                if value is not None:
+                    raise TypeError("cannot assign '{}' as child module '{}' "
+                                    "(torch.nn.Module or None expected)"
+                                    .format(torch.typename(value), name))
+                modules[name] = value
+                value.is_root = False
+                for mod in value.modules():
+                    if isinstance(mod, Layer) and mod.uuid != value.uuid:
+                        mod.is_root = False
+                reset_name(value, self._uid_prefixs)
+                value.relative_name = name if not hasattr(value,
+                                                          'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+            else:
+                buffers = self.__dict__.get('_buffers')
+                if buffers is not None and name in buffers:
+                    if value is not None and not isinstance(value, torch.Tensor):
+                        raise TypeError("cannot assign '{}' as buffer '{}' "
+                                        "(torch.Tensor or None expected)"
+                                        .format(torch.typename(value), name))
+                    buffers[name] = value
+                else:
+                    object.__setattr__(self, name, value)
+                    if name=='is_cross_attention' and value==True:
+                        self.crossattention = MaskedMultiHeadedAttention(attn_heads=self.attn_heads, d_model=self.d_model,
+                                                                         dropout_rate=self.dropout_rate,
+                                                                         is_cross_attention=True, layer_idx=self.layer_idx)
+                        self.ln_cross_attn = LayerNorm(eps=1e-5)
+
+
+
+    def forward(self, x, layer_past = None, attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None):
             hidden_states=x
             residual = x
-            hidden_states = self.ln_1(hidden_states)
+
+            if self.pre_norm:
+                hidden_states = self.ln_1(hidden_states)
             attn_outputs = self.attn(
                 hidden_states,
+                layer_past=layer_past,
                 attention_mask=attention_mask,
                 head_mask=head_mask,
-                layer_past=layer_past,
-                #output_attentions=output_attentions,
+
             )
             attn_output = attn_outputs[0]  # output_attn: a, present, (attentions)
             outputs = attn_outputs[1:]
             # residual connection
             hidden_states = attn_output + residual
+            if not self.pre_norm:
+                hidden_states = self.ln_1(hidden_states)
 
             if encoder_hidden_states is not None:
                 # add one self-attention block for cross-attention
@@ -559,25 +641,33 @@ class GptTransformerBlock(Layer):
                         "cross-attention layers by setting `config.add_cross_attention=True`"
                     )
                 residual = hidden_states
-                hidden_states = self.ln_cross_attn(hidden_states)
+                if self.pre_norm:
+                    hidden_states = self.ln_cross_attn(hidden_states)
                 cross_attn_outputs = self.crossattention(
                     hidden_states,
                     attention_mask=attention_mask,
                     head_mask=head_mask,
                     encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
-                    #output_attentions=output_attentions,
+                    encoder_attention_mask=encoder_attention_mask
+
                 )
                 attn_output = cross_attn_outputs[0]
                 # residual connection
                 hidden_states = residual + attn_output
+                if not self.pre_norm:
+                    hidden_states = self.ln_cross_attn(hidden_states)
                 outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
 
             residual = hidden_states
-            hidden_states = self.ln_2(hidden_states)
+            if self.pre_norm:
+                hidden_states = self.ln_2(hidden_states)
+
             feed_forward_hidden_states = self.mlp(hidden_states)
             # residual connection
             hidden_states = residual + feed_forward_hidden_states
+
+            if not self.pre_norm:
+                hidden_states = self.ln_2(hidden_states)
 
             if self.use_cache:
                 outputs = (hidden_states,) + outputs
@@ -597,7 +687,7 @@ class BERT(Layer):
     """
 
     def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1, pad_idx=0,
-                 max_seq_length=512,output_mode='last_hidden_layer'):
+                 max_seq_length=512,pre_norm=True,output_mode='last_hidden_layer'):
         """
         param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -618,6 +708,7 @@ class BERT(Layer):
         self.dropout_rate = dropout_rate
         self.num_filters = hidden
         self.norm = LayerNorm()
+        self.pre_norm=pre_norm
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
         self.feed_forward_hidden = hidden * 4
@@ -680,7 +771,7 @@ class GPT2(Layer):
     """
 
     def __init__(self, vocab_size, hidden=768, n_layers=12, attn_heads=12, dropout_rate=0.1, pad_idx=0,
-                 max_seq_length=512,use_cache=True):
+                 max_seq_length=512,pre_norm=True,use_cache=True):
         """
         param vocab_size: vocab_size of total words
         :param hidden: BERT model hidden size
@@ -700,6 +791,7 @@ class GPT2(Layer):
         self.drop=Dropout(dropout_rate)
         self.num_filters = hidden
         self.norm=LayerNorm()
+        self.pre_norm=pre_norm
         self.out =Dense(vocab_size, use_bias=False,activation=SoftMax())
 
         # paper noted they used 4*hidden_size for ff_network_hidden_size
@@ -711,15 +803,58 @@ class GPT2(Layer):
         self.position =Embedding(num_embeddings=max_seq_length, embedding_dim=hidden)
         for i in range(n_layers):
             self.add_module('transformer_block{0}'.format(i),
-                GptTransformerBlock(attn_heads=self.attn_heads, hidden=self.hidden,feed_forward_hidden=self.feed_forward_hidden, dropout_rate=dropout_rate,use_cache=use_cache))
+                GptTransformerBlock(attn_heads=self.attn_heads, hidden=self.hidden,feed_forward_hidden=self.feed_forward_hidden, dropout_rate=dropout_rate,pre_norm=self.pre_norm,use_cache=use_cache,layer_idx=i))
 
+    def get_all_blocks(self):
+        return [module for name,module in self.named_children() if 'transformer_block' in name]
 
-    def forward(self, x, inputs_embeds=None,position_ids=None,layer_past=None):
-        input_shape = x.size() if x is not None else inputs_embeds.size()[:-1]
-        if layer_past is None:
-            past_length = 0
+    def get_head_mask(
+            self, head_mask: Optional[Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+    ) -> Tensor:
+        """
+        Prepare the head mask if needed.
+        Args:
+            head_mask (`torch.Tensor` with shape `[num_heads]` or `[num_hidden_layers x num_heads]`, *optional*):
+                The mask indicating if we should keep the heads or not (1.0 for keep, 0.0 for discard).
+            num_hidden_layers (`int`):
+                The number of hidden layers in the model.
+            is_attention_chunked: (`bool`, *optional*, defaults to `False`):
+                Whether or not the attentions scores are computed by chunks or not.
+        Returns:
+            `torch.Tensor` with shape `[num_hidden_layers x batch x num_heads x seq_length x seq_length]` or list with
+            `[None]` for each layer.
+        """
+        if head_mask is not None:
+            if head_mask.dim() == 1:
+                head_mask = head_mask.unsqueeze(0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+                head_mask = head_mask.expand(num_hidden_layers, -1, -1, -1, -1)
+            elif head_mask.dim() == 2:
+                head_mask = head_mask.unsqueeze(1).unsqueeze(-1).unsqueeze(-1)
+            # We can specify head_mask for each layer
+            if is_attention_chunked is True:
+                head_mask = head_mask.unsqueeze(-1)
         else:
-            past_length = layer_past[0][0].size(-2)
+            head_mask = [None] * num_hidden_layers
+
+        return head_mask
+
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer}
+        """
+        for layer, heads in heads_to_prune.items():
+            self.h[layer].attn.prune_heads(heads)
+
+    def forward(self, x,past_key_values=None, inputs_embeds=None,position_ids=None,attention_mask=None,encoder_hidden_states=None,encoder_attention_mask=None):
+        input_shape = x.size() if x is not None else inputs_embeds.size()[:-1]
+
+        if past_key_values is None:
+            past_length = 0
+            past_key_values = tuple([None] * self.n_layers )
+        else:
+            past_length = past_key_values[0][0].size(-2)
+
+
 
         if inputs_embeds is None:
             inputs_embeds=self.token(x)
@@ -728,19 +863,44 @@ class GPT2(Layer):
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
         position_embeds=self.position(position_ids)
 
+        if attention_mask is not None:
+            if batch_size <= 0:
+                raise ValueError("batch_size has to be defined and > 0")
+            attention_mask = attention_mask.view(batch_size, -1)
+            # We create a 3D attention mask from a 2D tensor mask.
+            # Sizes are [batch_size, 1, 1, to_seq_length]
+            # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+            # this attention mask is more simple than the triangular masking of causal attention
+            # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+            attention_mask = attention_mask[:, None, None, :]
 
+            # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+            # masked positions, this operation will create a tensor which is 0.0 for
+            # positions we want to attend and -10000.0 for masked positions.
+            # Since we are adding it to the raw scores before the softmax, this is
+            # effectively the same as removing these entirely.
+            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * -10000.0
 
         hidden_states = inputs_embeds + position_embeds
         hidden_states = self.drop(hidden_states)
+
+
+
         all_hidden_states= ()
         presents = () if self.use_cache else None
-        for name, transformer in self.named_children():
-            if 'transformer_block' in name:
-                outputs = transformer(hidden_states,attention_mask=None, head_mask=None,encoder_hidden_states=None,encoder_attention_mask=None,layer_past=layer_past)
-                hidden_states = outputs[0]
-                all_hidden_states = all_hidden_states + (hidden_states,)
-                if self.use_cache is True:
-                    presents = presents + (outputs[1],)
+        head_mask = self.get_head_mask(head_mask=None,num_hidden_layers=self.n_layers)
+        for i,(block, layer_past) in enumerate(zip(self.get_all_blocks(),past_key_values)):
+            # Ensure layer_past is on same device as hidden_states (might not be correct)
+            if layer_past is not None:
+                layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
+
+            outputs = block(hidden_states,layer_past=layer_past,attention_mask=attention_mask, head_mask=head_mask[i],encoder_hidden_states=encoder_hidden_states,encoder_attention_mask=encoder_attention_mask)
+            hidden_states = outputs[0]
+            all_hidden_states = all_hidden_states + (hidden_states,)
+            if self.use_cache is True:
+                presents = presents + (outputs[1],)
+
 
 
 
