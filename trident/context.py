@@ -13,8 +13,9 @@ _trident_context=None
 
 
 
+
 def sanitize_path(path):
-    """
+    """Sanitize the file or folder path, a same-format and absoluted path will return.
 
     Args:
         path (str): a path of file or folder
@@ -30,18 +31,26 @@ def sanitize_path(path):
     if path.startswith('~/'):
         path=os.path.join(os.path.expanduser("~"),path[2:])
     path=os.path.abspath(path)
-    if isinstance(path, str):
-        return os.path.normpath(path.strip()).replace('\\', '/')
-    else:
-        return path
+    return path.strip().replace('\\', '/')
+    # if isinstance(path, str):
+    #     return os.path.normpath(path.strip()).replace('\\', '/')
+    # else:
+    #     return path
 
 def split_path(path:str):
-    """split path into folder, filename and ext
+    """split path into folder, filename and ext 3 parts clearly.
 
     Args:
         path (str): a path of file or folder
 
     Returns:
+        folder, filename and ext
+
+    Examples:
+        >>> print(split_path('C:/.trident/datasets/cat.jpg'))
+        ('C:/.trident/datasets', 'cat', '.jpg')
+        >>> print(split_path('C:/.trident/models/resnet.pth.tar'))
+        ('C:/.trident/models', 'resnet', '.pth.tar')
 
     """
     if path is None or len(path) == 0:
@@ -58,6 +67,7 @@ def split_path(path:str):
         folder = os.path.join(folder, filename)
         filename = ''
     return folder, filename, ext
+
 
 def make_dir_if_need(path):
     """Check the base folder in input path whether exist, if not , then create it.
@@ -77,6 +87,7 @@ def make_dir_if_need(path):
             print(e)
             sys.stderr.write('folder:{0} is not valid path'.format(folder))
     return sanitize_path(path)
+
 
 def get_sitepackages():  # pragma: no cover
     installed_packages=None

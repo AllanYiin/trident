@@ -19,7 +19,7 @@ from trident.callbacks.lr_schedulers import AdjustLRCallback
 from trident.backend import iteration_tools
 from trident.data.dataset import ZipDataset
 from trident.backend.common import get_backend, to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path, make_dir_if_need, Signature, TensorShape
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, Signature, TensorShape
 from trident.backend.model import ModelBase, progress_bar
 from trident.callbacks.visualization_callbacks import *
 from trident.data.data_provider import *
@@ -27,6 +27,7 @@ from trident.misc.ipython_utils import *
 from trident.misc.visualization_utils import tile_rgb_images, loss_metric_curve
 from trident.backend.tensorspec import TensorSpec, assert_spec_compatibility, ObjectType
 from trident.loggers.history import HistoryBase
+from trident.context import split_path, make_dir_if_need, sanitize_path
 
 
 _session = get_session()

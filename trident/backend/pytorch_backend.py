@@ -35,13 +35,14 @@ from torch._jit_internal import _copy_to_script_wrapper
 from torch.nn.parameter import Parameter
 from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, \
-    PrintException, Signature, TensorShape, split_path, make_dir_if_need, sanitize_path, get_args_spec,is_instance
+    PrintException, Signature, TensorShape, get_args_spec,is_instance
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
 from trident.backend import dtype
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
 
 ctx = context._context()
 _backend = ctx.get_backend()
@@ -1251,6 +1252,21 @@ class Layer(nn.Module):
                     buffers[name] = value
                 else:
                     object.__setattr__(self, name, value)
+
+    def __getstate__(self):
+        # Override to support `copy.deepcopy` and pickling.
+        # Thread-local objects cannot be copied in Python 3, so pop these.
+        # so shouldn't be copied.
+        state = self.__dict__.copy()
+        # state.pop('_thread_local', None)
+        # state.pop('_metrics_lock', None)
+        return state
+
+    def __setstate__(self, state):
+        # state['_thread_local'] = threading.local()
+        # state['_metrics_lock'] = threading.Lock()
+        # Bypass Trackable logic as `__dict__` already contains this info.
+        object.__setattr__(self, '__dict__', state)
 
     def __repr__(self):
         # We treat the extra repr like the submodule, one item per line

@@ -8,6 +8,7 @@ from copy import deepcopy
 import builtins
 import tensorflow as tf
 from trident.models.pretrained_utils import _make_recovery_model_include_top
+from trident.context import split_path, make_dir_if_need, sanitize_path
 
 from trident.backend.common import *
 from trident.backend.tensorflow_backend import *

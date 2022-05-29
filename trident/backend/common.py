@@ -39,7 +39,7 @@ __all__ = ['get_session', 'set_session', 'get_session_value', 'is_autocast_enabl
            'Interpolation', 'is_numpy', 'find_minimal_edit_distance_key', 'jaccard_similarity', 'text_similarity', 'levenshtein', 'is_alphabet', 'is_punctuation',
            'remove_nonprintable',
 
-           'GetImageMode', 'split_path', 'make_dir_if_need', 'sanitize_path', 'ShortcutMode', 'adaptive_format', 'num_cpus',
+           'GetImageMode', 'ShortcutMode', 'adaptive_format', 'num_cpus',
            'get_args_spec', 'get_gpu_memory_map', 'get_memory_profile', 'red_color', 'green_color', 'cyan_color', 'blue_color', 'orange_color',
            'gray_color', 'yellow_color','magenta_color','violet_color','open_browser','launchTensorBoard','launchMLFlow','seg_as_sentence']
 
@@ -62,72 +62,7 @@ _bool = builtins.bool
 _SESSION = context._context()
 
 
-def sanitize_path(path):
-    """
 
-    Args:
-        path (str): a path of file or folder
-
-    Returns:
-        sanitized path
-
-    """
-    if isinstance(path, str):
-        curdir = '.'
-        is_curdir=False
-        if path.startswith(curdir):
-            is_curdir=True
-        new_path= os.path.normpath(path.strip()).replace('\\', '/')
-        if is_curdir:
-            new_path=os.path.join(curdir,new_path)
-        return new_path
-    else:
-        return path
-
-
-def split_path(path: str):
-    """split path into folder, filename and ext
-
-    Args:
-        path (str): a path of file or folder
-
-    Returns:
-
-    """
-    if path is None or len(path) == 0:
-        return '', '', ''
-    path = sanitize_path(path)
-    folder, filename = os.path.split(path)
-    ext = ''
-    if '.' in filename:
-        filename, ext = os.path.splitext(filename)
-        # handle double ext, like 'mode.pth.tar'
-        filename, ext2 = os.path.splitext(filename)
-        ext = ext2 + ext
-    else:
-        folder = os.path.join(folder, filename)
-        filename = ''
-    return folder, filename, ext
-
-
-def make_dir_if_need(path):
-    """Check the base folder in input path whether exist, if not , then create it.
-
-    Args:
-        path (str): a path of file or folder
-
-    Returns:
-        sanitized path
-
-    """
-    folder, filename, ext = split_path(path)
-    if len(folder) > 0 and not os.path.exists(folder):
-        try:
-            os.makedirs(folder)
-        except Exception as e:
-            PrintException()
-            sys.stderr.write('folder:{0} is not valid path'.format(folder))
-    return sanitize_path(path)
 
 
 def if_none(a, b):

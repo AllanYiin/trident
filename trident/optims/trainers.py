@@ -13,9 +13,11 @@ import uuid
 import numpy as np
 
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
+
 from trident.backend import iteration_tools
 from trident.backend.common import get_backend, to_list, addindent, get_time_suffix, PrintException, OrderedDict, \
-    split_path, make_dir_if_need, open_browser, launchTensorBoard, launchMLFlow
+    open_browser, launchTensorBoard, launchMLFlow
 from trident.backend.tensorspec import get_signature
 from trident.callbacks.lr_schedulers import StepLR
 from trident.callbacks.visualization_callbacks import *
@@ -34,20 +36,22 @@ if _backend == 'pytorch':
 
     from trident.backend.pytorch_backend import *
     from trident.backend.pytorch_ops import *
-    from trident.layers.pytorch_activations import Sigmoid
+    from trident.layers.pytorch_activations import Sigmoid,Tanh,ExpTanh
     from trident.layers.pytorch_layers import Flatten, Dense
     from trident.layers.pytorch_pooling import GlobalAvgPool2d
     from trident.optims.pytorch_losses import L1Loss, L2Loss, BCELoss, MSELoss
+    from trident.optims.pytorch_regularizers import get_reg
     from trident.optims.pytorch_optimizers import *
 
 elif _backend == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_backend import *
     from trident.backend.tensorflow_ops import *
-    from trident.layers.tensorflow_activations import Sigmoid
+    from trident.layers.tensorflow_activations import Sigmoid,Tanh,ExpTanh
     from trident.layers.tensorflow_layers import Flatten, Dense
     from trident.layers.tensorflow_pooling import GlobalAvgPool2d
     from trident.optims.tensorflow_losses import L1Loss, L2Loss, BCELoss, MSELoss
+    from trident.optims.tensorflow_regularizers import get_reg
     from trident.optims.tensorflow_optimizers import *
 
 
@@ -618,7 +622,7 @@ class TrainingPlan(object):
                                     elif isinstance(return_test, tuple):
                                         for i in range(len(return_test)):
                                             iter_testdata[data_provider.traindata.data_template.key_list[i].name] = \
-                                            return_test[i]
+                                                return_test[i]
 
                             # input, target = Variable(input).to(self.device), Variable(target).to(self.device)
                             num_epoch = self.num_epochs if only_steps == False else 1
@@ -650,14 +654,14 @@ class TrainingPlan(object):
                                                       num_batches,
                                                       done=None,
                                                       is_collect_data=current_batch == 0 or (
-                                                                  self.steps + 1) % collect_data_inteval == 0,
+                                                              self.steps + 1) % collect_data_inteval == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and self.steps > 0 and (
-                                                                  current_batch + 1) % self.print_progress_frequency == 0,
+                                                              current_batch + 1) % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history,
                                                       log_weights=keep_weights_history,
                                                       accumulate_grads=(
-                                                                                   self.steps + 1) % trainitem.accumulation_steps != 0,
+                                                                               self.steps + 1) % trainitem.accumulation_steps != 0,
                                                       is_out_sample_evaluation=need_out_sample_evaluation)
 
                                 if is_epoch_end:
@@ -771,7 +775,8 @@ class GanTrainingPlan(TrainingPlan):
         self.is_condition_gan = False
         self.discriminator = None
         self.generator = None
-        self._use_label_smoothing = False
+        self.use_label_smoothing = False
+        self.use_label_flipping = False
         self.max_noise_intensity = 0
         self.min_noise_intensity = 0
         self.decay = 10000
@@ -780,7 +785,6 @@ class GanTrainingPlan(TrainingPlan):
         self.total_variation_start_epoch = 3
         self._use_pull_away_term_loss = False
         self._use_feature_matching = False
-        self._use_label_smoothing = None
         self.discriminator_feature_uuid = None
 
     def with_generator(self, generator, name='modelG'):
@@ -814,7 +818,10 @@ class GanTrainingPlan(TrainingPlan):
         return self.add_training_item(self.discriminator, name=name, start_epoch=0)
 
     def with_label_smoothing(self, one_side=True):
-        self._use_label_smoothing = "one_side" if one_side else "two_side"
+        self.use_label_smoothing = "one_side" if one_side else "two_side"
+        return self
+    def with_label_flipping(self ):
+        self.use_label_flipping =True
         return self
 
     def with_noised_real_images(self, max_noise_intensity=0.1, min_noise_intensity=0, decay=10000):
@@ -829,7 +836,7 @@ class GanTrainingPlan(TrainingPlan):
         self.total_variation_reg_weight = reg_weight
         return self
 
-    def with_pull_away_term_loss(self, loss_weight=0.1):
+    def with_pull_away_term_loss(sef, loss_weight=0.1):
 
         def pullaway_loss():
             embeddings = None
@@ -889,32 +896,22 @@ class GanTrainingPlan(TrainingPlan):
         self.discriminator.with_loss(gradient_penalty, loss_weight=lambda_term)
         return self
 
-    def with_feature_matching(self, loss_weight=0.5):
+    def with_feature_matching(self, loss_weight=0.5,start_epoch=10):
         self._use_feature_matching = True
         moduals = list(self.discriminator.model.children())
+        moduals.reverse()
         for i in range(len(moduals)):
-            m = moduals[i]
-            if isinstance(m, Flatten) and i + 1 < len(moduals):
-                if 'MinibatchDiscrimination' in moduals[i + 1].__class__.__name__:
-                    moduals[i].keep_output = True
-                    self.discriminator_feature_uuid = moduals[i].uuid
-                    break
-                else:
-                    moduals[i + 1].keep_output = True
-                    self.discriminator_feature_uuid = moduals[i + 1].uuid
-                    break
-            elif isinstance(m, Dense) or isinstance(m, GlobalAvgPool2d) and i + 1 < len(moduals):
+            if 'conv' in moduals[i].__class__.__name__.lower():
                 moduals[i].keep_output = True
                 self.discriminator_feature_uuid = moduals[i].uuid
                 break
-
         def feature_matching(real_features, fake_features):
             if fake_features is not None and real_features is not None:
-                return L2Loss(reduction='mean')(fake_features, real_features)
+                return L2Loss()(fake_features, real_features)
 
             return to_tensor(0.0)
 
-        self.generator.with_loss(feature_matching, loss_weight=loss_weight)
+        self.generator.with_loss(feature_matching, loss_weight=loss_weight,start_epoch=start_epoch)
         return self
 
     def with_ttur(self, multiplier=2.5):
@@ -924,9 +921,8 @@ class GanTrainingPlan(TrainingPlan):
         self.discriminator.optimizer.base_lr = g_lr * multiplier
         return self
 
-    def with_gan_type(self, gan_type=''):
+    def with_gan_type(self, gan_type='lsgan'):
         self.gan_type = gan_type
-        real_label, fake_label = 1, 0
 
         def metric_dfake(d_fake):
             return d_fake.mean()
@@ -934,14 +930,17 @@ class GanTrainingPlan(TrainingPlan):
         def metric_dreal(d_real):
             return d_real.mean()
 
-        def g_loss(d_fake, real_label):
-            return BCELoss()(d_fake, real_label)
+        def g_loss(d_fake):
+            global real_label
+            return BCELoss(from_logits=True)(d_fake, real_label)
 
-        def real_loss(d_real, real_label):
-            return BCELoss()(d_real, real_label)
+        def real_loss(d_real):
+            global real_label
+            return BCELoss(from_logits=True)(d_real, real_label)
 
-        def fake_loss(d_fake, fake_label):
-            return BCELoss()(d_fake, fake_label)
+        def fake_loss(d_fake):
+            global fake_label
+            return BCELoss(from_logits=True)(d_fake, fake_label)
 
         if self.gan_type == 'gan':
 
@@ -1031,20 +1030,25 @@ class GanTrainingPlan(TrainingPlan):
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss', loss_weight=0.5)
         elif self.gan_type == 'lsgan':  # least squared
-            def g_loss(d_fake, real_label):
-                return MSELoss()(d_fake, real_label.detach())
+            if isinstance(self.discriminator.model[-1], Sigmoid):
+                self.discriminator.model.remove_at(-1)
 
-            self.generator.with_loss(g_loss, loss_weight=0.5)
+            def g_loss(d_fake,real_label):
 
-            def real_loss(d_real, real_label):
-                return MSELoss()(d_real, real_label.detach())
+                return ((d_fake-real_label)**2).mean()
 
-            def fake_loss(d_fake, fake_label):
-                return MSELoss()(d_fake, fake_label.detach())
+            self.generator.with_loss(g_loss)
+
+            def real_loss(d_real,real_label):
+                return ((d_real-real_label)**2).mean()
+
+            def fake_loss(d_fake,fake_label):
+
+                return ((d_fake-fake_label)**2).mean()
 
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(fake_loss, loss_weight=0.5)
-            self.discriminator.training_context['retain_graph'] = False
+            #self.discriminator.training_context['retain_graph'] = False
         elif self.gan_type == 'lsgan1':  # loss sensitive
             def g_loss(d_fake, real_label):
                 return MSELoss(d_fake, real_label)
@@ -1053,25 +1057,25 @@ class GanTrainingPlan(TrainingPlan):
         elif self.gan_type == 'rasgan':
             if isinstance(self.discriminator.model[-1], Sigmoid):
                 self.discriminator.model.remove_at(-1)
-                # self.discriminator.model.add_module('tanh',Tanh())
 
             def g_loss(d_fake, d_real, real_label, fake_label):
                 d_fake_logit = sigmoid(d_fake - d_real.mean().detach())
-                d_real_logit = sigmoid(d_real.detach() - d_fake.mean())
-                return - ((d_fake_logit + 1e-8).log()).mean() - ((1 - d_real_logit + 1e-8).log()).mean()
+                d_real_logit = sigmoid(d_real - d_fake.mean().detach())
+                return (binary_cross_entropy(d_real_logit,fake_label.detach(),from_logits=True).mean()+binary_cross_entropy(d_fake_logit,real_label.detach(),from_logits=True).mean())
 
-            self.generator.with_loss(g_loss, loss_weight=0.5)
-
+            self.generator.with_loss(g_loss, loss_weight=1)
             def real_loss(d_real, d_fake, real_label):
-                d_real_logit = sigmoid(d_real - d_fake.mean())
-                return - ((d_real_logit + 1e-8).log()).mean()
+                d_real_logit = sigmoid(d_real - d_fake.mean().detach())
+                return binary_cross_entropy(d_real_logit,real_label.detach(),from_logits=True).mean()
 
             def fake_loss(d_fake, d_real, fake_label):
-                d_fake_logit = sigmoid(d_fake - d_real.mean())
-                return - ((1 - d_fake_logit + 1e-8).log()).mean()
+                d_fake_logit = sigmoid(d_fake - d_real.mean().detach())
+                return binary_cross_entropy(d_fake_logit,fake_label.detach(),from_logits=True).mean()
 
-            self.discriminator.with_loss(real_loss, loss_weight=0.5)
-            self.discriminator.with_loss(fake_loss, loss_weight=0.5)
+            self.discriminator.with_loss(real_loss)
+            self.discriminator.with_loss(fake_loss)
+
+
 
         if self.gan_type == 'began':
             def metric_k_t():
@@ -1090,6 +1094,17 @@ class GanTrainingPlan(TrainingPlan):
             self.generator.with_metric(g_loss, name='g_loss')
             self.discriminator.with_metric(real_loss, name='real_loss')
             self.discriminator.with_metric(fake_loss, name='fake_loss')
+        elif self.gan_type == 'rasgan':
+            def metric_dfake_logit(d_real,d_fake):
+                return sigmoid(d_fake - d_real.mean().detach())
+
+            self.generator.with_metric(metric_dfake_logit,name='dfake_logit')
+            self.discriminator.with_metric(metric_dfake_logit, name='dfake_logit')
+
+            def metric_dreal_logit(d_real,d_fake):
+                return  sigmoid(d_real - d_fake.mean().detach())
+
+            self.discriminator.with_metric(metric_dreal_logit, name='dreal_logit')
         else:
             self.generator.with_metric(metric_dfake, name='d_fake')
             self.discriminator.with_metric(metric_dfake, name='d_fake')
@@ -1146,15 +1161,21 @@ class GanTrainingPlan(TrainingPlan):
 
     def start_now(self, collect_data_inteval=1, is_resume=False, only_steps=False, max_batches=np.inf,
                   keep_weights_history=False, keep_gradient_history=False):
+        print('is generator first: {0}'.format(self.is_generator_first))
+        print('use label flipping: {0}'.format(self.use_label_flipping))
+        print('real_label' if not self.use_label_flipping else 'fake_label'+': ',1)
+        print('fake_label' if not self.use_label_flipping else 'real_label'+': ',0)
 
         def g_get_dfake(training_context):
+
             traindata = training_context['train_data']
             traindata['d_fake'] = self.discriminator(self.generator(traindata['noise'])).to(get_device())
             if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
                 traindata['fake_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
-            traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            traindata['fake_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
+            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
+            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
+
 
         def g_get_dreal(training_context):
             traindata = training_context['train_data']
@@ -1169,6 +1190,7 @@ class GanTrainingPlan(TrainingPlan):
                 traindata['real_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
         def d_get_dfake(training_context):
+
             traindata = training_context['train_data']
             if self.gan_type == 'began':
                 traindata['k_t'] = to_tensor(self.k_t)
@@ -1180,23 +1202,36 @@ class GanTrainingPlan(TrainingPlan):
                 traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data']['output'].detach()
             traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']].detach())
 
-            traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            if self._use_label_smoothing is not None:
-                traindata['real_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.02), 0.8,1.2).detach().to(get_device())
-            traindata['fake_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
-            if self._use_label_smoothing == 'two_side':
-                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,0.2).detach().to(get_device())
+            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
+            if self.use_label_smoothing is not None:
+                traindata['real_label' if not self.use_label_flipping else 'fake_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.2), 0.8, 1.2).detach().to(get_device())
+            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
+            if self.use_label_smoothing == 'two_side':
+                traindata['fake_label' if not self.use_label_flipping else 'real_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.2)), 0.0, 0.2).detach().to(get_device())
+
 
         def d_get_dreal(training_context):
+
             traindata = training_context['train_data']
-            traindata['d_real'] =self.discriminator(traindata['image'])
-            traindata['output']=traindata['d_real']
-            traindata['real_label'] = ones_like(traindata['output']).detach().to(get_device())
-            if self._use_label_smoothing is not None:
-                traindata['real_label'] = random_uniform_like(traindata['output'], 0.9, 1).detach().to(get_device())
-            traindata['fake_label'] = zeros_like(traindata['output']).detach().to(get_device())
-            if self._use_label_smoothing == 'two_side':
-                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,.2).detach().to(get_device())
+            imagedata =traindata['image']
+
+            if self.max_noise_intensity > 0:
+                _mean, _variance = moments(imagedata, axis=[0, 1, 2, 3])
+                _std = sqrt(_variance) if _variance > 0 else 0.2
+                current_intensity =self.min_noise_intensity + builtins.max((self.max_noise_intensity - self.min_noise_intensity) * math.exp(  -1.0 * self.steps / self.decay),0)
+
+                imagedata = traindata['image'] + random_normal(imagedata.shape, mean=_mean.item(),    std=_std.item()) * current_intensity
+                traindata['d_real'] = self.discriminator(imagedata.detach())
+            else:
+                traindata['d_real'] = self.discriminator(traindata['image'])
+            traindata['output'] = traindata['d_real']
+
+            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
+            if self.use_label_smoothing is not None:
+                traindata['real_label' if not self.use_label_flipping else 'fake_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.2), 0.8, 1.2).detach().to(get_device())
+            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
+            if self.use_label_smoothing == 'two_side':
+                traindata['fake_label' if not self.use_label_flipping else 'real_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.2)), 0.0, 0.2).detach().to(get_device())
 
         data_provider = self._dataloaders.value_list[0]
 
@@ -1320,15 +1355,7 @@ class GanTrainingPlan(TrainingPlan):
                                 trainitem.training_context['model_name'] = trainitem_name
                                 if epoch < int(trainitem.start_epoch):
                                     trainitem.training_context['stop_update'] = 1
-                                if self.max_noise_intensity > 0 and trainitem.training_context[
-                                    'gan_role'] == 'discriminator':
-                                    current_intensity = self.min_noise_intensity + (
-                                                self.max_noise_intensity - self.min_noise_intensity) * math.exp(
-                                        -1.0 * self.steps / self.decay)
-                                    if self.steps % 100 == 0:
-                                        ctx.print('noise intensity:{0}'.format(current_intensity))
-                                    train_data['img_real'] = train_data['img_real'] + random_normal_like(
-                                        train_data['img_real']) * current_intensity
+
 
                                 # if self.is_generator_first:
                                 #     trainitem.model.zero_grad()
@@ -1360,7 +1387,7 @@ class GanTrainingPlan(TrainingPlan):
                                                       self.num_epochs if only_steps == False else 1,
                                                       len(data_provider.batch_sampler) if only_steps == False else max_batches,
                                                       is_collect_data=mbs == 0 or (
-                                                                  should_collect_data and mbs % collect_data_inteval) == 0,
+                                                              should_collect_data and mbs % collect_data_inteval) == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history,
@@ -1525,6 +1552,11 @@ class CycleGanTrainingPlan(TrainingPlan):
         self._use_label_smoothing = "one_side" if one_side else "two_side"
         return self
 
+    def with_label_flipping(self ):
+        self.use_label_flipping =True
+        return self
+
+
     def with_noised_real_images(self, max_noise_intensity=0.1, min_noise_intensity=0, decay=10000):
         self.max_noise_intensity = max_noise_intensity
         self.min_noise_intensity = min_noise_intensity
@@ -1597,21 +1629,11 @@ class CycleGanTrainingPlan(TrainingPlan):
         self.discriminator.with_loss(gradient_penalty, loss_weight=lambda_term)
         return self
 
-    def with_feature_matching(self, loss_weight=0.5):
+    def with_feature_matching(self, loss_weight=0.5,start_epoch=10):
         self._use_feature_matching = True
-        moduals = list(self.discriminator.model.children())
+        moduals = list(self.discriminator.model.children()).reverse()
         for i in range(len(moduals)):
-            m = moduals[i]
-            if isinstance(m, Flatten) and i + 1 < len(moduals):
-                if 'MinibatchDiscrimination' in moduals[i + 1].__class__.__name__:
-                    moduals[i].keep_output = True
-                    self.discriminator_feature_uuid = moduals[i].uuid
-                    break
-                else:
-                    moduals[i + 1].keep_output = True
-                    self.discriminator_feature_uuid = moduals[i + 1].uuid
-                    break
-            elif isinstance(m, Dense) or isinstance(m, GlobalAvgPool2d) and i + 1 < len(moduals):
+            if 'conv' in k.__class__.__name__.lower():
                 moduals[i].keep_output = True
                 self.discriminator_feature_uuid = moduals[i].uuid
                 break
@@ -1622,8 +1644,8 @@ class CycleGanTrainingPlan(TrainingPlan):
 
             return to_tensor(0.0)
 
-        self.generator.with_loss(feature_matching, loss_weight=loss_weight)
-        return self
+
+        return self.generator.with_loss(feature_matching, loss_weight=loss_weight,start_epoch=start_epoch)
 
     def with_ttur(self, multiplier=2.5):
         d_lr = self.discriminator.optimizer.lr
@@ -1634,7 +1656,7 @@ class CycleGanTrainingPlan(TrainingPlan):
 
     def with_gan_type(self, gan_type=''):
         self.gan_type = gan_type
-        real_label, fake_label = 1, 0
+
 
         def metric_dfake(d_fake):
             return d_fake.mean()
@@ -1739,6 +1761,7 @@ class CycleGanTrainingPlan(TrainingPlan):
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(weight_fake_loss, name='weight_fake_loss', loss_weight=0.5)
         elif self.gan_type == 'lsgan':  # least squared
+
             def g_loss(d_fake, real_label):
                 return MSELoss()(d_fake, real_label)
 
@@ -1764,23 +1787,24 @@ class CycleGanTrainingPlan(TrainingPlan):
 
             def g_loss(d_fake, d_real, real_label, fake_label):
                 d_fake_logit = sigmoid(d_fake - d_real.mean().detach())
-                d_real_logit = sigmoid(d_real.detach() - d_fake.mean())
-                return - ((d_fake_logit + 1e-8).log()).mean() - ((1 - d_real_logit + 1e-8).log()).mean()
+                d_real_logit = sigmoid(d_real - d_fake.mean())
+                return (binary_cross_entropy(d_real_logit, fake_label).mean() + binary_cross_entropy(d_fake_logit,
+                                                                                                     real_label).mean()) / 2
 
-            self.generator.with_loss(g_loss, loss_weight=0.5)
+            self.generator.with_loss(g_loss, loss_weight=1)
 
             def real_loss(d_real, d_fake, real_label):
                 d_real_logit = sigmoid(d_real - d_fake.mean())
-                return - ((d_real_logit + 1e-8).log()).mean()
+                return binary_cross_entropy(d_real_logit, real_label).mean()
 
             def fake_loss(d_fake, d_real, fake_label):
                 d_fake_logit = sigmoid(d_fake - d_real.mean())
-                return - ((1 - d_fake_logit + 1e-8).log()).mean()
+                return binary_cross_entropy(d_fake_logit, fake_label).mean()
 
             self.discriminator.with_loss(real_loss, loss_weight=0.5)
             self.discriminator.with_loss(fake_loss, loss_weight=0.5)
 
-        if self.gan_type == 'began':
+        elif self.gan_type == 'began':
             def metric_k_t():
                 return self.k_t
 
@@ -1858,15 +1882,19 @@ class CycleGanTrainingPlan(TrainingPlan):
                   keep_weights_history=False, keep_gradient_history=False):
 
         def g_get_dfake(training_context):
+
             traindata = training_context['train_data']
-            traindata['d_fake'] = self.discriminator(traindata['output'].to(get_device()))
+            traindata['d_fake'] = self.discriminator(self.generator(traindata['noise'])).to(get_device())
             if self._use_feature_matching and self.discriminator_feature_uuid in self.discriminator.nodes:
                 traindata['fake_features'] = self.discriminator.nodes[self.discriminator_feature_uuid].output
 
-            traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            traindata['fake_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
+            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(
+                get_device())
+            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(
+                get_device())
 
         def g_get_dreal(training_context):
+
             traindata = training_context['train_data']
 
             if (self.is_generator_first and 'output' not in self.discriminator.training_context[
@@ -1890,27 +1918,44 @@ class CycleGanTrainingPlan(TrainingPlan):
             else:
                 traindata[training_context['data_feed']['img_fake']] = self.generator.training_context['train_data'][
                     'output'].detach()
-            traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']])
+            traindata['d_fake'] = self.discriminator(traindata[training_context['data_feed']['img_fake']].detach())
 
-            traindata['real_label'] = ones_like(traindata['d_fake']).detach().to(get_device())
-            if self._use_label_smoothing is not None:
-                traindata['real_label'] = clip(random_normal_like(traindata['d_fake'], mean=1, std=0.02), 0.8,
-                                               1.2).detach().to(get_device())
-            traindata['fake_label'] = zeros_like(traindata['d_fake']).detach().to(get_device())
-            if self._use_label_smoothing == 'two_side':
-                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,
-                                               0.2).detach().to(get_device())
+            traindata['real_label'if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(
+                get_device())
+            if self.use_label_smoothing is not None:
+                traindata['real_label' if not self.use_label_flipping else 'fake_label'] = clip(
+                    random_normal_like(traindata['d_fake'], mean=1, std=0.2), 0.8, 1.2).detach().to(get_device())
+            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(
+                get_device())
+            if self.use_label_smoothing == 'two_side':
+                traindata['fake_label' if not self.use_label_flipping else 'real_label'] = clip(
+                    abs(random_normal_like(traindata['d_fake'], mean=0, std=0.2)), 0.0, 0.2).detach().to(get_device())
 
         def d_get_dreal(training_context):
             traindata = training_context['train_data']
-            traindata['d_real'] = traindata['output']
-            traindata['real_label'] = ones_like(traindata['output']).detach().to(get_device())
-            if self._use_label_smoothing is not None:
-                traindata['real_label'] = random_uniform_like(traindata['output'], 0.9, 1).detach().to(get_device())
-            traindata['fake_label'] = zeros_like(traindata['output']).detach().to(get_device())
-            if self._use_label_smoothing == 'two_side':
-                traindata['fake_label'] = clip(abs(random_normal_like(traindata['d_fake'], mean=0, std=0.02)), 0.0,
-                                               0.2).detach().to(get_device())
+            imagedata = to_tensor(traindata['image'])
+
+            if self.max_noise_intensity > 0:
+                _mean, _variance = moments(imagedata, axis=[0, 1, 2, 3])
+                _std = sqrt(_variance) if _variance > 0 else 0.2
+                current_intensity =self.min_noise_intensity + builtins.max((self.max_noise_intensity - self.min_noise_intensity) * math.exp(  -1.0 * self.steps / self.decay),0)
+
+                imagedata = traindata['image'] + random_normal(imagedata.shape, mean=_mean.item(),    std=_std.item()) * current_intensity
+                traindata['d_real'] = self.discriminator(imagedata.detach())
+            else:
+                traindata['d_real'] = self.discriminator(traindata['image'])
+            traindata['output'] = traindata['d_real']
+
+            traindata['real_label' if not self.use_label_flipping else 'fake_label'] = ones_like(traindata['d_fake']).detach().to(
+                get_device())
+            if self.use_label_smoothing is not None:
+                traindata['real_label' if not self.use_label_flipping else 'fake_label'] = clip(
+                    random_normal_like(traindata['d_fake'], mean=1, std=0.2), 0.8, 1.2).detach().to(get_device())
+            traindata['fake_label' if not self.use_label_flipping else 'real_label'] = zeros_like(traindata['d_fake']).detach().to(
+                get_device())
+            if self.use_label_smoothing == 'two_side':
+                traindata['fake_label' if not self.use_label_flipping  else 'real_label'] = clip(
+                    abs(random_normal_like(traindata['d_fake'], mean=0, std=0.2)), 0.0, 0.2).detach().to(get_device())
 
         data_provider = self._dataloaders.value_list[0]
 
@@ -2037,7 +2082,7 @@ class CycleGanTrainingPlan(TrainingPlan):
                                 if self.max_noise_intensity > 0 and trainitem.training_context[
                                     'gan_role'] == 'discriminator':
                                     current_intensity = self.min_noise_intensity + (
-                                                self.max_noise_intensity - self.min_noise_intensity) * math.exp(
+                                            self.max_noise_intensity - self.min_noise_intensity) * math.exp(
                                         -1.0 * self.steps / self.decay)
                                     if self.steps % 100 == 0:
                                         ctx.print('noise intensity:{0}'.format(current_intensity))
@@ -2076,7 +2121,7 @@ class CycleGanTrainingPlan(TrainingPlan):
                                                       self.num_epochs if only_steps == False else 1,
                                                       len(data_provider.batch_sampler) if only_steps == False else max_batches,
                                                       is_collect_data=mbs == 0 or (
-                                                                  should_collect_data and mbs % collect_data_inteval) == 0,
+                                                              should_collect_data and mbs % collect_data_inteval) == 0,
                                                       is_print_batch_progress=self.print_progress_unit == 'batch' and mbs > 0 and mbs % self.print_progress_frequency == 0,
                                                       is_print_epoch_progress=self.print_progress_unit == 'epoch' and epoch > 0 and epoch % self.print_progress_frequency == 0,
                                                       log_gradients=keep_gradient_history,

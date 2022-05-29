@@ -8,7 +8,8 @@ import numpy as np
 from trident import context
 
 from trident.backend.common import get_backend,to_list, addindent, get_time_suffix, format_time, get_terminal_size, get_session,get_backend, \
-    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, split_path, sanitize_path,make_dir_if_need,Signature
+    snake2camel, PrintException, unpack_singleton, enforce_singleton, OrderedDict, Signature
+from trident.context import split_path, make_dir_if_need, sanitize_path
 
 
 ctx = context._context()

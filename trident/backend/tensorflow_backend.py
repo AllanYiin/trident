@@ -45,6 +45,8 @@ from trident.backend.common import camel2snake, to_list, unpack_singleton, enfor
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
 from trident.backend import dtype
+from trident.context import split_path, make_dir_if_need, sanitize_path
+
 
 _FUN_NAMES = [
     ('float', tops.float),

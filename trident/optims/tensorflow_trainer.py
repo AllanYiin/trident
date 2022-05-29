@@ -20,6 +20,7 @@ import tensorflow as tf
 
 from trident import __version__
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend import dtype
 from trident.backend.common import *
 from trident.backend.model import ModelBase, progress_bar

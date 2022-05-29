@@ -32,6 +32,7 @@ import torch.nn as nn
 
 from trident import __version__
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend.common import *
 from trident.backend.tensorspec import *
 from trident.backend import dtype as Dtype
@@ -100,11 +101,12 @@ def make_deterministic(seed: int = 19260817, cudnn_deterministic: bool = False):
         torch.backends.cudnn.benchmark = False
 
 
-class Model(model.ModelBase):
+class Model(model.ModelBase,Layer):
     def __init__(self, inputs=None, input_shape=None, output=None, name=None):
-        super().__init__(inputs, input_shape, output, name)
+        super().__init__(inputs=inputs, input_shape=input_shape, output=output, name=name)
         self.batch_index = 0
         self.filter_index = 1
+
         self._enable_tensorboard = False
 
     def _initial_graph(self, inputs=None, input_shape=None, output=None, initializer=None):
@@ -977,19 +979,6 @@ class Model(model.ModelBase):
             else:
                 self.training_context['stop_update'] = self.training_context['stop_update'] - 1 if \
                     self.training_context['stop_update'] > 1 else self.training_context['stop_update']
-                # if not self.training_context['retain_graph'] and not accumulate_grads:
-                #     if is_layer:
-                #         self._model.zero_grad()
-                # if accumulate_grads:
-                #     if ctx.amp_available and self.is_autocast_enabled == True and get_device() == 'cuda':
-                #         if self.gradscaler is None:
-                #             self.gradscaler = torch.cuda.amp.GradScaler()
-                #         self.gradscaler.scale(self.training_context['current_loss'] ).backward(
-                #             retain_graph=self.training_context['retain_graph'])
-                #
-                #     else:
-                #         (self.training_context['current_loss'] / self.accumulation_steps).backward(
-                #             retain_graph=self.training_context['retain_graph'])
 
             if self.accumulation_steps > 1:
                 self.training_context['tmp_losses'].collect('total_losses', self.training_context['steps'],
@@ -1428,7 +1417,8 @@ class Model(model.ModelBase):
     def __dir__(self):
         module_attrs = dir(self._model.__class__)
         optimizer_attrs = dir(self.optimizer.__class__)
-        attrs = list(self.__dict__.keys())
+        attrs = list(self.__dict__.keys())+ list(super().__dict__.keys())
+
         losses = list(self._losses.keys())
         metrics = list(self._metrics.keys())
         regs = list(self._regs.keys())
@@ -1439,6 +1429,115 @@ class Model(model.ModelBase):
         keys = [key for key in keys if not key[0].isdigit()]
 
         return sorted(keys)
+    #
+    # def __getattr__(self, name):
+    #     if name in ['training_context', '_input_shape', '_output_shape', '_class_names', 'class_names', 'output_fn',
+    #                 'optimizer']:
+    #         return self.__dict__[name]
+    #     elif name in ['reverse_preprocess_flow']:
+    #         return self.__getattribute__(name)
+    #     elif name in ['name']:
+    #         if '_model' in self.__dict__:
+    #             _model = self.__dict__['_model']
+    #             if isinstance(_model, Layer) or hasattr(_model, 'name'):
+    #                 return _model._name if hasattr(_model, '_name') else _model.name
+    #             elif is_tensor(_model):
+    #                 object.__setattr__(self, name, 'model_' + str(uuid.uuid4().node))
+    #                 return self.__dict__[name]
+    #     elif name == 'signature' or name == '_signature':
+    #         _model = self.__dict__['_model']
+    #         if _model is not None and hasattr(_model, '_signature'):
+    #             return _model._signature
+    #         elif _model is not None and hasattr(_model, 'signature'):
+    #             return _model.signature
+    #         else:
+    #             return None
+    #     if 'training_context' in self.__dict__:
+    #         if name in self.__dict__['training_context']:
+    #             return self.__dict__['training_context'][name]
+    #     if '_model' in self.__dict__:
+    #         _model = self.__dict__['_model']
+    #         if isinstance(_model, Layer):
+    #             if _model is not None and name in _model.__dict__['_parameters']:
+    #                 return _model.__dict__['_parameters'][name]
+    #             elif _model is not None and name in _model.__dict__['_buffers']:
+    #                 return _model.__dict__['_buffers'][name]
+    #             elif _model is not None and name in _model.__dict__['_modules']:
+    #                 return _model.__dict__['_modules'][name]
+    #             elif _model is not None and name in _model.__dict__:
+    #                 return _model.__dict__[name]
+    #             elif _model is not None and "_" + name in _model.__dict__:
+    #                 return _model.__dict__["_" + name]
+    #
+    #     if name in self.__dict__:
+    #         return self.__dict__[name]
+    #
+    #     raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, name))
+    #
+    # def __setattr__(self, name, value):
+    #     if name in ['_input_shape', '_output_shape', '_class_names', 'class_names', 'output_fn', 'optimizer']:
+    #         object.__setattr__(self, name, value)
+    #     elif name in ['trainable']:
+    #         _model = self.__dict__['_model']
+    #         if hasattr(_model, 'trainable'):
+    #             _model.trainable = value
+    #
+    #     elif name in ['_model']:
+    #         object.__setattr__(self, '_model', value)
+    #     elif name in ['name']:
+    #         if '_model' in self.__dict__:
+    #             _model = self.__dict__['_model']
+    #             if isinstance(_model, Layer):
+    #                 _model._name = value
+    #                 if hasattr(_model, '_name'):
+    #                     _model.name = value
+    #
+    #             elif is_tensor(_model):
+    #                 object.__setattr__(self, name, value)
+    #
+    #     else:
+    #
+    #         if name == 'signature' or name == '_signature':
+    #             _model = self.__dict__['_model']
+    #             if _model is not None:
+    #                 object.__setattr__(self.__dict__['_model'], "_" + name, value)
+    #
+    #         if 'training_context' in self.__dict__ and name in self.__dict__['training_context']:
+    #             self.__dict__['training_context'][name] = value
+    #         elif '_model' in self.__dict__ and self.__dict__['_model'] is not None:
+    #             _model = self.__dict__['_model']
+    #             if isinstance(_model, Layer):
+    #                 if _model is not None and name in _model.__dict__['_parameters']:
+    #                     _model.__dict__['_parameters'][name] = value
+    #                 elif _model is not None and name in _model.__dict__['_modules']:
+    #                     _model.__dict__['_modules'][name] = value
+    #                 elif _model is not None and name in _model.__dict__['_buffers']:
+    #                     _model.__dict__['_buffers'][name] = value
+    #                 elif _model is not None and name in _model.__dict__:
+    #                     object.__setattr__(self.__dict__['_model'], name, value)
+    #                 elif _model is not None and "_" + name in _model.__dict__:
+    #                     object.__setattr__(self.__dict__['_model'], "_" + name, value)
+    #                 else:
+    #                     object.__setattr__(self, name, value)
+    #             else:
+    #                 object.__setattr__(self, name, value)
+    #         else:
+    #             object.__setattr__(self, name, value)
+
+    # def __getstate__(self):
+    #     # Override to support `copy.deepcopy` and pickling.
+    #     # Thread-local objects cannot be copied in Python 3, so pop these.
+    #     # so shouldn't be copied.
+    #     state = self.__dict__.copy()
+    #     # state.pop('_thread_local', None)
+    #     # state.pop('_metrics_lock', None)
+    #     return state
+    #
+    # def __setstate__(self, state):
+    #     # state['_thread_local'] = threading.local()
+    #     # state['_metrics_lock'] = threading.Lock()
+    #     # Bypass Trackable logic as `__dict__` already contains this info.
+    #     object.__setattr__(self, '__dict__', state)
 
     def cpu(self):
         if isinstance(self._model, (nn.Module, Layer)):

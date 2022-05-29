@@ -8,6 +8,7 @@ import os
 from copy import deepcopy
 
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend.common import *
 from trident.backend.pytorch_backend import Sequential, fix_layer, get_device, load
 from trident.data.utils import download_model_from_google_drive
