@@ -49,19 +49,11 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1,axis:int=1,ignore_index:Un
 
     is_logsoftmax = None
     from_logits = None
-    output_exp = exp(output_tensor)
-    if (ndim(output_tensor) >= 1 and 'float' in str(output_tensor.dtype) and output_tensor.min() >= 0 and output_tensor.max() <= 1):
-        is_logsoftmax = False
-        from_logits = True
-        output_tensor = clip(output_tensor, min=1e-7, max=1 - 1e-7)
 
-    elif (ndim(output_exp) >= 1 and 'float' in str(output_exp.dtype) and output_exp.min() >= 0 and output_exp.max() <= 1):
-        is_logsoftmax = True
-        from_logits = True
-        output_tensor =  clip(output_exp, min=1e-7, max=1 - 1e-7)
-    else:
-        is_logsoftmax = False
-        from_logits = False
+    if _check_logsoftmax_logit(output, axis):
+        output_tensor=exp(output_tensor)
+    elif not _check_logit(output, axis):
+        output_tensor=sigmoid(output_tensor)
 
     if output_tensor.dtype!=torch.int64 and topk==1:
         if len(output_tensor.size())==1: #binary
@@ -71,7 +63,8 @@ def accuracy(output:Tensor, target:Tensor, topk:int=1,axis:int=1,ignore_index:Un
     if target_tensor.dtype!=torch.int64:
         target_tensor=argmax(target_tensor,axis).squeeze()
     if output_tensor.shape!=target_tensor.shape and topk==1:
-        raise  ValueError('input shape {0} is not competable with target shape {1}'.format(output_tensor.shape,target_tensor.shape))
+        output_tensor = argmax(output_tensor, axis).squeeze()
+        #raise  ValueError('input shape {0} is not competable with target shape {1}'.format(output_tensor.shape,target_tensor.shape))
 
     input_mask=ones_like(output_tensor)
     if isinstance(ignore_index, int) and 0 <= ignore_index < num_classes:
