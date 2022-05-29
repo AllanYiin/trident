@@ -420,7 +420,7 @@ class TensorSpec(object):
             if any([d in str(self.dtype)  for d in ['int64','long']]):
                 return np.random.uniform(0, 1,shape).astype(np.int64)
             else:
-                return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1)
+                return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1).astype(np.float32)
         elif str(self.dtype)=='str' or self.optional:
             return self.default
         else:
@@ -722,7 +722,7 @@ def get_signature(fn, name=None):
 
     returns = get_args(sig.return_annotation)
 
-    if sig.return_annotation is not inspect._empty and returns is not None:
+    if sig.return_annotation is not inspect._empty and returns is not None and len(returns)>0:
         if isinstance(returns, str):
             signature.outputs[returns] = TensorSpec(TensorShape([None]), optional=False, name=returns)
         elif isinstance(returns, list):
