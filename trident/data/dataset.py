@@ -529,7 +529,7 @@ class LabelDataset(Dataset):
         language = context._context().locale
         self.__default_language__ = language
 
-        if isinstance(labels[0],str):
+        if  labels is not None and len(labels)>0 and isinstance(labels[0],str):
             self.class_names[language]=list(sorted(set(self.items)))
             self.class_names['en-US'] = list(sorted(set(self.items)))
             self._lab2idx = dict(zip(self.class_names[language], range(len(self.class_names[language]))))

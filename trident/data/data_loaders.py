@@ -384,7 +384,7 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                        object_type=ObjectType.rgb):
     base_folder = sanitize_path(base_folder)
     if base_folder is not None and os.path.exists(base_folder):
-        print(base_folder)
+        print('base_folder:',base_folder)
         if folder_as_label:
             class_names = []
             if classes is not None and isinstance(classes, list) and len(classes) > 0:
@@ -394,8 +394,18 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
                     if os.path.isdir(os.path.join(base_folder, subdir)):
                         class_names.append(subdir)
             if len(class_names) == 0:
-
                 raise ValueError('No subfolder in base folder.')
+            elif len(class_names)==1:
+                only_subfolder=os.path.join(base_folder, os.listdir(base_folder)[0])
+                print('Only one folder found... try to check the subfolders in it!! ')
+                class_names=[]
+                for subdir in sorted(os.listdir(only_subfolder)):
+                    if os.path.isdir(os.path.join(only_subfolder, subdir)):
+                        class_names.append(subdir)
+                if len(class_names)>1:
+                    print('base_folder change to...:', only_subfolder)
+                    base_folder=only_subfolder
+
             class_names = list(sorted(set(class_names)))
             print(class_names)
             labels = []
@@ -420,15 +430,15 @@ def load_folder_images(dataset_name='', base_folder=None, classes=None, shuffle=
             labelsdata.binding_class_names(class_names)
 
             traindata = Iterator(data=imagedata, label=labelsdata,is_shuffle=shuffle)
-            dataset = DataProvider(dataset_name, traindata=traindata)
-            dataset.binding_class_names(class_names)
+            data_provider = DataProvider(dataset_name, traindata=traindata)
+            data_provider.binding_class_names(class_names)
 
         else:
             imgs = list_images(base_folder)
             imagedata = ImageDataset(imgs, object_type=ObjectType.rgb)
             traindata = Iterator(data=imagedata,is_shuffle=shuffle)
-            dataset = DataProvider(dataset_name, traindata=traindata)
-        return dataset
+            data_provider = DataProvider(dataset_name, traindata=traindata)
+        return data_provider
     else:
         raise ValueError('')
 
