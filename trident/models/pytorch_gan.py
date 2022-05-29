@@ -27,10 +27,10 @@ from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequenti
 from trident.backend.pytorch_ops import *
 from trident.data.image_common import *
 from trident.data.utils import download_file_from_google_drive
-from trident.layers.pytorch_activations import get_activation, Identity, LeakyRelu, Sigmoid
+from trident.layers.pytorch_activations import get_activation, Identity, Relu,LeakyRelu, Sigmoid,Tanh
 from trident.layers.pytorch_blocks import *
 from trident.layers.pytorch_layers import *
-from trident.layers.pytorch_normalizations import get_normalization, BatchNorm
+from trident.layers.pytorch_normalizations import get_normalization, BatchNorm,   SpectralNorm
 from trident.layers.pytorch_pooling import *
 from trident.optims.pytorch_trainer import *
 
@@ -190,39 +190,45 @@ class NetworkType(Enum):
 
 def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=(3,128,128), upsample_mode='nearest', generator_build_block='resnet',
                 discriminator_build_block='resnet', generator_network_type='decoder', discriminator_network_type='encoder',
-                use_skip_connections=False,
-                use_spectral=False, activation='leaky_relu', generator_norm='batch', discriminator_norm='batch',
-                use_dilation=False, use_dropout=False, use_self_attention=False, use_minibatch_discrimination=False):
+                use_skip_connections=False,generator_use_spectral=False, discriminator_use_spectral=False, activation='leaky_relu', generator_norm='batch', discriminator_norm='batch',
+                use_dilation=False, use_dropout=False, use_self_attention=False, use_minibatch_discrimination=False,**kwargs):
+    if 'use_spectral' in kwargs:
+        generator_use_spectral=kwargs['use_spectral']
+        discriminator_use_spectral = kwargs['use_spectral']
     noise_input = torch.tensor(data=np.random.normal(0, 1, size=(2, noise_shape))) if noise_shape is not None else None
     image_width=input_shape[-1]
+
+    initial_size = 8
+    if image_width in [64, 32]:
+        initial_size = 4
+    elif image_width in [20,40]:
+        initial_size = 5
+    elif image_width in [48,96,192]:
+        initial_size = 6
+    elif image_width in [28, 56, 112, 224]:
+        initial_size = 7
+    elif image_width in [36,72,108,144]:
+        initial_size = 9
+    elif image_width in [80,160, 320]:
+        initial_size = 10
+
     def build_generator():
         layers = []
-        initial_size = 8
 
-        if image_width in [192, 96, 48]:
-            initial_size = 6
-        elif image_width in [144, 72, 36]:
-            initial_size = 9
-        elif image_width in [160, 80]:
-            initial_size = 10
-        elif image_width in [64]:
-            initial_size = 4
-        initial_filters=128 if upsample_mode == "pixel_shuffle" else 256
-        layers.append(Dense(initial_filters * initial_size * initial_size, activation=None, name='fc'))
+        initial_filters= 256 if upsample_mode == 'pixel_shuffle' else 128
+        fc=Dense(initial_filters * initial_size * initial_size, activation=None, name='fc')
+        if generator_use_spectral:
+            fc=SpectralNorm(fc)
+        layers.append(fc)
+        layers.append(BatchNorm())
         layers.append(Reshape((initial_filters, initial_size, initial_size), name='reshape'))
 
-        if upsample_mode == "pixel_shuffle":
-            layers.append(Conv2d_Block((3, 3), 256, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False, activation=activation, normalization=generator_norm))
-        else:
-            pass
-            # layers.append(Conv2d_Block((3, 3), 256, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False, activation=activation, normalization=generator_norm,
-            #                            padding_mode='replicate'))
-
         current_width = initial_size
+        filter = initial_filters
         i = 0
         while current_width < image_width:
-            filter = 256
-            scale = 2 if (image_width // current_width) % 2 == 0 else (image_width // current_width)
+
+            scale = 2 #if (image_width // current_width) % 2 == 0 else (image_width // current_width)
 
             dilation = 1
             if use_dilation:
@@ -231,78 +237,53 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
             if upsample_mode == 'transpose':
                 layers.append(
                     TransConv2d_Block((3, 3), depth_multiplier=1, strides=scale, auto_pad=True, padding_mode='replicate',
-                                      use_spectral=use_spectral, use_bias=False, activation=activation,
+                                      use_spectral=generator_use_spectral, use_bias=False, activation=activation,
                                       normalization=generator_norm, dilation=dilation,
                                       name='transconv_block{0}'.format(i)))
             elif upsample_mode == 'pixel_shuffle':
 
-                # filter = filter // (scale * scale)
-
-                if i > 0:
-                    layers.append(
-                        Conv2d_Block((3, 3), depth_multiplier=4, strides=1, auto_pad=True, use_spectral=use_spectral,
-                                     use_bias=False, activation=activation, normalization=generator_norm,
-                                     padding_mode='replicate'))
-
                 layers.append(Upsampling2d(scale_factor=scale, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
-
-
             else:
                 layers.append(Upsampling2d(scale_factor=scale, mode=upsample_mode, name='{0}{1}'.format(upsample_mode, i)))
 
-                if i > 0:
-                    layers.append(
-                        Conv2d_Block((3, 3), depth_multiplier=2, strides=1, auto_pad=True, use_spectral=use_spectral,
-                                     use_bias=False, activation=activation, normalization=generator_norm,
-                                     padding_mode='replicate'))
-
-            if current_width * scale<image_width:
+            if current_width * scale<image_width or upsample_mode == 'pixel_shuffle':
+                if current_width * scale==image_width:
+                    filter=filter//2
                 if generator_build_block =='base':
                     layers.append(Conv2d_Block((3, 3), num_filters=filter, strides=1, auto_pad=True, padding_mode='replicate',
-                                               use_spectral=use_spectral, use_bias=False, activation=activation,
+                                               use_spectral=generator_use_spectral, use_bias=False, activation=activation,
                                                normalization=generator_norm, dilation=dilation,
                                                name='base_block{0}'.format(i)))
                 elif generator_build_block == 'resnet':
-                    layers.extend(resnet_block(num_filters=filter, strides=1, activation=activation, use_spectral=use_spectral,
+                    layers.extend(resnet_block(num_filters=filter, strides=1, activation=activation, use_spectral=generator_use_spectral,
                                                normalization=generator_norm, dilation=dilation,
                                                name='resnet_block{0}'.format(i)))
                 elif generator_build_block == 'bottleneck':
-                    layers.append(bottleneck_block(num_filters=filter, strides=1, activation=activation, use_spectral=use_spectral,
+                    layers.append(bottleneck_block(num_filters=filter, strides=1, activation=activation, use_spectral=generator_use_spectral,
                                                    normalization=generator_norm, dilation=dilation,
                                                    name='resnet_block{0}'.format(i)))
                 if use_self_attention and current_width == initial_size * 2:
                     layers.append(SelfAttention(8, name='self_attention'))
                 if use_dropout and current_width == initial_size * 4:
                     layers.append(Dropout(0.2))
-            elif current_width * scale==image_width:
+            elif current_width * scale==image_width and image_width<128:
                 layers.append(
                     Conv2d_Block((3, 3), num_filters=filter//2, strides=1, auto_pad=True, padding_mode='replicate',
-                                 use_spectral=use_spectral, use_bias=False, activation=activation,
+                                 use_spectral=generator_use_spectral, use_bias=False, activation=activation,
                                  normalization=generator_norm, dilation=dilation,
                                  name='base_block{0}'.format(i)))
 
             current_width = current_width * scale
             i = i + 1
-        layers.append(Conv2d((5, 5), 3, strides=1, auto_pad=True, use_bias=False, activation='tanh', name='last_layer'))
+        layers.append(Conv2d((5, 5), 3, strides=1, auto_pad=True, use_bias=False, activation=Tanh(), name='last_layer'))
         return Sequential(layers, name='generator')
 
     def build_discriminator():
         layers = []
-        initial_size = 8
-
-        if image_width in [192, 96, 48]:
-            initial_size = 6
-        elif image_width in [144, 72, 36]:
-            initial_size = 9
-        elif image_width in [160, 80]:
-            initial_size = 10
-        elif image_width in [64]:
-            initial_size = 4
-
 
         layers.append(
             Conv2d((5, 5), 32, strides=1, auto_pad=True, use_bias=False, activation=activation, name='first_layer'))
-        layers.append(Conv2d_Block((3, 3), 64, strides=2, auto_pad=True, use_spectral=use_spectral, use_bias=False,
+        layers.append(Conv2d_Block((3, 3), 64, strides=2, auto_pad=True, use_spectral=discriminator_use_spectral, use_bias=False,
                                    activation=activation, normalization=discriminator_norm, name='second_layer'))
         filter = 64
         current_width = image_width // 2
@@ -311,38 +292,41 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
             filter = filter * 2 if i % 2 == 1 else filter
             if discriminator_build_block == 'base':
                 layers.append(
-                    Conv2d_Block((3, 3), num_filters=filter, strides=2, auto_pad=True, use_spectral=use_spectral, use_bias=False,
+                    Conv2d_Block((3, 3), num_filters=filter, strides=2, auto_pad=True, use_spectral=discriminator_use_spectral, use_bias=False,
                                  activation=activation, normalization=discriminator_norm,
                                  name='base_block{0}'.format(i)))
             elif discriminator_build_block == 'resnet':
-                layers.extend(resnet_block(num_filters=filter, strides=2, activation=activation, use_spectral=use_spectral,
+                layers.extend(resnet_block(num_filters=filter, strides=2, activation=activation, use_spectral=discriminator_use_spectral,
                                            normalization=discriminator_norm, name='resnet_block{0}'.format(i)))
 
             elif discriminator_build_block == 'bottleneck':
                 layers.append(
-                    bottleneck_block(num_filters=filter, strides=2, reduce=2, activation=activation, use_spectral=use_spectral,
+                    bottleneck_block(num_filters=filter, strides=2, reduce=2, activation=activation, use_spectral=discriminator_use_spectral,
                                      normalization=discriminator_norm, name='bottleneck_block{0}'.format(i)))
 
             current_width = current_width // 2
 
-            layers.append(Conv2d_Block((3, 3), depth_multiplier=1, strides=1, auto_pad=True, use_spectral=use_spectral, use_bias=False,
+            layers.append(Conv2d_Block((3, 3), depth_multiplier=1, strides=1, auto_pad=True, use_spectral=discriminator_use_spectral, use_bias=False,
                                        activation=activation, normalization=discriminator_norm))
 
+            if use_self_attention and current_width==image_width//8:
+                layers.append(SelfAttention(8, name='self_attention'))
+
             i +=1
-        if use_self_attention:
-            layers.insert(-2, SelfAttention(8, name='self_attention'))
+
         if use_dropout:
-            layers.insert(-1, Dropout(0.2))
-        layers.append(Conv2d_Block((3, 3), 128, strides=1, auto_pad=True, use_bias=False, activation='leaky_relu', use_spectral=None, normalization=None,
-                                   name='last_conv'))
-        layers.append(GlobalAvgPool2d()),
+            layers.append(Dropout(0.2))
+        layers.append(Conv2d((3, 3), depth_multiplier=0.5, strides=2, auto_pad=True, use_bias=False, activation=None,name='last_conv'))
+
         if use_minibatch_discrimination:
             layers.append(MinibatchDiscriminationLayer(name='minibatch_dis'))
-        layers.append(Dense(1, use_bias=False, name='fc'))
-        # layers.append(Sigmoid())
+        else:
+            layers.append(Flatten()),
+            layers.append(Dense(1))
+            layers.append(Sigmoid())
         dis = Sequential(layers, name='discriminator')
         out = dis(to_tensor(TensorShape([None, 3, image_width, image_width]).get_dummy_tensor()).to(get_device()))
-        if use_spectral:
+        if discriminator_use_spectral:
             new_layers = []
             for layer in dis:
                 if isinstance(layer, Dense):
@@ -355,6 +339,7 @@ def gan_builder(noise_shape=100,input_shape=(3,128,128), generated_output_shape=
 
 
     def build_autoencoder(gan_role='discriminator', use_skip_connections=False):
+        use_spectral=discriminator_use_spectral if gan_role=='discriminator' else 'generatior'
         layers = OrderedDict()
 
         ae = Sequential()
