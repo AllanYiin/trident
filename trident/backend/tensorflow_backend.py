@@ -1287,7 +1287,26 @@ class Layer(tf.Module):
         pass
 
     def copy(self):
-        return copy.deepcopy(self)
+        """Create a new FrozenDict with additional or replaced entries."""
+        sig = get_signature(type(self).__init__)
+        _args = OrderedDict()
+        for inp in sig.inputs.key_list:
+            if inp in self.__dict__:
+                _args[inp] = self.__dict__[inp]
+        shadow = type(self)(**_args)
+        shadow.build(self.input_shape)
+        for k, v in self.__dict__.items():
+            if k not in _args and k not in ['_modules', '_parameters', '_buffers']:
+                if is_tensor(v):
+                    shadow.__dict__[k] = to_tensor(to_numpy(v), dtype=v.dtype, device=v.device,
+                                                   requires_grad=v.requires_grad)
+                elif isinstance(v, (str, bool, numbers.Number)) or k in ['_nodes']:
+                    setattr(shadow, k, v)
+                else:
+                    setattr(shadow, k, copy.deepcopy(v))
+        shadow.load_state_dict(self.state_dict())
+        shadow.to(self.device)
+        return shadow
 
         # The user can pass an optional arbitrary mappable object to `state_dict`, in which case `state_dict` returns
         # back that same object. But if they pass nothing, an `OrederedDict` is created and returned.
