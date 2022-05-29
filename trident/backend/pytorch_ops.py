@@ -30,7 +30,6 @@ version = torch.__version__
 pt_version = LooseVersion(vstring=version)
 version1_7 = LooseVersion(vstring='1.7.0')
 ctx = context._context()
-_float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_device() == 'cuda' else Dtype.float32
 
 
 def is_gpu_available():
@@ -83,6 +82,7 @@ def _set_device(device='cpu'):
     except Exception as e:
         print(e)
 
+_float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and _get_device() == 'cuda' else Dtype.float32
 
 __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor',
            'to_scalar', 'ndim', 'numel', 'cast', 'str2dtype', 'int_shape', 'tensor_to_shape', 'is_sparse', 'is_nan',
@@ -329,10 +329,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
     elif isinstance(x, np.ndarray):
-        if x.dtype==np.float64:
-            x=x.astype(np.float32)
         dtype = str2dtype(str(x.dtype).replace('numpy', 'Dtype'))
-
     elif isinstance(x, Tensor) and 'float' not in str(x.dtype):
         dtype=x.dtype
     elif isinstance(x, Tensor) and 'float'in str(x.dtype):
@@ -353,6 +350,8 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             if dtype is None:
                 dtype = x.dtype
             else:
+                if dtype==Dtype.int32:
+                    dtype=Dtype.int64
                 x = x.type(dtype)
             x = x.to(device)
             if isinstance(requires_grad, bool) and requires_grad != x.requires_grad:
@@ -402,14 +401,10 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             x = x.to(device)
             return x
         elif isinstance(x, np.ndarray):
-            npdtype =str2dtype(str(x.dtype).replace('numpy','Dtype'))
             x = torch.from_numpy(x).to(device)
-            if 'int' in str(npdtype):
-                x = x.type(Dtype.int64)
-            else:
-                if dtype is None:
-                    dtype = _float_dtype
-                x = x.type(dtype)
+            if dtype is None:
+                dtype = _float_dtype
+            x = x.type(dtype)
             if not requires_grad:
                 x.requires_grad = False
             elif requires_grad:
@@ -2849,9 +2844,7 @@ def softmax(x, axis=1):
              [0.8808, 0.9820]]])
 
     """
-    denom = reduce_sum(x.exp(), axis=axis, keepdims=True)
-    nume = x.exp()
-    return where(denom == 0, zeros_like(denom), true_divide(nume, denom))
+    return torch.softmax(x,dim=axis)
 
 
 @numpy_compatible
@@ -3544,7 +3537,12 @@ def make_onehot(label, num_classes, axis=-1):
     if axis is None or axis in [-1, last_index]:
         return onehot
     else:
-        onehot = onehot.transpose(last_index, axis)
+
+        axes = list(range(len(onehot.shape)))
+        axes.pop(-1)
+        axes.insert(axis,-1)
+
+        onehot = onehot.permute(axes)
         return onehot
 
 
@@ -3917,7 +3915,7 @@ def random_normal(shape, mean=0.0, std=1.0, dtype=None, device=None,seed=None):
     if dtype is None:
         dtype = _float_dtype
     if device is None:
-        device = get_device()
+        device = _get_device()
     return torch.normal(mean=mean, std=std, size=shape,dtype=dtype,device=device)
 
 
