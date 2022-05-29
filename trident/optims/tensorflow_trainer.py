@@ -1501,18 +1501,12 @@ class Model(ModelBase,Layer):
                 self.do_on_excution_exception()
                 PrintException()
 
-    def summary(self):
-        if self._model.built:
-            if self._model._is_keras:
-                self._model.summary()
-            else:
-                if not hasattr(self._model,
-                               '_signature') or self._model._signature is None or self._model._signature.inputs is None:
-                    self._model._signature = get_signature(self._model, self._model._name)
-                summary(self._model, [item for item in self._model._signature.inputs.value_list])
-            return self
-        else:
-            raise ValueError('This model has not yet been built. ')
+    def summary(self,inputs=None):
+        # self.rebinding_input_output(self._model.input_shape)
+        if not hasattr(self._model, '_signature') or self._model._signature is None or self._model._signature.inputs is None or len(self._model._signature.outputs) == 0:
+            self._model._signature = get_signature(self._model, self._model._name)
+        summary(self._model, input_specs=self.signature.inputs.value_list,inputs=inputs)
+        return self
 
     @property
     def preprocess_flow(self):

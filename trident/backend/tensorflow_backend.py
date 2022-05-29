@@ -2684,7 +2684,7 @@ def calculate_flops(gen: Layer):
     return np.array(param_nums).sum()
 
 
-def summary(model, input_specs, batch_size=1, device="cuda"):
+def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
     def register_hook(module):
         def hook(module, input, output):
             # class_name =module.re    module.name   # str(module.__class__).split(".")[-1].split("'")[0]
@@ -2757,9 +2757,17 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
     model.to(get_device())
     model.eval()
 
-    # batch_size of 2 for batchnorm
-    x = [to_tensor(spec.shape.get_dummy_tensor()).to(get_device()) if spec.optional == False else spec.default for spec in model._signature.inputs.value_list]
-
+    inps=OrderedDict()
+    for v in input_specs:
+        k=v.name
+        if v.shape is not None and v.shape._dims!=[None]:
+            inps[k] =to_tensor(v.get_dummy_tensor(),device=get_device())
+        elif v.optional:
+            inps[k]=v.default
+        elif v.shape is None:
+            inps[k]=None
+        else:
+            inps[k] = None
     # p    rint(type(x[0]))
 
     # create properties
@@ -2771,7 +2779,14 @@ def summary(model, input_specs, batch_size=1, device="cuda"):
 
     # make a forward pass
     # print(x.shape)
-    model(*x)
+    if inputs is not None:
+        if isinstance(inputs, OrderedDict):
+            model(*list(inps.values()))
+        else:
+            model(*inputs)
+    else:
+        model(*inps.value_list)
+
 
     # remove these hooks
     for h in hooks:
