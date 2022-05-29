@@ -173,13 +173,24 @@ class _ClassificationLoss(Loss):
                                                                                            ObjectType.color_mask,
                                                                                            ObjectType.binary_mask]:
                         ctx.print('Start retrive label class distribution for auto-balance in loss function.')
-                        sample_base=np.arange(len(dp.traindata.label))
+                        sample_base=list(range(len(ds)))
                         if len(sample_base)>1000:
                             np.random.shuffle(sample_base)
                             sample_base=sample_base[:1000]
+                        overall_unique=OrderedDict()
+                        unique_results =[dict(zip(*np.unique(ds[i], return_counts=True))) for i in tqdm(sample_base)]
+                        for d in unique_results:
+                            for k,v in d.items():
+                                if k not in overall_unique:
+                                    overall_unique[k]=v
+                                else:
+                                    overall_unique[k]+=v
 
-                        unique, counts = torch.unique(to_tensor(np.stack([dp.traindata.label[sample_base[i]] for i in tqdm(range(len(sample_base)))]),
-                                      dtype=Dtype.long, device='cpu'), return_counts=True)
+                        unique=list(sorted(overall_unique.key_list))
+                        counts=[overall_unique[k] for k in unique]
+                        # unique = to_list(to_numpy(unique))
+                        # counts = to_numpy(counts)
+
                         ctx.print('')
                         reweights, label_statistics = _class_unique_value_process(unique, counts)
                         self.label_statistics = reweights
@@ -653,8 +664,7 @@ class CrossEntropyLoss(_ClassificationLoss):
             if self.auto_balance and self.label_statistics is not None:
                 if int_shape(output)[self.axis] == len(self.label_statistics):
                     unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
-                    unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),
-                                             pow(1 - clip(unbalance_weight, min=1e-7), 3.5))
+
 
             sample_weight = unbalance_weight
 
@@ -677,8 +687,6 @@ class CrossEntropyLoss(_ClassificationLoss):
             if self.auto_balance and self.label_statistics is not None:
                 if self.num_classes == len(self.label_statistics):
                     unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
-                    unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),
-                                             pow(1 - clip(unbalance_weight, min=1e-7), 3.5))
                     sample_weight = unbalance_weight
 
             if not self.is_logsoftmax :
@@ -1141,6 +1149,7 @@ class DiceLoss(_ClassificationLoss):
         """
         # if any_abnormal_number(output):
         #     print('{0} calculate starting'.format(self.name))
+
         if self.is_logsoftmax or reduce_max(output) <= 0:
             output = exp(output)
             output = clip(output, 1e-7, 1)
@@ -1157,18 +1166,18 @@ class DiceLoss(_ClassificationLoss):
         if self.auto_balance and self.label_statistics is not None:
             if self.num_classes == len(self.label_statistics):
                 unbalance_weight = to_tensor(self.label_statistics.copy()).detach().to(_float_dtype)
-                unbalance_weight = where(unbalance_weight < 1e-7, ones([self.num_classes]).to(_float_dtype),
-                                         pow(1 - clip(unbalance_weight, min=1e-7, max=1 - 1e-7), 3.5))
         sample_weight = unbalance_weight.detach()
         # reduce the batch axis and all spatial axes
         target = target.detach()
+        scale=numel(output)//output.size(1)
         sample_weight = sample_weight.detach()
-        intersection = reduce_sum((target * output), axis=[0, -1])
-        den1 = reduce_sum(output, axis=[0, -1])
-        den2 = reduce_sum(target, axis=[0, -1])
+        intersection = reduce_mean((target * output), axis=[0,-1])
+        den1 = reduce_mean(output, axis=[0,-1])
+        den2 = reduce_mean(target, axis=[0,-1])
 
-        dice = (2.0 * intersection * sample_weight + self.smooth) / (
-                    den1 * sample_weight + den2 * sample_weight + self.smooth)
+
+        dice = (2.0 * intersection * sample_weight + self.smooth/scale) / (
+                    den1 * sample_weight + den2 * sample_weight + self.smooth/scale)
         return 1.0 - dice
 
         # dice = (2.0 * intersection.sum(1) + self.smooth)/(den1.sum(1) + den2.sum(1) + self.smooth)
