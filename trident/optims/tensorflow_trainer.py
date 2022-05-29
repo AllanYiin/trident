@@ -25,7 +25,7 @@ from trident.backend import dtype
 from trident.backend.common import *
 from trident.backend.model import ModelBase, progress_bar
 from trident.backend.opencv_backend import array2image, image2array
-from trident.backend.tensorflow_backend import Layer, Combine, summary, get_device, fix_layer, try_map_args_and_call, \
+from trident.backend.tensorflow_backend import Layer,Sequential,ModuleDict,ModuleList, Combine, summary, get_device, fix_layer, try_map_args_and_call, \
     DTYPE_MAPPING, fix_keras_module
 from trident.backend.tensorflow_ops import *
 from trident.backend.tensorflow_ops import is_tensor
@@ -490,27 +490,28 @@ class Model(ModelBase,Layer):
         ctx.print(self._losses[alias].signature)
 
         # check whether the model is ended by SoftMax
-        if isinstance(list(self._model.modules())[-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
-            self._losses[alias].is_logsoftmax = True
-        elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(list(self._model.modules())[-1][-1],
-                                                                                    SoftMax) and hasattr(
-            self._losses[alias], 'is_logsoftmax'):
-            self._losses[alias].is_logsoftmax = True
-        elif isinstance(list(self._model.modules())[-1], Dense) and list(self._model.modules())[
-            -1].activation == log_softmax and hasattr(self._losses[alias], 'is_logsoftmax'):
-            self._losses[alias].is_logsoftmax = True
-        elif isinstance(list(self._model.modules())[-1], ModuleDict) and self._losses[
-            alias].signature is not None and hasattr(self._losses[alias], 'is_logsoftmax'):
-            for k, v in list(self._model.modules())[-1].items():
-                if isinstance(list(v.modules())[-1], SoftMax) and k in self._losses[alias].signature.inputs:
-                    self._losses[alias].is_logsoftmax = True
-                elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],
-                                                                                  SoftMax) and k in self._losses[
-                    alias].signature.inputs:
-                    self._losses[alias].is_logsoftmax = True
-                elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[
-                    -1].activation == log_softmax and k in self._losses[alias].signature.inputs:
-                    self._losses[alias].is_logsoftmax = True
+        if isinstance(self._model,Layer):
+            if isinstance(list(self._model.modules())[-1], SoftMax) and hasattr(self._losses[alias], 'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax = True
+            elif isinstance(list(self._model.modules())[-1], Sequential) and isinstance(list(self._model.modules())[-1][-1],
+                                                                                        SoftMax) and hasattr(
+                self._losses[alias], 'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax = True
+            elif isinstance(list(self._model.modules())[-1], Dense) and list(self._model.modules())[
+                -1].activation == log_softmax and hasattr(self._losses[alias], 'is_logsoftmax'):
+                self._losses[alias].is_logsoftmax = True
+            elif isinstance(list(self._model.modules())[-1], ModuleDict) and self._losses[
+                alias].signature is not None and hasattr(self._losses[alias], 'is_logsoftmax'):
+                for k, v in list(self._model.modules())[-1].items():
+                    if isinstance(list(v.modules())[-1], SoftMax) and k in self._losses[alias].signature.inputs:
+                        self._losses[alias].is_logsoftmax = True
+                    elif isinstance(list(v.modules())[-1], Sequential) and isinstance(list(v.modules())[-1][-1],
+                                                                                      SoftMax) and k in self._losses[
+                        alias].signature.inputs:
+                        self._losses[alias].is_logsoftmax = True
+                    elif isinstance(list(v.modules())[-1], Dense) and list(v.modules())[
+                        -1].activation == log_softmax and k in self._losses[alias].signature.inputs:
+                        self._losses[alias].is_logsoftmax = True
 
         self.loss_weights[alias] = float(loss_weight)
         self._losses[alias].__name__ = alias
@@ -932,9 +933,10 @@ class Model(ModelBase,Layer):
                 super().on_optimization_step_start()
                 # self.training_context['grads_and_vars']=zip( self.training_context['accum_gradient'], vars)
 
+
+                self.optimizer.step(self.training_context['grads_and_vars'])
                 if log_gradients:
                     self.log_gradient(self.training_context['grads_and_vars'])
-                self.optimizer.step(self.training_context['grads_and_vars'])
                 if self.accumulation_steps > 1:
                     self.training_context['accum_gradient'] = None
                 self.do_on_optimization_step_end()
@@ -1322,7 +1324,7 @@ class Model(ModelBase,Layer):
                     self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
 
                 with tf.GradientTape() as grad_tape:
-                    grad_tape.watch(self._model.trainable_variables)
+                    grad_tape.watch(self._model.variables)
 
                     if 'skip_generate_output' not in self.training_context or self.training_context[
                         'skip_generate_output'] == False:
@@ -1426,7 +1428,7 @@ class Model(ModelBase,Layer):
                         0 < self.training_context['stop_update'] < 1 and random.random() <= self.training_context[
                     'stop_update'])
                 if need_backward:
-                    if self.training_context['accum_gradient'] is None:
+                    if self.training_context['accum_gradient'] is None or len(self.training_context['accum_gradient'])==0:
                         self.training_context['accum_gradient'] = grads
                     else:
                         self.training_context['accum_gradient'] = [(acum_grad + grad) for acum_grad, grad in

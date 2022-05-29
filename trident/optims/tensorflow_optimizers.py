@@ -471,12 +471,13 @@ class Adam(Optimizer):
             bias_correction2 = 1 - beta2 ** state['step']
 
 
-            if self.gradient_centralization in ['all', 'gcc']:
-                if ndim(grad) > 3:
-                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             if group['weight_decay'] != 0:
                 grad = grad + p_data * group['weight_decay']
+
+            if self.gradient_centralization in ['all', 'gcc']:
+                if ndim(grad) > 3:
+                    grad = grad - reduce_mean(grad, axis=list(range(ndim(grad) - 1)), keepdims=True)
 
             # Decay the first and second moment running average coefficient
             # m_t = beta1 * m + (1 - beta1) * g_t
@@ -497,19 +498,19 @@ class Adam(Optimizer):
             step_size = group['lr'] / bias_correction1
             G_grad = exp_avg/denom
 
-            if self.gradient_centralization in ['all', 'gc']:
-                if len(list(int_shape(G_grad))) > 1:
-                    G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
-
+            # if self.gradient_centralization in ['all', 'gc']:
+            #     if len(list(int_shape(G_grad))) > 1:
+            #         G_grad = G_grad - reduce_mean(G_grad, axis=list(range(ndim(G_grad) - 1)), keepdims=True)
+            #
 
             if any_abnormal_number(G_grad):
                 sys.stderr.write('{0} p_data has abnormal value,trident automatically replace these abnormal value to zero.\n'.format(self.__class__.__name__))
                 G_grad = where(is_abnormal_number(G_grad),grad, G_grad)
 
             p.assign_add(-step_size*G_grad)
-            state['exp_avg'] = exp_avg
-            state['exp_avg_sq'] = exp_avg_sq
-            state['max_exp_avg_sq'] = exp_avg_sq
+            # state['exp_avg'] = exp_avg
+            # state['exp_avg_sq'] = exp_avg_sq
+            # state['max_exp_avg_sq'] = exp_avg_sq
         return True
 
 
