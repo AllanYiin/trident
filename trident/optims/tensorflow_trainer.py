@@ -70,7 +70,7 @@ def _to_tuple(x):
         return x,
 
 
-class Model(ModelBase):
+class Model(ModelBase,Layer):
     def __init__(self, inputs=None, input_shape=None, output=None, name=None):
         super().__init__(inputs, input_shape, output, name)
         self.batch_index = 0
@@ -273,6 +273,8 @@ class Model(ModelBase):
             raise ValueError('Invalid output')
 
         self.training_context['current_model'] = self._model
+        if callable(self._model):
+            self.__call__ = self._model.__call__
         if not hasattr(self._model, 'name'):
             self._model._name = 'model_' + str(uuid.uuid4().node)
         if self.save_path is None:
@@ -281,6 +283,10 @@ class Model(ModelBase):
         else:
             self.save_path = sanitize_path(make_dir_if_need(self.save_path))
         self.training_context['save_path'] = self.save_path
+
+    @property
+    def signature(self):
+        return self._model.signature if self._model is not None else None
 
     @property
     def device(self):
@@ -1608,12 +1614,13 @@ class Model(ModelBase):
     def __dir__(self):
         module_attrs = dir(self._model.__class__)
         optimizer_attrs = dir(self.optimizer.__class__)
-        attrs = list(self.__dict__.keys()) if self.__dict__ is not None else {}
-        losses = list(self._losses.keys()) if self._losses is not None else {}
-        metrics = list(self._metrics.keys()) if self._metrics is not None else {}
-        regs = list(self._regs.keys()) if self._regs is not None else {}
+        attrs = list(self.__dict__.keys())+ list(super().__dict__.keys())
 
-        constraints = list(self._constraints.keys()) if self._constraints is not None else {}
+        losses = list(self._losses.keys())
+        metrics = list(self._metrics.keys())
+        regs = list(self._regs.keys())
+
+        constraints = list(self._constraints.keys())
         keys = module_attrs + optimizer_attrs + attrs + losses + metrics + regs + constraints
         # Eliminate attrs that are not legal Python variable names
         keys = [key for key in keys if not key[0].isdigit()]

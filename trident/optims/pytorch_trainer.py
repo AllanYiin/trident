@@ -312,6 +312,8 @@ class Model(model.ModelBase,Layer):
             raise ValueError('Invalid output')
 
         self.training_context['current_model'] = self._model
+        if callable(self._model):
+            self.__call__= self._model.__call__
         if not hasattr(self._model, 'name'):
             self._model._name = 'model_' + str(uuid.uuid4().node)
         if self.save_path is None:
@@ -320,6 +322,10 @@ class Model(model.ModelBase,Layer):
         else:
             self.save_path = sanitize_path(make_dir_if_need(self.save_path))
         self.training_context['save_path'] = self.save_path
+
+    @property
+    def signature(self):
+        return self._model.signature if self._model is not None else None
 
     @property
     def device(self):
