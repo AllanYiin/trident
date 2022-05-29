@@ -29,7 +29,7 @@ from trident.misc.visualization_utils import loss_metric_curve
 from trident.optims.pytorch_trainer import Model, MuiltiNetwork
 from trident.reinforcement.utils import ReplayBuffer, Rollout, ActionStrategy
 from trident.loggers.history import HistoryBase
-
+from trident.context import split_path, make_dir_if_need, sanitize_path
 import_or_install('gym')
 import gym
 

@@ -15,7 +15,7 @@ import numpy as np
 from trident.backend.common import *
 from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
-
+from trident.context import split_path, make_dir_if_need, sanitize_path
 _session = get_session()
 
 if get_backend()=='pytorch':

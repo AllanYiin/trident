@@ -60,7 +60,8 @@ import colorsys
 import itertools
 import numpy as np
 from trident import context
-from trident.backend.common import get_time_suffix, make_dir_if_need, unpack_singleton, get_plateform, PrintException
+from trident.context import split_path,make_dir_if_need
+from trident.backend.common import get_time_suffix, unpack_singleton, get_plateform, PrintException
 
 ctx = context._context()
 _backend =ctx.get_backend()
@@ -394,9 +395,12 @@ def loss_metric_curve(losses, metrics,metrics_names,legend=None, calculate_base=
             metric_ax1.set_xlim(0, max_iteration)
 
     if save_path is not None:
-        plt.savefig(save_path, bbox_inches='tight')
+        suffix = get_time_suffix()
+        filename = save_path.format(suffix)
+
+        plt.savefig(filename, bbox_inches='tight')
         if ctx.enable_mlflow:
-            ctx.mlflow_logger.add_image(save_path)
+            ctx.mlflow_logger.add_image(filename)
     plt.tight_layout()
     if imshow:
         if is_in_ipython():

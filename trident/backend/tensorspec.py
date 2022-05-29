@@ -6,7 +6,8 @@ import collections
 from collections import Counter ,abc
 from enum import Enum
 from inspect import signature
-from trident.backend.common import to_list, OrderedDict, Signature, split_path, unpack_singleton, get_session, get_backend, TensorShape, is_instance
+from trident.context import split_path
+from trident.backend.common import to_list, OrderedDict, Signature, unpack_singleton, get_session, get_backend, TensorShape, is_instance
 from trident.backend import dtype
 import typing
 from typing import Optional, Union,Dict,Tuple,List, overload
@@ -731,7 +732,7 @@ def get_signature(fn, name=None):
         elif returns is Tensor:
             signature.outputs['output'] = TensorSpec(TensorShape([None]), optional=False, name='output')
         else:
-            if returns is not None and returns is not _GenericAlias:
+            if returns is not None  and not is_instance(returns,'_GenericAlias'):
                 for i in range(len(returns)):
                     signature.outputs['output_{0}'.format(i)] = TensorSpec(TensorShape([None]), optional=False, name='output_{0}'.format(i))
     else:

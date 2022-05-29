@@ -19,7 +19,7 @@ from scipy.io import loadmat
 from tqdm import tqdm
 
 from trident.backend.common import *
-
+from trident.context import make_dir_if_need,split_path,sanitize_path
 try:
     from urllib.request import urlretrieve
 except ImportError:

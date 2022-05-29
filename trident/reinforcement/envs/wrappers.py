@@ -25,8 +25,9 @@ from gym.wrappers import Monitor as _monitor
 from gym.wrappers import LazyFrames
 from matplotlib import animation
 from pyvirtualdisplay import Display
+from trident.context import split_path, make_dir_if_need, sanitize_path
 
-from trident.backend.common import make_dir_if_need, get_plateform, get_time_suffix, sanitize_path, if_none, split_path, \
+from trident.backend.common import get_plateform, get_time_suffix, \
     OrderedDict
 from trident.misc.ipython_utils import *
 from trident.reinforcement.utils import ObservationType, ActionStrategy

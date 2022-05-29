@@ -18,7 +18,7 @@ from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase
 from trident.data.image_common import *
 from trident.misc.ipython_utils import is_in_colab
-
+from trident.context import split_path, make_dir_if_need, sanitize_path
 if get_backend() == 'pytorch':
     import torch.nn as nn
     from trident.backend.pytorch_backend import get_device

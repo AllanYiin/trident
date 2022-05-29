@@ -10,6 +10,7 @@ from tqdm.auto import tqdm
 __all__ = ['CallbackBase','StoppingCriterionCallback','EarlyStoppingCriterionCallback','LambdaCallback','UnfreezeModelCallback']
 
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
 ctx = context._context()
 _backend = ctx.get_backend()
 if _backend=="pytorch":

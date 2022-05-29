@@ -10,7 +10,7 @@ import numpy as np
 from trident.backend.common import *
 from trident.backend.common import get_backend
 from trident.callbacks.callback_base import *
-
+from trident.context import split_path, make_dir_if_need, sanitize_path
 if get_backend()=='pytorch':
     from trident.backend.pytorch_ops import to_numpy,to_tensor
 elif get_backend()=='tensorflow':

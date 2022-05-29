@@ -22,6 +22,7 @@ from trident.optims.tensorflow_optimizers import Optimizer,get_optimizer
 from trident.optims.tensorflow_trainer import Model
 from trident.optims.tensorflow_losses import *
 from trident.reinforcement.utils import ReplayBuffer,Transition
+from trident.context import split_path, make_dir_if_need, sanitize_path
 import_or_install('gym')
 import gym
 

@@ -21,6 +21,7 @@ from trident.data.mask_common import label2color
 from trident.misc.ipython_utils import is_in_ipython, is_in_colab
 from trident.misc.visualization_utils import *
 from trident.optims.losses import _check_logsoftmax_logit
+from trident.context import split_path, make_dir_if_need, sanitize_path
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_backend import try_map_args_and_call, Layer,Sequential
     from trident.backend.pytorch_ops import to_numpy, arange, cast, clip, sqrt, int_shape, argmax, softmax, ndim, exp, reduce_max,\
@@ -312,7 +313,7 @@ class SegTileImageCallback(VisualizationCallbackBase):
             output = to_numpy(model.clone())
         elif isinstance(model, Layer):
             for k in model.signature.outputs.key_list:
-                if k in data and ndim(data[k])>=4:
+                if k in data and ndim(data[k])>=3:
                     output = to_numpy(data[k].copy())
                     break
         mask_type=None

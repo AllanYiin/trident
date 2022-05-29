@@ -20,7 +20,7 @@ import inspect
 import tensorflow as tf
 from trident.backend.tensorflow_ops import *
 from trident.data.utils import unpickle, pickle_it
-
+from trident.context import split_path, make_dir_if_need, sanitize_path
 __all__ = ['save', 'load', 'load_pthtar']
 
 string_classes = (str, bytes)

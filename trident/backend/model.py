@@ -19,9 +19,11 @@ from typing import Callable
 import numpy as np
 
 from trident import context
+from trident.context import split_path, make_dir_if_need, sanitize_path
+
 from trident.backend import dtype
 from trident.backend.common import to_list, format_time, get_terminal_size, get_backend, \
-    PrintException, OrderedDict, split_path, sanitize_path, adaptive_format, cyan_color, get_class, camel2snake
+    PrintException, OrderedDict, adaptive_format, cyan_color, get_class, camel2snake, is_instance
 from trident.backend.opencv_backend import array2image
 from trident.backend.tensorspec import *
 from trident.data.image_common import *
@@ -147,10 +149,11 @@ class ModelBase(object):
             #             mod.nodes = value.nodes
             #             mod.relative_name = name
 
-            inp_shape =self._model.input_shape
-            if inp_shape is None and hasattr(value, 'signature') and value.signature is not None and len(value.signature.inputs) > 0:
+            inp_shape = self._model.input_shape
+            if inp_shape is None and hasattr(value, 'signature') and value.signature is not None and len(
+                    value.signature.inputs) > 0:
                 inp_shape = value._signature.inputs.value_list[0].shape
-            elif inp_shape is None :
+            elif inp_shape is None:
                 inp_shape = copy.deepcopy(value.input_shape)
             self._initial_graph(input_shape=inp_shape, output=value)
         elif isinstance(value, np.ndarray) or 'tensor' in value.__name__.lower():
@@ -189,7 +192,6 @@ class ModelBase(object):
             if hasattr(self._model, '_signature'):
                 self._model._signature = get_signature(self._model)
             self._model._signature.outputs = value
-
 
     @property
     def targets(self):
@@ -262,7 +264,8 @@ class ModelBase(object):
                 self.inputs[arg_names[i]] = spec
 
 
-        elif self._signature is not None and len(self._signature.inputs.key_list) + len(self._signature.outputs.key_list) == len(arg_names):
+        elif self._signature is not None and len(self._signature.inputs.key_list) + len(
+                self._signature.outputs.key_list) == len(arg_names):
 
             old_inputs = copy.deepcopy(self._signature.inputs)
             old_outputs = copy.deepcopy(self._signature.outputs)
@@ -307,7 +310,8 @@ class ModelBase(object):
         return_list = [reverse_image_backend_adaption]
         for i in range(len(self._preprocess_flow)):
             fn = self._preprocess_flow[-1 - i]
-            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (fn.__class__.__name__ == 'Normalize'):
+            if (inspect.isfunction(fn) and fn.__qualname__ == 'normalize.<locals>.img_op') or (
+                    fn.__class__.__name__ == 'Normalize'):
                 return_list.append(Unnormalize(fn.mean, fn.std))
         return_list.append(array2image)
         return return_list
@@ -328,7 +332,8 @@ class ModelBase(object):
             img_data = np.expand_dims(image_backend_adaption(img_data), 0)
             if self.input_spec is None:
                 self._signature = get_signature(self._model)
-                self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(to_tensor(img_data), need_exclude_batch_axis=False)
+                self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(to_tensor(img_data),
+                                                                                                   need_exclude_batch_axis=False)
                 self._signature.inputs[self._signature.inputs.key_list[0]].object_type = ObjectType.rgb
                 self._signature.inputs[self._signature.inputs.key_list[0]].dtype = dtype.float32
 
@@ -382,31 +387,31 @@ class ModelBase(object):
             ):
         raise NotImplementedError
 
-
     def fit_generator(self,
-            generator,
-            batch_size=None,
-            epochs=1,
-            verbose=1,
-            callbacks=None,
-            validation_split=0.0,
-            validation_data=None,
-            shuffle=True,
-            class_weight=None,
-            sample_weight=None,
-            initial_epoch=0,
-            steps_per_epoch=None,
-            validation_steps=None,
-            validation_batch_size=None,
-            validation_freq=1,
-            max_queue_size=10,
-            workers=1,
-            use_multiprocessing=False,
-            ):
+                      generator,
+                      batch_size=None,
+                      epochs=1,
+                      verbose=1,
+                      callbacks=None,
+                      validation_split=0.0,
+                      validation_data=None,
+                      shuffle=True,
+                      class_weight=None,
+                      sample_weight=None,
+                      initial_epoch=0,
+                      steps_per_epoch=None,
+                      validation_steps=None,
+                      validation_batch_size=None,
+                      validation_freq=1,
+                      max_queue_size=10,
+                      workers=1,
+                      use_multiprocessing=False,
+                      ):
         raise NotImplementedError
 
     def __getattr__(self, name):
-        if name in ['training_context','_input_shape', '_output_shape', '_class_names', 'class_names', 'output_fn', 'optimizer']:
+        if name in ['training_context', '_input_shape', '_output_shape', '_class_names', 'class_names', 'output_fn',
+                    'optimizer']:
             return self.__dict__[name]
         elif name in ['reverse_preprocess_flow']:
             return self.__getattribute__(name)
@@ -478,7 +483,7 @@ class ModelBase(object):
 
             if 'training_context' in self.__dict__ and name in self.__dict__['training_context']:
                 self.__dict__['training_context'][name] = value
-            elif '_model' in self.__dict__ and self.__dict__['_model'] is not None :
+            elif '_model' in self.__dict__ and self.__dict__['_model'] is not None:
                 _model = self.__dict__['_model']
                 if isinstance(_model, Layer):
                     if _model is not None and name in _model.__dict__['_parameters']:
@@ -507,7 +512,7 @@ class ModelBase(object):
     def with_optimizer(self, optimizer, **kwargs):
         return self
 
-    def with_loss(self, loss, loss_weight=1, start_epoch=0,as_metric=False, name='', **kwargs):
+    def with_loss(self, loss, loss_weight=1, start_epoch=0, as_metric=False, name='', **kwargs):
         return self
 
     def with_metric(self, metric, name='', print_only=False, **kwargs):
@@ -616,7 +621,7 @@ class ModelBase(object):
         pass
 
     def do_on_epoch_start(self):
-        for callback in self.callbacks:
+        for callback in self.training_context['callbacks']:
             callback.on_epoch_start(self.training_context)
 
     def do_on_epoch_end(self):
@@ -631,8 +636,10 @@ class ModelBase(object):
             epoch_steps = [s for s in steps_values if epoch_values[steps_values.index(s)] == current_epoch]
             filtered_batch_values = [v for step, v in zip(batch_steps, batch_values) if step in epoch_steps]
             if len(filtered_batch_values) > 0:
-                filtered_batch_values = np.array(filtered_batch_values[-10:]).mean() if len(filtered_batch_values) > 10 else np.array(filtered_batch_values).mean()
-                self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'], filtered_batch_values)
+                filtered_batch_values = np.array(filtered_batch_values[-10:]).mean() if len(
+                    filtered_batch_values) > 10 else np.array(filtered_batch_values).mean()
+                self.epoch_loss_history.collect('total_losses', self.training_context['current_epoch'],
+                                                filtered_batch_values)
 
         steps_values, epoch_values = self.training_context['metrics'].get_series('epoch')
 
@@ -640,15 +647,16 @@ class ModelBase(object):
             if k != 'epoch':
                 metric_steps, metric_values = self.training_context['metrics'].get_series(k)
                 epoch_steps = [s for s in steps_values if epoch_values[steps_values.index(s)] == current_epoch]
-                filtered_batch_metric_values = [v for step, v in zip(metric_steps, metric_values) if step in epoch_steps]
+                filtered_batch_metric_values = [v for step, v in zip(metric_steps, metric_values) if
+                                                step in epoch_steps]
                 if len(filtered_batch_metric_values) > 0:
-                    filtered_batch_metric_values = np.array(filtered_batch_metric_values[-10:]).mean() if len(filtered_batch_metric_values) > 10 else np.array(
+                    filtered_batch_metric_values = np.array(filtered_batch_metric_values[-10:]).mean() if len(
+                        filtered_batch_metric_values) > 10 else np.array(
                         filtered_batch_metric_values).mean()
-                    self.epoch_metric_history.collect(k, self.training_context['current_epoch'], filtered_batch_metric_values)
-
+                    self.epoch_metric_history.collect(k, self.training_context['current_epoch'],
+                                                      filtered_batch_metric_values)
 
             # self.training_context['print_epoch_progress_frequency'] = 1
-
 
     def do_on_batch_start(self):
         for callback in self.training_context['callbacks']:
@@ -664,7 +672,8 @@ class ModelBase(object):
         return train_data, test_data
 
     def do_calculate_forward(self, is_training=True):
-        data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(self.training_context['test_data']) == 0 else \
+        data = self.training_context['train_data'] if is_training or self.training_context['test_data'] is None or len(
+            self.training_context['test_data']) == 0 else \
             self.training_context['test_data']
         data_feed = self.training_context['data_feed']
         model = self.training_context['current_model']
@@ -686,20 +695,20 @@ class ModelBase(object):
             if isinstance(output, (list, tuple)):
                 for i in range(len(output)):
                     data[signature.outputs.key_list[i]] = output[i]
-            elif isinstance(output, (OrderedDict)):
+            elif is_instance(output, 'OrderedDict'):
                 for k, v in output.items():
                     data[k] = v
-
             else:
-                if self._signature.outputs is None or len(self._signature.outputs)==0:
-                    self._signature.outputs['output']=TensorSpec.tensor_to_spec(output)
+                if self._signature.outputs is None or len(self._signature.outputs) == 0:
+                    self._signature.outputs['output'] = TensorSpec.tensor_to_spec(output)
                     data[self._signature.outputs.key_list[0]] = output
                 else:
                     data[self._signature.outputs.key_list[0]] = output
         if is_training and self.use_output_as_loss and is_tensor(data['output']):
             this_loss = data['output'].sum()
             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
-            self.training_context['losses'].collect('output', self.training_context['steps'], to_scalar(this_loss.copy()))
+            self.training_context['losses'].collect('output', self.training_context['steps'],
+                                                    to_scalar(this_loss.copy()))
 
     def do_on_loss_calculation_start(self):
         for callback in self.callbacks:
@@ -715,43 +724,50 @@ class ModelBase(object):
 
         # losss
         for k, v in self._losses.items():
-            if not hasattr(v, 'start_epoch') or (hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
+            if not hasattr(v, 'start_epoch') or (
+                    hasattr(v, 'start_epoch') and v.start_epoch <= self.training_context['current_epoch']):
 
                 try:
                     loss_weight = to_tensor(1.0)
                     if k in self.loss_weights:
                         loss_weight = self.loss_weights[k]
                     loss_weight = to_tensor(loss_weight, 'float32')
-                    #print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
-                    #print(self.train_data.value_list[-1])
-                    this_loss = loss_weight * try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
+                    # print(-1, 'train_data', self.train_data.value_list[-1].shape, 'abnormal:', any_abnormal_number( self.train_data.value_list[-1]))
+                    # print(self.train_data.value_list[-1])
+                    this_loss = loss_weight * try_map_args_and_call(v, self.train_data,
+                                                                    self.training_context['data_feed'],
+                                                                    self.is_autocast_enabled)  # v.forward(output, target) if hasattr(v, 'forward') else v(
 
                     if isinstance(this_loss, tuple):
                         overall_loss = to_tensor(0.0, requires_grad=True)
                         for i in range(len(this_loss)):
                             if any_abnormal_number(this_loss[i]):
-                                sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(k))
+                                sys.stderr.write(
+                                    'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, please check anything wrong!!!/n'.format(
+                                        k))
                             else:
                                 # a leaf Variable that requires grad connotused in an in-place operation.
                                 overall_loss = overall_loss + this_loss[i]
                         self.training_context['current_loss'] = self.training_context['current_loss'] + overall_loss
 
                         if hasattr(v, 'as_metric') and v.as_metric == True:
-                            self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(overall_loss))
-
+                            self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],
+                                                                         to_numpy(overall_loss / loss_weight))
 
                         self.training_context['tmp_losses'].collect(k, self.training_context['steps'], overall_loss)
 
                     else:
                         if any_abnormal_number(this_loss):
-                            sys.stderr.write('Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(k))
+                            sys.stderr.write(
+                                'Loss {0} have abnormal number (nan, inf,-inf), trident will skip it automaticly, ' 'please check anything wrong!!!/n'.format(
+                                    k))
                         else:
                             # a leaf Variable that requires grad connotused in an in-place operation.
                             self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss
 
-                        if hasattr(v,'as_metric') and v.as_metric==True:
-                            self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],to_numpy(this_loss))
-
+                        if hasattr(v, 'as_metric') and v.as_metric == True:
+                            self.training_context['tmp_metrics'].collect(camel2snake(k), self.training_context['steps'],
+                                                                         to_numpy(this_loss / loss_weight))
 
                         self.training_context['tmp_losses'].collect(k, self.training_context['steps'], this_loss)
 
@@ -769,14 +785,21 @@ class ModelBase(object):
         for k, v in self._regs.items():
             this_loss = to_tensor(0.0, requires_grad=True)
             if 'model' in v.signature.inputs:
-                reg_weight=v.signature.inputs['reg_weight'].default if 'reg_weight' in v.signature.inputs and hasattr(v.signature.inputs['reg_weight'],'default') else 1e-6
+                reg_weight = v.signature.inputs['reg_weight'].default if 'reg_weight' in v.signature.inputs and hasattr(
+                    v.signature.inputs['reg_weight'], 'default') else 1e-6
 
-                this_loss = v(self._model,reg_weight=reg_weight) if self.training_context['stop_update'] < 1 else to_tensor(0.0, requires_grad=True)
+                this_loss = v(self._model, reg_weight=reg_weight) if self.training_context[
+                                                                         'stop_update'] < 1 else to_tensor(0.0,
+                                                                                                           requires_grad=True)
             elif 'output' in v.signature.inputs:
-                this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[   'stop_update'] < 1 else to_tensor(0.0)
+                this_loss = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                                  self.is_autocast_enabled) if self.training_context[
+                                                                                   'stop_update'] < 1 else to_tensor(
+                    0.0)
             if not any_abnormal_number(this_loss):
                 # a leaf Variable that requires grad connotused in an in-place operation.
-                self.training_context['current_loss'] = self.training_context['current_loss'] + this_loss  # self.training_context[
+                self.training_context['current_loss'] = self.training_context[
+                                                            'current_loss'] + this_loss  # self.training_context[
             # 'current_loss'] + this_loss
 
             self.training_context['tmp_losses'].collect(k + '_Loss', self.training_context['steps'], this_loss)
@@ -810,12 +833,15 @@ class ModelBase(object):
                 self.training_context['metrics'].regist(k)
             self.training_context['tmp_metrics'].regist(k)
 
-            this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'], self.is_autocast_enabled) if self.training_context[
-                                                                                                                                         'stop_update'] < 1 else to_tensor(0)
+            this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
+                                                self.is_autocast_enabled) if self.training_context[
+                                                                                 'stop_update'] < 1 else to_tensor(0)
             self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
 
-            if self.training_context['is_out_sample_evaluation'] == True and self.test_data is not None and len(self.test_data) > 0:
-                this_out_metric = try_map_args_and_call(v, self.test_data, self.training_context['data_feed'], self.is_autocast_enabled)
+            if self.training_context['is_out_sample_evaluation'] == True and self.test_data is not None and len(
+                    self.test_data) > 0:
+                this_out_metric = try_map_args_and_call(v, self.test_data, self.training_context['data_feed'],
+                                                        self.is_autocast_enabled)
                 self.training_context['out_sample_metrics'].collect(k, self.training_context['steps'], this_out_metric)
 
         # ON_EVALUATION_END
@@ -891,23 +917,27 @@ class ModelBase(object):
                     batch_steps, batch_values = self.tmp_metrics.get_series(k)
                     metric_value = np.array(batch_values).mean()
                 else:
-                    metric_value =batch_values[-1]
-                metric_strings.append('{0}: {1} '.format(k, adaptive_format(metric_value, batch_values, value_type='metric', name=k)))
+                    metric_value = batch_values[-1]
+                metric_strings.append(
+                    '{0}: {1} '.format(k, adaptive_format(metric_value, batch_values, value_type='metric', name=k)))
 
         if len(self.training_context['losses']) == 0:
             loss_value = None
         else:
-            if len(self.training_context['losses'].get_series('total_losses')[0])>0:
-                loss_value =self.training_context['losses'].get_last('total_losses')[-1]
+            if len(self.training_context['losses'].get_series('total_losses')[0]) > 0:
+                loss_value = self.training_context['losses'].get_last('total_losses')[-1]
             else:
                 steps, values = self.tmp_losses.get_series('total_losses')
-                loss_value= np.array(values).mean()
+                loss_value = np.array(values).mean()
 
-        step_time = self.training_context['time_batch_progress'] / builtins.min(self.steps + 1, print_batch_progress_frequency)
-        progress_bar(step_time, self.training_context['current_batch']+1, self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
-                     'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
-                                                                            self.optimizer.lr,
-                                                                            self.training_context['current_epoch']),
+        step_time = self.training_context['time_batch_progress'] / builtins.min(self.steps + 1,
+                                                                                print_batch_progress_frequency)
+        progress_bar(step_time, self.training_context['current_batch'] + 1,
+                     self.training_context['total_batch'] if self.training_context['total_batch'] is not None else '*',
+                     'Loss: {0} | {1} | lr: {2:<10.3e} | epoch: {3}'.format(
+                         adaptive_format(loss_value, value_type='loss'), ', '.join(metric_strings),
+                         self.optimizer.lr,
+                         self.training_context['current_epoch']),
                      name=self.training_context['model_name'].ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_batch_progress'] = 0
 
@@ -922,23 +952,29 @@ class ModelBase(object):
 
         for k in self.epoch_metric_history.key_list:
             if k != 'epoch':
-                metric_strings.append('{0}: {1}'.format(k, adaptive_format(self.epoch_metric_history.get_last(k)[-1], self.epoch_metric_history.get_series(k)[-1], 'metric', k)))
+                metric_strings.append('{0}: {1}'.format(k, adaptive_format(self.epoch_metric_history.get_last(k)[-1],
+                                                                           self.epoch_metric_history.get_series(k)[-1],
+                                                                           'metric', k)))
         step_time = self.training_context['time_epoch_progress']
 
         progress_bar(step_time, self.training_context['current_epoch'] + 1, self.training_context['total_epoch'],
                      'Loss: {0}| {1} | lr: {2:<10.3e}'.format(
-                         adaptive_format(self.epoch_loss_history.get_last('total_losses')[-1], self.epoch_loss_history.get_series('total_losses')[-1], value_type='loss',
-                                         name='total_losses'), ', '.join(metric_strings), self.training_context['current_lr']),
+                         adaptive_format(self.epoch_loss_history.get_last('total_losses')[-1],
+                                         self.epoch_loss_history.get_series('total_losses')[-1], value_type='loss',
+                                         name='total_losses'), ', '.join(metric_strings),
+                         self.training_context['current_lr']),
                      name=self.training_context['model_name'].ljust(self.training_context['max_name_length'] + 1, ' '))
         self.training_context['time_epoch_progress'] = 0
 
         self.do_on_progress_end()
 
-    #@pysnooper.snoop()
-    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch=None, done=False,
+    # @pysnooper.snoop()
+    def train_model(self, train_data, test_data, current_epoch, current_batch, total_epoch, total_batch=None,
+                    done=False,
                     is_collect_data=True, is_print_batch_progress=True, is_print_epoch_progress=True,
-                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False, is_out_sample_evaluation=False, **kwargs):
-        #with autograd.detect_anomaly():
+                    is_print_batch_gradients=True, log_gradients=False, log_weights=False, accumulate_grads=False,
+                    is_out_sample_evaluation=False, **kwargs):
+        # with autograd.detect_anomaly():
         try:
 
             self.training_context['current_epoch'] = current_epoch
@@ -955,7 +991,7 @@ class ModelBase(object):
                 if self.training_context['current_epoch'] == 0:
                     # epoch is not the logical inteval for us to control the flow
                     self.training_context['steps'] = 0
-                    #on_epoch_start
+                    # on_epoch_start
                     for callback in self.callbacks:
                         callback.on_epoch_start(self.training_context)
 
@@ -975,7 +1011,8 @@ class ModelBase(object):
             self.training_context['current_lr'] = self.optimizer.lr
             self.batch_loss_history.collect('epoch', self.training_context['steps'], current_epoch)
             self.batch_metric_history.collect('epoch', self.training_context['steps'], current_epoch)
-            is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if self.training_context['total_batch'] is not None else done
+            is_epoch_end = (self.training_context['current_batch'] == self.training_context['total_batch'] - 1) if \
+                self.training_context['total_batch'] is not None else done
             # print('step:{0}'.format(self.training_context['steps']))
             self.do_on_batch_start()
             for callback in self.callbacks:
@@ -987,13 +1024,16 @@ class ModelBase(object):
             for callback in self.callbacks:
                 callback.on_data_received(self.training_context)
 
-            if (not self.training_context['skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
+            if (not self.training_context[
+                'skip_reset_total_loss']):  # and (not (self.training_context['steps'] + 1) % self.accumulation_steps != 0):
                 self.training_context['current_loss'] = to_tensor(0.0, requires_grad=True)
 
-            if 'skip_generate_output' not in self.training_context or self.training_context['skip_generate_output'] == False:
+            if 'skip_generate_output' not in self.training_context or self.training_context[
+                'skip_generate_output'] == False:
                 try:
                     if self.output_fn is not None and callable(self.output_fn):
-                        self.output_fn(model=self,training_context=self.training_context, is_training=True, is_autocast_enabled=self.is_autocast_enabled)
+                        self.output_fn(model=self, training_context=self.training_context, is_training=True,
+                                       is_autocast_enabled=self.is_autocast_enabled)
                     else:
                         self.do_calculate_forward(is_training=True)
 
@@ -1002,7 +1042,7 @@ class ModelBase(object):
                     PrintException()
 
             # write output in to data
-            #print(-1, 'output',self.training_context['train_data'].value_list[-1].shape, 'abnormal:', any_abnormal_number(self.training_context['train_data'].value_list[-1]))
+            # print(-1, 'output',self.training_context['train_data'].value_list[-1].shape, 'abnormal:', any_abnormal_number(self.training_context['train_data'].value_list[-1]))
 
             # if any_abnormal_number(train_data['output']):
             #     print('{0} before calculate loss'.format(''))
@@ -1014,7 +1054,8 @@ class ModelBase(object):
             if isinstance(self._model, Layer) and any_abnormal_number(self._model):
                 for para in self._model.parameters():
                     if any_abnormal_number(para):
-                        para.data.copy_(where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
+                        para.data.copy_(
+                            where(is_nan(para), random_normal_like(para, mean=0, std=0.02).to(get_device()), para))
             self.do_calculate_constraints()
             if log_weights and is_collect_data:
                 if isinstance(self._model, Layer):
@@ -1022,9 +1063,13 @@ class ModelBase(object):
                 elif is_tensor(self._model):
                     self.log_weight(weghts=self._model)
 
-            if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and self.training_context['stop_update'] < 1:
+            if self.test_data is None or len(self.test_data) == 0:
+                self.test_data = self.train_data
+            if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0 and \
+                    self.training_context['stop_update'] < 1:
                 if self.output_fn is not None and callable(self.output_fn):
-                    self.output_fn(model=self,training_context=self.training_context, is_training=False, is_autocast_enabled=self.is_autocast_enabled)
+                    self.output_fn(model=self, training_context=self.training_context, is_training=False,
+                                   is_autocast_enabled=self.is_autocast_enabled)
                 else:
                     self.do_calculate_forward(is_training=False)
 
@@ -1038,7 +1083,8 @@ class ModelBase(object):
 
                     # check
                     if len(steps) > 0:
-                        self.training_context['metrics'].collect(k, self.training_context['steps'], to_scalar(to_numpy(values).mean()))
+                        self.training_context['metrics'].collect(k, self.training_context['steps'],
+                                                                 to_scalar(to_numpy(values).mean()))
                 self.training_context['tmp_metrics'].reset()
 
             # ON_BATCH_END
@@ -1055,16 +1101,20 @@ class ModelBase(object):
             else:
                 self.training_context['print_batch_progress_frequency'] += 1
 
-            if is_out_sample_evaluation == True and self.test_data is not None and len(self.test_data) > 0:
+            if is_out_sample_evaluation == True:
+                self.model.eval()
                 verbose = []
                 for k in self.training_context['out_sample_metrics'].get_keys():
                     test_steps, test_values = self.training_context['out_sample_metrics'].get_series(k)
                     metric_value = test_values[-1]
                     history_metric_value = to_scalar(test_values[-1])
-                    verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value,prev_value=test_values,value_type='metric', name=k)))
-                out_sample_evaluation_str = cyan_color(self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
+                    verbose.append('{0}: {1}'.format(k, adaptive_format(history_metric_value, prev_value=test_values,
+                                                                        value_type='metric', name=k)))
+                out_sample_evaluation_str = cyan_color(
+                    self.training_context['model_name'] + ' ' + 'out-of-sample evaluation: ' + ','.join(verbose))
                 ctx.print(out_sample_evaluation_str)
-            # self.training_context['steps'] += 1
+                self.model.train()
+                # self.training_context['steps'] += 1
 
         except KeyboardInterrupt as k:
             self.do_on_excution_exception()
@@ -1073,7 +1123,7 @@ class ModelBase(object):
             self.do_on_excution_exception()
             PrintException()
 
-    def summary(self):
+    def summary(self, inputs=None):
         raise NotImplementedError
 
     def predict(self, input):
@@ -1084,15 +1134,15 @@ class ModelBase(object):
 
     def trigger_when(self, when='on_batch_end', frequency=1, unit='batch', action=None):
         if 'epoch' in when:
-            unit='epoch'
+            unit = 'epoch'
 
-        cb=get_class('LambdaCallback',['trident.callbacks'])
-        new_callbacks =cb(when=when, frequency=frequency, unit=unit, action=action)
+        cb = get_class('LambdaCallback', ['trident.callbacks', 'trident.callbacks.callback_base'])
+        new_callbacks = cb(when=when, frequency=frequency, unit=unit, action=action)
         self.with_callbacks(new_callbacks)
         return self
 
     def unfreeze_model_scheduling(self, frequency: int, unit='epoch', slice_from=None, slice_to=None, module_name=None):
-        cb=get_class('UnfreezeModelCallback',['trident.callbacks'])
+        cb = get_class('UnfreezeModelCallback', ['trident.callbacks'])
         self.callbacks.append(cb(frequency, unit, slice_from, slice_to, module_name=module_name))
         return self
 
@@ -1110,7 +1160,6 @@ class ModelBase(object):
 
     def gpu(self):
         self.cuda()
-
 
     def xpu(self):
         self._model.xpu()
@@ -1136,7 +1185,7 @@ def progress_bar(step_time, current, total, msg=None, name=''):
     # cur_len = builtins.max(int(TOTAL_BAR_LENGTH * float(current) / total), 1)
     # rest_len = int(TOTAL_BAR_LENGTH - cur_len) - 1 + cur_len
 
-    L = ['{0}'.format(name) , ' Step: {0:<8s}'.format(format_time(step_time))]
+    L = ['{0}'.format(name), ' Step: {0:<8s}'.format(format_time(step_time))]
     # L.append(' | Tot: {0:<12s}'.format(format_time(tot_time)))
     if msg:
         L.append(' | ' + msg)

@@ -11,7 +11,7 @@ from trident.backend.common import *
 from trident.backend.common import get_backend
 from trident.callbacks.callback_base import CallbackBase,_valid_when
 from trident.data.image_common import *
-
+from trident.context import split_path, make_dir_if_need, sanitize_path
 if get_backend()=='pytorch':
     import torch
     import torch.nn as nn
