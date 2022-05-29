@@ -22,7 +22,14 @@ def sanitize_path(path):
     Returns:
         sanitized path
 
+    Examples:
+        >>> print(sanitize_path('~/.trident/datasets'))
+        C:/Users/allan/.trident/datasets
+
     """
+    if path.startswith('~/'):
+        path=os.path.join(os.path.expanduser("~"),path[2:])
+    path=os.path.abspath(path)
     if isinstance(path, str):
         return os.path.normpath(path.strip()).replace('\\', '/')
     else:
