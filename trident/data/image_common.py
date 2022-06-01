@@ -99,7 +99,9 @@ def list_images(directory, ext='jpg|jpeg|jpe|tiff|tif|bmp|png|ppm|jfif'):
 def check_same_size(*images):
     result = True
     base_shape =None
-    if isinstance(images[0],numbers.Number):
+    if isinstance(images[0],str):
+        return True
+    elif isinstance(images[0],numbers.Number):
         base_shape=0
     elif  isinstance(images[0],np.ndarray):
         base_shape = TensorShape(images[0].shape)
