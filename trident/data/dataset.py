@@ -330,6 +330,8 @@ class ImageDataset(Dataset):
 
             if not isinstance(img, np.ndarray):
                 raise ValueError('image data should be ndarray')
+            elif  self.object_type == ObjectType.image_path:
+                return img
             elif isinstance(img, np.ndarray) and img.ndim not in [2, 3]:
                 raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(img.ndim))
             elif self.object_type == ObjectType.gray:
