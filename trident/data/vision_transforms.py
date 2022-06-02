@@ -198,7 +198,7 @@ class Resize(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        h, w, eh, ew, th, tw, pad_vert, pad_horz = self._shape_info
+        h, w, eh, ew, th, tw, pad_vert, pad_horz ,scale= self._shape_info
 
         if not self.keep_aspect:
             return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
@@ -222,18 +222,19 @@ class Resize(VisionTransform):
             return output
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        h, w,eh, ew, th, tw, pad_vert, pad_horz = self._shape_info
+        # 原圖尺寸、預期尺寸、縮放後尺寸
+        h, w,eh, ew, th, tw, pad_vert, pad_horz ,scale= self._shape_info
         if h == th and w == tw:
             return coords
-        coords[:, 0] = np.round(coords[:, 0] * (float(tw) / w))
-        coords[:, 1] = np.round(coords[:, 1] * (float(th) / h))
+        coords[:, 0] = np.round(coords[:, 0] *scale)
+        coords[:, 1] = np.round(coords[:, 1] *scale)
         if not self.align_corner:
             coords[:, 0] += pad_vert // 2
             coords[:, 1] += pad_horz // 2
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w,eh, ew,  th, tw, pad_vert, pad_horz = self._shape_info
+        h, w,eh, ew,  th, tw, pad_vert, pad_horz,scale = self._shape_info
         if h == eh and w == ew:
             return mask
         mask_dtype = mask.dtype
@@ -279,7 +280,7 @@ class Resize(VisionTransform):
             tw = int(builtins.round(w * self.scale, 0))
             pad_vert = eh - th
             pad_horz = ew - tw
-            return h, w,eh, ew, th, tw, pad_vert, pad_horz
+            return h, w,eh, ew, th, tw, pad_vert, pad_horz,self.scale
 
 class Unresize(VisionTransform):
     r"""
