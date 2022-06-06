@@ -2889,6 +2889,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
     print("Estimated Total Size (MB): %0.2f" % total_size)
     print("----------------------------------------------------------------")
     # return summary
+    del hooks
 
 
 def normalize_padding(padding, rank):
