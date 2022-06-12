@@ -1439,10 +1439,8 @@ class GanTrainingPlan(TrainingPlan):
                                     trainitem.save_model(trainitem.training_context['save_path'], )
                                     if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
                                                                    trainitem.training_context['upload_onnx'] == False):
-                                        trainitem.save_onnx(
-                                            trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        ctx.summary_writer.add_onnx_graph(
-                                            trainitem.training_context['save_path'].replace('.pth', '.onnx'));
+                                        trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
                                         trainitem.training_context['upload_onnx'] = True
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
@@ -2172,10 +2170,8 @@ class CycleGanTrainingPlan(TrainingPlan):
                                     trainitem.save_model(trainitem.training_context['save_path'], )
                                     if ctx.enable_tensorboard and ('upload_onnx' not in trainitem.training_context or
                                                                    trainitem.training_context['upload_onnx'] == False):
-                                        trainitem.save_onnx(
-                                            trainitem.training_context['save_path'].replace('.pth', '.onnx'))
-                                        ctx.summary_writer.add_onnx_graph(
-                                            trainitem.training_context['save_path'].replace('.pth', '.onnx'));
+                                        trainitem.save_onnx(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
+                                        ctx.summary_writer.add_onnx_graph(trainitem.training_context['save_path'].replace('.pth', '.onnx'))
                                         trainitem.training_context['upload_onnx'] = True
                             if only_steps == True and self.steps >= max_batches - 1:
                                 for k, trainitem in self.training_items.items():
