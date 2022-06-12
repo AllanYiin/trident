@@ -790,6 +790,8 @@ class GanTrainingPlan(TrainingPlan):
     def with_generator(self, generator, name='modelG'):
         if len(self.training_items) == 0:
             self.is_generator_first = True
+        else:
+            self.is_generator_first =False
 
         generator.training_context['gan_role'] = 'generator'
         if generator.optimizer is None:
@@ -804,13 +806,15 @@ class GanTrainingPlan(TrainingPlan):
     def with_discriminator(self, discriminator, name='modelD'):
         if len(self.training_items) == 0:
             self.is_generator_first = False
+        else:
+            self.is_generator_first =True
 
         discriminator.training_context['gan_role'] = 'discriminator'
         if discriminator.optimizer is None:
             discriminator.with_optimizer(Adam, lr=2e-4, betas=(0.5, 0.999))
         discriminator.with_callbacks(StepLR(frequency=5, unit='epoch', gamma=0.75))
         self.discriminator = discriminator
-        #self.discriminator.training_context['skip_generate_output'] = True
+
         if not self.is_generator_first:
             self.discriminator.training_context['retain_graph'] = True
         else:
