@@ -2469,18 +2469,18 @@ def fix_layer(layer: Layer):
 
     for module in layer.modules():
         module.dump_patches = True
-        if not hasattr(module, '_signature'):
-            module._signature = inspect.signature(module.forward)
+        # if not hasattr(module, '_signature'):
+        #     module._signature = inspect.signature(module.forward)
         class_name = module.__class__.__name__
         if not hasattr(layer, 'get_root'):
             setattr(layer, 'get_root', MethodType(get_root, layer))
         if not hasattr(module, 'uuid'):
             module.uuid = uuid.uuid4().node
         # check for root
-        # if module.uuid == layer.uuid:
-        #     module.is_root = True
-        # else:
-        #     module.is_root = False
+        if module.uuid == layer.uuid:
+            module.is_root = True
+        else:
+            module.is_root = False
         if not hasattr(module, 'relative_name'):
             module.relative_name = ''
         if not hasattr(module, '_uid_prefixs'):
@@ -2542,7 +2542,7 @@ def fix_layer(layer: Layer):
                 module.use_spectral = False
 
     if layer.is_root == True and (not hasattr(layer, '_signature') or layer._signature is None or len(layer._signature.inputs) == 0):
-        layer._signature = None
+        layer._signature = get_signature(layer)
     return layer
 
 
