@@ -679,18 +679,20 @@ class Layer(nn.Module):
 
     @property
     def device(self) -> str:
-        return self._device
+        if self.is_root :
+            if len(self.weights)==0:
+                return get_device()
+            else:
+                return self.weights[0].device.type
+        return self.get_root().device
 
     @device.setter
     def device(self, value: str):
         if isinstance(value, str):
-            self._device = value
             self.to(value)
         elif isinstance(value, torch.device):
-            self._device = value.type
             self.to(value.type)
         else:
-            self._device = value
             self.to(value)
 
     def cuda(self, device: Optional[Union[int, torch.device]] = None):
@@ -2000,7 +2002,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
 
         if (
                 not isinstance(module, (nn.Sequential, Sequential, nn.ModuleList, ModuleList, nn.ModuleDict, ModuleDict))
-                and not (module == model)
+                and not (module == model and len(module._parameters)==0)
         ):
             hooks.append(module.register_forward_hook(hook))
 
@@ -2048,103 +2050,111 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
     # create properties
     summary = OrderedDict()
     hooks = []
+    try:
+        # register hook
+        model.apply(register_hook)
 
-    # register hook
-    model.apply(register_hook)
-
-    # make a forward pass
-    # print(x.shape)
-    if inputs is not None:
-        if isinstance(inputs, OrderedDict):
-            model(*list(inps.values()))
+        # make a forward pass
+        # print(x.shape)
+        if inputs is not None:
+            if isinstance(inputs, OrderedDict):
+                model(*list(inps.values()))
+            elif isinstance(inputs, (Tensor,np.ndarray)):
+                model(inputs)
+            else:
+                model(*inputs)
         else:
-            model(*inputs)
-    else:
-        model(*inps.value_list)
+            model(*inps.value_list)
 
-    # remove these hooks
-    for h in hooks:
-        h.remove()
-    max_name_len = 0
-    max_weight_len = 0
-    for layer in summary:
-        max_name_len = builtins.max(max_name_len, len(layer + "  [" + summary[layer]["class_name"] + "]") + 5)
-        max_weight_len = builtins.max(max_weight_len, builtins.max([len(str(item).replace('(', '').replace(')', '')) for item in summary[layer]["weight"].items()]) + 5 if len(
-            summary[layer]["weight"]) > 0 else 5)
+        # remove these hooks
+        for h in hooks:
+            h.remove()
+        max_name_len = 0
+        max_weight_len = 0
+        for layer in summary:
+            max_name_len = builtins.max(max_name_len, len(layer + "  [" + summary[layer]["class_name"] + "]") + 5)
+            max_weight_len = builtins.max(max_weight_len, builtins.max([len(str(item).replace('(', '').replace(')', '')) for item in summary[layer]["weight"].items()]) + 5 if len(
+                summary[layer]["weight"]) > 0 else 5)
 
-    print("--------------------------------------------------------------------------------------------------------------------------------")
-    line_new = "{0:^50s} {1:<25s}  {2:<35s} {3:<8s}  {4:<8s}  {5:<25s}".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format("Layer (type)",
-                                                                                                                                                                 "Output Shape",
-                                                                                                                                                                 "Weight ", "Bias",
-                                                                                                                                                                 "Param #",
-                                                                                                                                                                 "FLOPS #")
+        print("--------------------------------------------------------------------------------------------------------------------------------")
+        line_new = "{0:^50s} {1:<25s}  {2:<35s} {3:<8s}  {4:<8s}  {5:<25s}".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format("Layer (type)",
+                                                                                                                                                                     "Output Shape",
+                                                                                                                                                                     "Weight ", "Bias",
+                                                                                                                                                                     "Param #",
+                                                                                                                                                                     "FLOPS #")
 
-    print(line_new)
-    print("==============================================================================")
-    total_params = np.array([0], dtype=np.float64)
-    total_output = 0
-    trainable_params = np.array([0], dtype=np.float64)
-    flops = np.array([0], dtype=np.float64)
-    macc = np.array([0], dtype=np.float64)
-    for layer in summary:
-        # input_shape, output_shape, trainable, nb_params
-        is_keep = '★' if summary[layer]["keep_output"] else ''
-        class_name = summary[layer]["class_name"]
-        # line_new = "{0:<50s} {1:<20s}  {2:<20s} {3:<8s}  {4:<8}  {5:<12}".format(
-        #     layer+"  "+class_name,
-        #     is_keep + str(summary[layer]["output_shape"]),
-        #     str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
-        #     str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
-        #     summary[layer]["nb_params"],
-        #     summary[layer]["flops"][0]
-        # )
-
-        line_new = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4:,.0f}  {5:,.0f}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
-            (layer + "  [" + class_name + "]").ljust(max_name_len, ' '),
-            (is_keep + str([None] + summary[layer]["output_shape"][1:])).ljust(25, ' '),
-            str(summary[layer]["weight"].item_list[0] if 'weight' in summary[layer] and len(summary[layer]["weight"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(
-                max_weight_len, ' '),
-            str(summary[layer]["bias"].item_list[0] if 'bias' in summary[layer] and len(summary[layer]["bias"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(8, ' '),
-            summary[layer]["nb_params"],
-            summary[layer]["flops"].sum()
-        )
-        if len(summary[layer]["weight"]) > 1:
-            for n in range(1, len(summary[layer]["weight"])):
-                line_new_add = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4}  {5}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
-                    " ".ljust(max_name_len + len(layer + "  [" + class_name + "]") // 2, " "),
-                    " ".ljust(25 + len(is_keep + str([None] + summary[layer]["output_shape"][1:])) // 2, " "),
-                    str(summary[layer]["weight"].item_list[n] if n < len(summary[layer]["weight"]) else ' ').replace('(', '').replace(')', '').ljust(max_weight_len, " "),
-                    str(summary[layer]["bias"].item_list[n] if n < len(summary[layer]["bias"]) else ' ').replace('(', '').replace(')', '').ljust(8, " "), " ", " ")
-                line_new = line_new + '\n' + line_new_add
-
-        total_params += summary[layer]["nb_params"]
-        flops += float(summary[layer]["flops"])
-        macc += float(summary[layer]["macc"].sum())
-        total_output += np.prod(summary[layer]["output_shape"])
-        if "trainable" in summary[layer]:
-            trainable_params += summary[layer]["trainable"]
         print(line_new)
+        print("==============================================================================")
+        total_params = np.array([0], dtype=np.float64)
+        total_output = 0
+        trainable_params = np.array([0], dtype=np.float64)
+        flops = np.array([0], dtype=np.float64)
+        macc = np.array([0], dtype=np.float64)
+        for layer in summary:
+            # input_shape, output_shape, trainable, nb_params
+            is_keep = '★' if summary[layer]["keep_output"] else ''
+            class_name = summary[layer]["class_name"]
+            # line_new = "{0:<50s} {1:<20s}  {2:<20s} {3:<8s}  {4:<8}  {5:<12}".format(
+            #     layer+"  "+class_name,
+            #     is_keep + str(summary[layer]["output_shape"]),
+            #     str(summary[layer]["weight"] if 'weight' in summary[layer] else ''),
+            #     str(summary[layer]["bias"] if 'bias' in summary[layer] else ''),
+            #     summary[layer]["nb_params"],
+            #     summary[layer]["flops"][0]
+            # )
 
-    # assume 4 bytes/number (float on cuda).
-    total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional == False and spec.shape is not None]).sum()
-    total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
-    total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
-    total_size = total_params_size + total_output_size + total_input_size
+            line_new = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4:,.0f}  {5:,.0f}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
+                (layer + "  [" + class_name + "]").ljust(max_name_len, ' '),
+                (is_keep + str([None] + summary[layer]["output_shape"][1:])).ljust(25, ' '),
+                str(summary[layer]["weight"].item_list[0] if 'weight' in summary[layer] and len(summary[layer]["weight"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(
+                    max_weight_len, ' '),
+                str(summary[layer]["bias"].item_list[0] if 'bias' in summary[layer] and len(summary[layer]["bias"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(8, ' '),
+                summary[layer]["nb_params"],
+                summary[layer]["flops"].sum()
+            )
+            if len(summary[layer]["weight"]) > 1:
+                for n in range(1, len(summary[layer]["weight"])):
+                    line_new_add = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4}  {5}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
+                        " ".ljust(max_name_len + len(layer + "  [" + class_name + "]") // 2, " "),
+                        " ".ljust(25 + len(is_keep + str([None] + summary[layer]["output_shape"][1:])) // 2, " "),
+                        str(summary[layer]["weight"].item_list[n] if n < len(summary[layer]["weight"]) else ' ').replace('(', '').replace(')', '').ljust(max_weight_len, " "),
+                        str(summary[layer]["bias"].item_list[n] if n < len(summary[layer]["bias"]) else ' ').replace('(', '').replace(')', '').ljust(8, " "), " ", " ")
+                    line_new = line_new + '\n' + line_new_add
 
-    print("================================================================")
-    print("Total params: {0:,.0f}".format(total_params[0]))
-    print("Trainable params: {0:,.0f}".format(trainable_params[0]))
-    print("Non-trainable params: {0:,.0f}".format(total_params[0] - trainable_params[0]))
-    print("Total MACC: {0:,.0f}".format(macc[0]))
-    print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]))
-    print("----------------------------------------------------------------")
-    print("Input size (MB): %0.2f" % total_input_size)
-    print("Forward/backward pass size (MB): %0.2f" % total_output_size)
-    print("Params size (MB): %0.2f" % total_params_size)
-    print("Estimated Total Size (MB): %0.2f" % total_size)
-    print("----------------------------------------------------------------")
-    # return summary
-    del hooks
+            total_params += summary[layer]["nb_params"]
+            flops += float(summary[layer]["flops"])
+            macc += float(summary[layer]["macc"].sum())
+            total_output += np.prod(summary[layer]["output_shape"])
+            if "trainable" in summary[layer]:
+                trainable_params += summary[layer]["trainable"]
+            print(line_new)
+
+        # assume 4 bytes/number (float on cuda).
+        total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional == False and spec.shape is not None]).sum()
+        total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
+        total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
+        total_size = total_params_size + total_output_size + total_input_size
+
+        print("================================================================")
+        print("Total params: {0:,.0f}".format(total_params[0]))
+        print("Trainable params: {0:,.0f}".format(trainable_params[0]))
+        print("Non-trainable params: {0:,.0f}".format(total_params[0] - trainable_params[0]))
+        print("Total MACC: {0:,.0f}".format(macc[0]))
+        print("Total FLOPs: {0:.5f} GFLOPs".format(np.round(flops / 10. ** 9, 5)[0]))
+        print("----------------------------------------------------------------")
+        print("Input size (MB): %0.2f" % total_input_size)
+        print("Forward/backward pass size (MB): %0.2f" % total_output_size)
+        print("Params size (MB): %0.2f" % total_params_size)
+        print("Estimated Total Size (MB): %0.2f" % total_size)
+        print("----------------------------------------------------------------")
+        # return summary
+        del hooks
+    except Exception as e:
+        del hooks
+        print(e)
+        PrintException()
+
+
 
 
 def normalize_padding(padding, rank):
@@ -2397,8 +2407,7 @@ def fix_layer(layer: Layer):
     """
     if not hasattr(layer, 'is_root'):
         layer.is_root = True
-    if not hasattr(layer, '_device'):
-        layer._device = get_device()
+
 
     def get_root(self):
         if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:
@@ -2410,6 +2419,9 @@ def fix_layer(layer: Layer):
                 if hasattr(node, 'default_name') and node.default_name == "sequential_1":
                     return node
             return self
+
+    if not hasattr(layer, 'device'):
+        layer.device=layer.weights[0].device.type
 
     layer.to(get_device())
     if not hasattr(layer, '_nodes'):
