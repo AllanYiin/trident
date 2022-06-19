@@ -26,7 +26,7 @@ from trident.backend.common import *
 from trident.backend.opencv_backend import file2array
 from trident.backend.tensorspec import TensorSpec, ObjectType
 from trident.data.image_common import image_backend_adaption, reverse_image_backend_adaption, \
-    array2image, TensorShape
+    array2image, TensorShape,OrderedDict
 from trident.data.label_common import label_backend_adaptive
 from trident.data.mask_common import mask_backend_adaptive, color2label
 from trident.data.samplers import *
@@ -232,9 +232,6 @@ class ZipDataset(Dataset):
 class NumpyDataset(Dataset):
     def __init__(self, data=None, object_type=ObjectType.array_data, symbol="array", **kwargs):
         super().__init__(data, symbol=symbol, object_type=object_type, **kwargs)
-        if data is not None:
-            self._element_spec = TensorSpec(shape=tensor_to_shape(self.items[0], need_exclude_batch_axis=True, is_singleton=True), dtype=self.items[0].dtype, name=self.symbol,
-                                            object_type=self.object_type)
 
     def __getitem__(self, index: int) -> Tuple:
         if index >= len(self.items):
@@ -1216,7 +1213,13 @@ class Iterator(object):
             else:
                 if len(ds) > 0:
                     dataitem = ds[k]
-                    ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
+                    if isinstance(dataitem,np.ndarray):
+                        ds.element_spec = TensorSpec.tensor_to_spec(expand_dims(dataitem, 0), object_type=ds.object_type, name=ds.symbol)
+                    elif isinstance(dataitem,numbers.Number):
+                        ds.element_spec =TensorSpec(shape=TensorShape([None,1]),object_type=ObjectType.regression_label,name=ds.symbol)
+                    else:
+                        pass
+
             self.data_template[ds.element_spec] = None
 
         self._batch_size = batch_size
