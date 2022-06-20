@@ -834,8 +834,7 @@ class ModelBase(object):
             self.training_context['tmp_metrics'].regist(k)
 
             this_metric = try_map_args_and_call(v, self.train_data, self.training_context['data_feed'],
-                                                self.is_autocast_enabled) if self.training_context[
-                                                                                 'stop_update'] < 1 else to_tensor(0)
+                                                self.is_autocast_enabled)
             self.training_context['tmp_metrics'].collect(k, self.training_context['steps'], this_metric)
 
             if self.training_context['is_out_sample_evaluation'] == True and self.test_data is not None and len(
