@@ -484,14 +484,14 @@ class RFBnet(Layer):
 
         else:
 
-            # locations = decode(locations, self.priors, self.variance)
+            locations = decode(locations, self.priors, self.variance)
             return confidences, locations
 
 
 def RfbNet(include_top=True,
            pretrained=True,
-           input_shape=None,
-           base_filters=16, num_classes=1, num_regressors=4,
+           input_shape=(3,480,640),
+           base_filters=16, num_classes=2, num_regressors=4,
            **kwargs):
     if input_shape is not None and len(input_shape) == 3:
         input_shape = tuple(input_shape)
@@ -499,28 +499,28 @@ def RfbNet(include_top=True,
         input_shape = (3, 480, 640)
     if num_classes != 2 or num_regressors != 4:
         pretrained = False
-    rfbnet = SsdDetectionModel(input_shape=input_shape,
+    rfbnet_model = SsdDetectionModel(input_shape=input_shape,
                                output=RFBnet(base_filters=base_filters, num_classes=num_classes,
                                              num_regressors=num_regressors))
-    rfbnet.detection_threshold = 0.7
-    rfbnet.nms_threshold = 0.7
-    rfbnet.palette[0] = (128, 255, 128)
-    rfbnet.palette[1] = (128, 255, 128)
-    rfbnet.preprocess_flow = [
-        Resize((480, 640), True),
+    rfbnet_model.detection_threshold = 0.5
+    rfbnet_model.nms_threshold = 0.7
+    rfbnet_model.palette[0] = (0, 0, 0)
+    rfbnet_model.palette[1] = (128, 255, 128)
+    rfbnet_model.preprocess_flow = [
+        Resize((480, 640), True,align_corner=True),
         Normalize(127.5, 127.5)
     ]
-
+    rfbnet_model.class_names=['background','face']
     if pretrained == True:
         download_model_from_google_drive('1T_0VYOHaxoyuG1fAxY-6g0C7pfXiujns', dirname, 'version-RFB-640.pth')
         recovery_model = fix_layer(load(os.path.join(dirname, 'version-RFB-640.pth')))
         recovery_model.softmax = SoftMax(axis=-1)
-        priors = recovery_model.priors.clone()
-        recovery_model.__delattr__("priors")
-        recovery_model.register_buffer("priors", priors)
+        # priors = recovery_model.priors.clone()
+        # recovery_model.__delattr__("priors")
+        # recovery_model.register_buffer("priors", priors)
         recovery_model.name = 'rfb640'
         recovery_model.eval()
         recovery_model.to(_device)
-        rfbnet.model = recovery_model
-    return rfbnet
+        rfbnet_model.load_state_dict(recovery_model.state_dict())
+    return rfbnet_model
 
