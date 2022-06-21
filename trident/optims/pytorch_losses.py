@@ -44,13 +44,46 @@ _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_en
 def _calculate_loss_unimplemented(self, output: Tensor, target: Tensor) -> None:
     raise NotImplementedError
 
+
+
+def _nlp_vercabs_unique_value_process(uniques,counts):
+    uniques_array = to_numpy(uniques)
+    counts_array = to_numpy(counts)
+    counts_array = np.array([builtins.max(counts_array[uniques.index(i)], 1) if i in uniques else 1 for i in
+                             range(int(uniques_array.max()) + 1)]).astype(np.float32)
+    uniques_array = np.array(list(range(int(uniques_array.max()) + 1)))
+
+
+    order_index = np.argsort(-1 * counts_array)
+    sorted_ratio = counts_array[order_index] / counts_array.sum()
+    soreted_uniques = uniques_array[order_index]
+    sorted_ratio_cumsum = np.cumsum(sorted_ratio)
+    threshold_value=np.array([n for  n in  range(len(sorted_ratio_cumsum)) if (sorted_ratio_cumsum[n]>0.5 and sorted_ratio_cumsum[n-1]<0.5) or (sorted_ratio_cumsum[n]>0.995 and sorted_ratio_cumsum[n-1]<0.995)])
+    threshold_uniques=soreted_uniques[threshold_value]
+    threshold_counts=counts_array[order_index][threshold_value]
+    threshold_ratio = sorted_ratio[threshold_value]
+    threshold_cumsum = sorted_ratio_cumsum[threshold_value]
+
+    reweights1 = np.sqrt(counts_array.mean() / (counts_array))
+    reweights0 = counts_array.sum() / (counts_array * len(counts_array))
+    reweights=reweights1.copy()
+    reweights[counts_array >=threshold_counts[0]] = reweights0[counts_array >=threshold_counts[0]]
+    reweights[counts_array <= 10] =1
+    reweights[0]=0.01
+    #的
+
+    return reweights.astype(np.float32), OrderedDict(zip(uniques_array, counts_array))
+
+
 def _class_unique_value_process(uniques,counts):
-    uniques = to_numpy(uniques)
-    counts = to_numpy(counts)
-    counts=np.array([builtins.max(counts[i],1) if i in uniques else 1  for i in range(int(uniques.max()))])
-    uniques=np.array(list(range(int(uniques.max()))))
-    reweights=counts.sum()/(counts*len(counts))
-    return reweights,OrderedDict(zip(uniques, counts))
+    uniques_array = to_numpy(uniques)
+    counts_array = to_numpy(counts)
+    counts_array=np.array([builtins.max(counts_array[uniques.index(i)],1) if i in uniques else 1  for i in range(int(uniques_array.max())+1)]).astype(np.float32)
+    uniques_array=np.array(list(range(int(uniques_array.max())+1)))
+    reweights=counts_array.sum()/(counts_array*len(counts_array))
+    return reweights,OrderedDict(zip(uniques_array, counts_array))
+
+
 
 
 class _ClassificationLoss(Loss):
@@ -58,7 +91,7 @@ class _ClassificationLoss(Loss):
 
     def __init__(self, axis=1, sample_weight=None, auto_balance=False, from_logits=False, ignore_index=-100,
                  cutoff=None, label_smooth=False, reduction='mean', enable_ohem=False,
-                 ohem_thresh=0.7, input_names=None, output_names=None,
+                 ohem_thresh=0.1, input_names=None, output_names=None,
                  name=None, **kwargs):
         """
 
@@ -141,7 +174,11 @@ class _ClassificationLoss(Loss):
                     pass
                 elif ds is not None:
                     if hasattr(ds, '_label_statistics') and ds._label_statistics is not None:
-                        self.label_statistics = list(ds._label_statistics.values())
+                        if not isinstance(ds,TextSequenceDataset):
+                            self.label_statistics ,_= _class_unique_value_process(list(ds._label_statistics.keys()), list(ds._label_statistics.values()))
+                        else:
+                            self.label_statistics, _ =  _nlp_vercabs_unique_value_process(list(ds._label_statistics.keys()),     list(ds._label_statistics.values()))
+
                     elif isinstance(ds, LabelDataset) or dp.traindata.label.object_type in [
                         ObjectType.classification_label]:
                         print('Start retrive label class distribution for auto-balance in loss function.')
@@ -199,7 +236,8 @@ class _ClassificationLoss(Loss):
                         del counts
 
                     elif isinstance(ds, TextSequenceDataset):
-                        reweights, label_statistics = _class_unique_value_process(np.arange(len(ds.vocabs_frequency.value_list)), ds.vocabs_frequency.value_list)
+                        keys = [ds.text2index[k] for k in list(ds.vocabs_frequency.keys()) if k in ds.vocabs]
+                        reweights, label_statistics = _nlp_vercabs_unique_value_process(keys, ds.vocabs_frequency.value_list)
                         self.label_statistics = reweights
                         ds._label_statistics = label_statistics
 
@@ -397,7 +435,7 @@ class _ClassificationLoss(Loss):
 class _PairwiseLoss(Loss):
     """Calculate loss for  complex classification task."""
 
-    def __init__(self, axis=None, sample_weight=None, reduction='mean', enable_ohem=False, ohem_thresh=0.7,
+    def __init__(self, axis=1, sample_weight=None, reduction='mean', enable_ohem=False, ohem_thresh=0.7,
                  input_names=None, output_names=None, name=None, **kwargs):
         """
 
@@ -435,6 +473,7 @@ class _PairwiseLoss(Loss):
                                             ohem_thresh=ohem_thresh, input_names=input_names, output_names=output_names,
                                             name=name)
         self.sample_weight = sample_weight
+
 
         # initilize weight
 
@@ -1469,7 +1508,7 @@ class KLDivergenceLoss(_PairwiseLoss):
 
         loss = nn.functional.kl_div(output, target, reduction='none')
 
-        return loss.sum(1)
+        return loss
 
 
 class L1Loss(_PairwiseLoss):
@@ -1482,7 +1521,7 @@ class L1Loss(_PairwiseLoss):
 
     def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='L1Loss'):
-        super(L1Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+        super(L1Loss, self).__init__(axis=1,reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                                      input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
@@ -1513,8 +1552,9 @@ class L2Loss(_PairwiseLoss):
 
     def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='MSELoss'):
-        super(L2Loss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+        super(L2Loss, self).__init__(axis=1,reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                                      input_names=input_names, output_names=output_names, name=name)
+
         self.name = name
         self.reduction = reduction
 
@@ -1543,7 +1583,7 @@ class SmoothL1Loss(_PairwiseLoss):
 
     def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='SmoothL1Loss'):
-        super(SmoothL1Loss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, reduction=reduction,
+        super(SmoothL1Loss, self).__init__(axis=1,enable_ohem=enable_ohem, ohem_thresh=ohem_thresh, reduction=reduction,
                                            input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
@@ -1575,7 +1615,7 @@ class MSELoss(_PairwiseLoss):
 
     def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='MSELoss'):
-        super(MSELoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+        super(MSELoss, self).__init__(axis=1,reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                                       input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
@@ -1598,7 +1638,7 @@ class MSELoss(_PairwiseLoss):
 
 class WingLoss(_PairwiseLoss):
     def __init__(self, omega=10, epsilon=2, input_names=None, output_names=None, name='WingLoss'):
-        super(WingLoss, self).__init__(input_names=input_names, output_names=output_names, name=name)
+        super(WingLoss, self).__init__(axis=1,input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.omega = omega
         self.epsilon = epsilon
@@ -1635,7 +1675,7 @@ class WingLoss(_PairwiseLoss):
 class AdaptiveWingLoss(_PairwiseLoss):
     def __init__(self, omega=14, theta=0.5, epsilon=1, alpha=2.1, input_names=None, output_names=None,
                  name='AdaptiveWingLoss'):
-        super(AdaptiveWingLoss, self).__init__(input_names=input_names, output_names=output_names, name=name)
+        super(AdaptiveWingLoss, self).__init__(axis=1,input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.omega = omega
         self.theta = theta
@@ -1669,7 +1709,7 @@ class AdaptiveWingLoss(_PairwiseLoss):
 class ExponentialLoss(_PairwiseLoss):
     def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='ExponentialLoss'):
-        super(ExponentialLoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+        super(ExponentialLoss, self).__init__(axis=1,reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                                               input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
@@ -1697,7 +1737,7 @@ class ExponentialLoss(_PairwiseLoss):
 class ItakuraSaitoLoss(_PairwiseLoss):
     def __init__(self, reduction='mean', enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='ItakuraSaitoLoss'):
-        super(ItakuraSaitoLoss, self).__init__(reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+        super(ItakuraSaitoLoss, self).__init__(axis=1,reduction=reduction, enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                                                input_names=input_names, output_names=output_names, name=name)
         self.name = name
         self.reduction = reduction
@@ -1729,7 +1769,7 @@ class ItakuraSaitoLoss(_PairwiseLoss):
 class CosineSimilarityLoss(_PairwiseLoss):
     def __init__(self, enable_ohem=False, ohem_thresh=0.7, input_names=None, output_names=None,
                  name='CosineSimilarityLoss'):
-        super(CosineSimilarityLoss, self).__init__(enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
+        super(CosineSimilarityLoss, self).__init__(axis=1,enable_ohem=enable_ohem, ohem_thresh=ohem_thresh,
                                                    input_names=input_names, output_names=output_names, name=name)
 
     def calculate_loss(self, output, target, **kwargs):

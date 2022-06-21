@@ -48,13 +48,44 @@ __all__ = ['get_loss', '_ClassificationLoss', 'CrossEntropyLoss', 'BCELoss', 'MS
            'SoftIoULoss']
 
 
+
+def _nlp_vercabs_unique_value_process(uniques,counts):
+    uniques_array = to_numpy(uniques)
+    counts_array = to_numpy(counts)
+    counts_array = np.array([builtins.max(counts_array[uniques.index(i)], 1) if i in uniques else 1 for i in
+                             range(int(uniques_array.max()) + 1)]).astype(np.float32)
+    uniques_array = np.array(list(range(int(uniques_array.max()) + 1)))
+
+
+    order_index = np.argsort(-1 * counts_array)
+    sorted_ratio = counts_array[order_index] / counts_array.sum()
+    soreted_uniques = uniques_array[order_index]
+    sorted_ratio_cumsum = np.cumsum(sorted_ratio)
+    threshold_value=np.array([n for  n in  range(len(sorted_ratio_cumsum)) if (sorted_ratio_cumsum[n]>0.5 and sorted_ratio_cumsum[n-1]<0.5) or (sorted_ratio_cumsum[n]>0.995 and sorted_ratio_cumsum[n-1]<0.995)])
+    threshold_uniques=soreted_uniques[threshold_value]
+    threshold_counts=counts_array[order_index][threshold_value]
+    threshold_ratio = sorted_ratio[threshold_value]
+    threshold_cumsum = sorted_ratio_cumsum[threshold_value]
+
+    reweights1 = np.sqrt(counts_array.mean() / (counts_array))
+    reweights0 = counts_array.sum() / (counts_array * len(counts_array))
+    reweights=reweights1.copy()
+    reweights[counts_array >=threshold_counts[0]] = reweights0[counts_array >=threshold_counts[0]]
+    reweights[counts_array <= 10] =1
+    reweights[0]=0.01
+    #的
+
+    return reweights.astype(np.float32), OrderedDict(zip(uniques_array, counts_array))
+
+
 def _class_unique_value_process(uniques,counts):
-    uniques = to_numpy(uniques)
-    counts = to_numpy(counts)
-    counts=np.array([builtins.max(counts[i],1) if i in uniques else 1  for i in range(int(uniques.max()))])
-    uniques=np.array(list(range(int(uniques.max()))))
-    reweights=counts.sum()/(counts*len(counts))
-    return reweights,OrderedDict(zip(uniques, counts))
+    uniques_array = to_numpy(uniques)
+    counts_array = to_numpy(counts)
+    counts_array=np.array([builtins.max(counts_array[uniques.index(i)],1) if i in uniques else 1  for i in range(int(uniques_array.max())+1)]).astype(np.float32)
+    uniques_array=np.array(list(range(int(uniques_array.max())+1)))
+    reweights=counts_array.sum()/(counts_array*len(counts_array))
+    return reweights,OrderedDict(zip(uniques_array, counts_array))
+
 
 
 class _ClassificationLoss(Loss, tracking.AutoTrackable):
@@ -211,76 +242,93 @@ class _ClassificationLoss(Loss, tracking.AutoTrackable):
         ctx = context._context()
         inferred_target_object_type = object_type_inference(target)
         if hasattr(ctx._thread_local_info, 'data_providers') and len(ctx._thread_local_info.data_providers) > 0:
+            with torch.no_grad():
+                dp = list(ctx._thread_local_info.data_providers.values())[-1]
+                ds = None
+                if dp.traindata.label is None:
+                    pass
+                elif isinstance(dp.traindata.label, ZipDataset):
+                    for dp_ds in dp.traindata.label.items:
+                        if dp_ds.symbol in self.signature.inputs:
+                            ds = dp_ds
+                        # maybe duplicate
+                        elif dp_ds.object_type in self.valid_target_object_type and dp_ds.object_type == inferred_target_object_type:
+                            ds = dp_ds
+                else:
+                    ds = dp.traindata.label
+                if ds is None:
+                    pass
+                elif ds is not None:
+                    if hasattr(ds, '_label_statistics') and ds._label_statistics is not None:
+                        if not isinstance(ds, TextSequenceDataset):
+                            self.label_statistics, _ = _class_unique_value_process(list(ds._label_statistics.keys()),
+                                                                                   list(ds._label_statistics.values()))
+                        else:
+                            self.label_statistics, _ = _nlp_vercabs_unique_value_process(
+                                list(ds._label_statistics.keys()), list(ds._label_statistics.values()))
 
-            dp = list(ctx._thread_local_info.data_providers.values())[-1]
-            ds = None
-            if dp.traindata.label is None:
-                pass
-            elif isinstance(dp.traindata.label, ZipDataset):
-                for dp_ds in dp.traindata.label.items:
-                    if dp_ds.symbol in self.signature.inputs:
-                        ds = dp_ds
-                    # maybe duplicate
-                    elif ds.object_type in self.valid_target_object_type and ds.object_type == inferred_target_object_type:
-                        ds = dp_ds
-            else:
-                ds = dp.traindata.label
-            if ds is None:
-                pass
-            elif ds is not None:
-                if hasattr(ds, '_label_statistics') and ds._label_statistics is not None:
+                    elif isinstance(ds, LabelDataset) or dp.traindata.label.object_type in [
+                        ObjectType.classification_label]:
+                        print('Start retrive label class distribution for auto-balance in loss function.')
+                        unique, counts = np.unique(
+                            np.array([dp.traindata.label.items[i] for i in tqdm(range(len(dp.traindata.label.items)))]),
+                            return_counts=True)
+                        ctx.print('')
+                        reweights, label_statistics = _class_unique_value_process(unique, counts)
+                        self.label_statistics = reweights
+                        ds._label_statistics = label_statistics
 
-                    self.label_statistics = list(ds._label_statistics.values())
-                elif isinstance(ds, LabelDataset) or dp.traindata.label.object_type in [ObjectType.classification_label]:
-                    print('Start retrive label class distribution for auto-balance in loss function.')
-                    unique, counts = np.unique(
-                        np.array([dp.traindata.label.items[i] for i in tqdm(range(len(dp.traindata.label.items)))]),
-                        return_counts=True)
-                    ctx.print('')
-                    reweights, label_statistics = _class_unique_value_process(unique, counts)
-                    self.label_statistics = reweights
-                    ds._label_statistics = label_statistics
+                        del unique
+                        del counts
 
-                    del unique
-                    del counts
+                    elif isinstance(ds, BboxDataset) or dp.traindata.label.object_type in [ObjectType.absolute_bbox,
+                                                                                           ObjectType.relative_bbox]:
+                        ctx.print('Start retrive label class distribution for auto-balance in loss function.')
+                        unique, counts = torch.unique(to_tensor(
+                            np.concatenate([dp.traindata.label[i][:, 4] for i in tqdm(range(len(ds.items)))], axis=0),
+                            dtype=Dtype.long, device='cpu'), return_counts=True)
+                        ctx.print('')
+                        reweights, label_statistics = _class_unique_value_process(unique, counts)
+                        self.label_statistics = reweights
+                        ds._label_statistics = label_statistics
+                        del unique
+                        del counts
 
-                elif isinstance(ds, BboxDataset) or dp.traindata.label.object_type in [ObjectType.absolute_bbox,
-                                                                                       ObjectType.relative_bbox]:
-                    ctx.print('Start retrive label class distribution for auto-balance in loss function.')
-                    unique, counts = tf.unique(to_tensor(
-                        np.concatenate([dp.traindata.label[i][:, 4] for i in tqdm(range(len(ds.items)))], axis=0),
-                        dtype=Dtype.long, device='cpu'), return_counts=True)
-                    ctx.print('')
-                    reweights, label_statistics = _class_unique_value_process(unique, counts)
-                    self.label_statistics = reweights
-                    ds._label_statistics = label_statistics
-                    del unique
-                    del counts
+                    elif isinstance(ds, MaskDataset) or dp.traindata.label.object_type in [ObjectType.label_mask,
+                                                                                           ObjectType.color_mask,
+                                                                                           ObjectType.binary_mask]:
+                        ctx.print('Start retrive label class distribution for auto-balance in loss function.')
+                        sample_base = list(range(len(ds)))
+                        if len(sample_base) > 1000:
+                            np.random.shuffle(sample_base)
+                            sample_base = sample_base[:1000]
+                        overall_unique = OrderedDict()
+                        unique_results = [dict(zip(*np.unique(ds[i], return_counts=True))) for i in tqdm(sample_base)]
+                        for d in unique_results:
+                            for k, v in d.items():
+                                if k not in overall_unique:
+                                    overall_unique[k] = v
+                                else:
+                                    overall_unique[k] += v
 
-                elif isinstance(ds, MaskDataset) or dp.traindata.label.object_type in [ObjectType.label_mask,
-                                                                                       ObjectType.color_mask,
-                                                                                       ObjectType.binary_mask]:
-                    ctx.print('Start retrive label class distribution for auto-balance in loss function.')
-                    sample_base = np.arange(len(dp.traindata.label))
-                    if len(sample_base) > 1000:
-                        np.random.shuffle(sample_base)
-                        sample_base = sample_base[:1000]
+                        unique = list(sorted(overall_unique.key_list))
+                        counts = [overall_unique[k] for k in unique]
+                        # unique = to_list(to_numpy(unique))
+                        # counts = to_numpy(counts)
 
-                    unique, counts = tf.unique(
-                        to_tensor(np.stack([dp.traindata.label[sample_base[i]] for i in tqdm(range(len(sample_base)))]),
-                                  dtype=Dtype.long, device='cpu'), return_counts=True)
-                    ctx.print('')
-                    reweights, label_statistics = _class_unique_value_process(unique, counts)
-                    self.label_statistics = reweights
-                    ds._label_statistics = label_statistics
-                    del unique
-                    del counts
+                        ctx.print('')
+                        reweights, label_statistics = _class_unique_value_process(unique, counts)
+                        self.label_statistics = reweights
+                        ds._label_statistics = label_statistics
+                        del unique
+                        del counts
 
-                elif isinstance(ds, TextSequenceDataset):
-                    reweights, label_statistics = _class_unique_value_process(
-                        np.arange(len(ds.vocabs_frequency.value_list)), ds.vocabs_frequency.value_list)
-                    self.label_statistics = reweights
-                    ds._label_statistics = label_statistics
+                    elif isinstance(ds, TextSequenceDataset):
+                        keys = [ds.text2index[k] for k in list(ds.vocabs_frequency.keys()) if k in ds.vocabs]
+                        reweights, label_statistics = _nlp_vercabs_unique_value_process(keys,
+                                                                                        ds.vocabs_frequency.value_list)
+                        self.label_statistics = reweights
+                        ds._label_statistics = label_statistics
 
     def preprocess(self, output: Tensor, target: Tensor, **kwargs):
         """
