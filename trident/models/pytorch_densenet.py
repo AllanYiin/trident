@@ -23,7 +23,7 @@ from trident.models.pretrained_utils import _make_recovery_model_include_top
 
 from trident.backend.common import *
 from trident.backend.tensorspec import *
-from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, ModuleList,summary, fix_layer,load,get_device
+from trident.backend.pytorch_backend import to_numpy, to_tensor, Layer, Sequential, summary, fix_layer,load,get_device
 from trident.data.image_common import *
 from trident.data.utils import download_model_from_google_drive,download_file,get_image_from_google_drive
 from trident.layers.pytorch_activations import get_activation, Identity, Relu
@@ -51,7 +51,7 @@ if not os.path.exists(dirname):
 
 
 
-def DenseLayer(growth_rate,dropout_rate=0.2,is_fcn=False,name=''):
+def DenseLayer(growth_rate,name=''):
     """
     The basic normalization, convolution and activation combination for dense connection
 
@@ -64,15 +64,15 @@ def DenseLayer(growth_rate,dropout_rate=0.2,is_fcn=False,name=''):
 
     """
     items = OrderedDict()
-    if not is_fcn:
-        items['conv1']=Conv2d_Block((1,1), sequence_rank='nac',num_filters=4 * growth_rate,strides=1,activation=Relu(inplace=True),auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
-    items['conv2']=Conv2d_Block((3,3),sequence_rank='nac',num_filters=growth_rate,strides=1,activation=Relu(inplace=True),auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
-    items['drop'] =Dropout(dropout_rate)
+    items['norm']=BatchNorm2d()
+    items['relu']=Relu()
+    items['conv1']=Conv2d_Block((1,1),4 * growth_rate,strides=1,activation='relu',auto_pad=True,padding_mode='zero',use_bias=False,normalization='batch')
+    items['conv2']=Conv2d((3,3),growth_rate,strides=1,auto_pad=True,padding_mode='zero',use_bias=False)
     return  Sequential(items)
 
 
 class DenseBlock(Layer):
-    def __init__(self, num_layers,  growth_rate=32,is_upsample=False ,is_fcn=False,dropout_rate=0.2,keep_output=False,name=''):
+    def __init__(self, num_layers,  growth_rate=32, drop_rate=0,keep_output=False,name=''):
         """
         The dense connected block.
         Feature-maps of eachconvolution layer are used as inputs into all subsequent layers
@@ -89,31 +89,18 @@ class DenseBlock(Layer):
 
         """
         super(DenseBlock, self).__init__()
-        self.is_upsample=is_upsample
         if len(name)>0:
             self.name=name
         self.keep_output=keep_output
         for i in range(num_layers):
-            layer = DenseLayer(growth_rate,dropout_rate=dropout_rate,is_fcn=is_fcn,name='denselayer%d' % (i + 1))
+            layer = DenseLayer(growth_rate,name='denselayer%d' % (i + 1))
             self.add_module('denselayer%d' % (i + 1), layer)
 
     def forward(self, x, **kwargs):
-        if hasattr(self,'is_upsample') and self.is_upsample:
-            new_features = []
-            # we pass all previous activations into each dense layer normally
-            # But we only store each dense layer's output in the new_features array
-            for name, layer in self.named_children():
-                out = layer(x)
-                x = torch.cat([x, out], 1)
-                new_features.append(out)
-            return torch.cat(new_features, 1)
-        else:
-            for name, layer in self.named_children():
-                out = layer(x)
-                x = torch.cat([x, out], 1)  # 1 = channel axis
-            return x
-
-
+        for name, layer in self.named_children():
+            new_features = layer(x)
+            x=torch.cat([x,new_features], 1)
+        return x
 
 
 def Transition(reduction,name=''):
@@ -130,7 +117,7 @@ def Transition(reduction,name=''):
     """
     items=OrderedDict()
     items['norm']=BatchNorm2d()
-    items['relu']=Relu(inplace=True)
+    items['relu']=Relu()
     items['conv1']=Conv2d((1, 1),num_filters=None, depth_multiplier=reduction, strides=1, auto_pad=True,padding_mode='zero',use_bias=False)
     items['pool']=AvgPool2d(2,2,auto_pad=True)
     return Sequential(items,name=name)
@@ -186,7 +173,7 @@ def DenseNet(blocks,
 
     """
     densenet=Sequential()
-    densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation=Relu(inplace=True),normalization='batch', name='conv1/conv'))
+    densenet.add_module('conv1/conv',Conv2d_Block((7,7),initial_filters,strides=2,use_bias=False,auto_pad=True,padding_mode='zero',activation='relu',normalization='batch', name='conv1/conv'))
     densenet.add_module('maxpool', (MaxPool2d((3, 3), strides=2, auto_pad=True, padding_mode='zero')))
     densenet.add_module('denseblock1', DenseBlock(blocks[0],growth_rate=growth_rate))
     densenet.add_module('transitiondown1', Transition(0.5))
@@ -206,10 +193,9 @@ def DenseNet(blocks,
     model=ImageClassificationModel(input_shape=input_shape,output=densenet)
 
     #model.model.to(_device)
-    if os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt')):
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',encoding='utf-8-sig') as f:
-            labels = [l.rstrip() for l in f]
-            model.class_names = labels
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'imagenet_labels1.txt'), 'r',encoding='utf-8-sig') as f:
+        labels = [l.rstrip() for l in f]
+        model.class_names = labels
     model.preprocess_flow = [Resize((input_shape[2], input_shape[1]), keep_aspect=True), Normalize(0, 255),  Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])]
     # model.summary()
     return model
@@ -273,46 +259,37 @@ class _DenseNetFcn2(Layer):
         self.growth_rate=growth_rate
         self.name=name
         self.initial_filters=initial_filters
-        self.first_layer=Conv2d_Block((3, 3), num_filters=self.initial_filters, strides=1, use_bias=False, auto_pad=True,
-                                                    padding_mode='zero', activation=Relu(inplace=True), normalization='batch',
+        self.first_layer=Conv2d_Block((3, 3), num_filters=self.initial_filters, strides=2, use_bias=False, auto_pad=True,
+                                                    padding_mode='zero', activation='relu', normalization='batch',
                                                     name='first_layer')
-        self.up_block=ModuleList()
-        self.down_block = ModuleList()
-        num_filters=self.initial_filters
         for i in range(len(self.blocks)-1):
+            num_filters=self.initial_filters+self.blocks[i+1]*self.growth_rate
+            self.add_module('denseblock_down{0}'.format(i+1),DenseBlock(self.blocks[i], growth_rate=self.growth_rate, name='denseblock_down{0}'.format(i+1)))
+            self.add_module('transition_down{0}'.format(i+1),TransitionDown(0.5,name='transition_down{0}'.format(i+1)))
+            self.add_module('transition_up{0}'.format(i + 1), TransConv2d_Block((3,3),num_filters=num_filters,strides=2,auto_pad=True,activation='relu',normalization='batch',name='transition_up{0}'.format(i + 1)))
+            self.add_module('denseblock_up{0}'.format(i + 1),DenseBlock(self.blocks[i], growth_rate=self.growth_rate, name='denseblock_up{0}'.format(i + 1)))
 
-            self.down_block.append(DenseBlock(self.blocks[i], growth_rate=self.growth_rate, is_fcn=True,name='denseblock_down{0}'.format(i+1)))
-            self.down_block.append(TransitionDown(1,name='transition_down{0}'.format(i+1)))
-
-            self.up_block.insert(0,DenseBlock(self.blocks[i], growth_rate=self.growth_rate, is_upsample=True ,is_fcn=True,name='denseblock_up{0}'.format(i + 1)))
-            self.up_block.insert(0, TransConv2d_Block((3, 3), depth_multiplier=0.5, strides=2, auto_pad=True,
-                                                  activation=Relu(inplace=True), normalization='batch',
-                                                  name='transition_up{0}'.format(i + 1)))
-
-        self.bottleneck=DenseBlock(self.blocks[-1], growth_rate=self.growth_rate, name='bottleneck')
-        #self.upsample= Upsampling2d(scale_factor=2,mode='bilinear')
+        self.bottleneck=DenseBlock(self.blocks[4], growth_rate=self.growth_rate, name='bottleneck')
+        self.upsample= Upsampling2d(scale_factor=2,mode='bilinear')
         self.last_layer=Conv2d((1, 1), num_filters=self.num_classes, strides=1, activation=None)
-        self.softmax=SoftMax(axis=1)
+        self.softmax=SoftMax()
 
     def forward(self, x,**kwargs):
         x=enforce_singleton(x)
         skips=[]
         x=self.first_layer(x)
-        for i in range(len(self.down_block)//2 ):
-            x=self.down_block[2*i](x)
+        for i in range(len(self.blocks) - 1):
+            x=getattr(self,'denseblock_down{0}'.format(i+1))(x)
             skips.append(x)
-            x = self.down_block[2*i+1](x)
-
+            x=getattr(self,'transition_down{0}'.format(i+1))(x)
 
         x=self.bottleneck(x)
-
-        for i in range(len(self.up_block)//2):
-            x = self.up_block[2 * i](x)
+        for i in range(len(self.blocks) - 1):
+            x = getattr(self, 'transition_up{0}'.format(len(self.blocks)-1- i))(x)
             output = skips.pop()
             x = torch.cat([x, output], dim=1)
-            x=self.up_block[2*i+1](x)
-
-        #x=self.upsample(x)
+            x=getattr(self,'denseblock_up{0}'.format(len(self.blocks)-1-i))(x)
+        x=self.upsample(x)
         x=self.last_layer(x)
         x=self.softmax(x)
         return x
@@ -363,7 +340,7 @@ def DenseNet121(include_top=True,
         densenet121.model = _make_recovery_model_include_top(densenet121.model, include_top=include_top, classes=classes, freeze_features=True)
 
     densenet121.model.input_shape = input_shape
-    densenet121.model.to(_device)
+    densenet121.model.to(get_device())
     return densenet121
 
 
@@ -454,7 +431,7 @@ def DenseNet169(include_top=True,
         recovery_model=load(os.path.join(dirname,'densenet169.pth'))
         recovery_model = fix_layer(recovery_model)
         recovery_model.name = 'densenet169'
-        densenet169 = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
+        recovery_model = _make_recovery_model_include_top(recovery_model,input_shape=input_shape, include_top=include_top, classes=classes, freeze_features=freeze_features)
         densenet169.model = recovery_model
     else:
         densenet169.model = _make_recovery_model_include_top(densenet169.model, include_top=include_top, classes=classes, freeze_features=True)
