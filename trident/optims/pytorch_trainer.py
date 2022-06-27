@@ -255,29 +255,34 @@ class Model(model.ModelBase,Layer):
                 output.eval()
                 out = output(*dummay_input)
 
+            if is_tensor(out):
+                if  len(output.signature.outputs)==0:
+                    output.signature.outputs['output']=TensorSpec.tensor_to_spec(out,need_exclude_batch_axis=True,is_singleton=False) if out is not None else TensorSpec(
+                            shape=TensorShape([None]), optional=True, name=k)
+                elif  len(output.signature.outputs)==1:
+                    output.signature.outputs[output.signature.outputs.key_list[0]] = TensorSpec.tensor_to_spec(out,
+                                                                                   need_exclude_batch_axis=True,
+                                                                                   is_singleton=False) if out is not None else TensorSpec(
+                            shape=TensorShape([None]), optional=True, name=k)
+            elif is_instance(out,'OrderedDict'):
+                for k, v in out.__dict__.items():
+                    if v is not None or k in output.signature.outputs:
+                        spec = TensorSpec.tensor_to_spec(v, need_exclude_batch_axis=True,is_singleton=False,
+                                                         name=k) if v is not None else TensorSpec(
+                            shape=TensorShape([None]), optional=True, name=k)
+                        if k in output.signature.outputs:
+                            spec.optional = output.signature.outputs[k].optional
+                            spec.default = output.signature.outputs[k].default
+                        output.signature.outputs[k] = spec
+            elif isinstance(out, (list, tuple)):
+                for i in range(len(out)):
+                    output.signature.outputs['output{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
+                                                                                 name='output_{0}'.format(i))
+
             self._model = output
             # self._model.signature.inputs.value_list[0]=TensorSpec(shape=self._model.input_shape,dtype=self._model.weights[0].data.dtype)
 
-            if is_tensor(out) :
-                output._signature.outputs[output._signature.outputs.key_list[0]].shape = tensor_to_shape(out)
-                output._signature.outputs[output._signature.outputs.key_list[0]].dtype = DTYPE_MAPPING[
-                    out.dtype] if out.dtype in DTYPE_MAPPING else out.dtype
 
-            elif is_instance(out, 'dict'):
-                for k, v in out.__dict__.items():
-                    spec=TensorSpec.tensor_to_spec(v,need_exclude_batch_axis=True, name=k)
-                    if k in output.signature.outputs:
-                        spec.optional=output.signature.outputs[k].optional
-                        spec.default=output.signature.outputs[k].default
-                    elif v is None:
-                        spec.optional =True
-                        spec.default=None
-                    output.signature.outputs[k] = spec
-
-            elif isinstance(out, (list, tuple)):
-                for i in range(len(out)):
-                    output.signature.outputs['output_{0}'.format(i)] = TensorSpec(shape=tensor_to_shape(out[i]),
-                                                                                  name='output_{0}'.format(i))
 
         elif isinstance(output, (list, tuple)) and all([isinstance(m, (nn.Module)) for m in output]):
             output_list = []
@@ -337,7 +342,14 @@ class Model(model.ModelBase,Layer):
             self._model.device = value
             self._model.to(value)
 
-    def train(self):
+    def get_root(self):
+        if self._model is not None:
+            if isinstance(self._model,n.Module):
+                self._model.is_root=True
+                return self._model
+        return self
+
+    def train(self, **kwargs):
         if self._model is not None and isinstance(self._model, torch.Tensor):
             pass
         elif self._model is not None and isinstance(self._model, Layer) and self._model.built:
@@ -889,18 +901,18 @@ class Model(model.ModelBase,Layer):
             input_list = [data_feed[arg] for arg in self._model.signature.inputs.key_list] if not is_tensor(
                 self._model) else []
             for item in train_data.key_list:
-                if train_data[item].dtype is np.string_ or train_data[item].dtype is np.str_ or train_data[
+                if train_data[item].dtype is np.str_ or train_data[item].dtype is np.str_ or train_data[
                     item].dtype.kind in {'U', 'S'}:
-                    train_data[item] = [s.decode() for s in train_data[item]]
+                    train_data[item] = [s.item() for s in train_data[item]]
                 else:
                     train_data[item] = to_tensor(train_data[item]).to(get_device())
                 if item in input_list and 'float' in str(train_data[item].dtype):
                     train_data[item].require_grads = True
 
                 if test_data is not None and item in test_data:
-                    if test_data[item].dtype is np.string_ or test_data[item].dtype is np.str_ or test_data[
+                    if test_data[item].dtype is np.str_ or test_data[item].dtype is np.str_ or test_data[
                         item].dtype.kind in {'U', 'S'}:
-                        test_data[item] = [s.decode() for s in test_data[item]]
+                        test_data[item] = [s.item() for s in test_data[item]]
                     else:
                         test_data[item] = to_tensor(test_data[item]).to(get_device())
 
@@ -1079,7 +1091,7 @@ class Model(model.ModelBase,Layer):
                             'state_dict': self._model.state_dict(),
                             'backend': 'pytorch',
                             'trident_version': __version__,
-                            'pytorch_version': torch.__version__,
+                            'pytorch_version': str(torch.__version__),
                             'signature': self._model.signature
                         }, f)
 
@@ -1550,8 +1562,11 @@ class Model(model.ModelBase,Layer):
             self._model.to("cpu")
 
     def cuda(self):
-        if isinstance(self._model, (nn.Module, Layer)):
-            self._model.to("cuda")
+        if is_gpu_available():
+            if isinstance(self._model, (nn.Module, Layer)):
+                self._model.to("cuda")
+
+
 
     @property
     def enable_tensorboard(self):
@@ -1763,7 +1778,7 @@ class MuiltiNetwork(Model):
             self._networks[k].save_model(self._networks[k].training_context['save_path'], )
         return self
 
-    def train(self):
+    def train(self, **kwargs):
         for k in self._networks.keys():
             self._networks[k].train()
         return self
@@ -1943,7 +1958,7 @@ class ImageDetectionModel(Model):
         object.__setattr__(self, 'detection_threshold', detection_threshold)
         object.__setattr__(self, 'nms_threshold', nms_threshold)
 
-        if self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
+        if self._model is not None and self._model.signature is not None and len(self._model.signature.inputs.value_list) > 0 and \
                 self._model.signature.inputs.value_list[0].object_type is None:
             self._model.signature.inputs.value_list[0].object_type = ObjectType.rgb
 
@@ -2353,7 +2368,7 @@ class LanguageModel(Model):
                     value = pretrained_dict[key]
                     if is_tensor(value) and any_abnormal_number(value):
                         has_abnormal = True
-                        ctx.print('detect abnormal in state_dict[{0}],value:{1}'.format(key), value)
+                        ctx.print('detect abnormal in state_dict[{0}],value:{1}'.format(key, value))
                         pretrained_dict[key] = where(is_nan(value),
                                                      random_normal_like(value, mean=0, std=0.02).to(get_device()).cast(
                                                          value.dtype), value)
