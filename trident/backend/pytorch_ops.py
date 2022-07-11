@@ -328,8 +328,13 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     #input_dtype = dtype
     if dtype is None and isinstance(x, numbers.Integral):
         dtype = Dtype.int64
+    elif isinstance(x, str) or (isinstance(x, np.ndarray) and x.dtype==np.string_):
+        return x
+    elif isinstance(x, list) and all([isinstance(s,str) for s in x]):
+        return np.array(x)
     elif isinstance(x, np.ndarray):
         dtype = str2dtype(str(x.dtype).replace('numpy', 'Dtype'))
+
     elif isinstance(x, Tensor) and 'float' not in str(x.dtype):
         dtype=x.dtype
     elif isinstance(x, Tensor) and 'float'in str(x.dtype):
@@ -361,6 +366,8 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
     else:
         if x is None:
             return None
+        elif isinstance(x, str) :
+            return x
         elif isinstance(x, numbers.Integral):
             if dtype is None:
                 dtype = Dtype.int64
@@ -395,9 +402,7 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             else:
                 if dtype is None:
                     dtype = _float_dtype
-                x = torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x, dtype=dtype,
-                                                                                                       requires_grad=requires_grad).to(
-                    device)
+                x = torch.tensor(x, dtype=dtype).to(device) if requires_grad is None else torch.tensor(x, dtype=dtype,requires_grad=requires_grad).to(device)
             x = x.to(device)
             return x
         elif isinstance(x, np.ndarray):
@@ -2611,7 +2616,8 @@ def hard_sigmoid(x):
     Memory saving version of sigmoid
     it follows:
 
-        f(x) =  relu6(x+3)/6
+        Returns `0.` if `x < -2.5`, `1.` if `x > 2.5`.
+        In `-2.5 <= x <= 2.5`, returns `0.2 * x + 0.5`.
 
     Args:
         x (Tensor): input tensor.
@@ -2623,11 +2629,12 @@ def hard_sigmoid(x):
 
     Examples:
         >>> hard_sigmoid(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
-        tensor([-0.0000, -0.3333,  0.0000,  1.6667])
+        tensor([0.0000, 0.3000, 0.5000, 0.9000])
 
 
     """
-    return F.relu6(x + 3) / 6
+
+    return  torch.clamp(x*0.2+0.5, 0., 1.)
 
 
 @numpy_compatible
@@ -2890,7 +2897,7 @@ def gelu(x):
         <Tensor: shape=(4,), dtype=float32, numpy=array([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00], dtype=float32>
 
     """
-    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
+    return nn.functional.gelu(x)
 
 
 def gpt_gelu(x):
@@ -2905,6 +2912,9 @@ def gpt_gelu(x):
 
     """
     return 0.5 * x * (1 + torch.tanh(math.sqrt(2 / math.pi) * (x + 0.044715 * torch.pow(x, 3))))
+
+
+
 
 
 def silu(x):
@@ -3916,6 +3926,8 @@ def random_normal(shape, mean=0.0, std=1.0, dtype=None, device=None,seed=None):
         dtype = _float_dtype
     if device is None:
         device = _get_device()
+    if std is None or std<0.02:
+        std=0.02
     return torch.normal(mean=mean, std=std, size=shape,dtype=dtype,device=device)
 
 
@@ -3961,7 +3973,8 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=None, device=None,seed=None):
         dtype = str2dtype(dtype)
     else:
         dtype = x.dtype
-
+    if std is None or std<0.02:
+        std=0.02
     if is_tensor(std):
         std = std.item()
     if is_tensor(mean):

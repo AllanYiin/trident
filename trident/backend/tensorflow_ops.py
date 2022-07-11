@@ -316,9 +316,9 @@ def to_tensor(x, dtype=None,device=None, requires_grad=None) -> Tensor:
         <tf.Tensor: shape=(5,), dtype=int64, numpy=array([0, 1, 2, 3, 4], dtype=int64)>
 
     """
-    if device is None:
-        device=_get_device()
-    elif  'cuda' in device.lower() or 'gpu' in device.lower():
+    if x is None:
+        return x
+    if  device is not None and ( 'cuda' in device.lower() or 'gpu' in device.lower()):
         device='/gpu:0'
     else:
         device="/cpu:0"
@@ -2661,11 +2661,11 @@ def hard_sigmoid(x:Tensor,name='hard_sigmoid'):
 
     Examples:
         >>> hard_sigmoid(to_tensor([-3.0, -1.0, 0.0, 2.0])).cpu()
-        tensor([-0.0000, -0.3333,  0.0000,  1.6667])
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([0.0000e+00, 3.0000e-01, 5.0000e-01, 9.0000e-01], dtype=float32)>
 
 
     """
-    return relu6(x + 3) / 6
+    return tf.clip_by_value(x * 0.2 + 0.5, 0., 1.)
 
 @numpy_compatible
 def hard_tanh(x:Tensor,name='hard_tanh'):
@@ -3905,6 +3905,8 @@ def random_normal(shape, mean=0.0, std=1.0, dtype='float32', device=None,seed=No
 
 
     """
+    if std is None or std < 0.02:
+        std = 0.02
     return tf.random.normal(to_list(shape),mean=mean,stddev=std,dtype=str2dtype(dtype))
 
 @numpy_compatible
@@ -3945,6 +3947,8 @@ def random_normal_like(x, mean=0.0, std=1.0, dtype=None,device=None, seed=None):
     """
     if dtype is None:
         dtype=x.dtype
+    if std is None or std < 0.02:
+        std = 0.02
     return tf.random.normal(to_list(int_shape(x)),mean=mean,stddev=std,dtype=dtype)
 
 def random_uniform(shape, min_value=0.0, max_value=1.0, dtype='float32', device=None,seed=None):
