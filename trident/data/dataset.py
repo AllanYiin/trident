@@ -33,7 +33,7 @@ from trident.data.samplers import *
 from trident.data.text_common import reverse_text_backend_adaption
 from trident.data.transform import Transform
 from trident.data.vision_transforms import Unnormalize
-
+from trident.data.text_transforms import ToHalfWidth
 try:
     import Queue
 except ImportError:
@@ -945,13 +945,13 @@ class TextSequenceDataset(Dataset):
         self._element_spec = value
 
     def add_corpus(self, corpus):
+        th=ToHalfWidth()
         if corpus is  not None:
             if isinstance(corpus, str):
-                corpus=corpus.splitlines()
-
-
-            if hasattr(corpus, "__iter__"):
-                corpus=[t for t in corpus if len(t)>self.min_sequence_length]
+                corpus=th(corpus).splitlines()
+                self.items.extend(corpus)
+            elif hasattr(corpus, "__iter__"):
+                corpus=[th(t) for t in corpus if len(t)>self.min_sequence_length]
                 self.items.extend(corpus)
             else:
                 raise ValueError('corpus should be a collection.')
@@ -979,19 +979,21 @@ class TextSequenceDataset(Dataset):
                 def process_statistics():
                     total_len = 0
                     for i in range(len(self.items)):
-                        for ch in list(self.items[i]):
+                        _sentence=self.items[i]
+
+                        for j in range(len(self.items[i])):
+                            ch=_sentence[j]
                             if ch not in self.vocabs_frequency:
                                 self.vocabs_frequency[ch] = 0
                             self.vocabs_frequency[ch] += 1
 
                         total_len += (len(self.items[i]) + 2)
                         self.length_index[i] = total_len
-                        if i==0:
-                            self._element_spec = TensorSpec(shape=tensor_to_shape(self[0]), name=self.symbol,object_type=self.object_type, is_spatial=True)
 
-                if len(self.items)<500000:
+                if len(self.items)<5000000:
+                    self._element_spec = TensorSpec(shape=TensorShape([None]+[sequence_length]),dtype=Dtype.long , name=self.symbol,
+                                                    object_type=self.object_type, is_spatial=True)
                     process_statistics()
-
                 else:
                     start_thread(process_statistics, args=[])
     def update_vocabs(self,corpus):
