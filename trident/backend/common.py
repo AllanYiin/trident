@@ -206,7 +206,7 @@ def camel2snake(string1):
         return None
     else:
         s1 = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', string1)
-        return re.sub('([a-z0-9])([A-Z])', r'\1_\2', s1).lower()
+        return re.sub('([a-z\d])([A-Z])', r'\1_\2', s1).lower()
 
 
 def snake2camel(string1):
@@ -553,11 +553,9 @@ class TensorShape(object):
 
     @property
     def dims(self):
-        """Deprecated.  Returns list of dimensions for this shape.
-        Suggest `TensorShape.as_list` instead.
+        """Returns list of dimensions for this shape.
         Returns:
-          A list containing `tf.compat.v1.Dimension`s, or None if the shape is
-          unspecified.
+            A list containing Dimension or None .
         """
         return self._dims
 
@@ -709,7 +707,7 @@ class TensorShape(object):
             shape[0] = batch_size
         else:
             shape = [batch_size, ] + shape
-        return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1)
+        return np.clip(np.abs(np.random.standard_normal(shape)), 0, 1).astype(np.float32)
 
 
 def as_shape(shape):
@@ -962,7 +960,7 @@ def is_iter(x):
 def to_list(x):
     """
      Convert anything to a list.
-     if input is a tensor or a ndarray, to_list only unfold the first dimention , its different to the numpy behavior.
+     if input is a tensor or a ndarray, to_list only unfold the first dimention , it's different to the numpy behavior.
 
     Args:
         x ():
@@ -1043,7 +1041,7 @@ def remove_nonprintable(x: str):
 
 def unpack_singleton(x):
     """
-    Gets the first element if the iterable has only one value. Otherwise return the iterable.But would not split a
+    Gets the first element if the iterable has only one value. Otherwise, return the iterable.But would not split a
     tensor.
 
     Args:
@@ -1075,7 +1073,7 @@ def unpack_singleton(x):
 
 def enforce_singleton(x):
     """
-    Enforce only first element can pass if input is a a tuple or a list. It always use for singleton check if the
+    Enforce only first element can pass if input is a tuple or a list. It always uses for singleton check if the
     function only accept one input.
     Args:
         x ():
@@ -1272,7 +1270,8 @@ def find_minimal_edit_distance_key(keys, lookup_keys):
                         avaiable_section.remove(n)
                         break
                     else:
-                        section_dict[k][str(item)] = sublookup[subdata.index(item)]
+                        for item in subdata:
+                            section_dict[k][str(item)] = sublookup[subdata.index(item)]
                         avaiable_section.remove(n)
                         break
 
@@ -1302,13 +1301,13 @@ def addindent(s_, numSpaces):
 
 
 def format_time(seconds):
-    """ Format the seconds into human readable style
+    """ Format the seconds into human-readable style
 
     Args:
         seconds (int,long): total seconds
 
     Returns:
-         human readable style
+         human-readable style
 
     """
     days = int(seconds / 3600 / 24)
@@ -1591,11 +1590,8 @@ def num_cpus():
 def get_gpu_memory_map():
     """Get the current gpu usage.
 
-    Returns
-    -------
-    usage: dict
-        Keys are device ids as integers.
-        Values are memory usage as integers in MB.
+    Returns:
+        dict, Keys are device ids as integers.Values are memory usage as integers in MB.
     """
     result = subprocess.check_output(
         [
