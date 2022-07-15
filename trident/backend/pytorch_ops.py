@@ -283,10 +283,10 @@ def to_numpy(*x) -> np.ndarray:
         if isinstance(x, torch.autograd.Variable):
             x = x.data
         return x.clone().cpu().detach().numpy()
-    elif isinstance(x, list):
-        return np.array(x)
-    elif isinstance(x, tuple):
-        return np.array(list(x))
+    elif isinstance(x, (list,tuple)):
+        x=[to_numpy(item) if is_tensor(item) else item  for item in x]
+        return np.stack(x,0)
+
     elif isinstance(x, bool):
         return np.array([int(x)]).astype(np.bool)
     elif isinstance(x, numbers.Number):
@@ -1784,12 +1784,12 @@ def element_max(left, right):
         :the element-wise product of the two  input
 
     Examples:
-    >>> element_max(to_tensor([1., 1., 0., -1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
-    tensor([1.0000, 1.0000, 0.1250, 0.0000])
-    >>> element_max(to_tensor([5., 10., 15., 30.]),to_tensor([20.]))
-    tensor([20., 20., 20., 30.])
-    >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
-    tensor([10., 10., 15., 30.])
+        >>> element_max(to_tensor([1., 1., 0., -1.]), to_tensor([0.5, 0.25, 0.125, 0.]))
+        tensor([1.0000, 1.0000, 0.1250, 0.0000])
+        >>> element_max(to_tensor([5., 10., 15., 30.]),to_tensor([20.]))
+        tensor([20., 20., 20., 30.])
+        >>> element_max(to_tensor([5., 10., 15., 30.]), to_tensor([10., 2., 8., 2.]))
+        tensor([10., 10., 15., 30.])
     """
     return torch.max(left, right)
 
@@ -1964,19 +1964,21 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
         tensor([ 93., 126.])
 
     """
+    _xdtype=x.dtype
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
         x=x.to(_float_dtype)
+
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
-            return torch.sum(x)
+            return torch.sum(x.float()).to(_xdtype)
         else:
-            return torch.sum(x, axis, keepdim=keepdims)
+            return torch.sum(x.float(), axis, keepdim=keepdims).to(_xdtype)
     else:
-        return torch.sum(x)
+        return torch.sum(x.float()).to(_xdtype)
 
 
 @numpy_compatible
@@ -2968,7 +2970,7 @@ def norm(x: Tensor, order=None, axis=1, keepdims=False):
             0      -- not supported --           sum(x != 0)
             1      max(sum(abs(x), dim=0))       as below
             -1     min(sum(abs(x), dim=0))       as below
-            2      2-norm (largest sing. value)  as below
+            2      2-norm (the largest sing. value)  as below
             -2     smallest singular value       as below
             other  -- not supported --           sum(abs(x)**ord)**(1./ord)
             =====  ============================  ==========================
@@ -5306,7 +5308,7 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
     width = tensor.shape[-1]
     warped_tensor = warp_affine(tensor, matrix, (height, width))
 
-    # return in the original shape
+    # return to the original shape
     if is_unbatched:
         warped_tensor = torch.squeeze(warped_tensor, dim=0)
 
