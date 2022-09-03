@@ -9,10 +9,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
-from torch.nn.parameter import Parameter
 from trident import context
 from trident.backend.common import epsilon, get_function, enforce_singleton,get_class,TensorShape
-from trident.backend.pytorch_backend import Layer,get_device
+from trident.backend.pytorch_backend import Layer,get_device,Parameter
 from trident.backend.pytorch_ops import *
 
 __all__ = ['InstanceNorm','InstanceNorm2d','InstanceNorm3d','AdaptiveInstanceNorm','BatchNorm','BatchNorm2d','BatchNorm3d','GroupNorm','GroupNorm2d','GroupNorm3d','LayerNorm','LayerNorm2d','LayerNorm3d','L2Norm','PixelNorm','SpectralNorm','EvoNormB0','EvoNormS0','get_normalization']

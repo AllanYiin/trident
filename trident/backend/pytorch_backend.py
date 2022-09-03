@@ -32,7 +32,6 @@ import torch.onnx
 import torch.utils.hooks as hooks
 from torch.utils.hooks import RemovableHandle
 from torch._jit_internal import _copy_to_script_wrapper
-from torch.nn.parameter import Parameter
 from trident.backend import common
 from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, PrintException, Signature, TensorShape, get_args_spec,is_instance
 from trident.backend.tensorspec import *
@@ -337,7 +336,7 @@ class Parameter(nn.Parameter):
 
 
 class Layer(nn.Module):
-    """Trident extened pytorch nn.Module as base layer class.
+    """ Trident extened pytorch nn.Module as base layer class.
 
     Your models should also subclass of this class.
     Layer contains :
@@ -345,12 +344,9 @@ class Layer(nn.Module):
         parameters: the trainable parameters in the layer.
         buffers: the other non_trainable tensor in the layer.
 
-
     Attributes :
         training (bool): If True, means in the training phase, else in the evaluation phase.
-
         rank (int): The number of the spatial related axes.
-
         _modules (OrderedDict) : storage of all the submodules.
 
         _parameters (OrderedDict) : storage of all the tranable weights.
@@ -374,9 +370,6 @@ class Layer(nn.Module):
 
         relative_name:relative_name is the same concept as named_modules in pytorch. But in pytorch, you need to get the name from generator enumeration. In trident,
         you can access the relative name  with this attribute.
-
-
-
 
     """
     _version: int = 1
@@ -556,7 +549,7 @@ class Layer(nn.Module):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
-        In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
+        In 'build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
 
         Args:
             input_shape (TensorShape):  the shape representation exclude the batch axis.
@@ -568,7 +561,7 @@ class Layer(nn.Module):
         """ Do the shape inference and initialize weights and bias.
 
         `build' is a key method in trident, you can use  property `built' to check whether the layer do the build process.
-        In build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
+        In 'build' , we need to put all the logics about  how to comfirm the shape of outputs, weights and bias according to the coming input tensor.
 
         Args:
             input_shape (tensor):  the shape representation exclude the batch axis.
@@ -1010,7 +1003,7 @@ class Layer(nn.Module):
             if inp in self.__dict__:
                 _args[inp] = self.__dict__[inp]
         shadow = type(self)(**_args)
-        shadow.build(self.input_shape)
+        shadow.build(self._input_shape)
         for k, v in self.__dict__.items():
             if k not in _args and k not in ['_modules', '_parameters', '_buffers']:
                 if is_tensor(v):
@@ -1991,9 +1984,10 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                     summary[m_key][para_type][name] = list(int_shape(para))
                     num_params = np.prod(np.array(list(int_shape(para)), dtype=np.float64))
                     spatial_dims = np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
-                    params += num_params
-                    if para.requires_grad:
-                        summary[m_key]["trainable"] += num_params
+                    if module.relative_name if hasattr(module, 'relative_name') else module.name==m_key and summary[m_key]["visits"]==0:
+                        params += num_params
+                        if para.requires_grad:
+                            summary[m_key]["trainable"] += num_params
 
                     summary[m_key]["flops"] += (2 * num_params - 1) * spatial_dims
                     summary[m_key]["macc"] += num_params * spatial_dims
