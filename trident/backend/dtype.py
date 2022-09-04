@@ -72,7 +72,7 @@ elif get_backend() == 'tensorflow':
     complex128 = tf.complex128
     cfloat = tf.complex64
 
-if get_backend() == 'jax':
+elif get_backend() == 'jax':
     import jax.numpy as jnp
     # type definition
     bool = jnp.bool_
