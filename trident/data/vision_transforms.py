@@ -181,7 +181,7 @@ class Resize(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size, keep_aspect=True, align_corner=True, interpolation=cv2.INTER_AREA, name='resize', **kwargs):
+    def __init__(self, output_size, keep_aspect=True, align_corner=False, interpolation=cv2.INTER_AREA, background_color=(0,0,0),name='resize', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
@@ -190,6 +190,7 @@ class Resize(VisionTransform):
         self.keep_aspect = keep_aspect
         self.align_corner = align_corner
         self.interpolation = interpolation
+        self.background_color=background_color
         self.scale = 1
 
     def apply(self, input: Tuple, spec: TensorSpec):
@@ -203,12 +204,13 @@ class Resize(VisionTransform):
         if not self.keep_aspect:
             return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
         else:
-
             resized_image =cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
             shp = list(int_shape(resized_image))
             shp[:2] = self.output_size
-
-            output = np.zeros(shp)
+            if len(shp)==3:
+                output = np.ones(shp)*self.background_color
+            else:
+                output = np.zeros(shp)
             if self.align_corner:
                 if ndim(resized_image) == 2:
                     output[:th, :tw] = resized_image
@@ -224,13 +226,17 @@ class Resize(VisionTransform):
     def _apply_coords(self, coords, spec: TensorSpec):
         # 原圖尺寸、預期尺寸、縮放後尺寸
         h, w,eh, ew, th, tw, pad_vert, pad_horz ,scale= self._shape_info
-        if h == th and w == tw:
+        if h == eh and w == ew:
             return coords
-        coords[:, 0] = np.round(coords[:, 0] *scale)
-        coords[:, 1] = np.round(coords[:, 1] *scale)
+        if not self.keep_aspect:
+            coords[:, 0] = np.round(coords[:, 0] * (ew/w))
+            coords[:, 1] = np.round(coords[:, 1] * (eh/h))
+        else:
+            coords[:, 0] = np.round(coords[:, 0] *scale)
+            coords[:, 1] = np.round(coords[:, 1] *scale)
         if not self.align_corner:
-            coords[:, 0] += pad_vert // 2
-            coords[:, 1] += pad_horz // 2
+            coords[:, 0] += pad_horz // 2
+            coords[:, 1] += pad_vert // 2
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
@@ -273,7 +279,8 @@ class Resize(VisionTransform):
         if not self.keep_aspect:
             th=eh
             tw=ew
-            return h, w, eh, ew, th,tw,0, 0
+            self.scale = min(float(eh) / h, float(ew) / w)
+            return h, w, eh, ew, th,tw,0, 0,1
         else:
             self.scale = min(float(eh) / h, float(ew) / w)
             th = int(builtins.round(h * self.scale, 0))
@@ -312,7 +319,7 @@ class Unresize(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        h, w, th, tw, pad_vert, pad_horz = self._shape_info
+        h, w, th, tw, pad_vert, pad_horz  ,scale= self._shape_info
 
         if not self.keep_aspect:
             return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
@@ -334,20 +341,19 @@ class Unresize(VisionTransform):
             return resized_image
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        h, w, th, tw, pad_vert, pad_horz = self._shape_info
+        h, w, th, tw, pad_vert, pad_horz  ,scale= self._shape_info
         if h == th and w == tw:
             return coords
+
+        coords[:, 0] = np.round(coords[:, 0] * scale)
+        coords[:, 1] = np.round(coords[:, 1] * scale)
         if not self.align_corner:
-            coords[:, 0] -= pad_vert // 2
-            coords[:, 1] -= pad_horz // 2
-
-        coords[:, 0] = np.round(coords[:, 0] * (w/float(tw)))
-        coords[:, 1] = np.round(coords[:, 1] * (h/float(th)))
-
+            coords[:, 0] += pad_vert // 2
+            coords[:, 1] += pad_horz // 2
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w, th, tw, pad_vert, pad_horz = self._shape_info
+        h, w, th, tw, pad_vert, pad_horz ,scale= self._shape_info
         if h == th and w == tw:
             return mask
         mask_dtype = mask.dtype
@@ -372,18 +378,19 @@ class Unresize(VisionTransform):
     def _get_shape(self, image):
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
-        eh, ew = image.shape[:2]
-        h, w = self.output_size
+        h, w = image.shape[:2]
+        eh, ew = self.output_size
 
         if not self.keep_aspect:
-            return eh, ew, eh, ew, 0, 0
+            self.scale =1
+            return eh, ew, eh, ew, 0, 0,1
         else:
-            self.scale = min(float(ew) / h, float(ew) / w)
+            self.scale = min(float(eh) / h, float(ew) / w)
             th = int(builtins.round(h * self.scale, 0))
             tw = int(builtins.round(w * self.scale, 0))
             pad_vert = eh - th
             pad_horz = ew - tw
-            return eh, ew, th, tw, pad_vert, pad_horz
+            return eh, ew, th, tw, pad_vert, pad_horz,self.scale
 
 
 class ShortestEdgeResize(VisionTransform):
@@ -791,7 +798,7 @@ class RandomTransformAffine(VisionTransform):
     :param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15,border_mode='random_color', interpolation=cv2.INTER_AREA,keep_prob=0.5, name='transform_affine', **kwargs):
+    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15,border_mode='random_color', background_color=None, interpolation=cv2.INTER_AREA,keep_prob=0.5, name='transform_affine', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = None
@@ -801,8 +808,9 @@ class RandomTransformAffine(VisionTransform):
         self.shear_range = shear_range
         self.interpolation = interpolation
         self.random_flip = random_flip
-        if border_mode not in ['random_color','replicate','zero','reflect','wrap']:
-            print('Only {0} are valid items'.format(['random_color','replicate','zero','reflect','wrap']))
+        self.background_color=background_color
+        if border_mode not in ['random_color','constant','replicate','zero','reflect','wrap']:
+            print('Only {0} are valid items'.format(['random_color','constant','replicate','zero','reflect','wrap']))
             self.border_mode ='random_color'
         else:
             self.border_mode=border_mode
@@ -850,6 +858,12 @@ class RandomTransformAffine(VisionTransform):
 
     def _apply_coords(self, coords, spec: TensorSpec):
         mat_img, height, width,angle, is_flip,rr,shear_factor,background_color = self._shape_info
+        outlier_mask=coords[:,1]<2
+        if 0<len(coords[outlier_mask,:])<3 and coords[~outlier_mask,1].min()>(coords[60,1]-((coords[66,1]+coords[79,1])/2)):
+            print('landmark異常數據')
+            [print(y,coords[y,1]) for y in coords[:,1] if coords[y,1]<2 ]
+            print(np.concatenate([np.expand_dims(np.arange(len(coords)),0),coords.copy()],axis=0).astype(np.int32).tolist())
+
         if rr>self.keep_prob:
 
             coords = coords.transpose([1, 0])
@@ -895,6 +909,8 @@ class RandomTransformAffine(VisionTransform):
 
         h, w = image.shape[0:2]
         angle = np.random.uniform(self.rotation_range[0], self.rotation_range[1]) if _check_range_tuple(self.rotation_range) else  np.random.uniform(-self.rotation_range, self.rotation_range) if self.rotation_range>0 else 0
+        if self.rotation_range==0:
+            angle=0
         scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1]) if _check_range_tuple(self.zoom_range) else np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range>0 else 1
         tx = np.random.uniform(-self.shift_range, self.shift_range) * w
         ty = np.random.uniform(-self.shift_range, self.shift_range) * h
@@ -902,6 +918,12 @@ class RandomTransformAffine(VisionTransform):
         mat = cv2.getRotationMatrix2D((w // 2, h // 2), angle, scale)
         mat[:, 2] += (tx, ty)
         M[:2]=mat
+        # c, s = np.cos(angle*(pi()/180)), np.sin(angle*(pi()/180))
+        # M=np.array([
+        #     [c, -s, 0],
+        #     [s, c, 0],
+        #     [0, 0, 1.],
+        # ])
 
         # Shear
         shear_factor = random.uniform(0, self.shear_range) if self.shear_range>0 else 0
@@ -919,6 +941,8 @@ class RandomTransformAffine(VisionTransform):
         rr= np.random.random()
 
         background_color=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        if self.border_mode!='random_color' and self.background_color is not None:
+            background_color=self.background_color
 
         return np.array(mat[:2]).reshape((2, 3)), h, w,angle, rr_flip < self.random_flip,rr,shear_factor,background_color
 
