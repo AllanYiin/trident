@@ -664,33 +664,28 @@ class TensorShape(object):
         return self.dims != other.dims
 
     def is_compatible_with(self, other):
-        """Returns True iff `self` is compatible with `other`.
+        """ Returns True if `self` is compatible with `other`.
         Two possibly-partially-defined shapes are compatible if there
         exists a fully-defined shape that both shapes can represent. Thus,
-        compatibility allows the shape inference code to reason about
-        partially-defined shapes. For example:
-        * TensorShape(None) is compatible with all shapes.
-        * TensorShape([None, None]) is compatible with all two-dimensional
-          shapes, such as TensorShape([32, 784]), and also TensorShape(None). It is
-          not compatible with, for example, TensorShape([None]) or
-          TensorShape([None, None, None]).
-        * TensorShape([32, None]) is compatible with all two-dimensional shapes
-          with size 32 in the 0th dimension, and also TensorShape([None, None])
-          and TensorShape(None). It is not compatible with, for example,
-          TensorShape([32]), TensorShape([32, None, 1]) or TensorShape([64, None]).
-        * TensorShape([32, 784]) is compatible with itself, and also
-          TensorShape([32, None]), TensorShape([None, 784]), TensorShape([None,
-          None]) and TensorShape(None). It is not compatible with, for example,
-          TensorShape([32, 1, 784]) or TensorShape([None]).
-        The compatibility relation is reflexive and symmetric, but not
-        transitive. For example, TensorShape([32, 784]) is compatible with
-        TensorShape(None), and TensorShape(None) is compatible with
-        TensorShape([4, 4]), but TensorShape([32, 784]) is not compatible with
-        TensorShape([4, 4]).
+        compatibility allows the shape inference code to reason about partially-defined shapes.
+
+        For example,
+            - TensorShape(None) is compatible with all shapes.
+            - TensorShape([None, None]) is compatible with all two-dimensional shapes, such as TensorShape([32, 784]), and also TensorShape(None). It is not compatible with, for example, TensorShape([None]) or TensorShape([None, None, None]).
+            - TensorShape([32, None]) is compatible with all two-dimensional shapes with size 32 in the 0th dimension, and also TensorShape([None, None]) and TensorShape(None). It is not compatible with, for example, TensorShape([32]), TensorShape([32, None, 1]) or TensorShape([64, None]).
+            - TensorShape([32, 784]) is compatible with itself, and also TensorShape([32, None]), TensorShape([None, 784]), TensorShape([None,
+              None]) and TensorShape(None).
+              It is not compatible with, for example, TensorShape([32, 1, 784]) or TensorShape([None]).
+
+        The compatibility relation is reflexive and symmetric, but not transitive.
+        For example,
+            - TensorShape([32, 784]) is compatible with TensorShape(None), and TensorShape(None) is compatible with TensorShape([4, 4]), but TensorShape([32, 784]) is not compatible with TensorShape([4, 4]).
+
         Args:
-          other: Another TensorShape.
+            other : Another TensorShape.
+
         Returns:
-          True iff `self` is compatible with `other`.
+            True if `self` is compatible with `other`.
         """
         other = TensorShape(other)
         if self.dims is not None and other.dims is not None:
@@ -1109,16 +1104,18 @@ def check_keys(model, pretrained_state_dict):
     print('\n\t'.join(unused_pretrained_keys))
     print('Used keys:{}'.format(len(used_pretrained_keys)))
     if len(missing_keys) >= len(unused_pretrained_keys) > 0:
-        print('Try to mapping missing_keys to unused_pretrained_keys:')
+
         tmp_unused_pretrained_keys = list(unused_pretrained_keys)
         fix_dict = find_minimal_edit_distance_key(missing_keys, unused_pretrained_keys)
-        for k, v in fix_dict.items():
-            print('{0}=>{1}'.format(k, v))
-        print('Is mapping results accetable?')
-        ans = input('(Y/N) << ').lower()
-        if ans in ['yes', 'y']:
+        if fix_dict is not None:
+            print('Try to mapping missing_keys to unused_pretrained_keys:')
             for k, v in fix_dict.items():
-                pretrained_state_dict[k] = pretrained_state_dict[v]
+                print('{0}=>{1}'.format(k, v))
+            print('Is mapping results accetable?')
+            ans = input('(Y/N) << ').lower()
+            if ans in ['yes', 'y']:
+                for k, v in fix_dict.items():
+                    pretrained_state_dict[k] = pretrained_state_dict[v]
 
     # print('\n\t'.join(used_pretrained_keys))
 
