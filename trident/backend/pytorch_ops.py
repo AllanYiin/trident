@@ -1317,7 +1317,7 @@ def round(x: (Tensor, float), digit: int = 0):
     """
 
     if digit != 0:
-        factor = to_tensor(float(math.pow(10, -1 * digit)))
+        factor = to_tensor(float(math.pow(10.0, -1 * digit)))
         return (x / factor).round() * factor
     else:
         return torch.round(x)
@@ -1964,21 +1964,22 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, **kwargs):
         tensor([ 93., 126.])
 
     """
-    _xdtype=x.dtype
+
     axis = kwargs.get('dim', axis)
     keepdims = kwargs.get('keepdim', keepdims)
     if x.element_size() == 0:
         return x
     if x.dtype == Dtype.bool:
         x=x.to(_float_dtype)
-
+    _xdtype=x.dtype
+    scale=1 if _xdtype==Dtype.float32 else builtins.max(numel(x),1)
     if axis is None or isinstance(axis, (int, list, tuple)):
         if axis is None and keepdims == False:
-            return torch.sum(x.float()).to(_xdtype)
+            return torch.sum(x/scale)*scale
         else:
-            return torch.sum(x.float(), axis, keepdim=keepdims).to(_xdtype)
+            return torch.sum(x/scale, axis, keepdim=keepdims)*scale
     else:
-        return torch.sum(x.float()).to(_xdtype)
+        return torch.sum(x/scale)*scale
 
 
 @numpy_compatible
@@ -3542,7 +3543,7 @@ def make_onehot(label, num_classes, axis=-1):
 
     """
 
-    onehot = torch.nn.functional.one_hot(label.long(), num_classes).float()
+    onehot = torch.nn.functional.one_hot(label.long(), num_classes).to(_float_dtype)
     last_index = ndim(onehot) - 1
     if axis < 0:
         axis += ndim(onehot)
@@ -3625,14 +3626,14 @@ def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
     >>> grid1.shape
     torch.Size([3, 2, 2])
     """
-    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=Dtype.float,
+    xs = torch.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=_float_dtype,
                         requires_grad=requires_grad)
-    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=Dtype.float,
+    ys = torch.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=_float_dtype,
                         requires_grad=requires_grad)
     if normalized_coordinates:
-        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=Dtype.float,
+        xs = torch.linspace(0, 1, int(x), device=get_session_value('device'), dtype=_float_dtype,
                             requires_grad=requires_grad)
-        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=Dtype.float,
+        ys = torch.linspace(0, 1, int(y), device=get_session_value('device'), dtype=_float_dtype,
                             requires_grad=requires_grad)
     grid_x, grid_y = torch.meshgrid([xs, ys])
 
@@ -4226,7 +4227,7 @@ def rgb2gray(rgb: Tensor, axis=-1):
         >>> print( abs(np.round(gray_tensor.astype(np.float32))-groundtruth_gray.astype(np.float32)).mean())
 
     """
-    rgb = rgb.copy().float()
+    rgb = rgb.copy().to(_float_dtype)
     if ndim(rgb) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
     if ndim(rgb) == 3:
@@ -4264,7 +4265,7 @@ def rgb2hsv(rgb: Tensor):
         >>> print(abs(np.round(hsv_tensor.astype(np.float32))-groundtruth_hsv.astype(np.float32)).mean())
 
     """
-    rgb = rgb.float() / 255.0
+    rgb = rgb.to(_float_dtype) / 255.0
     if ndim(rgb) not in [3, 4]:
         raise ValueError('input rgb image ndim should equal 3 but get {0}'.format(ndim(rgb)))
     # rgb=rgb[np.newaxis, ...]
@@ -4555,7 +4556,7 @@ def gray2rgb(gray: Tensor):
         rgb (tensor):  rgb image ; shape:(H,W,C)
 
     """
-    gray = gray.copy().float()
+    gray = gray.copy().to(_float_dtype)
     if ndim(gray) == 3 and int_shape(gray)[-1] == 1:
         gray = gray[:, :, 0]
     if ndim(gray) != 2:
@@ -4888,8 +4889,8 @@ def bbox_giou(bboxes1, bboxes2):
     out_wh = torch.clamp(out_max_xy - out_min_xy, min=0)  # [N,M,2]
     outer_area = out_wh[:, :, 0] * out_wh[:, :, 1]  # [N,M]
 
-    union = (area1[:, None] + area2 - inter_area).float()
-    closure = outer_area.float()
+    union = (area1[:, None] + area2 - inter_area).to(_float_dtype)
+    closure = outer_area.to(_float_dtype)
     ious = inter_area / union
     ious = torch.clamp(ious, min=0, max=1.0)
 
