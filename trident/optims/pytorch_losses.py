@@ -1547,7 +1547,7 @@ class L1Loss(_PairwiseLoss):
         """
         batch = int_shape(output)[0]
         target = target.detach()
-        return F.l1_loss(output.view(batch, -1), target.view(batch, -1), reduction='none')
+        return F.l1_loss(output.reshape((batch, -1)), target.reshape((batch, -1)), reduction='none')
 
 
 class L2Loss(_PairwiseLoss):
@@ -1579,7 +1579,7 @@ class L2Loss(_PairwiseLoss):
         """
         batch = int_shape(output)[0]
         target = target.detach()
-        return 0.5 * ((output.view(batch, -1) - target.view(batch, -1)) ** 2)
+        return 0.5 * ((output.reshape((batch, -1)) - target.reshape((batch, -1))) ** 2)
 
 
 class SmoothL1Loss(_PairwiseLoss):
@@ -1610,7 +1610,7 @@ class SmoothL1Loss(_PairwiseLoss):
         """
         batch = int_shape(output)[0]
         target = target.detach()
-        return F.smooth_l1_loss(output.view(batch, -1), target.view(batch, -1), reduction='none')
+        return F.smooth_l1_loss(output.reshape((batch, -1)), target.reshape((batch, -1)), reduction='none')
 
 
 class MSELoss(_PairwiseLoss):
@@ -1641,7 +1641,7 @@ class MSELoss(_PairwiseLoss):
         """
         batch = int_shape(output)[0]
         target = target.detach()
-        return ((output.view(batch, -1) - target.view(batch, -1)) ** 2)
+        return ((output.reshape((batch, -1)) - target.reshape((batch, -1))) ** 2)
 
 
 class WingLoss(_PairwiseLoss):
