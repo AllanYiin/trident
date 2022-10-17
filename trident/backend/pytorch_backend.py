@@ -1958,16 +1958,18 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                 summary[m_key]["input_shape"] = list(int_shape(input))
             if "input_shape" in summary[m_key]  and  len(summary[m_key]["input_shape"])>0:
                 summary[m_key]["input_shape"][0] = batch_size
+                try:
+                    output = iteration_tools.flatten([output], iterable_types=(list, tuple))
+                    output = unpack_singleton([item for item in output if item is not None])
+                    if is_tensor(output):
+                        summary[m_key]["output_shape"] =TensorShape( [batch_size]+list(int_shape(output))[1:])
+                    elif isinstance(output, (list, tuple)):
+                        summary[m_key]["output_shape"] = [TensorShape([batch_size]+list(int_shape(value))[1:]) for value in output]
+                    elif is_instance(output,'OrderedDict'):
+                        summary[m_key]["output_shape"] =[TensorShape([batch_size]+list(int_shape(value))[1:]) for value in list(output.values())]
 
-            output = iteration_tools.flatten([output], iterable_types=(list, tuple))
-            output = unpack_singleton([item for item in output if item is not None])
-            if isinstance(output, (list, tuple)):
-                summary[m_key]["output_shape"] = list(int_shape(output[0]))
-            elif is_instance(output,'OrderedDict'):
-                summary[m_key]["output_shape"] = list(int_shape(output.__dict__[list(output.__dict__.keys())[0]]))
-            elif is_tensor(output):
-                summary[m_key]["output_shape"] = list(int_shape(output))
-            summary[m_key]["output_shape"][0] = batch_size
+                except Exception as e:
+                    print(e)
 
             params = 0
             summary[m_key]["flops"] = np.array([0], dtype=np.float64)
@@ -1995,7 +1997,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             summary[m_key]["nb_params"] = params
 
         if (
-                not isinstance(module, (nn.Sequential, Sequential, nn.ModuleList, ModuleList, nn.ModuleDict, ModuleDict))
+                not isinstance(module, (nn.Sequential, Sequential, nn.ModuleList, ModuleList))
                 and not (module == model and len(module._parameters)==0)
         ):
             hooks.append(module.register_forward_hook(hook))
@@ -2026,8 +2028,10 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
     #     input_tensor = [to_tensor(module.signature.inputs.value_list[k].get_dummy_tensor()) for k in  range(module.signature.inputs.value_list) if not module.signature.inputs.value_list[k].optional or k==0]
     #
     inps=OrderedDict()
-    for v in input_specs:
-        k=v.name
+
+    for i in range(len(input_specs)):
+        v=input_specs[i]
+        k=v.name if v.name is not None else 'input' if len(input_specs)==1 else 'input_{0}'.format(i)
         if v.shape is not None and v.shape._dims!=[None]:
             inps[k] =to_tensor(v.get_dummy_tensor(),device=get_device())
         elif v.optional:
@@ -2058,6 +2062,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             else:
                 model(*inputs)
         else:
+
             model(*inps.value_list)
 
         # remove these hooks
@@ -2099,7 +2104,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
 
             line_new = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4:,.0f}  {5:,.0f}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
                 (layer + "  [" + class_name + "]").ljust(max_name_len, ' '),
-                (is_keep + str([None] + summary[layer]["output_shape"][1:])).ljust(25, ' '),
+                (is_keep + str(summary[layer]["output_shape"])).ljust(25, ' '),
                 str(summary[layer]["weight"].item_list[0] if 'weight' in summary[layer] and len(summary[layer]["weight"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(
                     max_weight_len, ' '),
                 str(summary[layer]["bias"].item_list[0] if 'bias' in summary[layer] and len(summary[layer]["bias"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(8, ' '),
@@ -2110,7 +2115,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                 for n in range(1, len(summary[layer]["weight"])):
                     line_new_add = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4}  {5}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
                         " ".ljust(max_name_len + len(layer + "  [" + class_name + "]") // 2, " "),
-                        " ".ljust(25 + len(is_keep + str([None] + summary[layer]["output_shape"][1:])) // 2, " "),
+                        " ".ljust(25 + len(is_keep + str(summary[layer]["output_shape"])) // 2, " "),
                         str(summary[layer]["weight"].item_list[n] if n < len(summary[layer]["weight"]) else ' ').replace('(', '').replace(')', '').ljust(max_weight_len, " "),
                         str(summary[layer]["bias"].item_list[n] if n < len(summary[layer]["bias"]) else ' ').replace('(', '').replace(')', '').ljust(8, " "), " ", " ")
                     line_new = line_new + '\n' + line_new_add
