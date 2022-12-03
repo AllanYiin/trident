@@ -116,10 +116,17 @@ def set_device(device=None):
         raise ValueError('Tpu is not available...')
     try:
         device_=device
+
         if device=='xpu':
             import torch_xla.core.xla_model as xm
             device_ = xm.xla_device()
         set_session('device', device_)
+        if torch.cuda.is_available() and get_signature() == 'cuda':
+            torch.backends.cudnn.enabled = True
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.deterministic = False
+            os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+            os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 
         gcitems = gc.get_objects()
         for i in range(len(gcitems)):
@@ -135,12 +142,7 @@ def set_device(device=None):
         print(e)
 
 
-if torch.cuda.is_available() and get_device() == 'cuda':
-    torch.backends.cudnn.enabled = True
-    torch.backends.cudnn.benchmark = True
-    torch.backends.cudnn.deterministic = False
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
+
 
 
 
