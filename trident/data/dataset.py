@@ -45,7 +45,7 @@ elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import tensor_to_shape, expand_dims, cast,to_tensor
 
 __all__ = ['Dataset', 'ZipDataset', 'ImageDataset', 'MaskDataset', 'TextSequenceDataset', 'LabelDataset', 'BboxDataset', 'LandmarkDataset', 'Iterator', 'MetricIterator',
-           'NumpyDataset', 'RandomNoiseDataset', 'ArrayDataset']
+           'NumpyDataset', 'RandomNoiseDataset', 'ArrayDataset','IndexDataset']
 
 _UID_PREFIX = collections.defaultdict(int)
 
@@ -85,7 +85,9 @@ class Dataset(DatasetBase):
     def __init__(self, args, symbol=None, object_type: Optional[ObjectType] = None, **kwargs):
         super().__init__()
         self.items = []
-        if args is not None and hasattr(args, '__iter__'):
+        if args is not None and isinstance(args, np.ndarray):
+            self.items=args
+        elif args is not None and hasattr(args, '__iter__'):
             self.items.extend(args)
         self._element_spec = None
         self.parent = None
@@ -198,11 +200,11 @@ class ZipDataset(Dataset):
 
     def __init__(self, *datasets, **kwargs):
         """See `Dataset.zip()` for details."""
-        super().__init__(datasets, **kwargs)
-        self.symbol = tuple([ds.symbol for ds in datasets])
+        super().__init__(*unpack_singleton(datasets), **kwargs)
+        self.symbol = '{0}'.format(str((ds.symbol for ds in unpack_singleton(datasets))))
 
     def __getitem__(self, index: int) -> Tuple:
-        return tuple([ds[index] for ds in self.items])
+        return self.items[index]
 
     def __getattr__(self, name):
         if name in self.__dict__:
@@ -226,7 +228,7 @@ class ZipDataset(Dataset):
             object.__setattr__(self, name, value)
 
     def __len__(self) -> int:
-        return len(self.items[0])
+        return 0 if len(self.items)==0 else len(self.items[0])  #len(self) % len(self.items)
 
 
 class NumpyDataset(Dataset):
@@ -250,7 +252,48 @@ class NumpyDataset(Dataset):
             return img_data
 
     def __len__(self) -> int:
-        return None if self.items is None else len(self.items)
+        return 0 if self.items is None else len(self.items)
+
+
+class IndexDataset(Dataset):
+    def __init__(self, data=None,mapping_dict=None,default_mapping_value=None, object_type=ObjectType.index_data, symbol="index_data", **kwargs):
+        super().__init__(data, symbol=symbol, object_type=object_type, **kwargs)
+        self.mapping_dict=mapping_dict
+        self.default_mapping_value=default_mapping_value
+        self._element_spec = TensorSpec(shape=tensor_to_shape(self[0], need_exclude_batch_axis=True, is_singleton=True),
+                                        dtype=Dtype.int64, name=self.symbol, object_type=self.object_type,
+                                        is_spatial=False)
+
+    def __getitem__(self, index: int) -> Tuple:
+        if index >= len(self.items):
+            index = index % len(self.items)
+        if self.items is None:
+            return None
+        else:
+            item=self.items[index]
+            if self.mapping_dict is None :
+                return item
+            else:
+                if item  in self.mapping_dict:
+                    return self.mapping_dict[item]
+                else:
+                    return self.default_mapping_value
+
+
+
+    def data_transform(self, data):
+
+        if isinstance(data, np.ndarray):
+            for fc in self.transform_funcs:
+                if (inspect.isfunction(fc) or isinstance(fc, Transform)) and fc is not image_backend_adaption:
+                    img_data = fc(data, spec=self.element_spec)
+
+            return data
+        else:
+            return data
+
+    def __len__(self) -> int:
+        return 0 if self.items is None else len(self.items)
 
 
 class StreamDataset(Dataset):
@@ -277,13 +320,13 @@ class StreamDataset(Dataset):
 
 
 class ArrayDataset(Dataset):
-    def __init__(self, arrays, symbol='array'):
+    def __init__(self, arrays,object_type=ObjectType.array_data,symbol='array'):
         r"""
         ArrayDataset is a dataset for numpy array data, one or more numpy arrays
          are needed to initiate the dataset. And the dimensions represented sample number
          are expected to be the same.
         """
-        super().__init__(arrays)
+        super().__init__(arrays,object_type=object_type,)
         self.symbol = symbol
 
     def __getitem__(self, index: int):
@@ -311,6 +354,10 @@ class ImageDataset(Dataset):
         super().__init__(images, symbol=symbol, object_type=object_type, **kwargs)
         self.is_spatial = True
         self.is_paired_process = False
+        if object_type==ObjectType.image_path:
+            self.element_spec=TensorSpec(shape=TensorShape([None]),dtype=str,object_type=object_type,name=symbol)
+        else:
+            self.element_spec = TensorSpec(shape=tensor_to_shape(self.items[0] if len(self.items)>0 else None ,True,True), dtype=Dtype.float32, object_type=object_type,name=symbol)
 
     def __getitem__(self, index: int):
         try:
@@ -415,15 +462,13 @@ class ImageDataset(Dataset):
 
 
 class MaskDataset(Dataset):
-    def __init__(self, masks, class_names=None, object_type: ObjectType = ObjectType.label_mask,
-                 get_image_mode: GetImageMode = GetImageMode.processed, symbol="mask", **kwargs):
+    def __init__(self, masks, class_names=None, object_type: ObjectType = ObjectType.label_mask, squeeze_channel=True,symbol="mask", **kwargs):
         super().__init__(masks, symbol=symbol, object_type=object_type, **kwargs)
         if object_type not in [ObjectType.label_mask, ObjectType.binary_mask, ObjectType.alpha_mask,
                                ObjectType.color_mask]:
             raise ValueError('Only mask is valid expect image type. ')
-
-        self.get_image_mode = get_image_mode
         self.palette = OrderedDict()
+        self.squeeze_channel=squeeze_channel
         self.transform_funcs = []
         self.is_spatial = True
         self.is_paired_process = False
@@ -432,7 +477,7 @@ class MaskDataset(Dataset):
         self._idx2lab = {}
         if class_names is not None:
             self.class_names = class_names
-        self._element_spec = TensorSpec(shape=TensorShape(self[0]), name=self.symbol, object_type=self.object_type, is_spatial=True)
+        self._element_spec = TensorSpec(shape=tensor_to_shape(self[0] if len(self)>0 else None ,need_exclude_batch_axis=True,is_singleton=True), dtype=Dtype.int64,name=self.symbol, object_type=self.object_type, is_spatial=True)
 
     def __getitem__(self, index: int):
         if index >= len(self.items):
@@ -471,7 +516,8 @@ class MaskDataset(Dataset):
             raise ValueError('image data should be ndarray')
         elif isinstance(mask, np.ndarray) and mask.ndim not in [2, 3]:
             raise ValueError('image data dimension  should be 2 or 3, but get {0}'.format(mask.ndim))
-
+        if ndim(mask)==2 and self.squeeze_channel==False:
+            mask=np.expand_dims(mask,-1)
         return mask
 
     def mask_transform(self, mask_data):
@@ -991,7 +1037,7 @@ class TextSequenceDataset(Dataset):
                         self.length_index[i] = total_len
 
                 if len(self.items)<5000000:
-                    self._element_spec = TensorSpec(shape=TensorShape([None]+[sequence_length]),dtype=Dtype.long , name=self.symbol,
+                    self._element_spec = TensorSpec(shape=TensorShape([None]+[self.sequence_length]),dtype=Dtype.long , name=self.symbol,
                                                     object_type=self.object_type, is_spatial=True)
                     process_statistics()
                 else:
@@ -1420,8 +1466,8 @@ class Iterator(object):
 
             returnData = OrderedDict()  # copy.deepcopy(self.data_template)
 
-            data = self.data.__getitem__(index ) if self.data is not None and len(self.data) > 0 else None
-            label = self.label.__getitem__(index) if self.label is not None and len(self.label) > 0 else None
+            data = self.data.__getitem__(index%len(self.data)) if self.data is not None and len(self.data) > 0 else None
+            label = self.label.__getitem__(index%len(self.data)) if self.label is not None and len(self.label) > 0 else None
             unpair = self.unpair.__getitem__(index%len(self.unpair)) if self.unpair is not None and len(self.unpair) > 0 else None
             #((x1,x2),(x3),(x4,x5))=>(x1,x2,x3,x4,x5)
             results = iteration_tools.flatten((data, label, unpair), iterable_types=(tuple))
@@ -1442,6 +1488,9 @@ class Iterator(object):
 
             # for batch transform cache data in memory
             if len(self.batch_transform_funcs) > 0:
+                for trans in self.batch_transform_funcs:
+                    if is_instance(trans,"VisionTransform"):
+                        trans.memory_cache=self.memory_cache
                 self.memory_cache.append(copy.deepcopy(returnData))
                 if len(self.memory_cache) > self.batch_size*2:
                     self.memory_cache.pop(0)
@@ -1459,32 +1508,43 @@ class Iterator(object):
                 #         PrintException()
                 # return datadict
 
-            for i in range(len(returnData)):
-                ds = self.get_datasets()[i]
-                if returnData.value_list[i] is None:
-                    print('')
-                returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
-            # def process_data_transform(i):
+            # for i in range(len(returnData)):
             #     ds = self.get_datasets()[i]
-            #     returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
-            #
-            # threads = []
-            # for i in range(len(returnData)):
-            #     threads.append(threading.Thread(target=process_data_transform, args=(i,)))
-            #     threads[i].start()
-            # for i in range(len(returnData)):
-            #     threads[i].join()
+            #     if returnData.value_list[i] is None:
+            #         pass
+            #     else:
+            #         returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
+            def process_data_transform(i):
+                ds = self.get_datasets()[i]
+                returnData[ds.element_spec] = unpack_singleton(ds.data_transform(returnData.value_list[i]))
+
+            threads = []
+            for i in range(len(returnData)):
+                threads.append(threading.Thread(target=process_data_transform, args=(i,)))
+                threads[i].start()
+            for i in range(len(returnData)):
+                threads[i].join()
 
 
             if self.signature is None or len(self.signature.outputs) == 0 or len(self._signature.outputs)!=len(self.get_datasets())  or self._is_signature_update == False:
                 self._signature = Signature(name='data_provider')
                 for spec,ds in zip(returnData.key_list,self.get_datasets()):
                     data_value=returnData[spec]
-                    self._signature.outputs[ds.symbol] =copy.deepcopy(spec)
-                    self._signature.outputs[ds.symbol].shape=tensor_to_shape(data_value,need_exclude_batch_axis=True,is_singleton=True)
-                    self._signature.outputs[ds.symbol].object_type=ds.object_type
+                    if data_value is not None:
+                        new_spec = copy.deepcopy(spec)
+                        new_spec.shape=tensor_to_shape(data_value,need_exclude_batch_axis=True,is_singleton=True)
+                        new_spec.object_type=ds.object_type
+                        self._signature.outputs[ds.symbol] =new_spec
+                        ds.element_spec=new_spec
+                        self.data_template[ds.element_spec] = None
+
+
                 self._is_signature_update=True
 
+            if self._is_signature_update:
+                self.data_template=OrderedDict()
+                for ds in self.get_datasets():
+                    self.data_template[ds.element_spec]=None
 
             self.pass_cnt += 1
             self.pass_time_spend += float(time.time() - start_time)
@@ -1549,7 +1609,7 @@ class MetricIterator(Iterator):
     def __init__(self, data=None, label=None, batch_size=8):
         super().__init__(data, batch_size)
         self.is_paired_process = False
-        self.signature = None
+        self._signature = None
         self._data = ImageDataset()
         if data is not None and isinstance(data, (Dataset, ZipDataset)):
             self._data = data
@@ -1578,7 +1638,7 @@ class MetricIterator(Iterator):
         try:
 
             anchor = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
-            positive = self.data.__getitem__(index % len(self.data)) if self.data is not None and len(self.data) > 0 else None
+            positive = self.data.__getitem__(index% len(self.data)) if self.data is not None and len(self.data) > 0 else None
             label = self.label.__getitem__(index % len(self.label)) if self.label is not None and len(self.label) > 0 else None
 
             available_list = list(range(len(self.data)))
@@ -1588,16 +1648,16 @@ class MetricIterator(Iterator):
 
             return_data = []
             if self.signature is None or len(self.signature) == 0:
-                self.signature = Signature()
-                self.signature.name = 'data_provider'
+                self._signature = Signature()
+                self._signature.name = 'data_provider'
                 if anchor is not None:
-                    self.signature.outputs['anchor'] = (-1,) + anchor.shape
+                    self._signature.outputs['anchor'] = (-1,) + anchor.shape
                 if positive is not None:
-                    self.signature.outputs['positive'] = (-1,) + positive.shape
+                    self._signature.outputs['positive'] = (-1,) + positive.shape
                 if negative is not None:
-                    self.signature.outputs['negative'] = (-1,) + negative.shape
+                    self._signature.outputs['negative'] = (-1,) + negative.shape
                 if label is not None:
-                    self.signature.outputs['label'] = (-1,)
+                    self._signature.outputs['label'] = (-1,)
 
             if anchor is not None:
                 return_data.append(anchor)
