@@ -8,12 +8,12 @@ from functools import partial
 import torch.nn as nn
 from torch.nn import init
 
-
-
-__all__ = ['uniform','normal','fill_ones','fill_zeros','kaiming_uniform', 'kaiming_normal','xavier_uniform','xavier_normal','trunc_normal']
+__all__ = ['uniform', 'normal', 'fill_ones', 'fill_zeros', 'kaiming_uniform', 'kaiming_normal', 'xavier_uniform',
+           'xavier_normal', 'trunc_normal']
 
 from trident.backend.common import get_function, camel2snake
-from trident.backend.pytorch_ops import ndim,int_shape
+from trident.backend.pytorch_ops import ndim
+
 
 def uniform(tensor, a=0., b=1.):
     # type: (Tensor, float, float) -> Tensor
@@ -21,22 +21,22 @@ def uniform(tensor, a=0., b=1.):
     distribution :math:`\mathcal{U}(a, b)`.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         a: the lower bound of the uniform distribution
         b: the upper bound of the uniform distribution
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.uniform_(w)
+        >>> uniform(w)
     """
-
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad == True and 'bias' not in name:
-                init.uniform_(weight, a=a,b=b)
-    elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad:
-            init.uniform_(tensor, a=a,b=b)
+    with torch.no_grad():
+        if isinstance(tensor, nn.Module):
+            for name, weight in tensor.named_parameters():
+                if weight.requires_grad == True and 'bias' not in name:
+                    init.uniform_(weight, a=a, b=b)
+        elif isinstance(tensor, nn.Parameter):
+            if tensor.requires_grad:
+                init.uniform_(tensor, a=a, b=b)
 
 
 def normal(tensor, mean=0., std=1.):
@@ -45,23 +45,23 @@ def normal(tensor, mean=0., std=1.):
     distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         mean: the mean of the normal distribution
         std: the standard deviation of the normal distribution
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.normal_(w)
+        >>> normal(w)
     """
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name:
-                init.normal_(weight,mean=mean,std=std)
+    if std is None or std < 0.02:
+        std = 0.02
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name:
+                init.normal_(weight, mean=mean, std=std)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad:
-            init.normal_(tensor,mean=mean,std=std)
-
-
+            init.normal_(tensor, mean=mean, std=std)
 
 
 def fill_zeros(tensor):
@@ -69,15 +69,15 @@ def fill_zeros(tensor):
     r"""Fills the input Tensor with the scalar value `0`.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.zeros_(w)
+        >>> fill_zeros(w)
     """
 
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
             if weight.requires_grad:
                 init.zeros_(weight)
     elif isinstance(tensor, nn.Parameter):
@@ -90,15 +90,15 @@ def fill_ones(tensor):
     r"""Fills the input Tensor with the scalar value `1`.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.ones_(w)
+        >>> fill_ones(w)
     """
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name:
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name:
                 init.ones_(weight)
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad:
@@ -118,7 +118,7 @@ def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     Also known as He initialization.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         a: the negative slope of the rectifier used after this layer (only
             used with ``'leaky_relu'``)
         mode: either ``'fan_in'`` (default) or ``'fan_out'``. Choosing ``'fan_in'``
@@ -132,14 +132,14 @@ def kaiming_uniform(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
         >>> w = torch.empty(3, 5)
         >>> nn.init.kaiming_uniform_(w, mode='fan_in', nonlinearity='relu')
     """
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name and weight.dim() >= 2:
                 init.kaiming_uniform_(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad and tensor.dim()>=2:
+        if tensor.requires_grad and tensor.dim() >= 2:
             init.kaiming_uniform_(tensor, a, mode, nonlinearity)
-        elif tensor.requires_grad and tensor.dim()<2:
+        elif tensor.requires_grad and tensor.dim() < 2:
             init.kaiming_uniform_(tensor.unsqueeze_(0).unsqueeze_(0), a, mode, nonlinearity)
             tensor.squeeze_(0).squeeze_(0)
 
@@ -157,7 +157,7 @@ def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
     Also known as He initialization.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         a: the negative slope of the rectifier used after this layer (only
             used with ``'leaky_relu'``)
         mode: either ``'fan_in'`` (default) or ``'fan_out'``. Choosing ``'fan_in'``
@@ -169,16 +169,16 @@ def kaiming_normal(tensor, a=0, mode='fan_in', nonlinearity='leaky_relu'):
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.kaiming_normal_(w, mode='fan_out', nonlinearity='relu')
+        >>> kaiming_normal(w, mode='fan_out', nonlinearity='relu')
     """
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name and weight.dim() >= 2:
                 init.kaiming_normal_(weight, a, mode, nonlinearity)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad and tensor.dim()>=2:
+        if tensor.requires_grad and tensor.dim() >= 2:
             init.kaiming_normal_(tensor, a, mode, nonlinearity)
-        elif tensor.requires_grad and tensor.dim()<2:
+        elif tensor.requires_grad and tensor.dim() < 2:
             init.kaiming_normal_(tensor.unsqueeze_(0).unsqueeze_(0), a, mode, nonlinearity)
             tensor.squeeze_(0).squeeze_(0)
 
@@ -197,20 +197,20 @@ def xavier_uniform(tensor, gain=1.):
     Also known as Glorot initialization.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         gain: an optional scaling factor
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.xavier_uniform_(w, gain=nn.init.calculate_gain('relu'))
+        >>> xavier_uniform(w, gain=1)
     """
 
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad == True and 'bias' not in name and weight.dim()>=2:
-                init.xavier_uniform_(weight,gain=gain)
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name and weight.dim() >= 2:
+                init.xavier_uniform_(weight, gain=gain)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad and tensor.dim()>=2:
+        if tensor.requires_grad and tensor.dim() >= 2:
             init.xavier_uniform_(tensor, gain=gain)
 
 
@@ -228,20 +228,21 @@ def xavier_normal(tensor, gain=1.):
     Also known as Glorot initialization.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         gain: an optional scaling factor
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.xavier_normal_(w)
+        >>> xavier_normal(w,gain=1)
     """
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name and weight.dim()>=2:
-                init.xavier_normal_(weight,gain=gain)
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name and weight.dim() >= 2:
+                init.xavier_normal_(weight, gain=gain)
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad and tensor.dim()>=2:
+        if tensor.requires_grad and tensor.dim() >= 2:
             init.xavier_normal_(tensor, gain=gain)
+
 
 def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
     # type: (Tensor, float, float, float, float) -> Tensor
@@ -253,7 +254,7 @@ def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
     best when :math:`a \leq \text{mean} \leq b`.
 
     Args:
-        tensor: an n-dimensional `torch.Tensor`
+        tensor: an n-dimensional `Tensor`
         mean: the mean of the normal distribution
         std: the standard deviation of the normal distribution
         a: the minimum cutoff value
@@ -261,40 +262,59 @@ def trunc_normal(tensor, mean=0., std=1., a=-2., b=2.):
 
     Examples:
         >>> w = torch.empty(3, 5)
-        >>> nn.init.trunc_normal_(w)
+        >>> trunc_normal(w)
     """
+    if std is None or std < 0.02:
+        std = 0.02
 
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if weight.requires_grad==True and 'bias' not in name:
-                init.trunc_normal_(weight,mean=mean, std=std, a=a, b=b)
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if weight.requires_grad == True and 'bias' not in name:
+                init.trunc_normal_(weight, mean=mean, std=std, a=a, b=b)
 
     elif isinstance(tensor, nn.Parameter):
         if tensor.requires_grad:
-            init.trunc_normal_(tensor,mean=mean, std=std, a=a, b=b)
+            init.trunc_normal_(tensor, mean=mean, std=std, a=a, b=b)
 
 
 def orthogonal(tensor, gain=1):
-    if isinstance(tensor,nn.Module):
-        for name,weight in tensor.named_parameters():
-            if ndim(weight)>=2:
-                if weight.requires_grad==True and 'bias' not in name:
-                    init.orthogonal_(weight,gain=gain)
+    """Fills the input `Tensor` with a (semi) orthogonal matrix, as
+    described in `Exact solutions to the nonlinear dynamics of learning in deep
+    linear neural networks` - Saxe, A. et al. (2013). The input tensor must have
+    at least 2 dimensions, and for tensors with more than 2 dimensions the
+    trailing dimensions are flattened.
+
+    Args:
+        tensor: an n-dimensional `Tensor`, where :math:`n \geq 2`
+        gain:
+
+    Returns:
+
+    Examples:
+        >>> w = torch.empty(3, 5)
+        >>> orthogonal(w)
+    """
+    if isinstance(tensor, nn.Module):
+        for name, weight in tensor.named_parameters():
+            if ndim(weight) >= 2:
+                if weight.requires_grad == True and 'bias' not in name:
+                    init.orthogonal_(weight, gain=gain)
 
     elif isinstance(tensor, nn.Parameter):
-        if tensor.requires_grad and ndim(tensor)>=2:
-            init.orthogonal_(tensor,gain=gain)
-      
+        if tensor.requires_grad and ndim(tensor) >= 2:
+            init.orthogonal_(tensor, gain=gain)
+
     elif isinstance(tensor, list):
         for p in tensor:
             orthogonal(p)
 
 
-def get_initializer(initializer,**kwargs):
-    if isinstance(initializer,str):
+def get_initializer(initializer, **kwargs):
+    if isinstance(initializer, str):
         initializer_fn = get_function(camel2snake(initializer), ['trident.backend.pytorch_initializers'])
-        initializer_fn=partial(initializer_fn,**kwargs) if len(kwargs)>0 else initializer_fn
+        initializer_fn = partial(initializer_fn, **kwargs) if len(kwargs) > 0 else initializer_fn
         return initializer_fn
-    elif inspect.isfunction(initializer) and getattr(initializer, '__module__', None) =='trident.backend.pytorch_initializers':
+    elif inspect.isfunction(initializer) and getattr(initializer, '__module__',
+                                                     None) == 'trident.backend.pytorch_initializers':
         initializer = partial(initializer, **kwargs) if len(kwargs) > 0 else initializer
         return initializer
