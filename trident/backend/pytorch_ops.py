@@ -1,6 +1,8 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+import os
+os.environ['TRIDENT_BACKEND'] = 'pytorch'
 
 import builtins
 import collections
@@ -18,7 +20,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
-
+import torchvision.ops as visionop
 from trident.backend import dtype as Dtype
 from trident.backend.common import *
 from trident.backend.numpy_ops import DTYPE_MAPPING as numpy_DTYPE_MAPPING
@@ -110,7 +112,7 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like',
            'multinomial', 'random_bernoulli', 'binary_cross_entropy',
            'rgb2xyz', 'rgb2hsv', 'rgb2lab', 'rgb2gray', 'xyz2lab', 'xyz2rgb', 'lab2xyz', 'lab2rgb', 'bbox_iou',
-           'bbox_giou', 'bbox_ciou', 'bbox_diou']
+           'bbox_giou', 'bbox_ciou', 'bbox_diou','nms']
 
 Tensor = torch.Tensor
 
@@ -492,9 +494,16 @@ def int_shape(x: Tensor):
 
     """
 
-    if x is None or not hasattr(x,'shape'):
+    if x is None :
         return []
-    return [d for d in x.shape]  # if isinstance(x,np.ndarray)  else  [d for d in  x.size()]
+    elif isinstance(x,TensorShape):
+        return x.dims
+    elif isinstance(x,torch.Size):
+        return  [d for d in x]
+    elif  hasattr(x, 'shape'):
+        return [d for d in x.shape]  # if isinstance(x,np.ndarray)  else  [d for d in  x.size()]
+    else:
+        return []
 
 
 def tensor_to_shape(x: Tensor, need_exclude_batch_axis=True, is_singleton=False) -> TensorShape:
@@ -4168,9 +4177,9 @@ def binary_cross_entropy(output, target, from_logits=False):
           A tensor.
       """
     if from_logits:
-        output = clip(output, 1e-7, 1 - 1e-7)
+        output = output
     else:
-        output = clip(sigmoid(output), 1e-7, 1 - 1e-7)
+        output = sigmoid(output)
     bce = target * torch.log(output)
     bce += (1 - target) * torch.log(1 - output)
     return -bce
@@ -4636,55 +4645,44 @@ def bbox_iou(bboxes1, bboxes2):
 
     Args:
         bboxes1 (Tensor): shape (n, 4)
-        bboxes2 (Tensor): shape (k, 4)
+        bboxes2 (Tensor): shape (n, 4)
 
     Returns:
-         ious(Tensor): shape (n, k)
+         ious(Tensor): shape (n)
 
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(bbox_iou(boxes1,boxes2).cpu())
+    tensor([0.7958, 0.7878, 0.6093, 0.9466, 0.7277])
+    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0])
     >>> print(iou_loss.cpu())
-    tensor(0.3802)
-
-    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
-    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
-    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-    >>> print(iou_loss.cpu())
-    tensor(0.3703)
-
-
-
-
+    tensor(0.2266)
     """
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    ious = torch.zeros((rows, cols))
-    if rows * cols == 0:
-        return ious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        ious = torch.zeros((cols, rows))
-        exchange = True
-    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
-    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
 
-    lt = maximum(bboxes1[:, None, :2], bboxes2[:, :2])  # [N,M,2]
-    rb = minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])  # [N,M,2]
-    wh = torch.clamp(rb - lt, min=0)  # [N,M,2]
-    inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
-    # print('inter_area',inter_area)
 
-    union = area1[:, None] + area2 - inter_area
-    # print('union',union)
-    ious = inter_area / union
-    ious = torch.clamp(ious, min=0, max=1.0)
-    if exchange:
-        ious = ious.T
-    # print('ious',ious)
-    return reduce_max(ious, 0).mean()
+    bboxes1 = bboxes1.to(_float_dtype)
+    bboxes2 = bboxes2.to(_float_dtype)
+    x1, y1, x2, y2 = bboxes1[:, 0], bboxes1[:, 1], bboxes1[:, 2], bboxes1[:, 3]
+    x1g, y1g, x2g, y2g = bboxes2[:, 0], bboxes2[:, 1], bboxes2[:, 2], bboxes2[:, 3]
+
+    x2 = torch.maximum(x1, x2)
+    y2 = torch.maximum(y1, y2)
+
+    xkis1 = torch.maximum(x1, x1g)
+    ykis1 = torch.maximum(y1, y1g)
+    xkis2 = torch.minimum(x2, x2g)
+    ykis2 = torch.minimum(y2, y2g)
+
+
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
+
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    return iouk
 
 
 @numpy_compatible
@@ -4693,70 +4691,55 @@ def bbox_diou(bboxes1, bboxes2):
 
     Args:
         bboxes1 (Tensor): shape (n, 4)
-        bboxes2 (Tensor): shape (k, 4)
+        bboxes2 (Tensor): shape (n, 4)
 
     Returns:
-         ious(Tensor): shape (n, k)
+         ious(Tensor): shape (n)
 
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> bbox_diou(boxes1,boxes2).cpu()
+    tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
+    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0])
     >>> print(iou_loss.cpu())
-    tensor(0.3854)
-
-    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
-    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
-    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-    >>> print(iou_loss.cpu())
-    tensor(0.3745)
-
-
-
+    tensor(0.2288)
 
     """
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    dious = torch.zeros((rows, cols))
-    if rows * cols == 0:
-        return dious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        dious = torch.zeros((cols, rows))
-        exchange = True
+    bboxes1=bboxes1.to(_float_dtype)
+    bboxes2=bboxes2.to(_float_dtype)
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
 
-    w1 = bboxes1[:, 2] - bboxes1[:, 0]
-    h1 = bboxes1[:, 3] - bboxes1[:, 1]
-    w2 = bboxes2[:, 2] - bboxes2[:, 0]
-    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
 
-    area1 = w1 * h1
-    area2 = w2 * h2
-    center_x1 = (bboxes1[:, None, 2] + bboxes1[:, None, 0]) / 2
-    center_y1 = (bboxes1[:, None, 3] + bboxes1[:, None, 1]) / 2
-    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
-    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+    x_p = (x2 + x1) / 2
+    y_p = (y2 + y1) / 2
+    x_g = (x1g + x2g) / 2
+    y_g = (y1g + y2g) / 2
 
-    inter_max_xy = torch.minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])
-    inter_min_xy = torch.maximum(bboxes1[:, None, :2], bboxes2[:, :2])
-    out_max_xy = torch.maximum(bboxes1[:, None, 2:], bboxes2[:, 2:])
-    out_min_xy = torch.minimum(bboxes1[:, None, :2], bboxes2[:, :2])
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
 
-    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
-    inter_area = inter[:, :, 0] * inter[:, :, 1]
-    inter_diag = (center_x2 - center_x1) ** 2 + (center_y2 - center_y1) ** 2
-    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
-    outer_diag = (outer[:, :, 0] ** 2) + (outer[:, :, 1] ** 2)
-    union = area1[:, None] + area2 - inter_area
-    ious = inter_area / union
-    ious = torch.clamp(ious, min=0, max=1.0)
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
 
-    dious = ious - (inter_diag) / torch.clamp(outer_diag, min=1.0)
-    dious = torch.clamp(dious, min=-1.0, max=1.0)
-    if exchange:
-        dious = dious.T
-    return dious
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    c = ((xc2 - xc1) ** 2) + ((yc2 - yc1) ** 2) + 1e-7
+    d = ((x_p - x_g) ** 2) + ((y_p - y_g) ** 2)
+    u = d / c
+    diouk = iouk - u
+    return diouk
 
 
 @numpy_compatible
@@ -4765,77 +4748,63 @@ def bbox_ciou(bboxes1, bboxes2):
 
     Args:
         bboxes1 (Tensor): shape (n, 4)
-        bboxes2 (Tensor): shape (k, 4)
+        bboxes2 (Tensor): shape (n, 4)
 
     Returns:
-         ious(Tensor): shape (n, k)
+         ious(Tensor): shape (n)
 
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> bbox_ciou(boxes1,boxes2).cpu()
+    tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
+    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0])
     >>> print(iou_loss.cpu())
-    tensor(0.3854)
-
-    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
-    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
-    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-    >>> print(iou_loss.cpu())
-    tensor(0.3745)
+    tensor(0.2288)
 
     """
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    cious = torch.zeros((rows, cols))
-    if rows * cols == 0:
-        return cious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        cious = torch.zeros((cols, rows))
-        exchange = True
+    bboxes1=bboxes1.to(_float_dtype)
+    bboxes2=bboxes2.to(_float_dtype)
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
 
-    w1 = bboxes1[:, 2] - bboxes1[:, 0]
-    h1 = bboxes1[:, 3] - bboxes1[:, 1]
-    w2 = bboxes2[:, 2] - bboxes2[:, 0]
-    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
+    w_pred = x2 - x1
+    h_pred = y2 - y1
+    w_gt = x2g - x1g
+    h_gt = y2g - y1g
 
-    area1 = w1 * h1
-    area2 = w2 * h2
+    x_center = (x2 + x1) / 2
+    y_center = (y2 + y1) / 2
+    x_center_g = (x1g + x2g) / 2
+    y_center_g = (y1g + y2g) / 2
 
-    center_x1 = (bboxes1[:, None, 2] + bboxes1[:, None, 0]) / 2
-    center_y1 = (bboxes1[:, None, 3] + bboxes1[:, None, 1]) / 2
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
 
-    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
-    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
 
-    inter_max_xy = torch.minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])
-    inter_min_xy = torch.maximum(bboxes1[:, None, :2], bboxes2[:, :2])
-    out_max_xy = torch.maximum(bboxes1[:, None, 2:], bboxes2[:, 2:])
-    out_min_xy = torch.minimum(bboxes1[:, None, :2], bboxes2[:, :2])
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + ctx.epsilon
+    iouk = intsctk / unionk
 
-    inter = torch.clamp((inter_max_xy - inter_min_xy), min=0)
-    inter_area = inter[:, :, 0] * inter[:, :, 1]
-    inter_diag = (center_x2 - center_x1) ** 2 + (center_y2 - center_y1) ** 2
-    outer = torch.clamp((out_max_xy - out_min_xy), min=0)
-    outer_diag = (outer[:, :, 0] ** 2) + (outer[:, :, 1] ** 2)
-    union = area1[:, None] + area2 - inter_area
-    ious = inter_area / union
-    ious = torch.clamp(ious, min=0, max=1.0)
-
-    u = (inter_diag) / outer_diag
-    w1 = w1.unsqueeze(1)
-    h1 = h1.unsqueeze(1)
-    v = (4 / (math.pi ** 2)) * torch.pow((torch.atan(w2 / h2) - torch.atan(w1 / h1)), 2)
+    c = ((xc2 - xc1) ** 2) + ((yc2 - yc1) ** 2)+ ctx.epsilon
+    d = ((x_center - x_center_g) ** 2) + ((y_center - y_center_g) ** 2)
+    u = d / c
+    v = (4 / (math.pi ** 2)) * torch.pow((torch.atan(w_gt / h_gt) - torch.atan(w_pred / h_pred)), 2)
     with torch.no_grad():
-        S = 1 - ious
+        S = 1 - iouk
         alpha = v / (S + v)
-    cious = ious - (u + alpha * v)
-    cious = torch.clamp(cious, min=-1.0, max=1.0)
-    if exchange:
-        cious = cious.T
-    return cious
-
+    ciouk = iouk - (u + alpha * v)
+    return ciouk
 
 @numpy_compatible
 def bbox_giou(bboxes1, bboxes2):
@@ -4843,62 +4812,57 @@ def bbox_giou(bboxes1, bboxes2):
 
     Args:
         bboxes1 (Tensor): shape (n, 4)
-        bboxes2 (Tensor): shape (k, 4)
+        bboxes2 (Tensor): shape (n, 4)
 
     Returns:
-         ious(Tensor): shape (n, k)
+         ious(Tensor): shape (n)
 
     Examples;
     >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
     >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
-    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> bbox_giou(boxes1,boxes2).cpu()
+    tensor([0.7910, 0.7832, 0.6093, 0.9465, 0.7277])
+    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0])
     >>> print(iou_loss.cpu())
-    tensor(0.3924)
+    tensor(0.2285)
 
-    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
-    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]]))
-    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-    >>> print(iou_loss.cpu())
-    tensor(0.3795)
 
 
 
 
     """
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    ious = torch.zeros((rows, cols))
-    if rows * cols == 0:
-        return ious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        ious = torch.zeros((cols, rows))
-        exchange = True
-    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
-    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
+    bboxes1=bboxes1.to(_float_dtype)
+    bboxes2=bboxes2.to(_float_dtype)
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
 
-    inter_max_xy = minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])
-    inter_min_xy = maximum(bboxes1[:, None, :2], bboxes2[:, :2])
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
 
-    wh = torch.clamp(inter_max_xy - inter_min_xy, min=0)  # [N,M,2]
-    inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
 
-    out_max_xy = maximum(bboxes1[:, None, 2:], bboxes2[:, 2:])
-    out_min_xy = minimum(bboxes1[:, None, :2], bboxes2[:, :2])
-    out_wh = torch.clamp(out_max_xy - out_min_xy, min=0)  # [N,M,2]
-    outer_area = out_wh[:, :, 0] * out_wh[:, :, 1]  # [N,M]
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
 
-    union = (area1[:, None] + area2 - inter_area).to(_float_dtype)
-    closure = outer_area.to(_float_dtype)
-    ious = inter_area / union
-    ious = torch.clamp(ious, min=0, max=1.0)
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
 
-    ious = ious - ((closure - union) / closure)
-    if exchange:
-        ious = ious.T
-    return ious
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
 
+    area_c = (xc2 - xc1) * (yc2 - yc1) + 1e-7
+    giouk = iouk - ((area_c - unionk) / area_c)
+    return giouk
+
+
+def nms(boxes: torch.Tensor, scores: torch.Tensor, iou_threshold: float=0.5):
+    return visionop.nms(boxes, scores, iou_threshold)
 
 ############################
 ## summary
