@@ -35,17 +35,21 @@ from trident.backend import dtype
 
 DTYPE_MAPPING = {
     np.bool_: dtype.bool,
-    np.int8_: dtype.int8,
-    np.int16_: dtype.int16,
-    np.int32_: dtype.int32,
-    np.int64_: dtype.int64,
-    np.uint8_: dtype.uint8,
-    np.float16_: dtype.float16,
-    np.float32_: dtype.float32,
-    np.float64_: dtype.float64,
-    np.cfloat_: dtype.cfloat
+    np.byte: dtype.int8,
+    np.short: dtype.int16,
+    np.intc: dtype.int32,
+    np.int_: dtype.int64,
+    np.ubyte: dtype.uint8,
+    np.half: dtype.float16,
+    np.single: dtype.float32,
+    np.double: dtype.float64,
+    np.csingle: dtype.cfloat
 }
 
+np.long=np.int_
+np.bool=np.bool_
+np.uint8=np.ubyte
+np.float32=np.single
 
 ############################
 ## tensor attribute
