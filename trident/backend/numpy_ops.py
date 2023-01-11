@@ -34,16 +34,16 @@ from trident.backend import dtype
 
 
 DTYPE_MAPPING = {
-    np.bool: dtype.bool,
-    np.int8: dtype.int8,
-    np.int16: dtype.int16,
-    np.int32: dtype.int32,
-    np.int64: dtype.int64,
-    np.uint8: dtype.uint8,
-    np.float16: dtype.float16,
-    np.float32: dtype.float32,
-    np.float64: dtype.float64,
-    np.cfloat: dtype.cfloat
+    np.bool_: dtype.bool,
+    np.int8_: dtype.int8,
+    np.int16_: dtype.int16,
+    np.int32_: dtype.int32,
+    np.int64_: dtype.int64,
+    np.uint8_: dtype.uint8,
+    np.float16_: dtype.float16,
+    np.float32_: dtype.float32,
+    np.float64_: dtype.float64,
+    np.cfloat_: dtype.cfloat
 }
 
 
@@ -1694,7 +1694,7 @@ def relu(x):
 
 
     """
-    return np.clip(x,a_min=0)
+    return np.clip(x,a_min=0,a_max=np.inf)
 
 
 def relu6(x):
@@ -2396,70 +2396,70 @@ def expand_dims(x:np.ndarray, axis=0):
 #         return x
 #
 #
-# def space_to_depth(x:np.ndarray, block_size=2):
-#     """
-#     Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
-#
-#     This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing
-#     sub-pixel convolution that is part of models for image super-resolution .
-#     It rearranges elements of an input tensor of shape (N, C, H, W) to a tensor of shape (N, C*b*b, H/b, W/b),
-#     where b is the block_size,
-#     by rearranging non-overlapping spatial blocks of size block_size x block_size into the depth/channel dimension at
-#     each location.
-#
-#     Args:
-#         x (np.ndarray): input tensor.
-#         block_size (int):
-#
-#     Returns: resized tensor
-#     Examples:
-#     >>> arr=space_to_depth(np.array([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],
-#     [2., 3., 2., 3., 2., 3.]],[[4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.], [4., 5., 4., 5., 4., 5.],[6., 7.,
-#     6., 7., 6., 7.]]]),block_size=2)
-#     >>> arr
-#     tensor([[[0., 0., 0.],
-#              [0., 0., 0.]],
-#     <BLANKLINE>
-#             [[1., 1., 1.],
-#              [1., 1., 1.]],
-#     <BLANKLINE>
-#             [[2., 2., 2.],
-#              [2., 2., 2.]],
-#     <BLANKLINE>
-#             [[3., 3., 3.],
-#              [3., 3., 3.]],
-#     <BLANKLINE>
-#             [[4., 4., 4.],
-#              [4., 4., 4.]],
-#     <BLANKLINE>
-#             [[5., 5., 5.],
-#              [5., 5., 5.]],
-#     <BLANKLINE>
-#             [[6., 6., 6.],
-#              [6., 6., 6.]],
-#     <BLANKLINE>
-#             [[7., 7., 7.],
-#              [7., 7., 7.]]])
-#     >>> print(arr.shape)
-#     torch.Size([8, 2, 3])
-#     """
-#     if ndim(x) not in (3, 4):
-#         raise ValueError('Input tensort length of shape should be 3 or 4 ')
-#     elif x.shape[-2] % block_size != 0 or x.shape[-1] % block_size != 0:
-#         raise ValueError('Input tensort channel must be divisible by square of block_size')
-#     else:
-#         orig_ndim = ndim(x)
-#         if orig_ndim == 3:
-#             x = expand_dims(x, 0)
-#         orig_shape = list(int_shape(x))
-#         x = reshape(x, (
-#             orig_shape[0], orig_shape[1], orig_shape[2] // block_size, block_size, orig_shape[3] // block_size, block_size))
-#         x = permute(x, [0, 1, 3, 5, 2, 4])
-#         x = reshape(x, (orig_shape[0], orig_shape[1] * block_size * block_size, orig_shape[2] // block_size,
-#                         orig_shape[3] // block_size))
-#         if orig_ndim == 3:
-#             return x[0]
-#         return x
+def space_to_depth(x:np.ndarray, block_size=2):
+    """
+    Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
+
+    This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing
+    sub-pixel convolution that is part of models for image super-resolution .
+    It rearranges elements of an input tensor of shape (N, C, H, W) to a tensor of shape (N, C*b*b, H/b, W/b),
+    where b is the block_size,
+    by rearranging non-overlapping spatial blocks of size block_size x block_size into the depth/channel dimension at
+    each location.
+
+    Args:
+        x (np.ndarray): input tensor.
+        block_size (int):
+
+    Returns: resized tensor
+    Examples:
+    >>> arr=space_to_depth(np.array([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],
+    [2., 3., 2., 3., 2., 3.]],[[4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.], [4., 5., 4., 5., 4., 5.],[6., 7.,
+    6., 7., 6., 7.]]]),block_size=2)
+    >>> arr
+    tensor([[[0., 0., 0.],
+             [0., 0., 0.]],
+    <BLANKLINE>
+            [[1., 1., 1.],
+             [1., 1., 1.]],
+    <BLANKLINE>
+            [[2., 2., 2.],
+             [2., 2., 2.]],
+    <BLANKLINE>
+            [[3., 3., 3.],
+             [3., 3., 3.]],
+    <BLANKLINE>
+            [[4., 4., 4.],
+             [4., 4., 4.]],
+    <BLANKLINE>
+            [[5., 5., 5.],
+             [5., 5., 5.]],
+    <BLANKLINE>
+            [[6., 6., 6.],
+             [6., 6., 6.]],
+    <BLANKLINE>
+            [[7., 7., 7.],
+             [7., 7., 7.]]])
+    >>> print(arr.shape)
+    torch.Size([8, 2, 3])
+    """
+    if ndim(x) not in (3, 4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    elif x.shape[-2] % block_size != 0 or x.shape[-1] % block_size != 0:
+        raise ValueError('Input tensort channel must be divisible by square of block_size')
+    else:
+        orig_ndim = ndim(x)
+        if orig_ndim == 3:
+            x = expand_dims(x, 0)
+        orig_shape = list(int_shape(x))
+        x = reshape(x, (
+            orig_shape[0], orig_shape[1], orig_shape[2] // block_size, block_size, orig_shape[3] // block_size, block_size))
+        x = permute(x, [0, 1, 3, 5, 2, 4])
+        x = reshape(x, (orig_shape[0], orig_shape[1] * block_size * block_size, orig_shape[2] // block_size,
+                        orig_shape[3] // block_size))
+        if orig_ndim == 3:
+            return x[0]
+        return x
 
 
 ############################
@@ -2701,9 +2701,13 @@ def make_onehot(label, num_classes, axis=-1):
     shp=label.shape
     flatten_label=label.reshape(-1)
     result=np.eye(num_classes)
-    result=result[flatten_label.astype(np.int64)]
+    result=result[flatten_label.astype(np.int64)].reshape(shp+(num_classes,))
     if axis!=-1 and axis!=ndim(label)-1:
-        result=np.swapaxes(axis,-1)
+        last_index = ndim(result) - 1
+        axes=list(range(len(result.shape)))
+        axes.pop(-1)
+        axes.insert(axis, -1)
+        result=np.transpose(result,axes)
 
     return result
 
@@ -3423,184 +3427,226 @@ def box_area(boxes: np.ndarray) :
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
-def bbox_iou(bboxes1:np.ndarray, bboxes2:np.ndarray):
+
+
+def bbox_iou(bboxes1: np.ndarray, bboxes2: np.ndarray):
     """
 
-     Args:
-         bboxes1 (ndarray): shape (n, 4)
-         bboxes2 (ndarray): shape (k, 4)
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
 
-     Returns:
-          ious(ndarray): shape (n, k)
+    Returns:
+         ious(Tensor): shape (n)
 
-     Examples;
-     >>> boxes1=np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
-     >>> boxes2=np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]])
-     >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-     >>> print(iou_loss)
-     0.38019627987703136
-
-     >>> boxes1=np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
-     >>> boxes2=np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120]])
-     >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
-     >>> print(iou_loss)
-     0.37027548071628236
-     """
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    ious = np.zeros((rows, cols))
-    if rows * cols == 0:
-        return ious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        ious = np.zeros((cols, rows))
-        exchange = True
-    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (bboxes1[:, 3] - bboxes1[:, 1])
-    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (bboxes2[:, 3] - bboxes2[:, 1])
-
-    lt = np.maximum(bboxes1[:, None, :2], bboxes2[:, :2])  # [N,M,2]
-    rb = np.minimum(bboxes1[:, None, 2:], bboxes2[:, 2:])  # [N,M,2]
-    wh = np.clip(rb - lt, a_min=0,a_max=np.inf)  # [N,M,2]
-    inter_area = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
-
-    union = area1[:, None] + area2 - inter_area
-    ious = inter_area / union
-    ious = np.clip(ious,a_min=0,a_max = 1.0)
-    if exchange:
-        ious = ious.T
-    return ious
+    Examples;
+    >>> boxes1=np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]])
+    >>> boxes2=np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]])
+    >>> bbox_iou(boxes1,boxes2)
+    array([7.9577e-01, 7.8784e-01, 6.0932e-01, 9.4663e-01, 7.2766e-01],
+          dtype=float32)
+    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss)
+    0.22655763626098632
+    """
 
 
-def bbox_diou(bboxes1:np.ndarray, bboxes2:np.ndarray):
+    bboxes1 = bboxes1.astype(np.float32)
+    bboxes2 = bboxes2.astype(np.float32)
+    x1, y1, x2, y2 = bboxes1[:, 0], bboxes1[:, 1], bboxes1[:, 2], bboxes1[:, 3]
+    x1g, y1g, x2g, y2g = bboxes2[:, 0], bboxes2[:, 1], bboxes2[:, 2], bboxes2[:, 3]
 
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    dious = np.zeros((rows, cols))
-    if rows * cols == 0:
-        return dious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        dious = np.zeros((cols, rows))
-        exchange = True
+    x2 = np.maximum(x1, x2)
+    y2 = np.maximum(y1, y2)
 
-    w1 = bboxes1[:, 2] - bboxes1[:, 0]
-    h1 = bboxes1[:, 3] - bboxes1[:, 1]
-    w2 = bboxes2[:, 2] - bboxes2[:, 0]
-    h2 = bboxes2[:, 3] - bboxes2[:, 1]
-
-    area1 = w1 * h1
-    area2 = w2 * h2
-    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
-    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
-    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
-    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
-
-    inter_max_xy = np.min(bboxes1[:, 2:],bboxes2[:, 2:])
-    inter_min_xy = np.max(bboxes1[:, :2],bboxes2[:, :2])
-    out_max_xy = np.max(bboxes1[:, 2:],bboxes2[:, 2:])
-    out_min_xy = np.min(bboxes1[:, :2],bboxes2[:, :2])
-
-    inter = np.clip((inter_max_xy - inter_min_xy), min=0)
-    inter_area = inter[:, 0] * inter[:, 1]
-    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
-    outer = np.clip((out_max_xy - out_min_xy), min=0)
-    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
-    union = area1+area2-inter_area
-    dious = inter_area / union - (inter_diag) / outer_diag
-    dious = np.clip(dious,min=-1.0,max = 1.0)
-    if exchange:
-        dious = dious.T
-    return dious
+    xkis1 = np.maximum(x1, x1g)
+    ykis1 = np.maximum(y1, y1g)
+    xkis2 = np.minimum(x2, x2g)
+    ykis2 = np.minimum(y2, y2g)
 
 
-def bbox_ciou(bboxes1:np.ndarray, bboxes2:np.ndarray):
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    cious = np.zeros((rows, cols))
-    if rows * cols == 0:
-        return cious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        cious = np.zeros((cols, rows))
-        exchange = True
+    intsctk = np.zeros(x1.shape).astype(np.float32)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).astype(np.bool)
 
-    w1 = bboxes1[:, 2] - bboxes1[:, 0]
-    h1 = bboxes1[:, 3] - bboxes1[:, 1]
-    w2 = bboxes2[:, 2] - bboxes2[:, 0]
-    h2 = bboxes2[:, 3] - bboxes2[:, 1]
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk.astype(np.float32) / unionk.astype(np.float32)
 
-    area1 = w1 * h1
-    area2 = w2 * h2
-
-    center_x1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
-    center_y1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
-    center_x2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
-    center_y2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
-
-    inter_max_xy = np.min(bboxes1[:, 2:],bboxes2[:, 2:])
-    inter_min_xy = np.max(bboxes1[:, :2],bboxes2[:, :2])
-    out_max_xy = np.max(bboxes1[:, 2:],bboxes2[:, 2:])
-    out_min_xy = np.min(bboxes1[:, :2],bboxes2[:, :2])
-
-    inter = np.clip((inter_max_xy - inter_min_xy), min=0)
-    inter_area = inter[:, 0] * inter[:, 1]
-    inter_diag = (center_x2 - center_x1)**2 + (center_y2 - center_y1)**2
-    outer =np.clip((out_max_xy - out_min_xy), min=0)
-    outer_diag = (outer[:, 0] ** 2) + (outer[:, 1] ** 2)
-    union = area1+area2-inter_area
-    u = (inter_diag) / outer_diag
-    iou = inter_area / union
-    v = (4 / (math.pi ** 2)) * np.pow((np.arctan(w2 / h2) - np.arctan(w1 / h1)), 2)
-
-    S = 1 - iou
-    alpha = v / (S + v)
-    cious = iou - (u + alpha * v)
-    cious = np.clip(cious,min=-1.0,max = 1.0)
-    if exchange:
-        cious = cious.T
-    return cious
+    return iouk
 
 
-def bbox_giou(bboxes1:np.ndarray, bboxes2:np.ndarray):
-    rows = bboxes1.shape[0]
-    cols = bboxes2.shape[0]
-    ious = np.zeros((rows, cols))
-    if rows * cols == 0:
-        return ious
-    exchange = False
-    if bboxes1.shape[0] > bboxes2.shape[0]:
-        bboxes1, bboxes2 = bboxes2, bboxes1
-        ious = np.zeros((cols, rows))
-        exchange = True
-    area1 = (bboxes1[:, 2] - bboxes1[:, 0]) * (
-        bboxes1[:, 3] - bboxes1[:, 1])
-    area2 = (bboxes2[:, 2] - bboxes2[:, 0]) * (
-        bboxes2[:, 3] - bboxes2[:, 1])
 
-    inter_max_xy = np.min(bboxes1[:, 2:],bboxes2[:, 2:])
+def bbox_diou(bboxes1: np.ndarray, bboxes2: np.ndarray):
+    """
 
-    inter_min_xy = np.max(bboxes1[:, :2],bboxes2[:, :2])
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
 
-    out_max_xy = np.max(bboxes1[:, 2:],bboxes2[:, 2:])
+    Returns:
+         ious(Tensor): shape (n)
 
-    out_min_xy = np.min(bboxes1[:, :2],bboxes2[:, :2])
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_diou(boxes1,boxes2).cpu()
+    tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
+    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.2288)
 
-    inter = np.clip((inter_max_xy - inter_min_xy), min=0)
-    inter_area = inter[:, 0] * inter[:, 1]
-    outer = np.clip((out_max_xy - out_min_xy), min=0)
-    outer_area = outer[:, 0] * outer[:, 1]
-    union = area1+area2-inter_area
-    closure = outer_area
+    """
 
-    ious = inter_area / union - (closure - union) / closure
-    ious = np.clip(ious,min=-1.0,max = 1.0)
-    if exchange:
-        ious = ious.T
-    return ious
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
 
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
+
+    x_p = (x2 + x1) / 2
+    y_p = (y2 + y1) / 2
+    x_g = (x1g + x2g) / 2
+    y_g = (y1g + y2g) / 2
+
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
+
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
+
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    c = ((xc2 - xc1) ** 2) + ((yc2 - yc1) ** 2) + 1e-7
+    d = ((x_p - x_g) ** 2) + ((y_p - y_g) ** 2)
+    u = d / c
+    diouk = iouk - u
+    return diouk
+
+
+
+def bbox_ciou(bboxes1: np.ndarray, bboxes2: np.ndarray):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
+
+    Returns:
+         ious(Tensor): shape (n)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_ciou(boxes1,boxes2).cpu()
+    tensor([0.7947, 0.7826, 0.6071, 0.9464, 0.7253])
+    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.2288)
+
+    """
+    bboxes1=bboxes1.to(_float_dtype)
+    bboxes2=bboxes2.to(_float_dtype)
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
+
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
+    w_pred = x2 - x1
+    h_pred = y2 - y1
+    w_gt = x2g - x1g
+    h_gt = y2g - y1g
+
+    x_center = (x2 + x1) / 2
+    y_center = (y2 + y1) / 2
+    x_center_g = (x1g + x2g) / 2
+    y_center_g = (y1g + y2g) / 2
+
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
+
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
+
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    c = ((xc2 - xc1) ** 2) + ((yc2 - yc1) ** 2) + 1e-7
+    d = ((x_center - x_center_g) ** 2) + ((y_center - y_center_g) ** 2)
+    u = d / c
+    v = (4 / (math.pi ** 2)) * torch.pow((torch.atan(w_gt / h_gt) - torch.atan(w_pred / h_pred)), 2)
+    with torch.no_grad():
+        S = 1 - iouk
+        alpha = v / (S + v)
+    ciouk = iouk - (u + alpha * v)
+    return ciouk
+
+
+def bbox_giou(bboxes1: np.ndarray, bboxes2: np.ndarray):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
+
+    Returns:
+         ious(Tensor): shape (n)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_giou(boxes1,boxes2).cpu()
+    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0]*boxes2.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.3924)
+
+
+
+
+
+    """
+    bboxes1=bboxes1.to(_float_dtype)
+    bboxes2=bboxes2.to(_float_dtype)
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
+
+    x2 = torch.max(x1, x2)
+    y2 = torch.max(y1, y2)
+
+    xkis1 = torch.max(x1, x1g)
+    ykis1 = torch.max(y1, y1g)
+    xkis2 = torch.min(x2, x2g)
+    ykis2 = torch.min(y2, y2g)
+
+    xc1 = torch.min(x1, x1g)
+    yc1 = torch.min(y1, y1g)
+    xc2 = torch.max(x2, x2g)
+    yc2 = torch.max(y2, y2g)
+
+    intsctk = zeros(x1.size()).to(_float_dtype)
+    mask = ((ykis2 > ykis1) * (xkis2 > xkis1)).bool()
+
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    area_c = (xc2 - xc1) * (yc2 - yc1) + 1e-7
+    giouk = iouk - ((area_c - unionk) / area_c)
+    return giouk
 
 
 
