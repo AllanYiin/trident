@@ -474,6 +474,8 @@ class TensorShape(object):
         >>> a=TensorShape([2,128,64,64])
         >>> print(a)
         (2, 128, 64, 64)
+        >>> print(a.numel())
+        1048576
         >>> print(a[2])
         64
         >>> print(a[1:3])
@@ -1751,27 +1753,27 @@ def orange_color(text, bolder=False):
     if bolder:
         return u'\033[1;33m%s\033[0m' % text
     else:
-        return '\033[33m {0}\033[0;0m'.format(text)
+        return '\033[33m{0}\033[0;0m'.format(text)
 
 
 def gray_color(text, bolder=False):
     if bolder:
         return u'\033[1;337m%s\033[0m' % text
     else:
-        return '\033[37m {0}\033[0;0m'.format(text)
+        return '\033[37m{0}\033[0;0m'.format(text)
 
 def violet_color(text, bolder=False):
     if bolder:
         return u'\033[1;35m%s\033[0m' % text
     else:
-        return '\033[35m {0}\033[0;0m'.format(text)
+        return '\033[35m{0}\033[0;0m'.format(text)
 
 
 def magenta_color(text, bolder=False):
     if bolder:
         return u'\033[1;35m%s\033[0m' % text
     else:
-        return '\033[35m {0}\033[0;0m'.format(text)
+        return '\033[35m{0}\033[0;0m'.format(text)
 
 
 
