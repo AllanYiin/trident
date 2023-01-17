@@ -2441,7 +2441,17 @@ class Upsampling3d(Layer):
     def forward(self, x, **kwargs):
 
         if self.mode == 'pixel_shuffle':
-            return pixel_shuffle3d(x, int(self.scale_factor))
+            batch_size, channels, in_depth, in_height, in_width = x.size()
+            channels //= self.upscale_factor ** 3
+
+            out_depth = in_depth * self.upscale_factor
+            out_height = in_height * self.upscale_factor
+            out_width = in_width * self.upscale_factor
+            input_view = x.contiguous().view(
+                batch_size, channels, self.upscale_factor, self.upscale_factor, self.upscale_factor,
+                in_depth, in_height, in_width)
+            shuffle_out = input_view.permute(0, 1, 5, 2, 6, 3, 7, 4).contiguous()
+            return shuffle_out.view(batch_size, channels, out_depth, out_height, out_width)
         elif self.mode == 'nearest':
             return F.interpolate(x, self.size, self.scale_factor, self.mode, None)
         else:
