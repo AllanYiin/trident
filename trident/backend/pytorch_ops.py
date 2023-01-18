@@ -99,7 +99,7 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'pad', 'identity', 'sigmoid', 'relu',
-           'relu6', 'leaky_relu',
+           'relu6', 'leaky_relu','celu',
            'leaky_relu6', 'smooth_relu', 'crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
            'silu', 'lecun_tanh',
            'soft_sign', 'soft_plus', 'square_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax',
@@ -111,7 +111,7 @@ __all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_te
            'shuffle',
            'random_choice', 'random_normal', 'random_normal_like', 'random_uniform', 'random_uniform_like',
            'multinomial', 'random_bernoulli', 'binary_cross_entropy',
-           'rgb2xyz', 'rgb2hsv', 'rgb2lab', 'rgb2gray', 'xyz2lab', 'xyz2rgb', 'lab2xyz', 'lab2rgb', 'bbox_iou',
+           'rgb2xyz', 'rgb2hsv', 'rgb2lab', 'rgb2gray', 'xyz2lab', 'xyz2rgb', 'lab2xyz', 'lab2rgb','xywh2xyxy','xyxy2xywh', 'bbox_iou',
            'bbox_giou', 'bbox_ciou', 'bbox_diou','nms']
 
 Tensor = torch.Tensor
@@ -2118,6 +2118,43 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, **kwargs):
     else:
         return torch.min(x)
 
+@numpy_compatible
+def reduce_std(x: Tensor, axis=None, keepdims=False, **kwargs):
+    """Returns the standard deviation, a measure of the spread of a distribution, of the array elements.
+     The standard deviation is computed for the flattened array by default, otherwise over the specified axis.
+
+    Args:
+        x (Tensor): input tensor.
+      axis: The dimensions to reduce. If `None` (the default), reduces all
+        dimensions. Must be in the range `(-rank(input_tensor), rank(input_tensor))`.
+      keepdims: If true, retains reduced dimensions with length 1.
+
+    Returns:
+      The reduced tensor.
+
+    Examples:
+        >>> x = to_tensor([5, 1, 2, 4])
+        >>> print(reduce_min(x))
+        tensor(5, shape=(), dtype=int32)
+        >>> x = to_tensor([-5, -1, -2, -4])
+        >>> print(reduce_min(x))
+        tensor(-1, shape=(), dtype=int32)
+        >>> x = to_tensor([4, float('nan')])
+        >>> print(reduce_min(x))
+        tensor(4.0, shape=(), dtype=float32)
+        >>> x = to_tensor([float('nan'), float('nan')])
+        >>> print(reduce_min(x))
+        tensor(-inf, shape=(), dtype=float32)
+        >>> x =to_tensor([float('-inf'), float('inf')])
+        >>> print(reduce_min(x))
+        tensor(inf, shape=(), dtype=float32)
+
+    """
+    axis = kwargs.get('dim', axis)
+    keepdims = kwargs.get('keepdim', keepdims)
+
+    return torch.std(x,dim=axis,keepdim=keepdims)
+
 
 @numpy_compatible
 def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -2436,6 +2473,28 @@ def smooth_relu(x):
     """
     return torch.log(1 + torch.exp(x))
 
+
+@numpy_compatible
+def celu(x, alpha: Tensor = 1.0):
+    r"""Continuously-differentiable exponential linear unit activation.
+
+     Computes the element-wise function:
+
+     .. math::
+       \mathrm{celu}(x) = \begin{cases}
+         x, & x > 0\\
+         \alpha \left(\exp(\frac{x}{\alpha}) - 1\right), & x \le 0
+       \end{cases}
+
+     For more information, see
+     `Continuously Differentiable Exponential Linear Units
+     <https://arxiv.org/pdf/1704.07483.pdf>`_.
+
+     Args:
+       x : input array
+       alpha : array or scalar (default: 1.0)
+     """
+    return torch.where(x > 0, x, alpha * torch.expm1(x / alpha))
 
 @numpy_compatible
 def crelu(x, axis=1):
@@ -4623,7 +4682,7 @@ def xyxy2xywh(boxes):
     else:
         raise TypeError('Argument xyxy must be a list, tuple, or numpy array.')
 
-
+@numpy_compatible
 def box_area(boxes: Tensor) -> Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its
@@ -5283,93 +5342,185 @@ def affine(tensor: Tensor, matrix: Tensor) -> Tensor:
 # based on:
 # https://github.com/anibali/tvl/blob/master/src/tvl/transforms.py#L185
 
-def rotate(tensor: Tensor, angle: Tensor) -> Tensor:
-    r"""Rotate the image anti-clockwise about the centre.
-
-    See :class:`~kornia.Rotate` for details.
-    """
-    if not torch.is_tensor(tensor):
-        raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
-    if not torch.is_tensor(angle):
-        raise TypeError("Input angle type is not a Tensor. Got {}".format(type(angle)))
-
-    if len(tensor.shape) not in (3, 4,):
-        raise ValueError("Invalid tensor shape, we expect CxHxW or BxCxHxW. "
-                         "Got: {}".format(tensor.shape))
-
-    # compute the rotation matrix
-    # TODO: add broadcasting to get_rotation_matrix2d for center
-    angle = angle.expand(tensor.shape[0])
-    center = torch.tensor([(tensor.size(4) - 1) / 2, (tensor.size(3) - 1) / 2]).expand(tensor.shape[0], -1).to(
-        tensor.device)
-    rotation_matrix = _compute_rotation_matrix(angle, center)
-
-    # warp using the affine transform
-    return affine(tensor, rotation_matrix[..., :2, :3])
-
-
-def translate(tensor: Tensor, translation: Tensor) -> Tensor:
-    r"""Translate the tensor in pixel units.
-
-    See :class:`~kornia.Translate` for details.
-    """
-    if not torch.is_tensor(tensor):
-        raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
-    if not torch.is_tensor(translation):
-        raise TypeError("Input translation type is not a Tensor. Got {}".format(type(translation)))
-    if len(tensor.shape) not in (3, 4,):
-        raise ValueError("Invalid tensor shape, we expect CxHxW or BxCxHxW. "
-                         "Got: {}".format(tensor.shape))
-
-    # compute the translation matrix
-    translation_matrix = _compute_translation_matrix(translation)
-
-    # warp using the affine transform
-    return affine(tensor, translation_matrix[..., :2, :3])
-
-
-def scale(tensor: Tensor, scale_factor: Tensor) -> Tensor:
-    r"""Scales the input image.
-
-    See :class:`~kornia.Scale` for details.
-    """
-    if not torch.is_tensor(tensor):
-        raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
-    if not torch.is_tensor(scale_factor):
-        raise TypeError("Input scale_factor type is not a Tensor. Got {}".format(type(scale_factor)))
-
-    # compute the tensor center
-
-    # compute the rotation matrix
-    # TODO: add broadcasting to get_rotation_matrix2d for center
-    center = torch.tensor([(tensor.size(4) - 1) / 2, (tensor.size(3) - 1) / 2]).expand(tensor.shape[0], -1).to(
-        tensor.device)
-    scale_factor = scale_factor.expand(tensor.shape[0])
-    scaling_matrix = _compute_scaling_matrix(scale_factor, center)
-
-    # warp using the affine transform
-    return affine(tensor, scaling_matrix[..., :2, :3])
-
-
-def shear(tensor: Tensor, shear: Tensor) -> Tensor:
-    r"""Shear the tensor.
-
-    See :class:`~kornia.Shear` for details.
-    """
-    if not torch.is_tensor(tensor):
-        raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
-    if not torch.is_tensor(shear):
-        raise TypeError("Input shear type is not a Tensor. Got {}".format(type(shear)))
-    if len(tensor.shape) not in (3, 4,):
-        raise ValueError("Invalid tensor shape, we expect CxHxW or BxCxHxW. "
-                         "Got: {}".format(tensor.shape))
-
-    # compute the translation matrix
-    shear_matrix = _compute_shear_matrix(shear)
-
-    # warp using the affine transform
-    return affine(tensor, shear_matrix[..., :2, :3])
-
+#
+# def get_rotation_matrix2d(center, angle, scale):
+#     r"""Calculates an affine matrix of 2D rotation.
+#
+#     The function calculates the following matrix:
+#
+#     .. math::
+#         \begin{bmatrix}
+#             \alpha & \beta & (1 - \alpha) \cdot \text{x}
+#             - \beta \cdot \text{y} \\
+#             -\beta & \alpha & \beta \cdot \text{x}
+#             + (1 - \alpha) \cdot \text{y}
+#         \end{bmatrix}
+#
+#     where
+#
+#     .. math::
+#         \alpha = \text{scale} \cdot cos(\text{angle}) \\
+#         \beta = \text{scale} \cdot sin(\text{angle})
+#
+#     The transformation maps the rotation center to itself
+#     If this is not the target, adjust the shift.
+#
+#     Args:
+#         center (Tensor): center of the rotation in the source image.
+#         angle (Tensor): rotation angle in degrees. Positive values mean
+#             counter-clockwise rotation (the coordinate origin is assumed to
+#             be the top-left corner).
+#         scale (Tensor): isotropic scale factor.
+#
+#     Returns:
+#         Tensor: the affine matrix of 2D rotation.
+#
+#     Shape:
+#         - Input: :math:`(B, 2)`, :math:`(B)` and :math:`(B)`
+#         - Output: :math:`(B, 2, 3)`
+#
+#     Example:
+#         >>> center = torch.zeros(1, 2)
+#         >>> scale = torch.ones(1)
+#         >>> angle = 45. * torch.ones(1)
+#         >>> M = tgm.get_rotation_matrix2d(center, angle, scale)
+#         tensor([[[ 0.7071,  0.7071,  0.0000],
+#                  [-0.7071,  0.7071,  0.0000]]])
+#     """
+#     if not torch.is_tensor(center):
+#         raise TypeError("Input center type is not a torch.Tensor. Got {}"
+#                         .format(type(center)))
+#     if not torch.is_tensor(angle):
+#         raise TypeError("Input angle type is not a torch.Tensor. Got {}"
+#                         .format(type(angle)))
+#     if not torch.is_tensor(scale):
+#         raise TypeError("Input scale type is not a torch.Tensor. Got {}"
+#                         .format(type(scale)))
+#     if not (len(center.shape) == 2 and center.shape[1] == 2):
+#         raise ValueError("Input center must be a Bx2 tensor. Got {}"
+#                          .format(center.shape))
+#     if not len(angle.shape) == 1:
+#         raise ValueError("Input angle must be a B tensor. Got {}"
+#                          .format(angle.shape))
+#     if not len(scale.shape) == 1:
+#         raise ValueError("Input scale must be a B tensor. Got {}"
+#                          .format(scale.shape))
+#     if not (center.shape[0] == angle.shape[0] == scale.shape[0]):
+#         raise ValueError("Inputs must have same batch size dimension. Got {}"
+#                          .format(center.shape, angle.shape, scale.shape))
+#     # convert angle and apply scale
+#     angle_rad = torch.deg2rad(angle)
+#     alpha = torch.cos(angle_rad) * scale
+#     beta = torch.sin(angle_rad) * scale
+#
+#     # unpack the center to x, y coordinates
+#     x, y = center[..., 0], center[..., 1]
+#
+#     # create output tensor
+#     batch_size, _ = center.shape
+#     M = torch.zeros(batch_size, 2, 3, device=center.device, dtype=center.dtype)
+#     M[..., 0, 0] = alpha
+#     M[..., 0, 1] = beta
+#     M[..., 0, 2] = (1. - alpha) * x - beta * y
+#     M[..., 1, 0] = -beta
+#     M[..., 1, 1] = alpha
+#     M[..., 1, 2] = beta * x + (1. - alpha) * y
+#     return M
+#
+# def _compute_rotation_matrix(angle: torch.Tensor,
+#                              center: torch.Tensor) -> torch.Tensor:
+#     """Computes a pure affine rotation matrix."""
+#     scale: torch.Tensor = torch.ones_like(center)
+#     matrix: torch.Tensor = get_rotation_matrix2d(center, angle, scale)
+#     return matrix
+#
+# def rotate(tensor: Tensor, angle: Tensor) -> Tensor:
+#     r"""Rotate the image anti-clockwise about the centre.
+#
+#     See :class:`~kornia.Rotate` for details.
+#     """
+#     if not torch.is_tensor(tensor):
+#         raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
+#     if not torch.is_tensor(angle):
+#         raise TypeError("Input angle type is not a Tensor. Got {}".format(type(angle)))
+#
+#     if len(tensor.shape) not in (3, 4,):
+#         raise ValueError("Invalid tensor shape, we expect CxHxW or BxCxHxW. "
+#                          "Got: {}".format(tensor.shape))
+#
+#     # compute the rotation matrix
+#     # TODO: add broadcasting to get_rotation_matrix2d for center
+#     angle = angle.expand(tensor.shape[0])
+#     center = torch.tensor([(tensor.size(4) - 1) / 2, (tensor.size(3) - 1) / 2]).expand(tensor.shape[0], -1).to(
+#         tensor.device)
+#     rotation_matrix = _compute_rotation_matrix(angle, center)
+#
+#     # warp using the affine transform
+#     return affine(tensor, rotation_matrix[..., :2, :3])
+#
+#
+# def translate(tensor: Tensor, translation: Tensor) -> Tensor:
+#     r"""Translate the tensor in pixel units.
+#
+#     See :class:`~kornia.Translate` for details.
+#     """
+#     if not torch.is_tensor(tensor):
+#         raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
+#     if not torch.is_tensor(translation):
+#         raise TypeError("Input translation type is not a Tensor. Got {}".format(type(translation)))
+#     if len(tensor.shape) not in (3, 4,):
+#         raise ValueError("Invalid tensor shape, we expect CxHxW or BxCxHxW. "
+#                          "Got: {}".format(tensor.shape))
+#
+#     # compute the translation matrix
+#     translation_matrix = _compute_translation_matrix(translation)
+#
+#     # warp using the affine transform
+#     return affine(tensor, translation_matrix[..., :2, :3])
+#
+#
+# def scale(tensor: Tensor, scale_factor: Tensor) -> Tensor:
+#     r"""Scales the input image.
+#
+#     See :class:`~kornia.Scale` for details.
+#     """
+#     if not torch.is_tensor(tensor):
+#         raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
+#     if not torch.is_tensor(scale_factor):
+#         raise TypeError("Input scale_factor type is not a Tensor. Got {}".format(type(scale_factor)))
+#
+#     # compute the tensor center
+#
+#     # compute the rotation matrix
+#     # TODO: add broadcasting to get_rotation_matrix2d for center
+#     center = torch.tensor([(tensor.size(4) - 1) / 2, (tensor.size(3) - 1) / 2]).expand(tensor.shape[0], -1).to(
+#         tensor.device)
+#     scale_factor = scale_factor.expand(tensor.shape[0])
+#     scaling_matrix = _compute_scaling_matrix(scale_factor, center)
+#
+#     # warp using the affine transform
+#     return affine(tensor, scaling_matrix[..., :2, :3])
+#
+#
+# def shear(tensor: Tensor, shear: Tensor) -> Tensor:
+#     r"""Shear the tensor.
+#
+#     See :class:`~kornia.Shear` for details.
+#     """
+#     if not torch.is_tensor(tensor):
+#         raise TypeError("Input tensor type is not a Tensor. Got {}".format(type(tensor)))
+#     if not torch.is_tensor(shear):
+#         raise TypeError("Input shear type is not a Tensor. Got {}".format(type(shear)))
+#     if len(tensor.shape) not in (3, 4,):
+#         raise ValueError("Invalid tensor shape, we expect CxHxW or BxCxHxW. "
+#                          "Got: {}".format(tensor.shape))
+#
+#     # compute the translation matrix
+#     shear_matrix = _compute_shear_matrix(shear)
+#
+#     # warp using the affine transform
+#     return affine(tensor, shear_matrix[..., :2, :3])
+#
 
 
 

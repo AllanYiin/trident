@@ -21,7 +21,7 @@ from tensorflow.python.eager import core as _core
 from tensorflow.python.eager import execute as _execute
 from tensorflow.python.eager import context
 from tensorflow.python.ops import array_ops,nn_ops
-from tensorflow.python.framework import ops, dtypes
+from tensorflow.python.framework import ops, dtypes, func_graph
 from tensorflow.python.framework.ops import EagerTensor
 from tensorflow.python.framework.ops  import composite_tensor
 from tensorflow.python.ops import math_ops
@@ -35,7 +35,7 @@ __all__ = ['get_graph','Tensor','CompositeTensor','is_gpu_available','is_tensor'
            'element_times', 'element_max', 'element_min', 'element_divide', 'element_cosine_distance', 'where',
            'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
            'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'identity', 'sigmoid', 'relu', 'relu6', 'leaky_relu',
-           'leaky_relu6', 'smooth_relu','crelu',  'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
+           'leaky_relu6', 'smooth_relu','celu','crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu', 'lecun_tanh',
            'soft_sign', 'soft_plus','square_plus', 'hard_tanh', 'logit', 'log_log', 'mish','hard_mish', 'softmax', 'log_softmax', 'gelu','reverse','index_select',
            'gpt_gelu','moments','norm','l2_normalize','broadcast_to','expand_as','spectral_norm', 'ones', 'ones_like', 'zeros', 'zeros_like','eye','eye_like','arange','make_onehot', 'meshgrid', 'reshape', 'permute', 'transpose',
            'squeeze', 'expand_dims', 'concate', 'stack','split','repeat_elements','gather','scatter_add','scatter_sub','scatter_max','scatter_min','assign','assign_add','assign_sub','gram_matrix','set_seed',
@@ -48,6 +48,7 @@ CompositeTensor=composite_tensor.CompositeTensor
 FLOAT32MAX=np.finfo(float).max
 FLOAT32MIN=np.finfo(float).min
 
+_float_dtype = Dtype.float32
 
 _GRAPH = threading.local()
 def get_graph():
@@ -2052,9 +2053,12 @@ def reduce_sum(x: Tensor, axis=None, keepdims=False, name='reduce_sum'):
     int64 while tensorflow returns the same dtype as the input.
     @end_compatibility
     """
+
     if x.dtype==Dtype.bool:
         x=cast(x,Dtype.float)
-    return tf.math.reduce_sum(x, axis=axis, keepdims=keepdims,name=name)
+    _xdtype=x.dtype
+
+    return cast(tf.math.reduce_sum(cast(x,Dtype.float)  if _xdtype!=Dtype.float32 else x, axis=axis, keepdims=keepdims,name=name),_xdtype)
 
 @numpy_compatible
 def reduce_max(x: Tensor, axis=None, keepdims=False, name='reduce_max'):
@@ -2147,6 +2151,53 @@ def reduce_min(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
 
     """
     return tf.math.reduce_min(x, axis=axis, keepdims=keepdims,name=name)
+
+@numpy_compatible
+def reduce_std(x: Tensor, axis=None, keepdims=False, name='reduce_min'):
+    """Computes the minimum of elements across dimensions of a tensor.
+
+    Reduces `input_tensor` along the dimensions given in `axis`.
+    Unless `keepdims` is true, the rank of the tensor is reduced by 1 for each
+    entry in `axis`. If `keepdims` is true, the reduced dimensions
+    are retained with length 1.
+
+    If `axis` is None, all dimensions are reduced, and a
+    tensor with a single element is returned.
+
+
+    See the numpy docs for `np.amax` and `np.nanmax` behavior.
+
+    Args:
+      x: The tensor to reduce. Should have real numeric type.
+      axis: The dimensions to reduce. If `None` (the default), reduces all
+        dimensions. Must be in the range `[-rank(input_tensor),
+        rank(input_tensor))`.
+      keepdims: If true, retains reduced dimensions with length 1.
+      name (str): op name
+
+    Returns:
+      The reduced tensor.
+
+    Examples:
+        >>> x = tf.constant([5, 1, 2, 4])
+        >>> print(reduce_min(x))
+        Tensor(5, shape=(), dtype=int32)
+        >>> x = tf.constant([-5, -1, -2, -4])
+        >>> print(reduce_min(x))
+        Tensor(-1, shape=(), dtype=int32)
+        >>> x = tf.constant([4, float('nan')])
+        >>> print(reduce_min(x))
+        Tensor(4.0, shape=(), dtype=float32)
+        >>> x = tf.constant([float('nan'), float('nan')])
+        >>> print(reduce_min(x))
+        Tensor(-inf, shape=(), dtype=float32)
+        >>> x = tf.constant([float('-inf'), float('inf')])
+        >>> print(reduce_min(x))
+        Tensor(inf, shape=(), dtype=float32)
+
+    """
+    return tf.math.reduce_std(x, axis=axis, keepdims=keepdims,name=name)
+
 
 @numpy_compatible
 def reduce_logsumexp(x: Tensor, axis=None, keepdims=False, name='reduce_logsumexp'):
@@ -2510,6 +2561,27 @@ def smooth_relu(x:Tensor, upper_limit=None,name='smooth_relu'):
         return clip(tf.math.log(1 + tf.math.exp(x)), -np.inf, upper_limit)
     return tf.math.log(1 + tf.math.exp(x),name=name)
 
+@numpy_compatible
+def celu(x, alpha: Tensor = 1.0):
+    r"""Continuously-differentiable exponential linear unit activation.
+
+     Computes the element-wise function:
+
+     .. math::
+       \mathrm{celu}(x) = \begin{cases}
+         x, & x > 0\\
+         \alpha \left(\exp(\frac{x}{\alpha}) - 1\right), & x \le 0
+       \end{cases}
+
+     For more information, see
+     `Continuously Differentiable Exponential Linear Units
+     <https://arxiv.org/pdf/1704.07483.pdf>`_.
+
+     Args:
+       x : input array
+       alpha : array or scalar (default: 1.0)
+     """
+    return tf.where(x > 0, x, alpha * tf.math.expm1(x / alpha))
 
 @numpy_compatible
 def crelu(x,axis=-1,name='crelu'):
@@ -3204,8 +3276,8 @@ def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
         :math:`\text{padding\_front}, \text{padding\_back})`.
 
     Padding mode:
-        See :class:`torch.nn.ConstantPad2d`, :class:`torch.nn.ReflectionPad2d`, and
-        :class:`torch.nn.ReplicationPad2d` for concrete examples on how each of the
+        See :class:`tf.nn.ConstantPad2d`, :class:`tf.nn.ReflectionPad2d`, and
+        :class:`tf.nn.ReplicationPad2d` for concrete examples on how each of the
         padding modes works. Constant padding is implemented for arbitrary dimensions.
         Replicate padding is implemented for padding the last 3 dimensions of 5D input
         tensor, or the last 2 dimensions of 4D input tensor, or the last dimension of
@@ -4149,16 +4221,16 @@ def cross_entropy(output,target, from_logits=False):
         output = output.sigmoid()
     output = output.clamp(epsilon(), 1.0 - epsilon())
     target = target.clamp(epsilon(), 1.0 - epsilon())
-    loss = -target * torch.log(output) # (1.0 - target) * torch.log(1.0 - output)
+    loss = -target * tf.log(output) # (1.0 - target) * tf.log(1.0 - output)
     return loss
 
 def binary_hinge(output, target, margin=1, pos_weight=1.0):
     """
     Implements Hinge loss.
     Args:
-        output (torch.Tensor): of shape `Nx*` where * means any number
+        output (tf.Tensor): of shape `Nx*` where * means any number
              of additional dimensions
-        target (torch.Tensor): same shape as target
+        target (tf.Tensor): same shape as target
         margin (float): margin for y_pred after which loss becomes 0.
         pos_weight (float): weighting factor for positive class examples. Useful in case
             of class imbalance.
@@ -4256,27 +4328,27 @@ def rgb2hsv(rgb:Tensor):
     if ndim(rgb) == 3:
         rc, gc, bc = split(maxc_tmp.copy(), 3, axis=axis)
 
-        out_h = torch.cat([
+        out_h = tf.cat([
             bc - gc,
             2.0 * delta + rc - bc,
             4.0 * delta + gc - rc, ], dim=axis)
-        out_h = torch.gather(out_h, dim=axis, index=max_indices[:, :, None])
+        out_h = tf.gather(out_h, dim=axis, index=max_indices[:, :, None])
 
 
     elif ndim(rgb) == 4:
         rc, gc, bc = split(maxc_tmp.copy(), 3, axis=-3)
-        out_h = torch.cat([
+        out_h = tf.cat([
             bc - gc,
             2.0 * delta + rc - bc,
             4.0 * delta + gc - rc,
         ], dim=-3)
-        out_h = torch.gather(out_h, dim=-3, index=max_indices[..., None, :, :])
+        out_h = tf.gather(out_h, dim=-3, index=max_indices[..., None, :, :])
 
     #out_h = out_h / delta
     out_h = (out_h / 6.0) % 1.0
 
     # -- output
-    return torch.cat([out_h*255.0, out_s*255.0, out_v*255.0], dim=axis)
+    return tf.cat([out_h*255.0, out_s*255.0, out_v*255.0], dim=axis)
 
 
 def xyz2rgb(xyz:Tensor):
@@ -4301,9 +4373,9 @@ def xyz2rgb(xyz:Tensor):
     transform_tensor.unsqueeze_(2).unsqueeze_(3)
     convolved=None
     if len(xyz.shape) == 4:
-        convolved = F.conv2d(xyz, transform_tensor)
+        convolved = tf.nn.conv2d(xyz, transform_tensor)
     else:
-        convolved = F.conv2d(xyz.unsqueeze(0), transform_tensor).squeeze(0)
+        convolved = tf.nn.conv2d(xyz.unsqueeze(0), transform_tensor).squeeze(0)
     # return convolved
     rgb=convolved*255.0
     if len(rgb.shape) == 4:
@@ -4338,7 +4410,7 @@ def rgb2xyz(rgb:Tensor):
         elif  int_shape(rgb)[0]==3:
             pass
     rgb=rgb/255.0
-    rgb = torch.where(rgb > 0.04045, ((rgb + 0.055) / 1.055).pow(2.4), rgb / 12.92)
+    rgb = tf.where(rgb > 0.04045, ((rgb + 0.055) / 1.055).pow(2.4), rgb / 12.92)
 
     transform_tensor = to_tensor([[0.4124564, 0.3575761, 0.1804375],
                                      [0.2126729, 0.7151522, 0.0721750],
@@ -4347,9 +4419,9 @@ def rgb2xyz(rgb:Tensor):
     transform_tensor.unsqueeze_(2).unsqueeze_(3)
     xyz=None
     if len(rgb.shape) == 4:
-        xyz= F.conv2d(rgb, transform_tensor)
+        xyz= tf.nn.conv2d(rgb, transform_tensor)
     else:
-        xyz= F.conv2d(rgb.unsqueeze(0), transform_tensor).squeeze(0)
+        xyz= tf.nn.conv2d(rgb.unsqueeze(0), transform_tensor).squeeze(0)
     xyz=xyz*255.0
     if len(xyz.shape) == 4:
         if int_shape(xyz)[-1] == 3:
@@ -4411,7 +4483,7 @@ def lab2xyz(lab:Tensor, wref=None):
     x = wref[0] * lab_finv(l2 + a / 5)
     y = wref[1] * lab_finv(l2)
     z = wref[2] * lab_finv(l2 - b / 2)
-    xyz = torch.cat([x, y, z], dim=dim)
+    xyz = tf.cat([x, y, z], dim=dim)
     xyz=xyz*255.0
     if len(xyz.shape) == 4:
         if int_shape(xyz)[-1] == 3:
@@ -4452,7 +4524,7 @@ def xyz2lab(xyz:Tensor, wref=None):
     l = 1.16 * fy - 0.16
     a = 5.0 * (lab_f(x / wref[0]) - fy)
     b = 2.0 * (fy - lab_f(z / wref[2]))
-    lab = torch.cat([clip(l,0,1)*100, clip(a,-1,1)*128+127, clip(b,-1,1)*128+127], dim=dim)
+    lab = tf.cat([clip(l,0,1)*100, clip(a,-1,1)*128+127, clip(b,-1,1)*128+127], dim=dim)
 
     if len(lab.shape) == 4:
         if int_shape(lab)[-1] == 3:
@@ -4525,6 +4597,319 @@ def gray2rgb(gray:Tensor):
     rgb=stack([gray,gray,gray],axis=-1)
     return rgb
 
+
+############################
+## bounding box
+###########################
+
+@numpy_compatible
+def xywh2xyxy(boxes, image_size=None):
+    """
+    Args:
+        boxes (tensor or ndarray):
+            boxes  with xywh  (centerx,centery,width, height) format
+            boxes shape should be [n,m] m>=4
+        image_size (size): (height, width)
+    Returns
+        xyxy (x1,y1,x2,y2)
+    """
+    """Convert [x1 y1 w h] box format to [x1 y1 x2 y2] format."""
+
+    if is_tensor(boxes):
+        class_info = None
+        if int_shape(boxes)[-1] > 4:
+            class_info = boxes[:, 4:]
+            boxes = boxes[:, :4]
+        x1y1 = tf.clip_by_value(boxes[:, 0:2] - boxes[:, 2:4] / 2,clip_value_min=0)
+        x2y2 = tf.clip_by_value(x1y1 + boxes[:, 2:4],clip_value_min=0)
+        if class_info is not None:
+            boxes = tf.concat([x1y1, x2y2, class_info], axis=-1)
+        else:
+            boxes = tf.concat([x1y1, x2y2], axis=-1)
+        return boxes
+
+    else:
+        raise TypeError('Argument xywh must be a list, tuple, numpy array or tensor.')
+
+@numpy_compatible
+def xyxy2xywh(boxes):
+    """Convert [x1 y1 x2 y2] box format to [x1 y1 w h] format."""
+
+    if is_tensor(boxes):
+        if boxes.ndim == 1:
+            boxes = tf.expand_dims(boxes,axis=0)
+        if boxes.shape[-1] > 4:
+            return tf.concat([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+                            boxes[:, 2:4] - boxes[:, 0:2], boxes[:, 4:]], axis=1)  # w, h
+        else:
+            return tf.concat([(boxes[:, 2:4] + boxes[:, 0:2]) / 2,  # cx, cy
+                            boxes[:, 2:4] - boxes[:, 0:2]], axis=1)  # w, h
+    else:
+        raise TypeError('Argument xyxy must be a list, tuple, or numpy array.')
+
+
+def box_area(boxes: Tensor) -> Tensor:
+    """
+    Computes the area of a set of bounding boxes, which are specified by its
+    (x1, y1, x2, y2) coordinates.
+
+    Arguments:
+        boxes (Tensor[N, 4]): boxes for which the area will be computed. They
+            are expected to be in (x1, y1, x2, y2) format
+
+    Returns:
+        area (Tensor[N]): area for each box
+    """
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+@numpy_compatible
+def bbox_iou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
+
+    Returns:
+         ious(Tensor): shape (n)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_iou(boxes1,boxes2)
+    <tf.Tensor: shape=(5,), dtype=float32, numpy=
+    array([7.9577e-01, 7.8784e-01, 6.0932e-01, 9.4663e-01, 7.2766e-01],
+          dtype=float32)>
+    >>> iou_loss=(1-bbox_iou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss)
+    tf.Tensor(0.22655764, shape=(), dtype=float32)
+    """
+
+
+    bboxes1 = cast(bboxes1,_float_dtype)
+    bboxes2 = cast(bboxes2,_float_dtype)
+
+    b1_y1, b1_x1, b1_y2, b1_x2 = tf.split(bboxes1, 4, axis=1)
+    b2_y1, b2_x1, b2_y2, b2_x2 = tf.split(bboxes2, 4, axis=1)
+    y1 = tf.maximum(b1_y1, b2_y1)
+    x1 = tf.maximum(b1_x1, b2_x1)
+    y2 = tf.minimum(b1_y2, b2_y2)
+    x2 = tf.minimum(b1_x2, b2_x2)
+
+    intersection = tf.maximum(x2 - x1, 0) * tf.maximum(y2 - y1, 0)
+    # Compute unions
+    b1_area = (b1_y2 - b1_y1) * (b1_x2 - b1_x1)
+    b2_area = (b2_y2 - b2_y1) * (b2_x2 - b2_x1)
+    union = b1_area + b2_area - intersection
+    iou = intersection / union
+    iou = tf.squeeze(iou, -1)
+    return iou
+
+
+
+@numpy_compatible
+def bbox_diou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
+
+    Returns:
+         ious(Tensor): shape (n)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_diou(boxes1,boxes2)
+    <tf.Tensor: shape=(5,), dtype=float32, numpy=
+    array([7.9471e-01, 7.8265e-01, 6.0713e-01, 9.4636e-01, 7.2533e-01],
+          dtype=float32)>
+    >>> iou_loss=(1-bbox_diou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss)
+    tf.Tensor(0.22876391, shape=(), dtype=float32)
+
+    """
+    bboxes1 = cast(bboxes1, _float_dtype)
+    bboxes2 = cast(bboxes2, _float_dtype)
+
+    b1_y1, b1_x1, b1_y2, b1_x2 = tf.split(bboxes1, 4, axis=1)
+    b2_y1, b2_x1, b2_y2, b2_x2 = tf.split(bboxes2, 4, axis=1)
+    y1 = tf.maximum(b1_y1, b2_y1)
+    x1 = tf.maximum(b1_x1, b2_x1)
+    y2 = tf.minimum(b1_y2, b2_y2)
+    x2 = tf.minimum(b1_x2, b2_x2)
+
+    out_max_xy = tf.maximum(bboxes1[:, 2:], bboxes2[:, 2:])
+    out_min_xy = tf.minimum(bboxes1[:, :2], bboxes2[:, :2])
+    c_h = tf.maximum(out_max_xy[:, 0] - out_min_xy[:, 0], 0)
+    c_w = tf.maximum(out_max_xy[:, 1] - out_min_xy[:, 1], 0)
+
+    center_x1 = (bboxes1[:, 3] + bboxes1[:, 1]) / 2
+    center_y1 = (bboxes1[:, 2] + bboxes1[:, 0]) / 2
+    center_x2 = (bboxes2[:, 3] + bboxes2[:, 1]) / 2
+    center_y2 = (bboxes2[:, 2] + bboxes2[:, 0]) / 2
+
+    p2 = (center_x2 - center_x1) ** 2 + (center_y2 - center_y1) ** 2
+    p2 = tf.expand_dims(p2, axis=-1)
+
+
+    c2 = c_w ** 2 + c_h ** 2
+    c2 = tf.expand_dims(c2, axis=-1)
+
+    intersection = tf.maximum(x2 - x1, 0) * tf.maximum(y2 - y1, 0)
+    # Compute unions
+    b1_area = (b1_y2 - b1_y1) * (b1_x2 - b1_x1)
+    b2_area = (b2_y2 - b2_y1) * (b2_x2 - b2_x1)
+    union = b1_area + b2_area - intersection
+
+    # 4. Compute IoU and reshape to [boxes1, boxes2]
+    diou = intersection / union - p2 / c2
+    diou = tf.squeeze(diou, -1)
+    return diou
+
+
+
+@numpy_compatible
+def bbox_ciou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
+
+    Returns:
+         ious(Tensor): shape (n)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_ciou(boxes1,boxes2)
+    <tf.Tensor: shape=(5,), dtype=float32, numpy=
+    array([7.8784e-01, 7.8580e-01, 6.0540e-01, 9.4597e-01, 7.2487e-01],
+          dtype=float32)>
+    >>> iou_loss=(1-bbox_ciou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss)
+    tf.Tensor(0.23002553, shape=(), dtype=float32)
+
+    """
+    bboxes1 = cast(bboxes1, _float_dtype)
+    bboxes2 = cast(bboxes2, _float_dtype)
+    # calculate center distance
+
+    #v = 4 * tf.square(tf.math.atan2(bboxes1[..., 2], bboxes1[..., 3]) - tf.math.atan2(bboxes2[..., 2], bboxes2[..., 3])) / (math.pi * math.pi)
+
+    # transform [x, y, w, h] to [x_min, y_min, x_max, y_max]
+
+    boxes_1 = tf.concat([tf.minimum(bboxes1[..., :2], bboxes1[..., 2:]),
+                         tf.maximum(bboxes1[..., :2], bboxes1[..., 2:])], axis=-1)
+    boxes_2 = tf.concat([tf.minimum(bboxes2[..., :2], bboxes2[..., 2:]),
+                         tf.maximum(bboxes2[..., :2], bboxes2[..., 2:])], axis=-1)
+
+    # calculate area of boxes_1 boxes_2
+    boxes_1_area = (boxes_1[..., 2] - boxes_1[..., 0]) * (boxes_1[..., 3] - boxes_1[..., 1])
+    boxes_2_area = (boxes_2[..., 2] - boxes_2[..., 0]) * (boxes_2[..., 3] - boxes_2[..., 1])
+
+    # calculate the two corners of the intersection
+    left_up = tf.maximum(boxes_1[..., :2], boxes_2[..., :2])
+    right_down =tf.minimum(boxes_1[..., 2:], boxes_2[..., 2:])
+
+
+
+    # calculate area of intersection
+    inter_section = tf.maximum(right_down - left_up, 0.0)
+    inter_area = inter_section[..., 0] * inter_section[..., 1]
+
+    # calculate union area
+    union_area = boxes_1_area + boxes_2_area - inter_area
+
+    # calculate IoU, add epsilon in denominator to avoid dividing by 0
+    iou = inter_area / (union_area + ctx.epsilon)
+
+    # calculate the upper left and lower right corners of the minimum closed convex surface
+    enclose_left_up = tf.minimum(boxes_1[..., :2], boxes_2[..., :2])
+    enclose_right_down = tf.maximum(boxes_1[..., 2:], boxes_2[..., 2:])
+
+    # calculate width and height of the minimun closed convex surface
+    enclose_wh = tf.maximum(enclose_right_down - enclose_left_up, 0.0)
+
+    # calculate enclosed diagonal distance
+    c = tf.reduce_sum(tf.square(enclose_wh), axis=-1)#enclose_diagonal
+    d = tf.reduce_sum(tf.square(bboxes1[..., :2] - bboxes2[..., :2]), axis=-1)#center_distance
+    u=d/c
+    v = (4 / (math.pi ** 2)) * tf.square(
+        (tf.atan2(bboxes1[..., 2], bboxes1[..., 3]) - tf.atan2(bboxes2[..., 2], bboxes2[..., 3])))
+
+    alpha = v / ( 1 - iou + v)
+
+
+
+    # calculate param v and alpha to CIoU
+    alpha = v / (1.0 - iou + v)
+    ciou= iou- (u + alpha * v)
+    return ciou
+
+
+
+
+
+
+
+
+@numpy_compatible
+def bbox_giou(bboxes1, bboxes2):
+    """
+
+    Args:
+        bboxes1 (Tensor): shape (n, 4)
+        bboxes2 (Tensor): shape (n, 4)
+
+    Returns:
+         ious(Tensor): shape (n)
+
+    Examples;
+    >>> boxes1=to_tensor(np.array([[39, 63, 203, 112], [49, 75, 203, 125],[31, 69, 201, 125],[50, 72, 197, 121],[35, 51, 196, 110]]))
+    >>> boxes2=to_tensor(np.array([[54, 66, 198, 114], [42, 78, 186, 126], [18, 63, 235, 135],[54, 72, 198, 120],[36, 60, 180, 108]]))
+    >>> bbox_giou(boxes1,boxes2).cpu()
+    tensor([0.7910, 0.7832, 0.6093, 0.9465, 0.7277])
+    >>> iou_loss=(1-bbox_giou(boxes1,boxes2)).sum()/(boxes1.shape[0])
+    >>> print(iou_loss.cpu())
+    tensor(0.2285)
+
+
+
+
+
+    """
+    bboxes1 = cast(bboxes1, _float_dtype)
+    bboxes2 = cast(bboxes2, _float_dtype)
+    x1, y1, x2, y2 = bboxes1[:,0], bboxes1[:,1], bboxes1[:,2], bboxes1[:,3]
+    x1g, y1g, x2g, y2g = bboxes2[:,0], bboxes2[:,1], bboxes2[:,2], bboxes2[:,3]
+
+    x2 = tf.maximum(x1, x2)
+    y2 = tf.maximum(y1, y2)
+
+    xkis1 = tf.maximum(x1, x1g)
+    ykis1 = tf.maximum(y1, y1g)
+    xkis2 =tf.minimum(x2, x2g)
+    ykis2 = tf.minimum(y2, y2g)
+
+    xc1 = tf.minimum(x1, x1g)
+    yc1 = tf.minimum(y1, y1g)
+    xc2 = tf.maximum(x2, x2g)
+    yc2 = tf.maximum(y2, y2g)
+
+    intsctk =  tf.zeros(int_shape(x1))
+    mask =cast((ykis2 > ykis1) * (xkis2 > xkis1),Dtype.bool)
+
+    intsctk[mask] = (xkis2[mask] - xkis1[mask]) * (ykis2[mask] - ykis1[mask])
+    unionk = (x2 - x1) * (y2 - y1) + (x2g - x1g) * (y2g - y1g) - intsctk + 1e-7
+    iouk = intsctk / unionk
+
+    area_c = (xc2 - xc1) * (yc2 - yc1) + 1e-7
+    giouk = iouk - ((area_c - unionk) / area_c)
+    return giouk
 
 
 
