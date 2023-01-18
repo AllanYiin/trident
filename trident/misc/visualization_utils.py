@@ -127,7 +127,7 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
         fontcolor = (255, 255, 255)
         avg_color = np.array(list(color)).mean()
         min_color = np.array(list(color)).min()
-        font = ImageFont.truetype(default_font, int(math.sqrt(img_shape[0] / 1000) * 16 + 1))
+        font = ImageFont.truetype(default_font, int(math.sqrt(img_shape[0] / 1000) * 16 + 2))
         # font=None#ImageFont.truetype(fonts[fontnames.index('Hiragino Sans GB')],int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
         if avg_color >= 120 or min_color <= 32:
             fontcolor = (0, 0, 0)
@@ -135,13 +135,16 @@ def plot_bbox(box, img, color=None, label=None, line_thickness=None, **kwargs):
             # font = ImageFont.truetype(fonts[fontnames.index('Microsoft Sans Serif')], int(math.sqrt(img_shape[0] / 1000) * 10 + 1))
             tf = max(tl - 1, 1)  # font thickness
 
-            t_size = draw.textlength(str(label), font=font)
+            t_box= draw.textbbox(c1,str(label), font=font)
+            t_size=[t_box[2]-t_box[0],t_box[3]-t_box[1]]
             offset = font.getbbox(str(label))
-            c2 = c1[0], c1[1] - t_size[1] - 2 * offset[1] - 3
-            c3 = c1[0] + 2 * offset[0] + t_size[0] + 3, c1[1]
+            corner2 = c1[0], c1[1] - t_size[1] - 2 * offset[1] - 3
+            corner3 = c1[0] + 2 * offset[0] + t_size[0] + 3, c1[1]
 
-            draw.rectangle((c2, c3), fill=color, width=2)
+            draw.rectangle((corner2, corner3), fill=color, width=2)
             draw.text((c1[0] + 1, c1[1] - t_size[1] - offset[1] - 2), ' {0}'.format(label), fill=fontcolor, font=font)
+
+
     except Exception as e:
         print('image_size', img_shape, box)
         print(e)
