@@ -159,7 +159,8 @@ def array2image(arr:np.ndarray):
 
     """
     # confirm back to numpy
-    arr=np.clip(np.squeeze(arr),0,255)
+    arr=np.squeeze(arr)
+    arr=np.clip(arr,0,255)
     if arr.ndim not in [2, 3]:
         raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
     mode = None
@@ -208,7 +209,7 @@ def mask2array(img):
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:
-            if arr.shape[3] in [3, 4] and arr.shape[0] not in [3, 4]:
+            if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
                 pass
             elif arr.shape[0] in [3, 4]:
                 arr = arr.transpose([1, 2, 0])

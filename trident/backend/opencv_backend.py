@@ -216,7 +216,7 @@ def mask2array(img):
         if arr.ndim not in [2, 3]:
             raise ValueError('image should be 2 or 3 dimensional. Got {} dimensions.'.format(arr.ndim))
         if arr.ndim == 3:
-            if arr.shape[3] in [3, 4] and arr.shape[0] not in [3, 4]:
+            if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
                 pass
             elif arr.shape[0] in [3, 4]:
                 arr = arr.transpose([1, 2, 0])
