@@ -242,7 +242,7 @@ def array2mask(arr:np.ndarray):
         #arr = np.expand_dims(arr, 2)
         mode = 'L'
     elif arr.ndim == 3:
-        if arr.shape[3] in [3, 4] and arr.shape[0] not in [3, 4]:
+        if arr.shape[2] in [3, 4] and arr.shape[0] not in [3, 4]:
             pass
         elif arr.shape[0] in [3, 4]:
             arr = arr.transpose([1, 2, 0])
