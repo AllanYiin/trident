@@ -17,35 +17,123 @@ from trident.data.bbox_common import box_area
 from trident.backend.tensorspec import ObjectType, get_signature
 from trident.backend.tensorspec import TensorSpec
 import matplotlib.pyplot as plt
+
+np.long=np.int_
+np.bool=np.bool_
+np.uint8=np.ubyte
+np.float32=np.single
+
+
 if get_backend() == 'pytorch':
     from trident.backend.pytorch_ops import *
 elif get_backend() == 'tensorflow':
     from trident.backend.tensorflow_ops import *
 from trident.data.transform import VisionTransform
 
-__all__ = ['Resize','Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 'RandomRescaleCrop', 'RandomCenterCrop', 'RandomMultiScaleImage', 'RandomTransform', 'RandomTransformAffine',
-           'AdjustBrightness', 'AdjustContrast', 'AdjustSaturation', 'AddNoise', 'AdjustHue', 'RandomAdjustHue', 'RandomAdjustBrightness', 'RandomAdjustContrast',
-           'RandomAdjustSaturation','AutoLevel','RandomLighting','GrayMixRGB',
-           'Normalize', 'Unnormalize', 'CLAHE', 'Lighting','RandomLighting','HorizontalFlip', 'RandomMirror', 'AdjustGamma', 'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
-           'RandomInvertColor', 'GrayScale', 'RandomGrayScale','RandomGridMask','GridMask','ToLowResolution',
-           'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization', 'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic','DetectionMixup']
+__all__ = ['Resize', 'Unresize', 'ShortestEdgeResize', 'Rescale', 'RandomCrop', 'RandomRescaleCrop', 'RandomCenterCrop',
+           'RandomMultiScaleImage', 'RandomTransform', 'RandomTransformAffine',
+           'AdjustBrightness', 'AdjustContrast', 'AdjustSaturation', 'AddNoise', 'AdjustHue', 'RandomAdjustHue',
+           'RandomAdjustBrightness', 'RandomAdjustContrast',
+           'RandomAdjustSaturation', 'AutoLevel', 'RandomLighting', 'GrayMixRGB',
+           'Normalize', 'Unnormalize', 'CLAHE', 'Lighting', 'HorizontalFlip', 'RandomMirror', 'AdjustGamma',
+           'RandomBlur', 'RandomAdjustGamma', 'Blur', 'InvertColor',
+           'RandomInvertColor', 'GrayScale', 'RandomGrayScale', 'RandomGridMask', 'GridMask', 'ToLowResolution',
+           'ImageDilation', 'ImageErosion', 'ErosionThenDilation', 'DilationThenErosion', 'AdaptiveBinarization',
+           'SaltPepperNoise', 'RandomErasing', 'ToRGB', 'ImageMosaic', 'DetectionMixup']
+
+def _check_float_dtype(arr):
+    return arr.astype(np.float32)
+
+def _check_pixel_value_range(arr):
+    return np.clip(arr,0,255)
+
+
+def _get_corners(bboxes):
+    """Get corners of bounding boxes
+
+    Parameters
+    ----------
+
+    bboxes: numpy.ndarray
+        Numpy array containing bounding boxes of shape `N X 4` where N is the
+        number of bounding boxes and the bounding boxes are represented in the
+        format `x1 y1 x2 y2`
+
+    returns
+    -------
+
+    numpy.ndarray
+        Numpy array of shape `N x 8` containing N bounding boxes each described by their
+        corner co-ordinates `x1 y1 x2 y2 x3 y3 x4 y4`
+
+    """
+    width = (bboxes[:, 2] - bboxes[:, 0]).reshape(-1, 1)
+    height = (bboxes[:, 3] - bboxes[:, 1]).reshape(-1, 1)
+
+    x1 = bboxes[:, 0].reshape(-1, 1)
+    y1 = bboxes[:, 1].reshape(-1, 1)
+
+    x2 = x1 + width
+    y2 = y1
+
+    x3 = x1
+    y3 = y1 + height
+
+    x4 = bboxes[:, 2].reshape(-1, 1)
+    y4 = bboxes[:, 3].reshape(-1, 1)
+
+    corners = np.hstack((x1, y1, x2, y2, x3, y3, x4, y4))
+
+    return corners
+
+
+def _get_enclosing_box(corners):
+    """Get an enclosing box for ratated corners of a bounding box
+
+    Parameters
+    ----------
+
+    corners : numpy.ndarray
+        Numpy array of shape `N x 8` containing N bounding boxes each described by their
+        corner co-ordinates `x1 y1 x2 y2 x3 y3 x4 y4`
+
+    Returns
+    -------
+
+    numpy.ndarray
+        Numpy array containing enclosing bounding boxes of shape `N X 4` where N is the
+        number of bounding boxes and the bounding boxes are represented in the
+        format `x1 y1 x2 y2`
+
+    """
+    x_ = corners[:, [0, 2, 4, 6]]
+    y_ = corners[:, [1, 3, 5, 7]]
+
+    xmin = np.min(x_, 1).reshape(-1, 1)
+    ymin = np.min(y_, 1).reshape(-1, 1)
+    xmax = np.max(x_, 1).reshape(-1, 1)
+    ymax = np.max(y_, 1).reshape(-1, 1)
+
+    final = np.hstack((xmin, ymin, xmax, ymax, corners[:, 8:]))
+
+    return final
 
 def _check_range_tuple(value):
-    return isinstance(value,tuple) and len(value)==2 and all([isinstance(v,numbers.Number) for v in value])
+    return isinstance(value, tuple) and len(value) == 2 and all([isinstance(v, numbers.Number) for v in value])
 
-def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=None, **kwargs):
+
+def randomize_with_validate(keep_prob=0.5, valid_range=None, effectless_value=None, **kwargs):
     def randomize_wrapper(cls):
         class Wrapper:
             def __init__(self, **kwargs):
-                self._args=None
-                self.rangs=OrderedDict()
-                self.other_args=None
-                self.keep_prob =keep_prob
+                self._args = None
+                self.rangs = OrderedDict()
+                self.other_args = None
+                self.keep_prob = keep_prob
                 self.valid_range = None
                 if isinstance(valid_range, (tuple, list)) and len(valid_range) == 2 and all(
                         [isinstance(t, numbers.Number) for t in valid_range]):
                     self.valid_range = valid_range
-
 
                 self.effectless_value = None
                 if isinstance(effectless_value, numbers.Number):
@@ -56,37 +144,39 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=Non
                 #     kwargs.pop('scale')
                 #
 
+                self._args = get_signature(cls.__init__, name=cls.__name__)
 
-                self._args = get_signature(cls.__init__,name=cls.__name__)
-
-                candidate_ranges= dict([(k.replace('_range', '').replace('_scale', ''), v) for k, v in kwargs.items() if isinstance(v, tuple) and len(v) == 2])
-                for k,v in candidate_ranges.items():
-                    value_range=list(v)
+                candidate_ranges = dict(
+                    [(k.replace('_range', '').replace('_scale', ''), v) for k, v in kwargs.items() if
+                     isinstance(v, tuple) and len(v) == 2])
+                for k, v in candidate_ranges.items():
+                    value_range = list(v)
                     if value_range[0] < valid_range[0]:
                         value_range[0] = valid_range[0]
                     if value_range[1] > valid_range[1]:
                         value_range[1] = valid_range[1]
-                    if value_range[1]==value_range[0]:
-                        value_range=valid_range
+                    if value_range[1] == value_range[0]:
+                        value_range = valid_range
 
                     if k in self._args.inputs:
-                        self.rangs[k] =tuple(value_range)
-                    elif len(candidate_ranges)==1 and 'value' in self._args.inputs:
-                        self.rangs[ 'value' ] = tuple(value_range)
+                        self.rangs[k] = tuple(value_range)
+                    elif len(candidate_ranges) == 1 and 'value' in self._args.inputs:
+                        self.rangs['value'] = tuple(value_range)
                     elif len(candidate_ranges) == 1 and 'scale' in self._args.inputs:
                         self.rangs['scale'] = tuple(value_range)
                     elif len(candidate_ranges) == 1 and 'ksize' in self._args.inputs:
                         self.rangs['ksize'] = tuple(value_range)
                     else:
-                        keys=[k for k in self._args.inputs.key_list if k not in ['self','name','keep_ratio'] and 'size' not in k and 'shape' not in k  and isinstance(self._args.inputs[k].default,numbers.Number)]
-                        if len(keys)>0:
-                         self.rangs[keys[0]] = tuple(value_range)
-
+                        keys = [k for k in self._args.inputs.key_list if k not in ['self', 'name',
+                                                                                   'keep_ratio'] and 'size' not in k and 'shape' not in k and isinstance(
+                            self._args.inputs[k].default, numbers.Number)]
+                        if len(keys) > 0:
+                            self.rangs[keys[0]] = tuple(value_range)
 
                 rangs = OrderedDict([(k, random.uniform(*v)) for k, v in self.rangs.items()])
-                other_args = OrderedDict([(k, v.default) for k, v in self._args.inputs.items() if  k not in self.rangs ])
+                other_args = OrderedDict([(k, v.default) for k, v in self._args.inputs.items() if k not in self.rangs])
                 if 'name' in other_args:
-                    other_args.pop( 'name' )
+                    other_args.pop('name')
 
                 self.other_args = other_args
 
@@ -100,16 +190,17 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=Non
 
                 self.rn = random.random()
 
-            def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None, **kwargs):
+            def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None,
+                         **kwargs):
                 keep_prob = kwargs.get('keep_prob', kwargs.get('keep_ratio', self.keep_prob))
-                self.keep_prob =keep_prob
-                self.rn=random.random()
+                self.keep_prob = keep_prob
+                self.rn = random.random()
                 if self.rn > keep_prob:
                     rangs, other_args = self.set_random()
 
-                    for k,v in rangs.items():
+                    for k, v in rangs.items():
                         setattr(self.wrap, k, v)
-                    for k,v in other_args.items():
+                    for k, v in other_args.items():
                         setattr(self.wrap, k, v)
 
                     # if len(rangs) > 0 and len(self.kwargs) > 0:
@@ -123,23 +214,29 @@ def randomize_with_validate(keep_prob=0.5,valid_range=None, effectless_value=Non
                     return inputs
 
             def _apply_image(self, image, spec: TensorSpec):
-                return self.wrap._apply_image( image, spec)
+                return self.wrap._apply_image(image, spec)
 
             def _apply_coords(self, coords, spec: TensorSpec):
                 return self.wrap._apply_coords(coords, spec)
+
             def _apply_mask(self, mask, spec: TensorSpec):
                 return self.wrap._apply_mask(mask, spec)
+
             def _get_shape(self, image):
                 return self.wrap._get_shape(image)
+
             def set_random(self):
                 self.rn = random.random()
-                rangs = dict([(k, random.uniform(*v)) for k, v in self.rangs.items() if isinstance(v, (tuple,list)) and len(v) == 2])
-                other_args = dict([(k, v) for k, v in self.other_args.items() if not (isinstance(v, (tuple,list))  and len(v) == 2)])
+                rangs = dict([(k, random.uniform(*v)) for k, v in self.rangs.items() if
+                              isinstance(v, (tuple, list)) and len(v) == 2])
+                other_args = dict(
+                    [(k, v) for k, v in self.other_args.items() if not (isinstance(v, (tuple, list)) and len(v) == 2)])
                 return rangs, other_args
 
         Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
         Wrapper.__doc__ = cls.__doc__
         return Wrapper
+
     return randomize_wrapper
 
 
@@ -152,9 +249,10 @@ def randomize(keep_prob=0.5, **kwargs):
                 self.keep_prob = keep_prob
                 self.rn = 0
 
-            def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None, **kwargs):
+            def __call__(self, inputs: Union[Dict[TensorSpec, np.ndarray], np.ndarray], spec: TensorSpec = None,
+                         **kwargs):
                 keep_prob = kwargs.get('keep_prob', kwargs.get('keep_ratio', self.keep_prob))
-                self.keep_prob =keep_prob
+                self.keep_prob = keep_prob
                 if self.rn > keep_prob:
                     return self.wrap(inputs, spec=spec, **kwargs)
                 else:
@@ -166,22 +264,25 @@ def randomize(keep_prob=0.5, **kwargs):
         Wrapper.__name__ = Wrapper.__qualname__ = cls.__name__
         Wrapper.__doc__ = cls.__doc__
         return Wrapper
+
     return randomize_wrapper
+
 
 class Resize(VisionTransform):
     r"""
     Resize the input data.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
+    param output_size: target size of image, with (height, width) shape.
+    param interpolation: interpolation method. All methods are listed below:
         * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
         * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
         * cv2.INTER_AREA – resampling using pixel area relation.
         * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
         * cv2.INTER_LANCZOS4– a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
+    param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size, keep_aspect=True, align_corner=False, interpolation=cv2.INTER_AREA, background_color=(0,0,0),name='resize', **kwargs):
+    def __init__(self, output_size, keep_aspect=True, align_corner=True, interpolation=cv2.INTER_AREA,
+                 background_color=(0, 0, 0), name='resize', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
@@ -190,7 +291,7 @@ class Resize(VisionTransform):
         self.keep_aspect = keep_aspect
         self.align_corner = align_corner
         self.interpolation = interpolation
-        self.background_color=background_color
+        self.background_color = background_color
         self.scale = 1
 
     def apply(self, input: Tuple, spec: TensorSpec):
@@ -199,76 +300,67 @@ class Resize(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        h, w, eh, ew, th, tw, pad_vert, pad_horz ,scale= self._shape_info
+        h, w, eh, ew, th, tw, pad_vert, pad_horz, scale = self._shape_info
 
-        if not self.keep_aspect:
-            return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+        image=_check_float_dtype(_check_pixel_value_range(image))
+        if h == eh and w == ew:
+            return image
+        elif not self.keep_aspect:
+            return cv2.resize(image.copy(), (ew, eh), interpolation=self.interpolation)
         else:
-            resized_image =cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+
+            if image.shape[-1]== 1:
+                image=image.squeeze(-1)
+                image=np.stack([image,image,image],axis=-1)
+            resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
+
             shp = list(int_shape(resized_image))
-            shp[:2] = self.output_size
-            if len(shp)==3:
-                output = np.ones(shp)*self.background_color
-            else:
-                output = np.zeros(shp)
-            if self.align_corner:
-                if ndim(resized_image) == 2:
-                    output[:th, :tw] = resized_image
-                elif ndim(resized_image) == 3:
-                    output[:th, :tw, :] = resized_image
-            else:
-                if ndim(resized_image) == 2:
-                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2] = resized_image
-                elif ndim(resized_image) == 3:
-                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :] = resized_image
+            output = np.ones((eh, ew, 3),dtype=np.float32) * self.background_color
+
+            output[pad_vert:pad_vert+shp[0], pad_horz:pad_horz+shp[1],:] = resized_image
+            output = _check_float_dtype(_check_pixel_value_range(output))
             return output
 
     def _apply_coords(self, coords, spec: TensorSpec):
         # 原圖尺寸、預期尺寸、縮放後尺寸
-        h, w,eh, ew, th, tw, pad_vert, pad_horz ,scale= self._shape_info
+        h, w, eh, ew, th, tw, pad_vert, pad_horz, scale = self._shape_info
         if h == eh and w == ew:
             return coords
-        if not self.keep_aspect:
-            coords[:, 0] = np.round(coords[:, 0] * (ew/w))
-            coords[:, 1] = np.round(coords[:, 1] * (eh/h))
+        elif not self.keep_aspect:
+            coords[..., 0] = coords[..., 0] * (ew / w)
+            coords[..., 1] = coords[..., 1] * (eh / h)
         else:
-            coords[:, 0] = np.round(coords[:, 0] *scale)
-            coords[:, 1] = np.round(coords[:, 1] *scale)
-        if not self.align_corner:
-            coords[:, 0] += pad_horz // 2
-            coords[:, 1] += pad_vert // 2
+            coords[..., 0] = coords[..., 0] * scale+ pad_horz
+            coords[..., 1] = coords[..., 1] * scale+pad_vert
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w,eh, ew,  th, tw, pad_vert, pad_horz,scale = self._shape_info
+        h, w, eh, ew, th, tw, pad_vert, pad_horz, scale = self._shape_info
+        mask_dtype = mask.dtype
+        _dtype=np.int32 if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else np.float32
+
+        mask=mask.astype(_dtype)
+        if mask.shape[-1]==1:
+            mask=np.squeeze(mask,-1)
+
         if h == eh and w == ew:
             return mask
-        mask_dtype = mask.dtype
-        mask = mask.astype(np.float32)
-        if not self.keep_aspect:
-            mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST)
-            return mask.astype(mask_dtype)
+
+        elif not self.keep_aspect:
+            resized_mask = cv2.resize(mask, (ew, eh), interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREA)
+            return resized_mask.astype(mask_dtype)
         else:
 
-            mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST).astype(np.float32)
-            output = np.zeros((*self.output_size, 3)).astype(np.float32)
-            if mask.ndim == 2:
-                output = np.zeros(self.output_size).astype(np.float32)
-            elif mask.ndim == 3:
-                output = np.zeros((*self.output_size, mask.shape[-1])).astype(np.float32)
+            resized_mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREA)
+            shp = list(int_shape(resized_mask))
 
-            if self.align_corner:
-                if mask.ndim == 2:
-                    output[:th, :tw] = mask
-                elif mask.ndim == 3:
-                    output[:th, :tw, :] = mask
+            if mask.ndim == 3:
+                output = np.zeros((eh, ew,3)).astype(_dtype)
+                output[pad_vert:pad_vert + shp[0], pad_horz:pad_horz + shp[1], :] = resized_mask
             else:
-                if mask.ndim == 2:
-                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2] = mask
-                elif mask.ndim == 3:
-                    output[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :] = mask
-            mask = np.squeeze(output)
-            return mask.astype(mask_dtype)
+                output = np.zeros((eh, ew)).astype(_dtype)
+                output[pad_vert:pad_vert + shp[0], pad_horz:pad_horz + shp[1]] = resized_mask
+            return output.astype(_dtype)
 
     def _get_shape(self, image):
         if isinstance(self.output_size, int):
@@ -277,32 +369,38 @@ class Resize(VisionTransform):
         eh, ew = self.output_size
 
         if not self.keep_aspect:
-            th=eh
-            tw=ew
+            th = eh
+            tw = ew
             self.scale = min(float(eh) / h, float(ew) / w)
-            return h, w, eh, ew, th,tw,0, 0,1
+            return h, w, eh, ew,  eh,ew, 0, 0, 1
         else:
             self.scale = min(float(eh) / h, float(ew) / w)
-            th = int(builtins.round(h * self.scale, 0))
-            tw = int(builtins.round(w * self.scale, 0))
-            pad_vert = eh - th
-            pad_horz = ew - tw
-            return h, w,eh, ew, th, tw, pad_vert, pad_horz,self.scale
+            th = int(h * self.scale)
+            tw = int(w * self.scale)
+            if self.align_corner:
+                pad_vert=0
+                pad_horz=0
+            else:
+                pad_vert=(eh - th)//2
+                pad_horz=(ew - tw)//2
+            return h, w, eh, ew, th, tw, pad_vert, pad_horz, self.scale
+
 
 class Unresize(VisionTransform):
     r"""
     Resize the input data.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
+    param output_size: target size of image, with (height, width) shape.
+    param interpolation: interpolation method. All methods are listed below:
         * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
         * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
         * cv2.INTER_AREA – resampling using pixel area relation.
         * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
         * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
+    param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size, keep_aspect=True, align_corner=True, interpolation=cv2.INTER_AREA, name='resize', **kwargs):
+    def __init__(self, output_size, keep_aspect=True, align_corner=True, interpolation=cv2.INTER_AREA, name='resize',
+                 **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
@@ -319,41 +417,40 @@ class Unresize(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        h, w, th, tw, pad_vert, pad_horz  ,scale= self._shape_info
+        h, w, th, tw, pad_vert, pad_horz, scale = self._shape_info
 
         if not self.keep_aspect:
             return cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
         else:
             if self.align_corner:
                 if ndim(image) == 2:
-                    image=image[:th, :tw]
+                    image = image[:th, :tw]
                 elif ndim(image) == 3:
-                    image=image[:th, :tw, :]
+                    image = image[:th, :tw, :]
             else:
                 if ndim(image) == 2:
-                    image=image[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2]
+                    image = image[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2]
                 elif ndim(image) == 3:
-                    image=image[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :]
+                    image = image[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :]
 
             resized_image = cv2.resize(image.copy(), (w, h), interpolation=self.interpolation)
-
 
             return resized_image
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        h, w, th, tw, pad_vert, pad_horz  ,scale= self._shape_info
+        h, w, th, tw, pad_vert, pad_horz, scale = self._shape_info
         if h == th and w == tw:
             return coords
 
-        coords[:, 0] = np.round(coords[:, 0] * scale)
-        coords[:, 1] = np.round(coords[:, 1] * scale)
+        coords[:, 0] = np.round((coords[:, 0]+0.5) * scale-0.5)
+        coords[:, 1] = np.round((coords[:, 1]+0.5) * scale-0.5)
         if not self.align_corner:
             coords[:, 0] += pad_vert // 2
             coords[:, 1] += pad_horz // 2
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        h, w, th, tw, pad_vert, pad_horz ,scale= self._shape_info
+        h, w, th, tw, pad_vert, pad_horz, scale = self._shape_info
         if h == th and w == tw:
             return mask
         mask_dtype = mask.dtype
@@ -364,14 +461,14 @@ class Unresize(VisionTransform):
         else:
             if self.align_corner:
                 if mask.ndim == 2:
-                    mask=mask[:th, :tw]
+                    mask = mask[:th, :tw]
                 elif mask.ndim == 3:
-                    mask=mask[:th, :tw, :]
+                    mask = mask[:th, :tw, :]
             else:
                 if mask.ndim == 2:
-                    mask=mask[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2]
+                    mask = mask[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2]
                 elif mask.ndim == 3:
-                    mask=mask[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :]
+                    mask = mask[pad_vert // 2:th + pad_vert // 2, pad_horz // 2:tw + pad_horz // 2, :]
             mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST).astype(np.float32)
             return mask.astype(mask_dtype)
 
@@ -382,15 +479,15 @@ class Unresize(VisionTransform):
         eh, ew = self.output_size
 
         if not self.keep_aspect:
-            self.scale =1
-            return eh, ew, eh, ew, 0, 0,1
+            self.scale = 1
+            return eh, ew, eh, ew, 0, 0, 1
         else:
             self.scale = min(float(eh) / h, float(ew) / w)
             th = int(builtins.round(h * self.scale, 0))
             tw = int(builtins.round(w * self.scale, 0))
             pad_vert = eh - th
             pad_horz = ew - tw
-            return eh, ew, th, tw, pad_vert, pad_horz,self.scale
+            return eh, ew, th, tw, pad_vert, pad_horz, self.scale
 
 
 class ShortestEdgeResize(VisionTransform):
@@ -458,14 +555,14 @@ class ShortestEdgeResize(VisionTransform):
 class Rescale(VisionTransform):
     r"""
     Resize the input data.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
+    param output_size: target size of image, with (height, width) shape.
+    param interpolation: interpolation method. All methods are listed below:
         * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
         * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
         * cv2.INTER_AREA – resampling using pixel area relation.
         * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
         * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
+    param order: the same with :class:`VisionTransform`.
     """
 
     def __init__(self, scale, interpolation=cv2.INTER_AREA, name='rescale', **kwargs):
@@ -479,6 +576,8 @@ class Rescale(VisionTransform):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
+        if self._shape_info is None:
+            self._shape_info = self._get_shape(image)
         h, w, _ = image.shape
         self.output_size = (int(w * self.scale), int(h * self.scale))
         return cv2.resize(image, (int(w * self.scale), int(h * self.scale)), self.interpolation)
@@ -492,36 +591,43 @@ class Rescale(VisionTransform):
         h, w, _ = mask.shape
         mask_dtype = mask.dtype
         mask = mask.astype(np.float32)
-        mask = cv2.resize(mask,self.output_size , cv2.INTER_NEAREST)
+        mask = cv2.resize(mask, self.output_size, cv2.INTER_NEAREST)
         mask = mask.astype(mask_dtype)
         return mask
-
 
 
 class RandomRescaleCrop(VisionTransform):
     r"""
     Resize the input data.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
+
+    1. expect size=(eh,ew) get the random scale from scale_range
+    2. (th,tw)=(eh*scale_range,ew*scale_range) will be the target crop area size
+    3. if crop area size is larger than image ,then padding to target crop size, otherwise crop from offset
+
+
+    param output_size: target size of image, with (height, width) shape.
+    param interpolation: interpolation method. All methods are listed below:
         * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
         * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
         * cv2.INTER_AREA – resampling using pixel area relation.
         * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
         * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
+    param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size, scale_range=(0.5, 2.0), interpolation=cv2.INTER_AREA, name='random_rescale_crop', **kwargs):
+    def __init__(self, output_size, scale_range=(0.5, 2.0), background_color=(0, 0, 0), interpolation=cv2.INTER_AREA,
+                 name='random_rescale_crop', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
+        self.background_color = background_color
         if isinstance(self.output_size, numbers.Number):
             self.output_size = (output_size, output_size)
-        scale_range =kwargs.get('scale',scale_range)
+        scale_range = kwargs.get('scale', scale_range)
         if isinstance(scale_range, numbers.Number):
             self.scale_range = (scale_range, scale_range)
         else:
-            self.scale_range =scale_range
+            self.scale_range = scale_range
 
         self.interpolation = interpolation
 
@@ -533,104 +639,109 @@ class RandomRescaleCrop(VisionTransform):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
 
-        height, width ,padx,pady,th, tw, eh, ew, target_scale = self._shape_info
+        height, width, offset_x, offset_y, th, tw, eh, ew, target_scale = self._shape_info
         try:
-            cropped_img = image[pady: builtins.min(pady + th, height), padx: builtins.min(padx + tw, width)]
-            cropped_img = cv2.resize(cropped_img, (int(tw/target_scale), int(th/target_scale)), interpolation=self.interpolation)
+            if image.shape[-1] == 1:
+                image = image.squeeze(-1)
+                image = np.stack([image, image, image], axis=-1)
+
+            cropped_img = image[offset_y: offset_y + th, offset_x: offset_x + tw, :]
+            cropped_img = cv2.resize(cropped_img, None, fx=1 / target_scale, fy=1 / target_scale,
+                                     interpolation=self.interpolation)
 
             if cropped_img.shape[0] == eh and cropped_img.shape[1] == ew:
                 return cropped_img
             else:
-                background = np.zeros((eh, ew, 1 if spec is not None and spec.object_type == ObjectType.gray else 3))
-                background[builtins.max(eh - cropped_img.shape[0], 0) // 2:builtins.max(eh - cropped_img.shape[0], 0) // 2 + cropped_img.shape[0],
-                builtins.max(ew - cropped_img.shape[1], 0) // 2:builtins.max(ew - cropped_img.shape[1], 0) // 2 + cropped_img.shape[1], :] = cropped_img
+                background = np.ones((eh, ew, 3)) * self.background_color
+
+                background[:builtins.min(cropped_img.shape[0], eh), :builtins.min(cropped_img.shape[1], ew),
+                :] = cropped_img[:builtins.min(cropped_img.shape[0], eh), :builtins.min(cropped_img.shape[1], ew), :]
                 return background
         except Exception as e:
-            print(e,self._shape_info)
+            print(e, self._shape_info)
             PrintException()
 
     def _apply_coords(self, coords, spec: TensorSpec):
-        height, width ,padx,pady,th, tw, eh, ew, target_scale = self._shape_info
+        height, width, offset_x, offset_y, th, tw, eh, ew, target_scale = self._shape_info
         try:
-            coords[:, 0] = coords[:, 0]-padx
-            coords[:, 1] = coords[:, 1] -pady
-            coords = np.round(coords/target_scale).astype(np.int32)
-            adj_tw=tw/target_scale
-            adj_th=th/target_scale
+            coords[:, 0] = coords[:, 0] - offset_x
+            coords[:, 1] = coords[:, 1] - offset_y
+            coords = coords / target_scale
 
-            coords[:, 0] = np.clip(coords[:, 0] +(ew-adj_tw)//2, 0, ew)
-            coords[:, 1] = np.clip(coords[:, 1] +(eh-adj_th)//2, 0, eh)
             return coords
         except Exception as e:
             print(e, self._shape_info)
             PrintException()
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        height, width, padx, pady, th, tw, eh, ew, target_scale = self._shape_info
+        height, width, offset_x, offset_y, th, tw, eh, ew, target_scale = self._shape_info
         try:
 
-            cropped_mask = mask[pady: builtins.min(pady + th, height), padx: builtins.min(padx + tw, width)]
-
-            cropped_mask = cv2.resize(cropped_mask, (ew, eh), interpolation=cv2.INTER_NEAREST)
+            cropped_mask = mask[offset_y: offset_y + th, offset_x: offset_x + tw]
+            cropped_mask = cv2.resize(cropped_mask, None, fx=1 / target_scale, fy=1 / target_scale,
+                                      interpolation=cv2.INTER_NEAREST)
 
             if cropped_mask.shape[0] == eh and cropped_mask.shape[1] == ew:
                 return cropped_mask
             else:
-                background = np.zeros(tuple(mask_shape)).astype(mask.dtype)
-                background[builtins.max(eh - cropped_mask.shape[0], 0) // 2:builtins.max(eh - cropped_mask.shape[0], 0) // 2 + cropped_mask.shape[0],
-                builtins.max(ew - cropped_mask.shape[1], 0) // 2:builtins.max(ew - cropped_mask.shape[1], 0) // 2 + cropped_mask.shape[1]] = cropped_mask
+                background = np.zeros((eh, ew)).astype(mask.dtype)
+                background[:builtins.min(cropped_mask.shape[0], eh),
+                :+builtins.min(cropped_mask.shape[1], ew)] = cropped_mask[:builtins.min(cropped_mask.shape[0], eh),
+                                                             :+builtins.min(cropped_mask.shape[1], ew)]
                 return background
         except Exception as e:
-            print(e,self._shape_info)
+            print(e, self._shape_info)
             PrintException()
 
     def _get_shape(self, image):
         height, width = image.shape[:2]
-        #area = height * width
+        # area = height * width
         if isinstance(self.output_size, int):
             self.output_size = (self.output_size, self.output_size)
         eh, ew = self.output_size
 
         target_scale = np.random.uniform(self.scale_range[0], self.scale_range[1])
-        th, tw = builtins.min(int(round(ew * target_scale)),width), builtins.min(int(round(eh * target_scale)),height)
+        tw, th = builtins.min(int(round(ew * target_scale)), width), builtins.min(int(round(eh * target_scale)), height)
 
-        padx,pady=0,0
+        offset_x, offset_y = 0, 0
 
-        if 0 < ew < tw - 1 :
-            padx = np.random.randint(0, (tw - ew)//2)
-        elif 0<ew<= tw - 1:
-            padx=0
-        if 0 < eh < th - 1:
-            pady = np.random.randint(0, (th - eh)//2)
-        elif 0 < eh<= th - 1:
-            pady=0
-        return height, width,padx,pady, th, tw, eh, ew, target_scale
+        if 0 < tw < ew - 2:
+            offset_x = random.uniform(0, (ew - tw) // 2)
+        else:
+            offset_x = 0
+        if 0 < th < eh - 2:
+            offset_y = random.uniform(0, (eh - th) // 2)
+        else:
+            offset_y = 0
+        return int(height), int(width), int(offset_x), int(offset_y), int(th), int(tw), int(eh), int(ew), target_scale
 
 
 class RandomCenterCrop(VisionTransform):
     r"""
     Resize the input data.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
+    param output_size: target size of image, with (height, width) shape.
+    param interpolation: interpolation method. All methods are listed below:
         * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
         * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
         * cv2.INTER_AREA – resampling using pixel area relation.
         * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
         * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
+    param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, output_size, scale_range=(0.8, 1.2), interpolation=cv2.INTER_AREA, name='random_center_crop', **kwargs):
+    def __init__(self, output_size, scale_range=(0.8, 1.2), background_color=(0, 0, 0), interpolation=cv2.INTER_AREA,
+                 name='random_center_crop', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
+        self.background_color = background_color
         if isinstance(self.output_size, numbers.Number):
             self.output_size = (output_size, output_size)
-        scale_range =kwargs.get('scale',scale_range)
+        scale_range = kwargs.get('scale', scale_range)
         if isinstance(scale_range, numbers.Number):
             self.scale_range = (scale_range, scale_range)
         else:
-            self.scale_range =scale_range
+            self.scale_range = scale_range
         self.interpolation = interpolation
 
     def apply(self, input: Tuple, spec: TensorSpec):
@@ -640,38 +751,57 @@ class RandomCenterCrop(VisionTransform):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
         x, y, th, tw, eh, ew, h, w = self._shape_info
+
+        if image.shape[-1] == 1:
+            image = image.squeeze(-1)
+            image = np.stack([image, image, image], axis=-1)
+
         resized_image = cv2.resize(image.copy(), (tw, th), interpolation=self.interpolation)
-        crop_image = resized_image[y: builtins.min(y + eh, th), x:builtins.min(x + ew, tw)]
+
+        crop_image = resized_image[y: builtins.min(y+eh,th), x:builtins.min(x+ew, tw)]
+        #crop_image = resized_image[y: builtins.min(y + eh, th), x:builtins.min(x + ew, tw)]
         if crop_image.shape[0] < eh or crop_image.shape[1] < ew:
-            background = np.zeros((eh, ew, 1 if spec is not None and spec.object_type == ObjectType.gray else 3))
+            background = np.ones((eh, ew, 3)) * self.background_color
             if ndim(crop_image) == 2:
-                background[builtins.max(eh - crop_image.shape[0], 0) // 2:builtins.max(eh - crop_image.shape[0], 0) // 2 + crop_image.shape[0],
-                builtins.max(ew - crop_image.shape[1], 0) // 2:builtins.max(ew - crop_image.shape[1], 0) // 2 + crop_image.shape[1], 0] = crop_image
+                background[
+                builtins.max(eh - crop_image.shape[0], 0) // 2:builtins.max(eh - crop_image.shape[0], 0) // 2 +
+                                                               crop_image.shape[0],
+                builtins.max(ew - crop_image.shape[1], 0) // 2:builtins.max(ew - crop_image.shape[1], 0) // 2 +
+                                                               crop_image.shape[1], 0] = crop_image
             else:
-                background[builtins.max(eh - crop_image.shape[0], 0) // 2:builtins.max(eh - crop_image.shape[0], 0) // 2 + crop_image.shape[0],
-                builtins.max(ew - crop_image.shape[1], 0) // 2:builtins.max(ew - crop_image.shape[1], 0) // 2 + crop_image.shape[1], :] = crop_image
+                background[
+                builtins.max(eh - crop_image.shape[0], 0) // 2:builtins.max(eh - crop_image.shape[0], 0) // 2 +
+                                                               crop_image.shape[0],
+                builtins.max(ew - crop_image.shape[1], 0) // 2:builtins.max(ew - crop_image.shape[1], 0) // 2 +
+                                                               crop_image.shape[1], :] = crop_image
             return background
         else:
             return crop_image
 
     def _apply_coords(self, coords, spec: TensorSpec):
         x, y, th, tw, eh, ew, h, w = self._shape_info
-        coords[:, 0] = (coords[:, 0] * true_divide(tw, w)).astype(np.int64)
-        coords[:, 1] = (coords[:, 1] * (true_divide(th, h))).astype(np.int64)
-        coords[:, 0] -= builtins.max(int(round((tw - ew) / 2.0)), 0)
-        coords[:, 1] -= builtins.max(int(round((th - eh) / 2.0)), 0)
+        scale = tw / w
+        coords[:, 0] = coords[:, 0] * scale
+        coords[:, 1] = coords[:, 1] * scale
+        coords[:, 0] -= x
+        coords[:, 1] -= y
         coords[:, 0] += builtins.max(ew - tw, 0) // 2
         coords[:, 1] += builtins.max(eh - th, 0) // 2
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
         x, y, th, tw, eh, ew, h, w = self._shape_info
-        mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST)
-        crop_mask = mask[y: builtins.min(y + eh, th), x:builtins.min(x + ew, tw)]
+        mask_dtype = mask.dtype
+        _dtype=np.int32 if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else np.float32
+        mask = mask.astype(_dtype)
+        if mask.shape[-1] == 1:
+            mask = np.squeeze(mask, -1)
+
+        resized_mask = cv2.resize(mask, (tw, th), interpolation=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREAST)
+        crop_mask = resized_mask[y: builtins.min(y+eh,th), x:builtins.min(x+ew, tw)]
         if crop_mask.shape[0] < eh or crop_mask.shape[1] < ew:
             background = np.zeros((eh, ew)).astype(mask.dtype)
-            background[builtins.max(eh - crop_mask.shape[0], 0) // 2:builtins.max(eh - crop_mask.shape[0], 0) // 2 + crop_mask.shape[0],
-            builtins.max(ew - crop_mask.shape[1], 0) // 2:builtins.max(ew - crop_mask.shape[1], 0) // 2 + crop_mask.shape[1]] = crop_mask
+            background[builtins.max(eh - crop_mask.shape[0], 0) // 2:builtins.max(eh - crop_mask.shape[0], 0) // 2 +crop_mask.shape[0],builtins.max(ew - crop_mask.shape[1], 0) // 2:builtins.max(ew - crop_mask.shape[1], 0) // 2 +crop_mask.shape[1]] = crop_mask
             return background
         else:
             return crop_mask
@@ -688,8 +818,8 @@ class RandomCenterCrop(VisionTransform):
 
         th, tw = int(h * current_scale), int(w * current_scale)
 
-        x = builtins.max(int(round((tw - ew) / 2.0)), 0)
-        y = builtins.max(int(round((th - eh) / 2.0)), 0)
+        x = builtins.max(int((tw - ew) / 2.0), 0)
+        y = builtins.max(int((th - eh) / 2.0), 0)
         return x, y, th, tw, eh, ew, h, w
 
 
@@ -698,7 +828,7 @@ class RandomCrop(VisionTransform):
     Crop the input data randomly. Before applying the crop transform,
     pad the image first. If target size is still bigger than the size of
     padded image, pad the image size to target size.
-    :param output_size: target size of image, with (height, width) shape.
+    param output_size: target size of image, with (height, width) shape.
 
     """
 
@@ -727,7 +857,8 @@ class RandomCrop(VisionTransform):
                 output = np.expand_dims(output, -1)
             return output
         elif image.ndim == 3:
-            output = np.zeros(self.output_size + (1,) if spec is not None and spec.object_type == ObjectType.gray else self.output_size + (3,))
+            output = np.zeros(self.output_size + (
+            1,) if spec is not None and spec.object_type == ObjectType.gray else self.output_size + (3,))
             crop_im = image[offset_y:min(offset_y + eh, h), offset_x:min(offset_x + ew, w), :]
             output[offset_y1:offset_y1 + crop_im.shape[0], offset_x1:offset_x1 + crop_im.shape[1], :] = crop_im
             return output
@@ -788,17 +919,19 @@ class RandomTransformAffine(VisionTransform):
         If shear is a tuple of list of size 4, then a shear parallel to X axis in the range of
         (shear[0], shear[1]) and a shear parallel to Y axis in the range of (shear[2], shear[3]) is applied.
         If shear is None, no shear is applied.
-    :param output_size: target size of image, with (height, width) shape.
-    :param interpolation: interpolation method. All methods are listed below:
+    param output_size: target size of image, with (height, width) shape.
+    param interpolation: interpolation method. All methods are listed below:
         * cv2.INTER_NEAREST – a nearest-neighbor interpolation.
         * cv2.INTER_LINEAR – a bilinear interpolation (used by default).
         * cv2.INTER_AREA – resampling using pixel area relation.
         * cv2.INTER_CUBIC – a bicubic interpolation over 4×4 pixel neighborhood.
         * cv2.INTER_LANCZOS4 – a Lanczos interpolation over 8×8 pixel neighborhood.
-    :param order: the same with :class:`VisionTransform`.
+    param order: the same with :class:`VisionTransform`.
     """
 
-    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0.15,border_mode='random_color', background_color=None, interpolation=cv2.INTER_AREA,keep_prob=0.5, name='transform_affine', **kwargs):
+    def __init__(self, rotation_range=15, zoom_range=0.02, shift_range=0.02, shear_range=0.2, random_flip=0,
+                 border_mode='random_color', background_color=None, interpolation=cv2.INTER_AREA, keep_prob=0.5,
+                 name='transform_affine', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = None
@@ -808,46 +941,47 @@ class RandomTransformAffine(VisionTransform):
         self.shear_range = shear_range
         self.interpolation = interpolation
         self.random_flip = random_flip
-        self.background_color=background_color
-        if border_mode not in ['random_color','constant','replicate','zero','reflect','wrap']:
-            print('Only {0} are valid items'.format(['random_color','constant','replicate','zero','reflect','wrap']))
-            self.border_mode ='random_color'
+        self.background_color = background_color
+        if border_mode not in ['random_color', 'constant', 'replicate', 'zero', 'reflect', 'wrap']:
+            print(
+                'Only {0} are valid items'.format(['random_color', 'constant', 'replicate', 'zero', 'reflect', 'wrap']))
+            self.border_mode = 'random_color'
         else:
-            self.border_mode=border_mode
-        self.keep_prob=keep_prob
+            self.border_mode = border_mode
+        self.keep_prob = keep_prob
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
         image = unpack_singleton(image)
-        H,W,C=int_shape(image)
+        H, W, C = int_shape(image)
         self.output_size = (H, W)
 
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        mat_img, height, width,angle, is_flip ,rr,shear_factor,background_color= self._shape_info
+        mat_img, height, width, angle, is_flip, rr, shear_factor, background_color = self._shape_info
 
-        if rr>self.keep_prob:
+        if rr > self.keep_prob:
             image = np.clip(image.astype(np.float32), 0, 255)[:, :, :3]
-            _borderMode=cv2.BORDER_CONSTANT
+            _borderMode = cv2.BORDER_CONSTANT
             _borderValue = background_color
-            if self.border_mode=='replicate':
-                _borderMode=cv2.BORDER_REPLICATE
-            elif self.border_mode=='reflect':
-                _borderMode=cv2.BORDER_REFLECT
-            elif self.border_mode=='wrap':
-                _borderMode=cv2.BORDER_WRAP
-            elif self.border_mode=='zero':
-                _borderValue=(0,0,0)
+            if self.border_mode == 'replicate':
+                _borderMode = cv2.BORDER_REPLICATE
+            elif self.border_mode == 'reflect':
+                _borderMode = cv2.BORDER_REFLECT
+            elif self.border_mode == 'wrap':
+                _borderMode = cv2.BORDER_WRAP
+            elif self.border_mode == 'zero':
+                _borderValue = (0, 0, 0)
 
-            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue,flags=cv2.INTER_AREA )  # , borderMode=cv2.BORDER_REPLICATE
+            image = cv2.warpAffine(image.copy(), mat_img, dsize=(width, height), borderMode=_borderMode,borderValue=_borderValue, flags=cv2.INTER_AREA)  # , borderMode=cv2.BORDER_REPLICATE
 
             # if shear_factor>0:
             #     image = cv2.warpAffine(image, mat_shear, dsize=(int(nW), image.shape[0]), borderMode=_borderMode,borderValue=_borderValue,flags=cv2.INTER_AREA)
             #     image = cv2.resize(image,(width, height))
             if is_flip:
-                image=cv2.flip(image,1)
+                image = cv2.flip(image, 1)
                 return image
 
 
@@ -856,15 +990,57 @@ class RandomTransformAffine(VisionTransform):
         else:
             return image
 
-    def _apply_coords(self, coords, spec: TensorSpec):
-        mat_img, height, width,angle, is_flip,rr,shear_factor,background_color = self._shape_info
-        outlier_mask=coords[:,1]<2
-        if 0<len(coords[outlier_mask,:])<3 and coords[~outlier_mask,1].min()>(coords[60,1]-((coords[66,1]+coords[79,1])/2)):
-            print('landmark異常數據')
-            [print(y,coords[y,1]) for y in coords[:,1] if coords[y,1]<2 ]
-            print(np.concatenate([np.expand_dims(np.arange(len(coords)),0),coords.copy()],axis=0).astype(np.int32).tolist())
+    def _apply_boxes(self, boxes,spec:TensorSpec):
+        mat_img, height, width,angle, is_flip, rr, shear_factor, background_color = self._shape_info
+        if isinstance( self.output_size,numbers.Number):
+            self.output_size=( self.output_size, self.output_size)
+        eh, ew = self.output_size
+        if ndim(boxes)==0:
+            return boxes
+        else:
+            if ndim(boxes) == 1:
+                boxes=np.expand_dims(boxes,0)
+            B=boxes.shape[0]
+            location= boxes[:, :4]
+            class_info = boxes[:, 4:5] if boxes.shape[-1]>4 else None
+            keypoints = boxes[:, 5:] if boxes.shape[-1]>5 else None
 
-        if rr>self.keep_prob:
+            corners = _get_corners(np.asarray(location))
+
+
+            corners = corners.reshape(-1, 2)
+            corners = np.hstack((corners, np.ones((corners.shape[0], 1), dtype=type(corners[0][0]))))
+            corners = np.dot(mat_img, corners.T).T
+
+            new_corners = corners.reshape(-1, 8)
+
+            new_bbox = _get_enclosing_box(new_corners)
+
+            # scale_factor_x = nW/width
+            # scale_factor_y = nH/ height
+            # new_bbox[:, :4] /= [scale_factor_x, scale_factor_y, scale_factor_x, scale_factor_y]
+            #
+
+            if keypoints is not None:
+                coords_keypoints = np.asarray(keypoints).reshape(-1, 2)
+                keypoints = self._apply_keypoints(coords_keypoints, spec).reshape((-1, keypoints.shape[-1]))
+
+            trans_boxes = new_bbox
+            if class_info is not None  and class_info.shape[-1]>0 and keypoints is not None and len(keypoints)>0:
+                trans_boxes = np.concatenate((trans_boxes, class_info,keypoints), axis=1)
+            elif class_info is not None  and class_info.shape[-1]>0:
+                trans_boxes = np.concatenate((trans_boxes, class_info), axis=1)
+            return trans_boxes
+
+    def _apply_coords(self, coords, spec: TensorSpec):
+        mat_img, height, width, angle, is_flip, rr, shear_factor, background_color = self._shape_info
+        outlier_mask = coords[:, 1] < 2
+        # if len(coords[outlier_mask,:])3 and coords[~outlier_mask,1].min()>(coords[60,1]-((coords[66,1]+coords[79,1])/2)):
+        #     print('landmark異常數據')
+        #     [print(y,coords[y,1]) for y in coords[:,1] if coords[y,1]<2 ]
+        #     print(np.concatenate([np.expand_dims(np.arange(len(coords)),0),coords.copy()],axis=0).astype(np.int32).tolist())
+
+        if rr > self.keep_prob:
 
             coords = coords.transpose([1, 0])
             coords = np.insert(coords, 2, 1, axis=0)
@@ -875,7 +1051,9 @@ class RandomTransformAffine(VisionTransform):
 
             if is_flip:
                 if coords_result.shape[-1] == 4:
-                    coords_result = np.stack([width - coords_result[..., 2], coords_result[..., 1], width - coords_result[..., 0], coords_result[..., 3]], axis=-1)
+                    coords_result = np.stack(
+                        [width - coords_result[..., 2], coords_result[..., 1], width - coords_result[..., 0],
+                         coords_result[..., 3]], axis=-1)
                 elif coords_result.shape[-1] == 2:
                     coords_result[..., 0] = width - coords_result[..., 0]
 
@@ -884,16 +1062,17 @@ class RandomTransformAffine(VisionTransform):
             return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
-        mask = unpack_singleton(mask)
-        mat_img, height, width,angle, is_flip,rr ,shear_factor,background_color= self._shape_info
-        if rr>self.keep_prob:
+
+        mat_img, height, width, angle, is_flip, rr, shear_factor, background_color = self._shape_info
+        if rr > self.keep_prob:
             mask_dtype = mask.dtype
             mask = mask.astype(np.float32)
 
-            mask = cv2.warpAffine(mask, mat_img, dsize=(width, height), borderMode=cv2.BORDER_CONSTANT, borderValue=(0, 0, 0),flags=cv2.INTER_NEAREST)  # , borderMode=cv2.BORDER_REPLICATE
-            if spec.object_type==ObjectType.binary_mask:
-                mask[mask>=0.5]=1
-                mask[mask < 0.5] =0
+            mask = cv2.warpAffine(mask, mat_img, dsize=(width, height), borderMode=cv2.BORDER_CONSTANT,
+                                  borderValue=(0, 0, 0), flags=cv2.INTER_NEAREST if spec.object_type in [ObjectType.binary_mask,ObjectType.label_mask,ObjectType.color_mask] else cv2.INTER_AREA)  # , borderMode=cv2.BORDER_REPLICATE
+            if spec.object_type == ObjectType.binary_mask:
+                mask[mask >= 0.5] = 1
+                mask[mask < 0.5] = 0
             mask = mask.astype(mask_dtype)
             if is_flip:
                 return np.fliplr(mask)
@@ -904,20 +1083,38 @@ class RandomTransformAffine(VisionTransform):
 
     def _get_shape(self, image):
         self.rn = random.randint(0, 10)
-        h, w, c = image.shape
+        h, w = image.shape[:2]
         self.output_size = (h, w)
 
-        h, w = image.shape[0:2]
-        angle = np.random.uniform(self.rotation_range[0], self.rotation_range[1]) if _check_range_tuple(self.rotation_range) else  np.random.uniform(-self.rotation_range, self.rotation_range) if self.rotation_range>0 else 0
-        if self.rotation_range==0:
-            angle=0
-        scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1]) if _check_range_tuple(self.zoom_range) else np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range>0 else 1
+
+        angle = np.random.uniform(self.rotation_range[0], self.rotation_range[1]) if _check_range_tuple(
+            self.rotation_range) else np.random.uniform(-self.rotation_range,
+                                                        self.rotation_range) if self.rotation_range > 0 else 0
+        if self.rotation_range == 0:
+            angle = 0
+        scale = np.random.uniform(self.zoom_range[0], self.zoom_range[1]) if _check_range_tuple(
+            self.zoom_range) else np.random.uniform(1 - self.zoom_range, 1 + self.zoom_range) if self.zoom_range > 0 else 1
         tx = np.random.uniform(-self.shift_range, self.shift_range) * w
         ty = np.random.uniform(-self.shift_range, self.shift_range) * h
         M = np.eye(3)
-        mat = cv2.getRotationMatrix2D((w // 2, h // 2), angle, scale)
-        mat[:, 2] += (tx, ty)
-        M[:2]=mat
+
+
+
+        rotation_mat = cv2.getRotationMatrix2D((w // 2, h // 2), angle, scale)
+        #
+        # cos = np.abs(rotation_mat[0, 0])
+        # sin = np.abs(rotation_mat[0, 1])
+        # nW = int((h * sin) + (w * cos))
+        # nH = int((h * cos) + (w * sin))
+        #
+        # rotation_mat[0, 2] += (nW / 2) - w /2
+        # rotation_mat[1, 2] += (nH / 2) - h /2
+
+        rotation_mat[:, 2] += (tx, ty)
+        M[:2] = rotation_mat
+
+
+
         # c, s = np.cos(angle*(pi()/180)), np.sin(angle*(pi()/180))
         # M=np.array([
         #     [c, -s, 0],
@@ -926,35 +1123,37 @@ class RandomTransformAffine(VisionTransform):
         # ])
 
         # Shear
-        shear_factor = random.uniform(0, self.shear_range) if self.shear_range>0 else 0
+        shear_factor = random.uniform(0, self.shear_range) if self.shear_range > 0 else 0
         # mat_shear= np.array([[1, abs(shear_factor), 0], [0, 1, 0]])
         #
         # nW = image.shape[1] + abs(shear_factor * image.shape[0])
 
         # Shear
-        S= np.eye(3)
+        S = np.eye(3)
         S[0, 1] = math.tan(random.uniform(-self.shear_range, self.shear_range) * math.pi / 180)  # x shear (deg)
         S[1, 0] = math.tan(random.uniform(-self.shear_range, self.shear_range) * math.pi / 180)  # y shear (deg)
 
-        mat=S @M
-        rr_flip= np.random.random()
-        rr= np.random.random()
+        mat = S @ M
+        rr_flip = np.random.random()
+        rr = np.random.random()
 
-        background_color=(random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-        if self.border_mode!='random_color' and self.background_color is not None:
-            background_color=self.background_color
+        background_color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+        if self.border_mode != 'random_color' and self.background_color is not None:
+            background_color = self.background_color
 
-        return np.array(mat[:2]).reshape((2, 3)), h, w,angle, rr_flip < self.random_flip,rr,shear_factor,background_color
+        return  np.array(mat[:2]).reshape((2, 3)), h, w, angle, rr_flip < self.random_flip, rr, shear_factor, background_color
 
 
 RandomTransform = RandomTransformAffine
 
 
 class RandomMultiScaleImage(VisionTransform):
-    def __init__(self, output_size, scale_range=(0.8, 1.2), interpolation=cv2.INTER_AREA, keep_aspect=True, name='random_multiscale_image', **kwargs):
+    def __init__(self, output_size, scale_range=(0.8, 1.2), background_color=(0, 0, 0), interpolation=cv2.INTER_AREA,
+                 keep_aspect=True, name='random_multiscale_image', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.keep_aspect = keep_aspect
+        self.background_color = background_color
         self.output_size = output_size
         if isinstance(self.output_size, numbers.Number):
             self.output_size = (output_size, output_size)
@@ -965,36 +1164,41 @@ class RandomMultiScaleImage(VisionTransform):
             self.scale_range = scale_range
         self.interpolation = interpolation
         self.idx = 0
-        #self.tmp_fun=None
+        # self.tmp_fun=None
         self.resize_funs = [Resize(output_size, True, align_corner=True, interpolation=interpolation),
-                            Resize(output_size, True, align_corner=False, interpolation=interpolation),
-                            Resize(output_size, False, interpolation=interpolation),
+                            Resize(output_size, True, align_corner=False, background_color=background_color,
+                                   interpolation=interpolation),
+                            Resize(output_size, False, background_color=background_color, interpolation=interpolation),
                             ShortestEdgeResize(output_size=output_size, keep_aspect=True, interpolation=interpolation),
                             ShortestEdgeResize(output_size=output_size, keep_aspect=True, interpolation=interpolation),
-                            RandomRescaleCrop(output_size=output_size, scale_range=scale_range, interpolation=interpolation),
-                            RandomRescaleCrop(output_size=output_size, scale_range=((scale_range[0] + 1) / 2, (scale_range[1] + 1) / 2), interpolation=interpolation),
+                            RandomRescaleCrop(output_size=output_size, scale_range=scale_range,
+                                              background_color=background_color, interpolation=interpolation),
+                            RandomRescaleCrop(output_size=output_size,
+                                              scale_range=((scale_range[0] + 1) / 2, (scale_range[1] + 1) / 2),
+                                              background_color=background_color, interpolation=interpolation),
                             RandomCrop(output_size=output_size),
                             RandomCrop(output_size=output_size),
-                            RandomCenterCrop(output_size=output_size, scale_range=scale_range, interpolation=interpolation)]
+                            RandomCenterCrop(output_size=output_size, scale_range=scale_range,
+                                             background_color=background_color, interpolation=interpolation)]
         if self.keep_aspect:
             self.resize_funs.pop(2)
 
     def _apply_image(self, image, spec: TensorSpec):
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        idx= self._shape_info
-        return self.resize_funs[idx]._apply_image( image, spec)
+        idx = self._shape_info
+        return self.resize_funs[idx]._apply_image(image, spec)
+
     def _apply_mask(self, mask, spec: TensorSpec):
         idx = self._shape_info
-        return self.resize_funs[idx]._apply_mask( mask, spec)
+        return self.resize_funs[idx]._apply_mask(mask, spec)
 
     def _apply_coords(self, coords, spec: TensorSpec):
         idx = self._shape_info
-        return self.resize_funs[idx]._apply_coords( coords, spec)
+        return self.resize_funs[idx]._apply_coords(coords, spec)
 
-
-    def _get_shape(self,image=None):
-        idx=random.choice(range(len(self.resize_funs)))
+    def _get_shape(self, image=None):
+        idx = random.choice(range(len(self.resize_funs)))
         return idx
 
 
@@ -1015,10 +1219,10 @@ class HorizontalFlip(VisionTransform):
 
     def _apply_coords(self, coords, spec: TensorSpec):
         height, width = self._shape_info
-        if coords.shape[-1]==4:
-            coords=np.stack([width-coords[..., 2],coords[..., 1],width-coords[..., 0], coords[..., 3]],axis=-1)
-        elif coords.shape[-1]==2:
-            coords[..., 0]=width-coords[..., 0]
+        if coords.shape[-1] == 4:
+            coords = np.stack([width - coords[..., 2], coords[..., 1], width - coords[..., 0], coords[..., 3]], axis=-1)
+        elif coords.shape[-1] == 2:
+            coords[..., 0] = width - coords[..., 0]
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
@@ -1029,6 +1233,7 @@ class HorizontalFlip(VisionTransform):
     def _get_shape(self, image):
         height, width, _ = image.shape
         return height, width
+
 
 class VerticalFlip(VisionTransform):
     def __init__(self, name='vertical_flip', **kwargs):
@@ -1047,10 +1252,11 @@ class VerticalFlip(VisionTransform):
 
     def _apply_coords(self, coords, spec: TensorSpec):
         height, width = self._shape_info
-        if coords.shape[-1]==4:
-            coords=np.stack([coords[..., 0],height-coords[..., 3],coords[..., 2], height-coords[..., 1]],axis=-1)
-        elif coords.shape[-1]==2:
-            coords[..., 1]=height-coords[..., 1]
+        if coords.shape[-1] == 4:
+            coords = np.stack([coords[..., 0], height - coords[..., 3], coords[..., 2], height - coords[..., 1]],
+                              axis=-1)
+        elif coords.shape[-1] == 2:
+            coords[..., 1] = height - coords[..., 1]
         return coords
 
     def _apply_mask(self, mask, spec: TensorSpec):
@@ -1074,8 +1280,8 @@ class Normalize(VisionTransform):
     Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels,
     this transform will normalize each channel of the input data.
     ``output[channel] = (input[channel] - mean[channel]) / std[channel]``
-    :param mean: sequence of means for each channel.
-    :param std: sequence of standard deviations for each channel.
+    param mean: sequence of means for each channel.
+    param std: sequence of standard deviations for each channel.
 
     """
 
@@ -1127,8 +1333,8 @@ class Unnormalize(VisionTransform):
     Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels,
     this transform will normalize each channel of the input data.
     ``output[channel] = (input[channel] - mean[channel]) / std[channel]``
-    :param mean: sequence of means for each channel.
-    :param std: sequence of standard deviations for each channel.
+    param mean: sequence of means for each channel.
+    param std: sequence of standard deviations for each channel.
 
     """
 
@@ -1180,8 +1386,8 @@ class AddNoise(VisionTransform):
     Given mean: ``(M1,...,Mn)`` and std: ``(S1,..,Sn)`` for ``n`` channels,
     this transform will normalize each channel of the input data.
     ``output[channel] = (input[channel] - mean[channel]) / std[channel]``
-    :param mean: sequence of means for each channel.
-    :param std: sequence of standard deviations for each channel.
+    param mean: sequence of means for each channel.
+    param std: sequence of standard deviations for each channel.
 
     """
 
@@ -1213,7 +1419,7 @@ class AdjustBrightness(VisionTransform):
     """Adjust brightness of an Image.
         Args:
             value (float):  How much to adjust the brightness. Can be
-                any non negative number. 0 gives a black image, 1 gives the
+                any non-negative number. 0 gives a black image, 1 gives the
                 original image while 2 increases the brightness by a factor of 2.
         Returns:
             np.ndarray: Brightness adjusted image.
@@ -1247,7 +1453,7 @@ class AdjustContrast(VisionTransform):
     """Adjust contrast of an Image.
     Args:
         value (float): How much to adjust the contrast. Can be any
-            non negative number. 0 gives a solid gray image, 1 gives the
+            non-negative number. 0 gives a solid gray image, 1 gives the
             original image while 2 increases the contrast by a factor of 2.
     Returns:
         np.ndarray: Contrast adjusted image.
@@ -1266,9 +1472,9 @@ class AdjustContrast(VisionTransform):
         if self.value == 0:
             return image
         image = image.astype(np.float32)
-        mean_value=-1
-        if ndim(image)==2 or (ndim(image)==3 and image.shape[-1]==1):
-            mean_value=image.mean()
+        mean_value = -1
+        if ndim(image) == 2 or (ndim(image) == 3 and image.shape[-1] == 1):
+            mean_value = image.mean()
         else:
             mean_value = round(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY).mean())
         image = (1 - self.value) * mean_value + self.value * image
@@ -1323,7 +1529,7 @@ class AdjustSaturation(VisionTransform):
 class AdjustHue(VisionTransform):
     r"""
        Adjust hue of the input data.
-       :param value: how much to adjust the hue. Can be any number
+       param value: how much to adjust the hue. Can be any number
            between 0 and 0.5, 0 gives the original image.
 
     """
@@ -1340,13 +1546,13 @@ class AdjustHue(VisionTransform):
     def _apply_image(self, image, spec: TensorSpec):
         if self.value == 0:
             return image
-        image_dtype=image.dtype
-        image = np.clip(image,0,255).astype(np.uint8)
+        image_dtype = image.dtype
+        image = np.clip(image, 0, 255).astype(np.uint8)
         hsv_image = cv2.cvtColor(image, cv2.COLOR_RGB2HSV_FULL)
-        h, s, v = np.split(hsv_image,3,axis=-1)
+        h, s, v = np.split(hsv_image, 3, axis=-1)
         # uint8 addition take cares of rotation across boundaries
         with np.errstate(over="ignore"):
-            h += np.uint8( self.value * 255)
+            h += np.uint8(self.value * 255)
         hsv_image = cv2.merge([h, s, v])
 
         image = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2RGB_FULL)
@@ -1438,9 +1644,9 @@ class GrayMixRGB(VisionTransform):
         dtype = image.dtype
         image = image.astype(np.float32)
         gray = cv2.cvtColor(cv2.cvtColor(image.copy(), cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
-        #gray0 = gray[:, :, 0]
+        # gray0 = gray[:, :, 0]
 
-        min_rgb = image.mean(axis=-1,keepdims=True)
+        min_rgb = image.mean(axis=-1, keepdims=True)
         mask = np.greater(gray, min_rgb)
         image = mask * gray + (1 - mask) * image
 
@@ -1451,6 +1657,7 @@ class GrayMixRGB(VisionTransform):
 
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
+
 
 class Blur(VisionTransform):
     def __init__(self, ksize=5, name='blur', **kwargs):
@@ -1494,7 +1701,6 @@ class InvertColor(VisionTransform):
         return mask
 
 
-
 class GrayScale(VisionTransform):
     def __init__(self, keepdims=True, name='gray_scale', **kwargs):
         super().__init__(name)
@@ -1509,10 +1715,10 @@ class GrayScale(VisionTransform):
             return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGBA2GRAY), cv2.COLOR_GRAY2RGB)
         elif image.ndim == 4 and not self.keepdims:
             return cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGBA2GRAY)
-        elif image.ndim == 3 and image.shape[-1]==1 and self.keepdims:
+        elif image.ndim == 3 and image.shape[-1] == 1 and self.keepdims:
             return image
-        elif image.ndim == 3 and image.shape[-1]==1 and not self.keepdims:
-            return image[:,:,0]
+        elif image.ndim == 3 and image.shape[-1] == 1 and not self.keepdims:
+            return image[:, :, 0]
         elif image.ndim == 3 and self.keepdims:
             return cv2.cvtColor(cv2.cvtColor(image.astype(np.float32), cv2.COLOR_RGB2GRAY), cv2.COLOR_GRAY2RGB)
         elif image.ndim == 3 and not self.keepdims:
@@ -1527,6 +1733,7 @@ class GrayScale(VisionTransform):
 
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
+
 
 class ToRGB(VisionTransform):
     def __init__(self, name='to_rgb', **kwargs):
@@ -1654,7 +1861,7 @@ class ImageDilation(VisionTransform):
 class DilationThenErosion(VisionTransform):
     r"""
        Adjust hue of the input data.
-       :param value: how much to adjust the hue. Can be any number
+       param value: how much to adjust the hue. Can be any number
            between 0 and 0.5, 0 gives the original image.
 
     """
@@ -1691,7 +1898,7 @@ class DilationThenErosion(VisionTransform):
 class ErosionThenDilation(VisionTransform):
     r"""
        Adjust hue of the input data.
-       :param value: how much to adjust the hue. Can be any number
+       param value: how much to adjust the hue. Can be any number
            between 0 and 0.5, 0 gives the original image.
 
     """
@@ -1748,7 +1955,7 @@ class AdaptiveBinarization(VisionTransform):
         return super().apply(input, spec)
 
     def _apply_image(self, image, spec: TensorSpec):
-        if image.ndim == 3 and image.shape[-1]!=1:
+        if image.ndim == 3 and image.shape[-1] != 1:
             gray = cv2.cvtColor(image.astype(np.uint8), cv2.COLOR_RGB2GRAY).astype(np.uint8)
         else:
             gray = image.astype(np.uint8)
@@ -1794,15 +2001,15 @@ class AdaptiveBinarization(VisionTransform):
 
 class Lighting(VisionTransform):
 
-    def __init__(self, value=0.0, name='lighting', **kwargs):
+    def __init__(self, value=0.1, name='lighting', **kwargs):
         super().__init__(name)
         if value < 0:
             raise ValueError("lighting value should be non-negative")
         self.value = value
-        self.eigvec = np.array([[0.4009, 0.7192, -0.5675], [-0.8140,-0.0045, -0.5808], [ 0.4203,-0.6948, -0.5836]])  # reverse the first dimension for BGR
-        self.eigval = np.array([ 0.0045,0.0188,0.2175])
-
-
+        self.eigvec = np.array([[-0.5675, 0.7192, 0.4009],
+                                [-0.5808, -0.0045, -0.8140],
+                                [-0.5836, -0.6948, 0.4203]])  # reverse the first dimension for BGR
+        self.eigval = np.array([55.4625, 4.7940, 1.1475])
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
@@ -1813,9 +2020,11 @@ class Lighting(VisionTransform):
 
         dtype = image.dtype
         image = image.astype(np.float32)
-        alpha=  np.random.normal(scale=self.value * 255, size=3)
+        alpha = np.random.normal(0, self.value, size=(3,))
 
-        image = image +self.eigvec.dot(alpha * self.eigval)
+        alter = (self.eigvec * np.expand_dims(alpha, 0) * np.expand_dims(self.eigval, 0)).sum(axis=1).reshape(1, 1, 3)
+        image += alter
+
         return image.clip(0, 255).astype(dtype)
 
     def _apply_coords(self, coords, spec: TensorSpec):
@@ -1824,10 +2033,10 @@ class Lighting(VisionTransform):
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
 
+
 @randomize_with_validate(valid_range=(0, 1.), effectless_value=0.)
 class RandomLighting(Lighting):
     pass
-
 
 
 class CLAHE(VisionTransform):
@@ -1935,7 +2144,8 @@ class RandomErasing(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, size_range=(0.05, 0.4), transparency_range=(0.4, 0.8), transparancy_ratio=0.5, keep_prob=0.5, name='random_erasing', **kwargs):
+    def __init__(self, size_range=(0.05, 0.4), transparency_range=(0.4, 0.8), transparancy_ratio=0.5, keep_prob=0.5,
+                 name='random_erasing', **kwargs):
         super().__init__(name)
         self.size_range = size_range
         self.transparency_range = transparency_range
@@ -1992,7 +2202,6 @@ class RandomErasing(VisionTransform):
         return mask
 
 
-
 class GridMask(VisionTransform):
     """GridMask augmentation for image classification and object detection.
 
@@ -2017,30 +2226,29 @@ class GridMask(VisionTransform):
          https://github.com/akuxcw/GridMask
     """
 
-    def __init__(self, d1=96, d2=None, rotate = 1, ratio = 0.5, mode=0, keep_prob=0.5, name='gridmask', **kwargs):
+    def __init__(self, d1=96, d2=None, rotate=1, ratio=0.5, mode=0, keep_prob=0.5, name='gridmask', **kwargs):
         super().__init__(name)
         self.d1 = d1
-        self.d2=d2
+        self.d2 = d2
         self.rotate = rotate
         self.ratio = ratio
         self.keep_prob = keep_prob
         self.mode = mode
 
-
     def set_prob(self, epoch, max_epoch):
         self.prob = self.keep_prob * min(1, epoch / max_epoch)
 
-    def get_grid(self,image):
-        h,w=image.shape[:2]
+    def get_grid(self, image):
+        h, w = image.shape[:2]
         hh = math.ceil((math.sqrt(h * h + w * w)))
 
         if self.d2 is None:
-            self.d2=maximum(h,w)
+            self.d2 = maximum(h, w)
 
         d = np.random.randint(self.d1, self.d2)
         # d = self.d
 
-        # maybe use ceil? but i guess no big difference
+        # maybe use ceil? but I guess no big difference
         self.l = math.ceil(d * self.ratio)
 
         mask = np.ones((hh, hh), np.float32)
@@ -2063,7 +2271,6 @@ class GridMask(VisionTransform):
         mask = mask.rotate(r)
         mask = np.asarray(mask)
         mask = mask[(hh - h) // 2:(hh - h) // 2 + h, (hh - w) // 2:(hh - w) // 2 + w]
-
 
         if self.mode == 1:
             mask = 1 - mask
@@ -2108,7 +2315,8 @@ class RandomGridMask(VisionTransform):
         gain (float): The constant multiplier.
     """
 
-    def __init__(self, output_size=None, d1=None, d2=None, max_d1=None, rotate_range=(0.2, 1), ratio=0.2, mode=0, keep_prob=0.5, name='gridmask', **kwargs):
+    def __init__(self, output_size=None, d1=None, d2=None, max_d1=None, rotate_range=(0.2, 1), ratio=0.2, mode=0,
+                 keep_prob=0.5, name='gridmask', **kwargs):
         super().__init__(name)
         self.is_spatial = True
         self.output_size = output_size
@@ -2130,7 +2338,7 @@ class RandomGridMask(VisionTransform):
             self.output_size = (h, w)
         hh = math.ceil((math.sqrt(h * h + w * w)))
         d2 = self.d2
-        d1 =self.d1
+        d1 = self.d1
         if self.d2 is None:
             d2 = minimum(h, w)
         elif isinstance(self.d2, numbers.Number):
@@ -2154,7 +2362,7 @@ class RandomGridMask(VisionTransform):
         d = np.random.randint(d1, d2)
         # d = self.d
 
-        # maybe use ceil? but i guess no big difference
+        # maybe use ceil? but I guess no big difference
         self.l = math.ceil(d * self.ratio)
 
         mask = np.ones((hh, hh), np.float32)
@@ -2211,22 +2419,20 @@ class RandomGridMask(VisionTransform):
             class_info = boxes[:, 4:5] if boxes.shape[-1] > 4 else None
             keypoints = boxes[:, 5:] if boxes.shape[-1] > 5 else None
             # 如果剛好格線遮蔽了小框，則排除小框定義
-            boxes[:,2] = np.clip(boxes[:,2], 0, w)
-            boxes[:,3] = np.clip(boxes[:,3], 0, h)
+            boxes[:, 2] = np.clip(boxes[:, 2], 0, w)
+            boxes[:, 3] = np.clip(boxes[:, 3], 0, h)
             for i in range(len(boxes)):
-                box=np.round(location[i]).astype(np.int32)
+                box = np.round(location[i]).astype(np.int32)
                 if self.current_mask[box[1]:box[3] + 1, box[0]:box[2] + 1].sum() == 0:
                     pass
                 else:
                     keep_boxes.append(boxes[i])
-            if len(keep_boxes)>1:
+            if len(keep_boxes) > 1:
                 return np.stack(keep_boxes, 0)
-            elif len(keep_boxes)==1:
+            elif len(keep_boxes) == 1:
                 return np.array(keep_boxes)
             else:
                 return None
-
-
 
     def _apply_coords(self, coords, spec: TensorSpec):
         h, w, rr, keep = self._shape_info
@@ -2245,63 +2451,66 @@ class RandomGridMask(VisionTransform):
         return h, w, rr, keep
 
 
-
-
 class DetectionMixup(VisionTransform):
     def __init__(self, output_size=None, keep_prob=0.8, name='detection_mixup', **kwargs):
         super().__init__(name)
-        self.alpha=1
+        self.alpha = 1
         self.output_size = output_size
         self.keep_prob = keep_prob
-        self.memory_cache=[]
-
-
+        self.memory_cache = []
 
     def _apply_image(self, image, spec: TensorSpec):
         image = unpack_singleton(image)
 
         if self._shape_info is None:
             self._shape_info = self._get_shape(image)
-        keep, other_idx, lam = self._shape_info
+        keep, other_idx, lam, offsetx, offsety = self._shape_info
         if keep:
             return image
         height, width = self.output_size
         background = np.zeros((height, width, 3))
-        p1 = self.memory_cache[other_idx][spec].copy()
-        p1 = p1[:builtins.min(height, p1.shape[0]), :builtins.min(width, p1.shape[1]):]
-        background[:p1.shape[0], :p1.shape[1], :] = p1
-        mixed_x = lam * image + (1 - lam) * background
+        if spec in self.memory_cache[other_idx]:
+            p1 = self.memory_cache[other_idx][spec].copy()
+            # p1 = p1[offsety:builtins.min(height, offsety+p1.shape[0]), offsetx:builtins.min(width, offsetx+p1.shape[1]):]
+            background[offsety:builtins.min(height, offsety + p1.shape[0]),
+            offsetx:builtins.min(width, offsetx + p1.shape[1]), :] = p1[:builtins.min(height,
+                                                                                      offsety + p1.shape[0]) - offsety,
+                                                                     :builtins.min(width,
+                                                                                   offsetx + p1.shape[1]) - offsetx, :]
+            mixed_x = lam * image + (1 - lam) * background
 
-        return clip(mixed_x, 0, 255).astype(np.float32)
-
+            return clip(mixed_x, 0, 255).astype(np.float32)
+        else:
+            return image
 
     def _apply_coords(self, coords, spec: TensorSpec):
 
         return coords
 
     def _apply_boxes(self, boxes, spec: TensorSpec):
-        keep, other_idx, lam = self._shape_info
+        keep, other_idx, lam, offsetx, offsety = self._shape_info
         if keep:
             return boxes
 
         height, width = self.output_size
-        box1 = self.memory_cache[other_idx][spec].copy()  if  self.memory_cache[other_idx][spec] is not None else None
-        box0=boxes.copy() if boxes is not None else None
-        if boxes is None or len(boxes)==0 or np.array_equal(np.unique(boxes),-1*np.ones(1)):
-            box0=None
-        if box1 is None or len(box1)==0 or np.array_equal(np.unique(box1),-1*np.ones(1)):
-            box1=None
+        if spec in self.memory_cache[other_idx]:
+            box1 = self.memory_cache[other_idx][spec].copy() if self.memory_cache[other_idx][spec] is not None else None
+            box0 = boxes.copy() if boxes is not None else None
+            if boxes is None or len(boxes) == 0 or np.array_equal(np.unique(boxes), -1 * np.ones(1)):
+                box0 = None
+            if box1 is None or len(box1) == 0 or np.array_equal(np.unique(box1), -1 * np.ones(1)):
+                box1 = None
+        else:
+            return boxes
 
-
-
-        merge_boxes=[]
-        if box0 is not None :
+        merge_boxes = []
+        if box0 is not None:
             # B = box0.shape[0]
             # location = box0[:, :4]
             # class_info = box0[:, 4:5] if box0.shape[-1] > 4 else None
             # keypoints = box0[:, 5:] if box0.shape[-1] > 5 else None
             merge_boxes.append(box0)
-        if box1 is not None :
+        if box1 is not None:
             # B1 = box1.shape[0]
             # location1 = box1[:, :4].reshape((B1, 2, 2))
             # class_info1 = box1[:, 4:5] if box1.shape[-1] > 4 else None
@@ -2318,36 +2527,39 @@ class DetectionMixup(VisionTransform):
             #     merge_list.append(keypoints1.reshape((B1, -1)))
             #
             # box1 = np.concatenate(merge_list, axis=-1)
+            box1[:, 0::2] += offsetx
+            box1[:, 1::2] += offsety
             merge_boxes.append(box1)
 
-        if len(merge_boxes)>0:
+        if len(merge_boxes) > 0:
             trans_boxes = np.concatenate(merge_boxes, axis=0)
             return trans_boxes
         else:
             return None
 
     def _apply_mask(self, mask, spec: TensorSpec):
-         return mask
-
+        return mask
 
     def _get_shape(self, image):
         if self.output_size is None:
-            self.output_size=image.shape[:2]
+            self.output_size = image.shape[:2]
+        height, width = image.shape[:2]
         rr = random.random()
-        keep=rr<self.keep_prob or len(self.memory_cache[:-1])<=3
-        other_idxes=None
-        other_idx=None
-        lam =0
+        keep = rr < self.keep_prob or len(self.memory_cache) - 1 <= 3
+        other_idxes = None
+        other_idx = None
+        lam = 0
+        offsetx = int(random.uniform(0, width / 2))
+        offsety = int(random.uniform(0, height / 2))
         if not keep:
-            other_idxes = list(range(len(self.memory_cache[:-1])))
+            other_idxes = list(range(len(self.memory_cache) - 1))
             random.shuffle(other_idxes)
-            other_idx =other_idxes[0]
+            other_idx = other_idxes[0]
 
             height, width = self.output_size
             lam = builtins.min(builtins.max(np.random.beta(self.alpha, self.alpha), 0.3), 0.7)
 
-
-        return keep,other_idx,lam
+        return keep, other_idx, lam, offsetx, offsety
 
 
 class ImageMosaic(VisionTransform):
@@ -2616,16 +2828,15 @@ class ImageMosaic(VisionTransform):
                 np.arange(0, img3.shape[0] - (height - center[0]), 1))
 
         return (
-        keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx, img3_offsety)
-
-
+            keep, other_idxes, center, img1_offsetx, img1_offsety, img2_offsetx, img2_offsety, img3_offsetx,
+            img3_offsety)
 
 
 class ToLowResolution(VisionTransform):
-    def __init__(self, scale=1/2,name='to_low_resolution', **kwargs):
+    def __init__(self, scale=1 / 2, name='to_low_resolution', **kwargs):
         super().__init__(name)
-        self.is_spatial=False
-        self.scale=scale
+        self.is_spatial = False
+        self.scale = scale
 
     def apply(self, input: Tuple, spec: TensorSpec):
         return super().apply(input, spec)
@@ -2636,10 +2847,10 @@ class ToLowResolution(VisionTransform):
             image = Rescale(scale=self.scale)(image)
         elif rnd % 3 == 0:
             image = Rescale(scale=math.pow(2, 3))(image)
-            image =  Rescale(scale=self.scale*math.pow(2,-3))(image)
+            image = Rescale(scale=self.scale * math.pow(2, -3))(image)
         elif rnd % 3 == 1:
             image = RandomBlur(ksize_range=(1, 5))(image)
-            image =Rescale(scale=self.scale)(image)
+            image = Rescale(scale=self.scale)(image)
         elif rnd % 3 == 2:
             image = Rescale(scale=math.pow(2, 2))(image)
             image = Rescale(scale=math.pow(2, -2))(image)
@@ -2654,6 +2865,3 @@ class ToLowResolution(VisionTransform):
 
     def _apply_mask(self, mask, spec: TensorSpec):
         return mask
-
-
-
