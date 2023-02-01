@@ -267,7 +267,7 @@ class RemovableHandle(object):
 PER_GRAPH_OBJECT_NAME_UIDS = weakref.WeakKeyDictionary()
 
 
-def reset_name(module: Layer, prefix_dict=None):
+def reset_name(module, prefix_dict=None):
     def get_uid(prefix, seq):
         if prefix not in module._uid_prefixs or seq < module._uid_prefixs[prefix]:
             module._uid_prefixs[prefix] = seq

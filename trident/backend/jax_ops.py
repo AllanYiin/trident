@@ -1,7 +1,7 @@
 import os
-from typing import List, Tuple, Union, Sequence
 
 os.environ['TRIDENT_BACKEND'] = 'jax'
+from typing import List, Tuple, Union, Sequence
 from functools import wraps
 import numpy as np
 import numbers
@@ -13,7 +13,8 @@ from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDi
 from trident.backend import dtype as Dtype
 from trident import context
 
-__all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','tensor_to_shape',
+__all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor',
+           'tensor_to_shape','to','cuda','cpu',
            'ndim', 'numel', 'cast', 'str2dtype', 'int_shape', 'logical_and', 'logical_or',
            'logical_xor', 'logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'topk', 'maximum', 'minimum',
@@ -38,7 +39,7 @@ __all__.extend(['e', 'pi', 'nan', 'inf'])
 
 jax.config.update('jax_array', True)
 
-Tensor = jnp.DeviceArray  # jax.Array
+Tensor =jax.experimental.array.Array#jaxlib.xla_extension.DeviceArray
 
 ctx = context._context()
 
@@ -442,12 +443,15 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
             x = jnp.array(x, dtype=jnp.float32)
         return x
     else:
-        return jnp.array(x, dtype=jnp.float32)
+        x= jnp.array(x)
+        if 'complex' in str(x.dtype):
+            return x
+        else:
+            return jnp.array(x, dtype=jnp.float32)
 
 
 
-
-def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->TensorShape:
+def tensor_to_shape(x: Tensor, need_exclude_batch_axis=True, is_singleton=False) -> TensorShape:
     """Get tensor shape information ten convert to TensorShape
 
     Args:
@@ -463,21 +467,20 @@ def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->T
         TensorShape([None, 64, 32, 32])
 
     """
-    if isinstance(x,numbers.Number) or (is_tensor(x) and ndim(x)==0):
+    if isinstance(x, numbers.Number) or (is_tensor(x) and ndim(x) == 0):
         return TensorShape([None])
     elif isinstance(x, str) or (isinstance(x, list) and len(x) > 0 and isinstance(x[0], str)):
         return TensorShape([None])
-    if need_exclude_batch_axis and is_singleton==False:
-        shp=list(int_shape(x))
-        if len(shp)==0:
+    if need_exclude_batch_axis and is_singleton == False:
+        shp = list(int_shape(x))
+        if len(shp) == 0:
             print('')
-        shp[0]=None
+        shp[0] = None
         return TensorShape(shp)
-    elif need_exclude_batch_axis and is_singleton==True:
-        return TensorShape([None]+list(int_shape(x)))
+    elif need_exclude_batch_axis and is_singleton == True:
+        return TensorShape([None] + list(int_shape(x)))
     else:
         return TensorShape(int_shape(x))
-
 
 
 _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_session().device == 'cuda' else Dtype.float32
@@ -536,7 +539,14 @@ def str2dtype(dtype_str: (str, jnp.dtype)):
      jnp.float16
 
     """
+
+
     if isinstance(dtype_str, jnp.dtype):
+        return dtype_str
+    elif isinstance(dtype_str, jax._src.numpy.lax_numpy._ScalarMeta):
+        return dtype_str
+
+    if dtype_str :
         return dtype_str
     elif isinstance(dtype_str, str):
         if 'float64' in dtype_str.lower() or 'double' in dtype_str.lower():
@@ -589,8 +599,8 @@ def cast(x: Tensor, cast_dtype):
 
     Examples:
         >>> x = to_tensor([1.8, 2.2])
-        >>>cast(x, jax.int32)
-        <tensor=array([1, 2], dtype=int32)>
+        >>> cast(x,jnp.int64)
+        Array([1, 2], dtype=int32)
 
     Raises:
         TypeError: If `x` cannot be cast to the `dtype`.
@@ -598,10 +608,63 @@ def cast(x: Tensor, cast_dtype):
     """
 
     cast_dtype = str2dtype(cast_dtype)
-    if isinstance(x, (jnp.ndarray, jax.xla.DeviceArray)) and isinstance(cast_dtype, jnp.dtype):
-        return x.astype(cast_dtype)
+    if isinstance(x, (jnp.ndarray, jax.xla.DeviceArray)) and isinstance(cast_dtype, (jnp.dtype,jax._src.numpy.lax_numpy._ScalarMeta)):
+        return jnp.array(x,dtype=cast_dtype)
     elif isinstance(x, np.ndarray) and isinstance(cast_dtype, np.dtype):
-        return x.astype(cast_dtype)
+        return jnp.array(x,dtype=cast_dtype)
+    else:
+        return x
+
+
+
+
+def float(x:Tensor):
+    return jnp.array(x, jnp.float32)
+
+def int(x:Tensor):
+    return jnp.array(x,jnp.int32)
+
+def long(x:Tensor):
+    return jnp.array(x,jnp.int64)
+
+def cpu(x:Tensor):
+    return jax.device_put(x, device=jax.devices("cpu")[0])
+
+def cuda(x:Tensor, device:int=None):
+    r"""Moves all model parameters and buffers to the GPU.
+
+    This also makes associated parameters and buffers different objects. So
+    it should be called before constructing optimizer if the module will
+    live on GPU while being optimized.
+
+    Args:
+        x (Tensor): input tensor
+        device (int, optional): if specified, all parameters will be
+            copied to that device
+
+    Returns:
+        Module: self
+    """
+    if is_gpu_available:
+        return jax.device_put(x, device=jax.devices("gpu")[0])
+    else:
+        return x
+
+def to(x, *args):
+    args=unpack_singleton(args)
+    if isinstance(args,str):
+        if 'cpu' in args:
+            return cpu(x)
+        elif 'gpu' in args or 'cuda' in args:
+            return cuda(x)
+        elif 'float' in args:
+            return cast(x,jnp.float32)
+        elif 'long' in args:
+            return cast(x,jnp.int64)
+        elif 'int' in args:
+            return cast(x,jnp.int32)
+    elif isinstance(args,(jnp.dtype,jax._src.numpy.lax_numpy._ScalarMeta)):
+        return cast(x, args)
     else:
         return x
 
@@ -644,7 +707,7 @@ def int_shape(x: Tensor):
 
     Examples:
         >>> int_shape(ones((3,3,7)))
-        (3, 3, 7)
+        [3, 3, 7]
 
     """
 
@@ -1280,9 +1343,8 @@ def abs(x: Tensor):
 
     >>> x = to_tensor([[-2.25 + 4.75j], [-3.25 + 5.75j]])
     >>> abs(x)
-    <Tensor: shape=(2, 1), dtype=float64, numpy=
-    array([[5.25594901],
-           [6.60492241]])>
+    Array([[5.2559e+00],
+           [6.6049e+00]], dtype=float32)
 
     Args:
       x: A `Tensor` or `SparseTensor` of type `float16`, `float32`, `float64`,
@@ -1361,11 +1423,11 @@ def exp(x: Tensor):
 
     >>> x = to_tensor(2.0)
     >>> exp(x)
-    <Tensor: shape=(), dtype=float32, numpy=7.389056>
+    Array(7.3891e+00, dtype=float32)
 
     >>> x = to_tensor([2.0, 8.0])
     >>> exp(x)
-    tensor([   7.389056, 2980.958   ])
+    Array([7.3891e+00, 2.9810e+03], dtype=float32)
 
     For complex numbers, the exponential value is calculated as
     \\(e^{x+iy}={e^x}{e^{iy}}={e^x}{\\cos(y)+i\\sin(y)}\\)
@@ -1375,7 +1437,7 @@ def exp(x: Tensor):
 
     >>> x =to_tensor(1 + 1j)
     >>> exp(x)
-    tensor(1.4686939399158851+2.2873552871788423j)>
+    Array(1.4687+2.2874j, dtype=complex64)
 
     Args:
       x: A `Tensor`. Must be one of the following types: `bfloat16`, `half`,
@@ -1442,8 +1504,8 @@ def cos(x: Tensor):
 
     Examples:
         >>> cos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-        tensor([[0.5403, 0.8776],
-                [0.9689, 0.7317]])
+         Array([[5.4030e-01, 8.7758e-01],
+           [9.6891e-01, 7.3169e-01]], dtype=float32)
 
     """
     return jnp.cos(x)
@@ -1478,11 +1540,11 @@ def asin(x: Tensor):
 
     Examples:
         >>> asin(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-        tensor([[ 1.5708,  0.5236],
-                [-0.2527, -0.8481]])
+        Array([[1.5708e+00, 5.2360e-01],
+           [-2.5268e-01, -8.4806e-01]], dtype=float32)
 
     """
-    return jnp.asin(x)
+    return jax.lax.asin(x)
 
 
 @numpy_compatible
@@ -1496,11 +1558,11 @@ def acos(x: Tensor):
 
     Examples:
         >>> acos(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-        tensor([[0.0000, 1.0472],
-                [1.8235, 2.4189]])
+        Array([[0.0000e+00, 1.0472e+00],
+           [1.8235e+00, 2.4189e+00]], dtype=float32)
 
     """
-    return jnp.acos(x)
+    return jax.lax.acos(x)
 
 
 @numpy_compatible
@@ -1514,10 +1576,10 @@ def atan(x: Tensor):
 
     Examples:
         >>> atan(to_tensor([-1, 0, 1])).cpu()
-        tensor([-0.7854,  0.0000,  0.7854])
+        Array([-7.8540e-01, 0.0000e+00, 7.8540e-01], dtype=float32)
 
     """
-    return jnp.atan(x)
+    return jax.lax.atan(x)
 
 
 @numpy_compatible
@@ -1535,7 +1597,7 @@ def sinh(x: Tensor):
                 [-0.2526, -0.8223]])
 
     """
-    return jnp.sinh(x)
+    return jax.lax.sinh(x)
 
 
 @numpy_compatible
@@ -1548,12 +1610,12 @@ def cosh(x: Tensor):
     Returns: element-wise cosh
 
     Examples:
-        >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]])).cpu()
-        tensor([[1.5431, 1.1276],
-                [1.0314, 1.2947]])
+        >>> cosh(to_tensor([[1,0.5],[-0.25,-0.75]]))
+        Array([[1.5431e+00, 1.1276e+00],
+           [1.0314e+00, 1.2947e+00]], dtype=float32)
 
     """
-    return jnp.cosh(x)
+    return jax.lax.cosh(x)
 
 
 @numpy_compatible
@@ -2932,7 +2994,7 @@ def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
 # tensor generation
 ###########################
 
-def ones(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=False):
+def ones(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=True):
     """Instantiates an all-ones tensor and returns it.
 
     Args
@@ -2945,21 +3007,23 @@ def ones(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requir
 
     Example
         >>> ones((3,4))
-        tensor([[ 1.,  1.,  1.,  1.],
-               [ 1.,  1.,  1.,  1.],
-               [ 1.,  1.,  1.,  1.]])
+        Array([[1.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00],
+           [1.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00],
+           [1.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00]], dtype=float32)
 
-    {{np_implementation}}
     """
     if isinstance(shape, TensorShape):
         shape = shape.dims
     if dtype is None:
         dtype = _float_dtype
-    return jnp.ones(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+    x= jnp.ones(shape, dtype=dtype).to(get_session_value('device'))
+    if not requires_grad:
+        x=jax.lax.stop_gradient(x)
+    return x
 
 
 @numpy_compatible
-def ones_like(a, dtype=None, requires_grad=False):
+def ones_like(a, dtype=None, requires_grad=True):
     """Instantiates an all-ones variable of the same shape as another tensor.
 
     Args
@@ -2972,18 +3036,21 @@ def ones_like(a, dtype=None, requires_grad=False):
 
     Example
         >>> ones_like( jnp.randn((3,4)))
-        array([[ 1.,  1.,  1.,  1.],
-               [ 1.,  1.,  1.,  1.],
-               [ 1.,  1.,  1.,  1.]], dtype=float32)
+        Array([[1.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00],
+           [1.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00],
+           [1.0000e+00, 1.0000e+00, 1.0000e+00, 1.0000e+00]], dtype=float32)
 
     {{np_implementation}}
     """
     if dtype is None:
         dtype = a.dtype
-    return jnp.ones(a.shape, dtype=dtype)
+    x= jnp.ones(a.shape, dtype=dtype)
+    if not requires_grad:
+        x=jax.lax.stop_gradient(x)
+    return x
 
 
-def zeros(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=False):
+def zeros(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=True):
     """Instantiates an all-zeros tensor and returns it.
 
     Args
@@ -3006,11 +3073,14 @@ def zeros(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requi
         shape = shape.dims
     if dtype is None:
         dtype = _float_dtype
-    return jnp.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+    x=jnp.zeros(shape, dtype=dtype).to(get_session_value('device'))
+    if not requires_grad:
+        x=jax.lax.stop_gradient(x)
+    return x
 
 
 @numpy_compatible
-def zeros_like(a, dtype=None, requires_grad=False):
+def zeros_like(a, dtype=None, requires_grad=True):
     """Instantiates an all-zeros variable of the same shape as another tensor.
 
     Args
@@ -3030,7 +3100,10 @@ def zeros_like(a, dtype=None, requires_grad=False):
     """
     if dtype is None:
         dtype = a.dtype
-    return jnp.zeros(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+    x= jnp.zeros(a.shape, dtype=dtype).to(get_session_value('device'))
+    if not requires_grad:
+        x=jax.lax.stop_gradient(x)
+    return x
 
 
 def eye(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=None):
@@ -3057,13 +3130,13 @@ def eye(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, require
         dtype = _float_dtype
 
     if len(shape) == 2:
-        return jnp.eye(shape[0], shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+        return jnp.eye(shape[0], shape[1], dtype=dtype).to(get_session_value('device'))
     else:
         raise ValueError('input tensor must have exactly two axe.')
 
 
 @numpy_compatible
-def eye_like(a, dtype=None, requires_grad=False):
+def eye_like(a, dtype=None, requires_grad=True):
     """
     Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
     matrix, ``x`` must have exactly two axes (counting both dynamic and static axes).
@@ -3086,7 +3159,7 @@ def eye_like(a, dtype=None, requires_grad=False):
     if dtype is None:
         dtype = a.dtype
     if a.ndim == 2:
-        return jnp.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad).to(
+        return jnp.eye(a.shape[0], a.shape[1], dtype=dtype).to(
             get_session_value('device'))
     else:
         raise ValueError('input tensor must have exactly two axe.')
@@ -3128,7 +3201,7 @@ def make_onehot(label, num_classes, axis=-1):
         return onehot
 
 
-def arange(*args, dtype=Dtype.int32, requires_grad=False):
+def arange(*args, dtype=Dtype.int32, requires_grad=True):
     """
 
     Args:
@@ -3151,7 +3224,7 @@ def arange(*args, dtype=Dtype.int32, requires_grad=False):
         raise ValueError('only maximum  3 args in arange function ')
 
 
-def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
+def meshgrid(x, y, normalized_coordinates=False, requires_grad=True):
     """Return meshgrid in range x & y.
 
     Args:
@@ -3274,19 +3347,15 @@ def split(x: Tensor, num_splits=2, axis=-1):
       For example:
 
       >>> x = to_tensor(np.random.uniform([5, 30]))
-      >>>
-      >>> # Split `x` into 3 tensors along dimension 1
       >>> s0, s1, s2 = split(x, num_splits=3, axis=-1)
       >>> int_shape(s0)
       array([ 5, 10], dtype=int32)
-      >>>
-      >>> # Split `x` into 3 tensors with sizes [4, 15, 11] along dimension 1
       >>> split0, split1, split2 = split(x, [4, 15, 11], 1)
       >>> int_shape(split0)
       array([5, 4], dtype=int32)
       >>> int_shape(split1)
       array([ 5, 15], dtype=int32)
-      >>>int_shape(split2)
+      >>> int_shape(split2)
       array([ 5, 11], dtype=int32)
 
       Args:
@@ -3439,6 +3508,9 @@ def bbox_diou(bboxes1, bboxes2):
 _FUN_NAMES = [
     # source_fun, target_fun
     ('to_numpy', to_numpy),
+    ('to', to),
+    ('cuda', cuda),
+    ('cpu', cpu),
     ('numel', numel),
     ('ndim', ndim),
     ('int_shape', int_shape),

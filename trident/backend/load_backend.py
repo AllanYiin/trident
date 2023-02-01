@@ -139,7 +139,7 @@ elif _session.backend == 'jax':
         set_session('print', xm.master_print)
     else:
         set_session('device', 'cpu')
-    #from trident.backend.jax_backend import *
+    from trident.backend.jax_backend import *
 
 
 elif _session.backend == 'onnx':
