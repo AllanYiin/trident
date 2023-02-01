@@ -22,6 +22,11 @@ elif _backend == 'tensorflow':
     import tensorflow as tf
     from trident.backend.tensorflow_ops import *
 
+
+elif _backend == 'jax':
+    import jax
+    from trident.backend.jax_ops import *
+
 __all__ = ['Loss','_check_logit','_check_logsoftmax_logit','_check_softmax']
 
 
