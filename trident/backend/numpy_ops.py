@@ -2090,8 +2090,8 @@ def log_log(x):
 
 
     Examples:
-        >>> loglog(np.array([-3.0, -1.0, 0.0, 2.0]))
-        tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
+        >>> log_log(np.array([-3.0, -1.0, 0.0, 2.0]))
+        array([4.8568e-02, 3.0780e-01, 6.3212e-01, 9.9938e-01])
 
     References:
         "Complementary Log-Log and Probit: Activation Functions Implemented in Artificial Neural Networks"

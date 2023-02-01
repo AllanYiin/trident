@@ -42,6 +42,9 @@ __all__ = ['get_graph','Tensor','CompositeTensor','is_gpu_available','is_tensor'
            'shuffle', 'random_choice','random_normal','random_normal_like','random_uniform','random_uniform_like','multinomial','binary_cross_entropy']
 
 
+from math import e , nan , inf , pi
+__all__.extend(['e', 'pi', 'nan', 'inf'])
+
 ctx=get_session()
 Tensor=EagerTensor
 CompositeTensor=composite_tensor.CompositeTensor
@@ -1706,6 +1709,9 @@ def clip(x: Tensor, min=tf.float32.min, max=tf.float32.max):
 
 
 
+############################
+# trigonometric functions
+###########################
 
 
 
@@ -1722,19 +1728,19 @@ def tan(x: Tensor):
     return tf.math.tan(x)
 
 @numpy_compatible
-def asin(x: Tensor):
+def asin(x: Tensor)->Tensor:
     return tf.math.asin(x)
 
 @numpy_compatible
-def acos(x: Tensor):
+def acos(x: Tensor)->Tensor:
     return tf.math.acos(x)
 
 @numpy_compatible
-def atan(x: Tensor):
+def atan(x: Tensor)->Tensor:
     return tf.math.atan(x)
 
 @numpy_compatible
-def sinh(x: Tensor):
+def sinh(x: Tensor)->Tensor:
     """Computes the element-wise sinh
 
     Args:
@@ -1749,10 +1755,10 @@ def sinh(x: Tensor):
                [-2.5261e-01, -8.2232e-01]], dtype=float32)>
 
     """
-    return tf.sinh(x)
+    return tf.math.sinh(x)
 
 @numpy_compatible
-def cosh(x: Tensor):
+def cosh(x: Tensor)->Tensor:
     """Computes the element-wise cosh
 
     Args:
@@ -1767,10 +1773,10 @@ def cosh(x: Tensor):
                [1.0314e+00, 1.2947e+00]], dtype=float32)>
 
     """
-    return tf.cosh(x)
+    return tf.math.cosh(x)
 
 @numpy_compatible
-def tanh(x: Tensor):
+def tanh(x: Tensor)->Tensor:
     """Computes the element-wise tanh
 
     Args:
@@ -1784,7 +1790,7 @@ def tanh(x: Tensor):
            [ 1.82348,  2.41886]])
 
     """
-    return tf.tanh(x)
+    return tf.math.tanh(x)
 
 
 ############################
@@ -2807,7 +2813,7 @@ def log_log(x:Tensor,name='log_log'):
 
     Examples:
         >>> log_log(to_tensor([-3.0, -1.0, 0.0, 2.0]))
-        tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00]
+        <tf.Tensor: shape=(4,), dtype=float32, numpy=array([4.8568e-02, 3.0780e-01, 6.3212e-01, 9.9938e-01], dtype=float32)>
 
 
     References:
