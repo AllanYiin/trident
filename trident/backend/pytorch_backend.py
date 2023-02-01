@@ -1,11 +1,11 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import copy
+
 import builtins
+import copy
 import functools
 import gc
-import inspect
 import itertools
 import logging
 import numbers
@@ -14,11 +14,11 @@ import os
 import shutil
 import sys
 import uuid
-import warnings
 from collections import defaultdict, abc
-from types import MethodType
-from typing import List, Tuple, Optional, Union, Callable, Any, Iterable,Iterator,Mapping, TypeVar,overload
 from functools import partial
+from types import MethodType
+from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Iterator, Mapping, TypeVar, Dict
+
 import numpy as np
 
 try:
@@ -32,24 +32,24 @@ import torch.onnx
 import torch.utils.hooks as hooks
 from torch.utils.hooks import RemovableHandle
 from torch._jit_internal import _copy_to_script_wrapper
-from trident.backend import common
-from trident.backend.common import to_list, addindent, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, get_session_value, PrintException, Signature, TensorShape, get_args_spec,is_instance
+from trident.backend.common import to_list, camel2snake, unpack_singleton, enforce_singleton, OrderedDict, \
+    get_session, set_session, get_session_value, PrintException, Signature, TensorShape, get_args_spec, is_instance
 from trident.backend.tensorspec import *
 from trident.backend import iteration_tools
 from trident.backend.pytorch_ops import *
 from trident.backend import pytorch_ops as tops
-from trident.backend import dtype
+from trident.backend import dtype as Dtype
 from trident import context
 from trident.context import split_path, make_dir_if_need, sanitize_path
-
 
 ctx = context._context()
 _backend = ctx.get_backend()
 
-__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network', 'summary', 'load', 'save', 'Combine',
+__all__ = ['get_device', 'set_device', 'Layer', 'Sequential', 'ModuleList', 'Parameter', 'ModuleDict', 'print_network',
+           'summary', 'load', 'save', 'Combine',
            'try_map_args_and_call',
            'print_mem_stack',
-           'normalize_padding', 'fix_layer', 'DTYPE_MAPPING','fix_pytorch_module']
+           'normalize_padding', 'fix_layer', 'DTYPE_MAPPING', 'fix_pytorch_module']
 
 _FUN_NAMES = [
     ('equal', tops.equal)]
@@ -62,6 +62,7 @@ sys.stdout.write('Pytorch version:{0}.\n'.format(version))
 pt_version = LooseVersion(vstring=version)
 base_version = LooseVersion(vstring='1.4.0')
 amp_version = LooseVersion(vstring='1.6.0')
+torch2_version = LooseVersion(vstring='1.13.0')
 
 if pt_version.version < base_version.version:
     raise ValueError('Not support Pytorch older then version 1.4')
@@ -73,18 +74,18 @@ elif pt_version.version >= amp_version.version:
         sys.stdout.write('Automatic Mixed Precision Support:{0}.\n'.format(False))
 
 DTYPE_MAPPING = {
-    torch.bool: dtype.bool,
-    torch.int8: dtype.int8,
-    torch.int16: dtype.int16,
-    torch.int32: dtype.int32,
-    torch.int64: dtype.int64,
-    torch.uint8: dtype.uint8,
-    torch.float16: dtype.float16,
-    torch.float32: dtype.float32,
-    torch.float64: dtype.float64,
-    torch.complex64: dtype.complex64,
-    torch.complex128: dtype.complex128,
-    torch.cfloat: dtype.cfloat
+    torch.bool: Dtype.bool,
+    torch.int8: Dtype.int8,
+    torch.int16: Dtype.int16,
+    torch.int32: Dtype.int32,
+    torch.int64: Dtype.int64,
+    torch.uint8: Dtype.uint8,
+    torch.float16: Dtype.float16,
+    torch.float32: Dtype.float32,
+    torch.float64: Dtype.float64,
+    torch.complex64: Dtype.complex64,
+    torch.complex128: Dtype.complex128,
+    torch.cfloat: Dtype.cfloat
 }
 
 
@@ -95,33 +96,32 @@ def get_device():
 
     """
     if ctx.device is None:
-        set_device("cuda" if torch.cuda.is_available() else 'xpu' if is_tpu_available() else  "cpu")
+        set_device("cuda" if torch.cuda.is_available() else 'xpu' if is_tpu_available() else "cpu")
 
     return get_session().device
 
 
 def set_device(device=None):
-
     if device is None:
         if is_gpu_available():
-            device='cuda'
+            device = 'cuda'
         elif is_tpu_available():
-            device='xpu'
+            device = 'xpu'
         else:
-            device='cpu'
+            device = 'cpu'
     device = device.lower().replace('gpu', 'cuda')
     if device == 'cuda' and not torch.cuda.is_available():
         raise ValueError('Gpu is not available...')
     if device == 'xpu' and not is_tpu_available():
         raise ValueError('Tpu is not available...')
     try:
-        device_=device
-
-        if device=='xpu':
+        device_ = device
+        set_session('device', device_)
+        if device == 'xpu':
             import torch_xla.core.xla_model as xm
             device_ = xm.xla_device()
-        set_session('device', device_)
-        if torch.cuda.is_available() and get_signature() == 'cuda':
+
+        elif torch.cuda.is_available() and get_signature() == 'cuda':
             torch.backends.cudnn.enabled = True
             torch.backends.cudnn.benchmark = True
             torch.backends.cudnn.deterministic = False
@@ -132,7 +132,7 @@ def set_device(device=None):
         for i in range(len(gcitems)):
             obj = gcitems[i]
             try:
-                if torch.is_tensor(obj) :
+                if torch.is_tensor(obj):
                     obj.to(device_)
                 elif isinstance(obj, nn.Module):
                     obj.to(device_)
@@ -140,10 +140,6 @@ def set_device(device=None):
                 pass
     except Exception as e:
         print(e)
-
-
-
-
 
 
 def load(f):
@@ -189,7 +185,8 @@ def reset_name(module: nn.Module, prefix_dict=None):
     if not hasattr(module, '_uid_prefixs') or prefix_dict is not None:
         module._uid_prefixs = prefix_dict
     if not hasattr(module, 'default_name'):
-        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(get_global_uid(camel2snake(module.__class__.__name__)))
+        module.default_name = camel2snake(module.__class__.__name__) + '_' + str(
+            get_global_uid(camel2snake(module.__class__.__name__)))
     prefix, seq = module.default_name.rsplit('_', 1)  # if '_' in module.default_name else
     seq = int(seq)
     module.default_name = prefix + '_' + str(seq - get_uid(prefix, seq) + 1)
@@ -324,6 +321,22 @@ def register_module_backward_hook(
 
 
 class Parameter(nn.Parameter):
+    """A kind of Tensor that is to be considered a module parameter.
+
+      Parameters are :class:`~jax.Tensor` subclasses, that have a
+      very special property when used with :class:`Layer` s - when they're
+      assigned as Layer attributes they are automatically added to the list of
+      its parameters, and will appear e.g. in :meth:`~Layer.parameters` iterator.
+      Assigning a Tensor doesn't have such effect. This is because one might
+      want to cache some temporary state, like last hidden state of the RNN, in
+      the model. If there was no such class as :class:`Parameter`, these
+      temporaries would get registered too.
+
+      Args:
+          data (Tensor): parameter tensor.
+          trainable (bool, optional): whether the parameter is trainable. Default: `True`
+      """
+
     def __new__(cls, data, trainable=True):
         inst = nn.Parameter.__new__(cls, data, trainable)
         return inst
@@ -375,9 +388,29 @@ class Layer(nn.Module):
 
     """
     _version: int = 1
-    training: bool
+
     _is_full_backward_hook: Optional[bool]
-    def __init__(self, name=None, keep_output=False, **kwargs):
+    training: bool
+    _built: bool
+
+    if pt_version.version < torch2_version.version:
+        # Marks whether the corresponding _forward_hooks accept kwargs or not.
+        # As JIT does not support Set[int], this dict is used as a set, where all
+        # hooks represented in this dict accept kwargs.
+        _forward_hooks_with_kwargs: Dict[int, bool]
+        # Marks whether the corresponding _forward_hooks accept kwargs or not.
+        # As JIT does not support Set[int], this dict is used as a set, where all
+        # hooks represented in this dict accept kwargs.
+        _forward_pre_hooks_with_kwargs: Dict[int, bool]
+        _state_dict_pre_hooks: Dict[int, Callable]
+
+
+    def __init__(self,
+                 name=None,
+                 keep_output=False,
+                 device=None,
+                 dtype=None ,
+                 **kwargs):
         """
 
         Args:
@@ -386,17 +419,27 @@ class Layer(nn.Module):
 
 
         """
+
         super(Layer, self).__init__()
+        object.__setattr__(self, 'uuid', uuid.uuid4().node)
+        super().__setattr__('training', True)
+        super().__setattr__('_built', False)
+        super().__setattr__('factory_kwargs',{'device': get_device(), 'dtype': Dtype.float32})
+        if pt_version.version < torch2_version.version:
+            super().__setattr__('_forward_hooks_with_kwargs', OrderedDict())
+            super().__setattr__('_forward_pre_hooks_with_kwargs', OrderedDict())
+            super().__setattr__('_state_dict_pre_hooks', OrderedDict())
+
+        self.to(self.factory_kwargs['device'])
+
         self.batch_index = 0
         self.filter_index = 1
         self.in_sequence = kwargs.get('in_sequence', False)
         if self.in_sequence:
             self.filter_index = -1
-        self.training = True
-        self._built = False
+
         self.rank = kwargs.get('rank', None)
-        self._non_persistent_buffers_set = set()
-        self.uuid = uuid.uuid4().node
+
         self._nodes = OrderedDict()
         self._uid_prefixs = {}
         self._name = name
@@ -415,9 +458,8 @@ class Layer(nn.Module):
         self.register_buffer('_output_tensor', None, persistent=False)
 
         self._signature = None
-        self._signature=get_signature(self,name=self.name)
+        self._signature = get_signature(self, name=self.name)
         self._device = get_device()
-
 
         self.dump_patches = True
 
@@ -542,7 +584,8 @@ class Layer(nn.Module):
         if module is None:
             raise KeyError("module  can't be None")
         elif isinstance(module, Layer):
-            self.add_module(str(len(self._modules)), module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
+            self.add_module(str(len(self._modules)),
+                            module)  # self.nodes = nodes  # for mod in self.modules():  #     mod.nodes = nodes
 
         else:
             raise ValueError('Not valid module')
@@ -569,7 +612,8 @@ class Layer(nn.Module):
             input_shape (tensor):  the shape representation exclude the batch axis.
 
         """
-        print('Your model will start to rebuild, it will cause lost all existing trainable parameters, will you want to rebuild it?')
+        print(
+            'Your model will start to rebuild, it will cause lost all existing trainable parameters, will you want to rebuild it?')
         ans = input('(Y/N) << ').lower()
         if ans in ['yes', 'y']:
             for name, module in self.named_modules():
@@ -674,21 +718,21 @@ class Layer(nn.Module):
 
     @property
     def device(self) -> str:
-        if self.is_root :
-            if len(self.weights)==0:
-                return get_device()
+        _root = self.get_root()
+        if self.is_root or _root is None :
+            if len(self.weights) == 0:
+                return self.factory_kwargs['device']
             else:
                 return self.weights[0].device.type
-        return self.get_root().device
+        else:
+            return _root.device
 
     @device.setter
     def device(self, value: str):
-        if isinstance(value, str):
-            self.to(value)
-        elif isinstance(value, torch.device):
-            self.to(value.type)
-        else:
-            self.to(value)
+        if isinstance(value, torch.device):
+            value=value.type
+        self.factory_kwargs['device']=value
+        self.to(value)
 
     def cuda(self, device: Optional[Union[int, torch.device]] = None):
         r"""Moves all model parameters and buffers to the GPU.
@@ -748,8 +792,6 @@ class Layer(nn.Module):
                 Module: self
             """
         return self._apply(lambda t: t.cuda(device))
-
-
 
     # def to(self, *args, **kwargs):
     #     r"""Moves and/or casts the parameters and buffers.
@@ -871,9 +913,11 @@ class Layer(nn.Module):
         elif isinstance(value, torch.Size):
             dims = [None, ] + [d for d in value]
             value = TensorShape(dims)
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                [isinstance(item, numbers.Integral) for item in value]):
             value = TensorShape((None,) + value)
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                [is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
             value = [TensorShape(sh) for sh in value]
         elif isinstance(value, TensorShape):
             pass
@@ -902,9 +946,11 @@ class Layer(nn.Module):
         elif isinstance(value, torch.Size):
             dims = [None, ] + [d for d in value]
             value = TensorShape(dims)
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                [isinstance(item, numbers.Integral) for item in value]):
             value = TensorShape((None,) + value)
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all(
+                [is_tensor(item) and ndim(item) == 1 and item.dtype == torch.int32 for item in value]):
             value = [TensorShape(sh) for sh in value]
         elif isinstance(value, TensorShape):
             pass
@@ -920,10 +966,12 @@ class Layer(nn.Module):
                 self._signature.outputs['output'] = TensorSpec(shape=self._output_shape, name='output')
 
             elif is_tensor(self._output_shape):
-                self._signature.outputs['output'] = TensorSpec(shape=TensorShape(to_list(to_numpy(self._output_shape))), name='output')
+                self._signature.outputs['output'] = TensorSpec(shape=TensorShape(to_list(to_numpy(self._output_shape))),
+                                                               name='output')
             else:
                 for k in range(len(self._output_shape)):
-                    self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k], name='output_{0}'.format(k))
+                    self._signature.outputs['output_{0}'.format(k)] = TensorSpec(shape=self._output_shape[k],
+                                                                                 name='output_{0}'.format(k))
 
     @property
     def signature(self):
@@ -944,11 +992,13 @@ class Layer(nn.Module):
 
             if self._input_shape is not None:
                 if isinstance(self._input_shape, TensorShape) and isinstance(inspect_args, str):
-                    self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape), name=inspect_args)
+                    self._signature.inputs[inspect_args] = TensorSpec(shape=TensorShape(self._input_shape),
+                                                                      name=inspect_args)
 
                 elif isinstance(self._input_shape, tuple):
                     for i in range(len(self._input_shape)):
-                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
+                        self._signature.inputs["input_{0}".format(i)] = TensorSpec(
+                            shape=TensorShape(self._input_shape[i]), name="input_{0}".format(i))
             else:
                 for arg in inspect_args:
                     self._signature.inputs[arg] = TensorSpec(shape=None)
@@ -958,10 +1008,12 @@ class Layer(nn.Module):
                     self._signature.outputs["output"] = TensorSpec(shape=TensorShape(self._output_shape), name="output")
                 elif isinstance(self._output_shape, tuple):
                     for i in range(len(self._output_shape)):
-                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
+                        self._signature.outputs["output_{0}".format(i)] = TensorSpec(
+                            shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
             else:
                 self._signature.outputs["output"] = TensorSpec(shape=None)
-        if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[0] != inspect_args:
+        if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[
+            0] != inspect_args:
             self._signature.inputs[inspect_args] = self._signature.inputs.value_list[0]
             self._signature.inputs.pop(self._signature.inputs.key_list[0])
         elif isinstance(inspect_args, list) and len(self._signature.inputs) == len(inspect_args):
@@ -1027,7 +1079,7 @@ class Layer(nn.Module):
         _out = self(x)
         folder, filename, ext = split_path(file_path)
         if filename == '':
-            filename= self.name
+            filename = self.name
         ext = '.onnx_'
         save_path = sanitize_path(os.path.join(folder, filename + ext))
         make_dir_if_need(save_path)
@@ -1077,19 +1129,20 @@ class Layer(nn.Module):
                         result = (result,)
                     input = result
 
-
-
         if not self._built:
             inp = unpack_singleton(input)
             if is_tensor(inp):
                 shp = tensor_to_shape(inp, need_exclude_batch_axis=True)
-                self.input_filters = shp[self.filter_index]
                 self.input_shape = shp
+                self.input_filters = shp[self.filter_index]
+
                 if self.is_root:
                     if self._signature is None:
                         self._signature = get_signature(self)
                     if self._signature is not None and len(self._signature.inputs) > 0:
-                        self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(inp, need_exclude_batch_axis=True, is_singleton=False)
+                        self._signature.inputs[self._signature.inputs.key_list[0]].shape = tensor_to_shape(inp,
+                                                                                                           need_exclude_batch_axis=True,
+                                                                                                           is_singleton=False)
                 del inp
             elif isinstance(inp, (tuple, list)):
                 if isinstance(inp[0], numbers.Number):
@@ -1125,7 +1178,6 @@ class Layer(nn.Module):
 
         result = unpack_singleton(result)
 
-
         if hasattr(self, 'keep_output') and self.keep_output == True:
             # make a op
             self._output_tensor = result
@@ -1134,7 +1186,8 @@ class Layer(nn.Module):
             if is_tensor(output):  # one output
                 self._output_shape = tensor_to_shape(output)
             elif isinstance(output, (list, tuple)):
-                output_shape = tuple([tensor_to_shape(item) for item in output if item is not None and not isinstance(item, (list, tuple))])
+                output_shape = tuple([tensor_to_shape(item) for item in output if
+                                      item is not None and not isinstance(item, (list, tuple))])
                 # if not isinstance(item, (list,tuple)) lstm
                 self._output_shape = unpack_singleton(output_shape)
 
@@ -1162,7 +1215,6 @@ class Layer(nn.Module):
                     functools.update_wrapper(wrapper, hook)
                     grad_fn.register_hook(wrapper)
                 self._maybe_warn_non_full_backward_hook(input, result, grad_fn)
-
 
         if is_all_numpy == True and self.training == False and self.is_root == True:
             if is_tensor(result):
@@ -1226,7 +1278,8 @@ class Layer(nn.Module):
                     if isinstance(mod, Layer) and mod.uuid != value.uuid:
                         mod.is_root = False
                 reset_name(value, self._uid_prefixs)
-                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+                value.relative_name = name if not hasattr(value,
+                                                          'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             elif modules is not None and name in modules:
                 if value is not None:
                     raise TypeError("cannot assign '{}' as child module '{}' "
@@ -1238,7 +1291,8 @@ class Layer(nn.Module):
                     if isinstance(mod, Layer) and mod.uuid != value.uuid:
                         mod.is_root = False
                 reset_name(value, self._uid_prefixs)
-                value.relative_name = name if not hasattr(value, 'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
+                value.relative_name = name if not hasattr(value,
+                                                          'relative_name') or value.relative_name == '' else name + '.' + value.relative_name
             else:
                 buffers = self.__dict__.get('_buffers')
                 if buffers is not None and name in buffers:
@@ -1266,31 +1320,7 @@ class Layer(nn.Module):
         object.__setattr__(self, '__dict__', state)
 
     def __repr__(self):
-        # We treat the extra repr like the submodule, one item per line
-        extra_lines = []
-        extra_repr = self.extra_repr()
-        # empty string will be split into list ['']
-        if extra_repr:
-            extra_lines = extra_repr.split('\n')
-        child_lines = []
-        for key, module in self._modules.items():
-            mod_str = repr(module)
-            mod_str = addindent(mod_str, 2)
-            child_lines.append('(' + key + '): ' + mod_str)
-        lines = extra_lines + child_lines
-
-        main_str = self._get_name() + '('
-        if lines:
-            # simple one-liner info, which most builtin Modules will use
-            if len(extra_lines) == 1 and not child_lines:
-                main_str += extra_lines[0]
-            else:
-                main_str += '\n  ' + '\n  '.join(lines) + '\n'
-
-        main_str += ')'
-        return main_str
-
-
+        return super().__repr__()
 
 
 class Sequential(Layer):
@@ -1362,29 +1392,32 @@ class Sequential(Layer):
             module (Module): child module to be added to the module.
         """
 
-        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
+        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[
+            -1]._output_shape is not None:
             last_output = self[-1]._output_shape
             dummay_input = to_tensor(last_output.get_dummy_tensor()).to(self.device)
             out = module(dummay_input)
             self._modules[name] = module
             if isinstance(out, OrderedDict):
 
-                self._output_shape = tuple([tensor_to_shape(o, need_exclude_batch_axis=True, is_singleton=False) for o in out.value_list])
+                self._output_shape = tuple(
+                    [tensor_to_shape(o, need_exclude_batch_axis=True, is_singleton=False) for o in out.value_list])
                 self.get_root().signature.outputs = OrderedDict()
                 for k, v in out.item_list:
-                    self.get_root().signature.outputs[k] = tensor_to_shape(v, need_exclude_batch_axis=True, is_singleton=False)
+                    self.get_root().signature.outputs[k] = tensor_to_shape(v, need_exclude_batch_axis=True,
+                                                                           is_singleton=False)
             else:
                 out = enforce_singleton(out)
                 self._output_shape = tensor_to_shape(out, need_exclude_batch_axis=True, is_singleton=False)
-                self._signature.outputs[self._signature.outputs.key_list[0]].shape=self._output_shape
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self._output_shape
                 # if len(self.get_root().signature.outputs) > 0:
                 #     self.get_root().signature=get_signature(self)
                 # else:
                 #     self.get_root().signature.outputs['output'] = self._output_shape.copy()
 
         else:
-            if not hasattr(module,'_signature') or module._signature is None:
-                module._signature=get_signature(module)
+            if not hasattr(module, '_signature') or module._signature is None:
+                module._signature = get_signature(module)
             sig = copy.deepcopy(module._signature)
             super(Sequential, self).add_module(name, module)
             if len(self) == 1 or self._signature is None:
@@ -1392,14 +1425,13 @@ class Sequential(Layer):
             elif len(self) > 1:
                 self._signature.outputs = copy.deepcopy(sig.outputs)
 
-
     def remove_at(self, idx):
         self.__delitem__(idx)
 
         if len(self._modules) > 0:
             self._output_shape = self[-1]._output_shape
             if isinstance(self._signature, Signature):
-                self._signature.outputs[self._signature.outputs.key_list[0]].shape=self[-1]._output_shape
+                self._signature.outputs[self._signature.outputs.key_list[0]].shape = self[-1]._output_shape
 
     def _get_item_by_idx(self, iterator, idx):
         """Get the idx-th item of the iterator"""
@@ -1458,7 +1490,7 @@ class Sequential(Layer):
                     x = module(x, **kwargs)
             else:
                 x = module(x, **kwargs)
-            #class_name=module.__class__.__name__.lower()
+            # class_name=module.__class__.__name__.lower()
             # if 'lstm' in class_name or 'gru' in class_name:
             #     if isinstance(x,tuple):
             #         x,hx=x
@@ -1496,11 +1528,9 @@ class ModuleList(Layer):
         self.uuid = uuid.uuid4().node
         self._name = name
         if isinstance(modules, dict):
-            for key, value in modules.items():
-                self.add_module(key, value)
+            self += list(modules.values())
         elif isinstance(modules, (list, tuple)):
-            for i, value in enumerate(modules):
-                self.add_module(str(i), value)
+            self += modules
 
     def _get_abs_string_index(self, idx):
         """Get the absolute index for the list of modules"""
@@ -1517,7 +1547,6 @@ class ModuleList(Layer):
             return self.__class__(list(self._modules.values())[idx])
         else:
             layer = self._modules[self._get_abs_string_index(idx)]
-            layer._nodes = OrderedDict()
             return layer
 
     def __setitem__(self, idx, module):
@@ -1588,8 +1617,6 @@ class ModuleList(Layer):
         return self
 
 
-
-
 class ModuleDict(Layer):
     r"""Holds submodules in a dictionary.
 
@@ -1632,7 +1659,8 @@ class ModuleDict(Layer):
                 return x
     """
 
-    def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False, is_multicasting=False, **kwargs) -> None:
+    def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False,
+                 is_multicasting=False, **kwargs) -> None:
         super(ModuleDict, self).__init__(name=name, keep_output=keep_output, **kwargs)
         self.uuid = uuid.uuid4().node
         self.is_multicasting = is_multicasting
@@ -1919,8 +1947,6 @@ class Combine(Layer):
         return None
 
 
-
-
 def print_network(net, verbose=False):
     num_params = 0
     for i, param in enumerate(net.parameters()):
@@ -1938,12 +1964,12 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
 
             m_key = module.relative_name if hasattr(module, 'relative_name') else module.name
             if m_key in summary:
-                summary[m_key]["visits"]+=1
-                visit=summary[m_key]["visits"]
-                m_key=m_key+'_{0}'.format(visit)
+                summary[m_key]["visits"] += 1
+                visit = summary[m_key]["visits"]
+                m_key = m_key + '_{0}'.format(visit)
 
             summary[m_key] = OrderedDict()
-            summary[m_key]["visits"]=0
+            summary[m_key]["visits"] = 0
             summary[m_key]["class_name"] = module.__class__.__name__
             if hasattr(module, 'keep_output'):
                 summary[m_key]["keep_output"] = module.keep_output
@@ -1952,23 +1978,25 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             input = iteration_tools.flatten([input], iterable_types=(list, tuple))
             input = unpack_singleton([item for item in input if item is not None])
 
-            if isinstance(input, (list, tuple)) and len(input)>0:
+            if isinstance(input, (list, tuple)) and len(input) > 0:
                 summary[m_key]["input_shape"] = list(int_shape(input[0]))
-            elif isinstance(input, dict) and len(input)>0:
+            elif isinstance(input, dict) and len(input) > 0:
                 summary[m_key]["input_shape"] = list(int_shape(list(input.values())[0]))
             elif is_tensor(input):
                 summary[m_key]["input_shape"] = list(int_shape(input))
-            if "input_shape" in summary[m_key]  and  len(summary[m_key]["input_shape"])>0:
+            if "input_shape" in summary[m_key] and len(summary[m_key]["input_shape"]) > 0:
                 summary[m_key]["input_shape"][0] = batch_size
                 try:
                     output = iteration_tools.flatten([output], iterable_types=(list, tuple))
                     output = unpack_singleton([item for item in output if item is not None])
                     if is_tensor(output):
-                        summary[m_key]["output_shape"] =TensorShape( [batch_size]+list(int_shape(output))[1:])
+                        summary[m_key]["output_shape"] = TensorShape([batch_size] + list(int_shape(output))[1:])
                     elif isinstance(output, (list, tuple)):
-                        summary[m_key]["output_shape"] = [TensorShape([batch_size]+list(int_shape(value))[1:]) for value in output]
-                    elif is_instance(output,'OrderedDict'):
-                        summary[m_key]["output_shape"] =[TensorShape([batch_size]+list(int_shape(value))[1:]) for value in list(output.values())]
+                        summary[m_key]["output_shape"] = [TensorShape([batch_size] + list(int_shape(value))[1:]) for
+                                                          value in output]
+                    elif is_instance(output, 'OrderedDict'):
+                        summary[m_key]["output_shape"] = [TensorShape([batch_size] + list(int_shape(value))[1:]) for
+                                                          value in list(output.values())]
 
                 except Exception as e:
                     print(e)
@@ -1988,7 +2016,8 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                     summary[m_key][para_type][name] = list(int_shape(para))
                     num_params = np.prod(np.array(list(int_shape(para)), dtype=np.float64))
                     spatial_dims = np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
-                    if module.relative_name if hasattr(module, 'relative_name') else module.name==m_key and summary[m_key]["visits"]==0:
+                    if module.relative_name if hasattr(module, 'relative_name') else module.name == m_key and \
+                                                                                     summary[m_key]["visits"] == 0:
                         params += num_params
                         if para.requires_grad:
                             summary[m_key]["trainable"] += num_params
@@ -2000,11 +2029,11 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
 
         if (
                 not isinstance(module, (nn.Sequential, Sequential, nn.ModuleList, ModuleList))
-                and not (module == model and len(module._parameters)==0)
+                and not (module == model and len(module._parameters) == 0)
         ):
             hooks.append(module.register_forward_hook(hook))
 
-    device = device.lower() if isinstance(device,str) else device.__name__
+    device = device.lower() if isinstance(device, str) else device.__name__
     assert device in [
         "cuda",
         "cpu",
@@ -2029,22 +2058,21 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
     # if module.signature is not None:
     #     input_tensor = [to_tensor(module.signature.inputs.value_list[k].get_dummy_tensor()) for k in  range(module.signature.inputs.value_list) if not module.signature.inputs.value_list[k].optional or k==0]
     #
-    inps=OrderedDict()
+    inps = OrderedDict()
 
     for i in range(len(input_specs)):
-        v=input_specs[i]
-        k=v.name if v.name is not None else 'input' if len(input_specs)==1 else 'input_{0}'.format(i)
-        if v.shape is not None and v.shape._dims!=[None]:
-            inps[k] =to_tensor(v.get_dummy_tensor(),device=get_device())
+        v = input_specs[i]
+        k = v.name if v.name is not None else 'input' if len(input_specs) == 1 else 'input_{0}'.format(i)
+        if v.shape is not None and v.shape._dims != [None]:
+            inps[k] = to_tensor(v.get_dummy_tensor(), device=get_device())
         elif v.optional:
-            inps[k]=v.default
+            inps[k] = v.default
         elif v.shape is None:
-            inps[k]=None
+            inps[k] = None
         else:
             inps[k] = None
 
-
-    #x = [to_tensor(inps[n].get_dummy_tensor(),device=get_device())  for n in range(len(inps)) if inps[n].optional == False or  inps[n].shape._dims!=[None]]
+    # x = [to_tensor(inps[n].get_dummy_tensor(),device=get_device())  for n in range(len(inps)) if inps[n].optional == False or  inps[n].shape._dims!=[None]]
     # p    rint(type(x[0]))
 
     # create properties
@@ -2059,7 +2087,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
         if inputs is not None:
             if isinstance(inputs, OrderedDict):
                 model(*list(inps.values()))
-            elif isinstance(inputs, (Tensor,np.ndarray)):
+            elif isinstance(inputs, (Tensor, np.ndarray)):
                 model(inputs)
             else:
                 model(*inputs)
@@ -2074,15 +2102,20 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
         max_weight_len = 0
         for layer in summary:
             max_name_len = builtins.max(max_name_len, len(layer + "  [" + summary[layer]["class_name"] + "]") + 5)
-            max_weight_len = builtins.max(max_weight_len, builtins.max([len(str(item).replace('(', '').replace(')', '')) for item in summary[layer]["weight"].items()]) + 5 if len(
+            max_weight_len = builtins.max(max_weight_len, builtins.max(
+                [len(str(item).replace('(', '').replace(')', '')) for item in
+                 summary[layer]["weight"].items()]) + 5 if len(
                 summary[layer]["weight"]) > 0 else 5)
 
-        print("--------------------------------------------------------------------------------------------------------------------------------")
-        line_new = "{0:^50s} {1:<25s}  {2:<35s} {3:<8s}  {4:<8s}  {5:<25s}".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format("Layer (type)",
-                                                                                                                                                                     "Output Shape",
-                                                                                                                                                                     "Weight ", "Bias",
-                                                                                                                                                                     "Param #",
-                                                                                                                                                                     "FLOPS #")
+        print(
+            "--------------------------------------------------------------------------------------------------------------------------------")
+        line_new = "{0:^50s} {1:<25s}  {2:<35s} {3:<8s}  {4:<8s}  {5:<25s}".replace('50s',
+                                                                                    str(max_name_len) + 's').replace(
+            '35s', str(max_weight_len) + 's').format("Layer (type)",
+                                                     "Output Shape",
+                                                     "Weight ", "Bias",
+                                                     "Param #",
+                                                     "FLOPS #")
 
         print(line_new)
         print("==============================================================================")
@@ -2104,22 +2137,31 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             #     summary[layer]["flops"][0]
             # )
 
-            line_new = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4:,.0f}  {5:,.0f}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
+            line_new = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4:,.0f}  {5:,.0f}  ".replace('50s',
+                                                                                           str(max_name_len) + 's').replace(
+                '35s', str(max_weight_len) + 's').format(
                 (layer + "  [" + class_name + "]").ljust(max_name_len, ' '),
                 (is_keep + str(summary[layer]["output_shape"])).ljust(25, ' '),
-                str(summary[layer]["weight"].item_list[0] if 'weight' in summary[layer] and len(summary[layer]["weight"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(
+                str(summary[layer]["weight"].item_list[0] if 'weight' in summary[layer] and len(
+                    summary[layer]["weight"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(
                     max_weight_len, ' '),
-                str(summary[layer]["bias"].item_list[0] if 'bias' in summary[layer] and len(summary[layer]["bias"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(8, ' '),
+                str(summary[layer]["bias"].item_list[0] if 'bias' in summary[layer] and len(
+                    summary[layer]["bias"]) > 0 else ' ').replace('(', '').replace(')', '').ljust(8, ' '),
                 summary[layer]["nb_params"],
                 summary[layer]["flops"].sum()
             )
             if len(summary[layer]["weight"]) > 1:
                 for n in range(1, len(summary[layer]["weight"])):
-                    line_new_add = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4}  {5}  ".replace('50s', str(max_name_len) + 's').replace('35s', str(max_weight_len) + 's').format(
+                    line_new_add = "{0:<50s} {1:<25s}  {2:<35s} {3:<8s}  {4}  {5}  ".replace('50s',
+                                                                                             str(max_name_len) + 's').replace(
+                        '35s', str(max_weight_len) + 's').format(
                         " ".ljust(max_name_len + len(layer + "  [" + class_name + "]") // 2, " "),
                         " ".ljust(25 + len(is_keep + str(summary[layer]["output_shape"])) // 2, " "),
-                        str(summary[layer]["weight"].item_list[n] if n < len(summary[layer]["weight"]) else ' ').replace('(', '').replace(')', '').ljust(max_weight_len, " "),
-                        str(summary[layer]["bias"].item_list[n] if n < len(summary[layer]["bias"]) else ' ').replace('(', '').replace(')', '').ljust(8, " "), " ", " ")
+                        str(summary[layer]["weight"].item_list[n] if n < len(
+                            summary[layer]["weight"]) else ' ').replace('(', '').replace(')', '').ljust(max_weight_len,
+                                                                                                        " "),
+                        str(summary[layer]["bias"].item_list[n] if n < len(summary[layer]["bias"]) else ' ').replace(
+                            '(', '').replace(')', '').ljust(8, " "), " ", " ")
                     line_new = line_new + '\n' + line_new_add
 
             total_params += summary[layer]["nb_params"]
@@ -2131,7 +2173,9 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
             print(line_new)
 
         # assume 4 bytes/number (float on cuda).
-        total_input_size = np.asarray([np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if spec.optional == False and spec.shape is not None]).sum()
+        total_input_size = np.asarray(
+            [np.abs(np.prod(to_numpy(spec.shape.dims[1:])) * batch_size * 4. / (1024 ** 2.)) for spec in input_specs if
+             spec.optional == False and spec.shape is not None]).sum()
         total_output_size = np.abs(2. * total_output * 4. / (1024 ** 2.))  # x2 for gradients
         total_params_size = np.abs(total_params * 4. / (1024 ** 2.))
         total_size = total_params_size + total_output_size + total_input_size
@@ -2154,8 +2198,6 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
         del hooks
         print(e)
         PrintException()
-
-
 
 
 def normalize_padding(padding, rank):
@@ -2252,7 +2294,7 @@ def get_human_readable_count(number):
     shift = -3 * (num_groups - 1)
     number = number * (10 ** shift)
     index = num_groups - 1
-    return '{0:,d} {1}'.format(int(number),labels[index])
+    return '{0:,d} {1}'.format(int(number), labels[index])
 
 
 def try_map_args_and_call(fn, data: OrderedDict, data_feed=None, is_autocast_enabled=False):
@@ -2281,8 +2323,10 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None, is_autocast_ena
                 if None in fn._signature.inputs.value_list:
                     _signature = get_signature(fn)
                 for arg in _signature.inputs.key_list:
-                    is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg], TensorSpec) else False
-                    default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg], TensorSpec) else None
+                    is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg],
+                                                                                  TensorSpec) else False
+                    default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg],
+                                                                             TensorSpec) else None
                     is_input = arg.lower() in ['x', 'input']
                     is_output = arg.lower() in ['y', 'output', 'y_pred']
                     if arg in data_feed and data_feed[arg] in data:
@@ -2350,8 +2394,10 @@ def try_map_args_and_call(fn, data: OrderedDict, data_feed=None, is_autocast_ena
                 fn.signature = get_signature(fn)
                 args = fn.signature.inputs.key_list
                 for arg in args:
-                    is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg], TensorSpec) else False
-                    default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg], TensorSpec) else None
+                    is_optional = fn.signature.inputs[arg].optional if isinstance(fn.signature.inputs[arg],
+                                                                                  TensorSpec) else False
+                    default = fn.signature.inputs[arg].default if isinstance(fn.signature.inputs[arg],
+                                                                             TensorSpec) else None
                     is_input = arg.lower() in ['x', 'input']
                     is_output = arg.lower() in ['y', 'output', 'y_pred']
                     if arg in data_feed and data_feed[arg] in data:
@@ -2409,7 +2455,6 @@ def fix_layer(layer: Layer):
     if not hasattr(layer, 'is_root'):
         layer.is_root = True
 
-
     def get_root(self):
         if not hasattr(self, '_nodes') or self._nodes is None or len(self._nodes) < 2:
             return self
@@ -2422,7 +2467,9 @@ def fix_layer(layer: Layer):
             return self
 
     if not hasattr(layer, 'device'):
-        layer.device=layer.weights[0].device.type
+        layer.device = layer.weights[0].device.type
+
+
 
     layer.to(get_device())
     if not hasattr(layer, '_nodes'):
@@ -2438,7 +2485,8 @@ def fix_layer(layer: Layer):
         if hasattr(layer, 'detection_threshold'):
             delattr(layer, 'detection_threshold')
 
-    if layer._input_shape is not None and isinstance(layer._input_shape, tuple) and all([isinstance(d, numbers.Integral) for d in layer._input_shape]):
+    if layer._input_shape is not None and isinstance(layer._input_shape, tuple) and all(
+            [isinstance(d, numbers.Integral) for d in layer._input_shape]):
         dims = [d for d in layer._input_shape]
         dims.insert(0, None)
         layer._input_shape = TensorShape(dims)
@@ -2453,10 +2501,12 @@ def fix_layer(layer: Layer):
         object.__setattr__(layer, '_input_shape', TensorShape(dims))
     elif layer._input_shape is not None and not isinstance(layer._input_shape, TensorShape):
         layer._input_shape = TensorShape(to_numpy(layer._input_shape))
-    elif layer._input_shape is not None and isinstance(layer._input_shape, TensorShape) and is_tensor(layer._input_shape.dims[0]):
+    elif layer._input_shape is not None and isinstance(layer._input_shape, TensorShape) and is_tensor(
+            layer._input_shape.dims[0]):
         layer._input_shape = TensorShape([d.item() for d in layer._input_shape.dims])
 
-    if layer._output_shape is not None and isinstance(layer._output_shape, tuple) and all([isinstance(d, numbers.Integral) for d in layer._output_shape]):
+    if layer._output_shape is not None and isinstance(layer._output_shape, tuple) and all(
+            [isinstance(d, numbers.Integral) for d in layer._output_shape]):
         dims = [d for d in layer._input_shape]
         dims.insert(0, None)
         layer._input_shape = TensorShape(dims)
@@ -2471,10 +2521,12 @@ def fix_layer(layer: Layer):
         object.__setattr__(layer, '_output_shape', TensorShape(dims))
     elif layer._output_shape is not None and not isinstance(layer._output_shape, TensorShape):
         layer._output_shape = TensorShape(layer._output_shape)
-    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], torch.Size) and len(
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(
+            layer._output_shape.dims[0], torch.Size) and len(
             layer._output_shape.dims[0]) == 1:
         layer._output_shape = TensorShape([None if d is None else d[0] for d in layer._output_shape.dims])
-    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(layer._output_shape.dims[0], torch.Size):
+    elif layer._output_shape is not None and isinstance(layer._output_shape, TensorShape) and isinstance(
+            layer._output_shape.dims[0], torch.Size):
         layer._output_shape = tuple([TensorShape(to_numpy(d)) for d in layer._output_shape.dims])
 
     if not hasattr(layer, 'get_root'):
@@ -2485,8 +2537,14 @@ def fix_layer(layer: Layer):
         # if not hasattr(module, '_signature'):
         #     module._signature = inspect.signature(module.forward)
         class_name = module.__class__.__name__
-        if not hasattr(layer, 'get_root'):
-            setattr(layer, 'get_root', MethodType(get_root, layer))
+        if not hasattr(module, 'get_root'):
+            setattr(module, 'get_root', MethodType(get_root, layer))
+
+        if not hasattr(module, '_state_dict_pre_hooks'):
+            object.__setattr__(module, '_forward_hooks_with_kwargs', OrderedDict())
+            object.__setattr__(module, '_forward_pre_hooks_with_kwargs', OrderedDict())
+            object.__setattr__(module, '_state_dict_pre_hooks', OrderedDict())
+
         if not hasattr(module, 'uuid'):
             module.uuid = uuid.uuid4().node
         # check for root
@@ -2554,14 +2612,15 @@ def fix_layer(layer: Layer):
             if not hasattr(module, 'use_spectral'):
                 module.use_spectral = False
 
-    if layer.is_root == True and (not hasattr(layer, '_signature') or layer._signature is None or len(layer._signature.inputs) == 0):
+    if layer.is_root == True and (
+            not hasattr(layer, '_signature') or layer._signature is None or len(layer._signature.inputs) == 0):
         layer._signature = get_signature(layer)
     return layer
 
 
 def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_shape: (tuple, TensorShape) = None):
     module.is_root = True
-    module.name=module.__class__.__name__
+    module.name = module.__class__.__name__
     module._nodes = OrderedDict()
     module._uid_prefixs = defaultdict(int)
     module._signature = get_signature(module)
@@ -2585,12 +2644,11 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
                     return node
             return module
 
-
     for name, mod in module.named_modules():
         if mod != module:
             module.is_root = False
         mod._built = True
-        if not hasattr(mod,'built'):
+        if not hasattr(mod, 'built'):
             mod.built = True
         mod.relative_name = name
         mod.batch_index = 0
@@ -2607,7 +2665,7 @@ def fix_pytorch_module(module: nn.Module, input_tensor: Tensor = None, input_sha
         mod.register_buffer('_output_tensor', None, persistent=False)
 
         mod._device = get_device()
-        #mod._signature = inspect.signature(mod.forward)
+        # mod._signature = inspect.signature(mod.forward)
         mod.dump_patches = True
         #
         # def getsignature(mod):

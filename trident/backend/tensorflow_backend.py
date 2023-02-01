@@ -1,52 +1,46 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
-import functools
-from  functools import  partial
+
 import builtins
-import gc
-from enum import Enum
-from itertools import islice
-import operator
 import copy
+import functools
+import gc
 import inspect
 import itertools
-from types import MethodType
-from collections import abc
 import numbers
+import operator
 import os
-import random
 import sys
-import threading
+import typing
 import uuid
 import weakref
+from collections import abc
 from collections import defaultdict, namedtuple
-from distutils.version import Version, LooseVersion
+from distutils.version import LooseVersion
+from functools import partial
 from itertools import islice
-from typing import Union, Tuple, Any, Callable, Iterator, Set, Optional, overload, TypeVar, Mapping, Dict,List,Iterable
-import typing
+from types import MethodType
+from typing import Union, Tuple, Any, Callable, Iterator, Set, Optional, overload, TypeVar, Mapping, Dict, List, \
+    Iterable
+
 import numpy as np
 import tensorflow as tf
+
 #from tensorflow.python import enable_eager_execution
 
 tf.executing_eagerly()
 
-from tensorflow.python.eager import context
-from tensorflow.python.framework import func_graph, ops
+from tensorflow.python.framework import ops
 
 from tensorflow.python.module import module
-from tensorflow.python.training.tracking import base as trackable
-from tensorflow.python.training.tracking import data_structures, tracking
-from tensorflow.python.training.tracking import layer_utils as trackable_layer_utils
 from tensorflow.python.util import object_identity
 from trident.backend import iteration_tools
-from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, get_session, set_session, Signature, PrintException, TensorShape, \
+from trident.backend.common import camel2snake, to_list, unpack_singleton, enforce_singleton, OrderedDict, Signature, PrintException, TensorShape, \
     get_args_spec,is_instance
 from trident.backend.tensorflow_ops import *
 from trident.backend import tensorflow_ops as tops
-from trident.backend import dtype
-from trident.context import split_path, make_dir_if_need, sanitize_path
-
+from trident.backend import dtype as Dtype
 
 _FUN_NAMES = [
     ('float', tops.float),
@@ -67,17 +61,17 @@ __all__ = ['set_device', 'DTYPE_MAPPING','Layer', 'get_device', 'Parameter', 'Se
 ctx = context._context()
 
 DTYPE_MAPPING = {
-    tf.bool: dtype.bool,
-    tf.int8: dtype.int8,
-    tf.int16: dtype.int16,
-    tf.int32: dtype.int32,
-    tf.int64: dtype.int64,
-    tf.uint8: dtype.uint8,
-    tf.float16: dtype.float16,
-    tf.float32: dtype.float32,
-    tf.float64: dtype.float64,
-    tf.complex64: dtype.complex64,
-    tf.complex128: dtype.complex128,
+    tf.bool: Dtype.bool,
+    tf.int8: Dtype.int8,
+    tf.int16: Dtype.int16,
+    tf.int32: Dtype.int32,
+    tf.int64: Dtype.int64,
+    tf.uint8: Dtype.uint8,
+    tf.float16: Dtype.float16,
+    tf.float32: Dtype.float32,
+    tf.float64: Dtype.float64,
+    tf.complex64: Dtype.complex64,
+    tf.complex128: Dtype.complex128,
 
 }
 
@@ -110,11 +104,14 @@ def set_device(device='/cpu:0'):
         for i in range(len(gcitems)):
             item = gcitems[i]
             try:
-                if is_tensor(item) :
+                if  not  inspect.isclass(item)  and is_tensor(item) :
                     with tf.device(ctx.device):
                         item = tf.identity(item)
-                elif is_instance(item, 'Layer'):
+                elif not  inspect.isclass(item) and  is_instance(item, 'trident.backend.tensorflow_backend.Layer'):
                     item.to(device)
+                elif not  inspect.isclass(item) and  is_instance(item, 'Layer'):
+                    with tf.device(ctx.device):
+                        item = tf.identity(item)
             except Exception as e:
                 print(e)
 
@@ -519,7 +516,7 @@ def _forward_unimplemented(self, *input: Any) -> None:
         instead of this since the former takes care of running the
         registered hooks while the latter silently ignores them.
     """
-    raise NotImplementedError
+    raise NotImplementedError(f"Module [{type(self).__name__}] is missing the required \"forward\" function")
 
 # def Parameter(data, trainable=True, dtype=None, name=None, **kwargs):
 #     if dtype is None:
@@ -529,7 +526,6 @@ def _forward_unimplemented(self, *input: Any) -> None:
 
 def Parameter(data, trainable=True, name=None):
     return tf.Variable(initial_value = data,trainable = trainable,dtype=data.dtype,name=name)
-
 
 
 
@@ -577,14 +573,69 @@ class Layer(tf.Module):
     """
     _version = 1
 
-    def __init__(self, name=None, keep_output=False, **kwargs):
+    training: bool
+    _built: bool
+    _parameters: Dict[str, Optional[Parameter]]
+    _buffers: Dict[str, Optional[Tensor]]
+    _non_persistent_buffers_set: Set[str]
+    _backward_hooks: Dict[int, Callable]
+    _is_full_backward_hook: Optional[bool]
+    _forward_hooks: Dict[int, Callable]
+    # Marks whether the corresponding _forward_hooks accept kwargs or not.
+    # As JIT does not support Set[int], this dict is used as a set, where all
+    # hooks represented in this dict accept kwargs.
+    _forward_hooks_with_kwargs: Dict[int, bool]
+
+
+    _forward_pre_hooks: Dict[int, Callable]
+    # Marks whether the corresponding _forward_hooks accept kwargs or not.
+    # As JIT does not support Set[int], this dict is used as a set, where all
+    # hooks represented in this dict accept kwargs.
+    _forward_pre_hooks_with_kwargs: Dict[int, bool]
+
+    _state_dict_hooks: Dict[int, Callable]
+    _load_state_dict_pre_hooks: Dict[int, Callable]
+    _state_dict_pre_hooks: Dict[int, Callable]
+    _load_state_dict_post_hooks: Dict[int, Callable]
+    _modules: Dict[str, Optional['Module']]
+
+
+    def __init__(self,
+                 name=None,
+                 keep_output=False,
+                 device=None,
+                 dtype=None ,
+                 **kwargs):
         """
         Args:
             name (str) :name of the layer.
-            keep_output (bool) :whether need to kept output tensor in execution time.
+            keep_output (bool) :whether you need to kept output tensor in execution time.
 
 
         """
+        object.__setattr__(self, 'uuid', uuid.uuid4().node)
+        super().__setattr__('training', True)
+        super().__setattr__('_built', False)
+
+        super().__setattr__('_parameters', OrderedDict())
+        super().__setattr__('_buffers', OrderedDict())
+        super().__setattr__('_non_persistent_buffers_set', set())
+        super().__setattr__('_backward_hooks', OrderedDict())
+        super().__setattr__('_is_full_backward_hook', None)
+        super().__setattr__('_forward_hooks', OrderedDict())
+        super().__setattr__('_forward_pre_hooks', OrderedDict())
+        super().__setattr__('_state_dict_hooks', OrderedDict())
+        super().__setattr__('_load_state_dict_pre_hooks', OrderedDict())
+        super().__setattr__('_load_state_dict_post_hooks', OrderedDict())
+        super().__setattr__('_forward_hooks_with_kwargs', OrderedDict())
+        super().__setattr__('_forward_pre_hooks_with_kwargs', OrderedDict())
+        super().__setattr__('_state_dict_pre_hooks', OrderedDict())
+
+        super().__setattr__('_modules', OrderedDict())
+        super().__setattr__('factory_kwargs', {'device': get_device(), 'dtype': Dtype.float32})
+        self.to(self.factory_kwargs['device'])
+
+
         prefix = self.__class__.__name__
         self._uid_prefixs = {}
         self._name = name
@@ -593,32 +644,32 @@ class Layer(tf.Module):
         self.relative_name = ''
         reset_name(self, self._uid_prefixs)
 
-        super(Layer, self).__init__(name=self.default_name)
+        super(Layer, self).__init__()
+
+
         self.batch_index = 0
         self.filter_index = -1
         self.in_sequence = kwargs.get('in_sequence', False)
         if self.in_sequence:
             self.filter_index = -1
-        self.training = True
-        self._built = False
+
         self.rank = kwargs.get('rank', None)
-        self._non_persistent_buffers_set = set()
-        self.uuid = uuid.uuid4().node
+
         self._nodes = OrderedDict()
         self._input_shape: Optional[None, TensorShape, List[TensorShape]] = None
         self._output_shape: Optional[None, TensorShape, List[TensorShape]] = None
 
         with self.name_scope:
-            self._modules = OrderedDict()
-            self._parameters = OrderedDict()
-            self._buffers = OrderedDict()
-            self._backward_hooks = OrderedDict()
-            self._forward_hooks = OrderedDict()
-            self._forward_pre_hooks = OrderedDict()
-            self._state_dict_hooks = OrderedDict()
-            self._load_state_dict_pre_hooks = OrderedDict()
+            # self._modules = OrderedDict()
+            # self._parameters = OrderedDict()
+            # self._buffers = OrderedDict()
+            # self._backward_hooks = OrderedDict()
+            # self._forward_hooks = OrderedDict()
+            # self._forward_pre_hooks = OrderedDict()
+            # self._state_dict_hooks = OrderedDict()
+            # self._load_state_dict_pre_hooks = OrderedDict()
 
-            self._non_persistent_buffers_set = set()
+            #self._non_persistent_buffers_set = set()
             self._input_shape = None
             self._output_shape = None
 
@@ -1148,7 +1199,7 @@ class Layer(tf.Module):
 
         if isinstance(value, tf.TensorShape):
             value = TensorShape(value.as_list())
-        elif is_tensor(value) and value.ndim == 1 and value.dtype == dtype.int32:
+        elif is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
             value = TensorShape([None, ] + to_list(to_numpy(value)))
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
             value = TensorShape((None,) + value)
@@ -1186,7 +1237,7 @@ class Layer(tf.Module):
             self._output_shape = value
             self._signature = None
         else:
-            if is_tensor(value) and value.ndim == 1 and value.dtype == dtype.int32:
+            if is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
                 value = TensorShape([None, ] + to_list(to_numpy(value)))
             elif isinstance(value, tf.TensorShape):
                 value = TensorShape(value.as_list())
@@ -1604,10 +1655,10 @@ class Layer(tf.Module):
 
             self._built = True
 
-        bw_hook = None
-        if full_backward_hooks:
-            bw_hook = hooks.BackwardHook(self, full_backward_hooks)
-            input = bw_hook.setup_input_hook(input)
+        # bw_hook = None
+        # if full_backward_hooks:
+        #     bw_hook = hooks.BackwardHook(self, full_backward_hooks)
+        #     input = full_backward_hooks(input)
 
 
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
@@ -1636,8 +1687,8 @@ class Layer(tf.Module):
                         if hook_result is not None:
                             result = hook_result
 
-                if bw_hook:
-                    result = bw_hook.setup_output_hook(result)
+                # if bw_hook:
+                #     result = bw_hook.setup_output_hook(result)
 
             if is_all_numpy == True and self.training == False and self.is_root == True:
                 if is_tensor(result):
@@ -3188,6 +3239,13 @@ def fix_layer(layer: Layer):
         class_name = module.__class__.__name__
         if not hasattr(layer, 'get_root'):
             setattr(layer, 'get_root', MethodType(get_root, layer))
+
+
+        if not hasattr(module, '_state_dict_pre_hooks'):
+            object.__setattr__(module, '_forward_hooks_with_kwargs', OrderedDict())
+            object.__setattr__(module, '_forward_pre_hooks_with_kwargs', OrderedDict())
+            object.__setattr__(module, '_state_dict_pre_hooks', OrderedDict())
+
         if not hasattr(module, 'uuid'):
             module.uuid = uuid.uuid4().node
         # check for root
@@ -3278,7 +3336,7 @@ def fix_layer(layer: Layer):
 
 
 def fix_keras_module(module: tf.Module, input_tensor: Tensor = None, input_shape: (tuple, TensorShape) = None):
-    import tensorflow.keras.backend as K
+    import tensorflow.python.keras.backend as K
     def named_modules(keras_model, memo=None, prefix=''):
         if memo is None:
             memo = set()
