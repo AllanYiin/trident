@@ -13,7 +13,7 @@ from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDi
 from trident.backend import dtype as Dtype
 from trident import context
 
-__all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor',
+__all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor','tensor_to_shape',
            'ndim', 'numel', 'cast', 'str2dtype', 'int_shape', 'logical_and', 'logical_or',
            'logical_xor', 'logical_not', 'less', 'equal', 'greater',
            'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'topk', 'maximum', 'minimum',
@@ -443,6 +443,41 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
         return x
     else:
         return jnp.array(x, dtype=jnp.float32)
+
+
+
+
+def tensor_to_shape(x:Tensor,need_exclude_batch_axis=True,is_singleton=False)->TensorShape:
+    """Get tensor shape information ten convert to TensorShape
+
+    Args:
+        is_singleton ():
+        x (Tensor):
+        need_exclude_batch_axis (bool):
+
+    Returns:
+        shape (TensorShape):
+
+    Examples:
+        >>> tensor_to_shape(random_normal((2,64,32,32)))
+        TensorShape([None, 64, 32, 32])
+
+    """
+    if isinstance(x,numbers.Number) or (is_tensor(x) and ndim(x)==0):
+        return TensorShape([None])
+    elif isinstance(x, str) or (isinstance(x, list) and len(x) > 0 and isinstance(x[0], str)):
+        return TensorShape([None])
+    if need_exclude_batch_axis and is_singleton==False:
+        shp=list(int_shape(x))
+        if len(shp)==0:
+            print('')
+        shp[0]=None
+        return TensorShape(shp)
+    elif need_exclude_batch_axis and is_singleton==True:
+        return TensorShape([None]+list(int_shape(x)))
+    else:
+        return TensorShape(int_shape(x))
+
 
 
 _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_session().device == 'cuda' else Dtype.float32
@@ -3402,6 +3437,25 @@ def bbox_diou(bboxes1, bboxes2):
 
 
 _FUN_NAMES = [
+    # source_fun, target_fun
+    ('to_numpy', to_numpy),
+    ('numel', numel),
+    ('ndim', ndim),
+    ('int_shape', int_shape),
+    ('cast', cast),
+    ('logical_and', logical_and),
+    ('logical_or', logical_or),
+    ('logical_xor', logical_xor),
+    ('logical_not', logical_not),
+    ('less', less),
+    ('greater', greater),
+    ('greater_equal', greater_equal),
+    ('not_equal', not_equal),
+    ('less_equal', less_equal),
+    ('argmax', argmax),
+    ('argmin', argmin),
+    ('argsort', argsort),
+    ('topk', topk),
     ('maximum', maximum),
     ('minimum', minimum),
     ('floor', floor),
@@ -3428,8 +3482,61 @@ _FUN_NAMES = [
     ('atan', atan),
     ('sinh', sinh),
     ('cosh', cosh),
-    ('tanh', tanh)
+    ('tanh', tanh),
+
+    ('where', where),
+    ('reduce_mean', reduce_mean),
+    ('reduce_sum', reduce_sum),
+    ('reduce_max', reduce_max),
+    ('reduce_min', reduce_min),
+    ('mean', mean),
+    ('sum', sum),
+    ('max', max),
+    ('min', min),
+    ('reduce_logsumexp', reduce_logsumexp),
+    ('reduce_prod', reduce_prod),
+    ('depth_to_space', depth_to_space),
+    ('space_to_depth', space_to_depth),
+    ('identity', identity),
+    ('sigmoid', sigmoid),
+    ('relu', relu),
+    ('relu6', relu6),
+    ('leaky_relu', leaky_relu),
+    ('leaky_relu6', leaky_relu6),
+    ('smooth_relu', smooth_relu),
+    ('p_relu', p_relu),
+    ('swish', swish),
+    ('elu', elu),
+    ('hard_sigmoid', hard_sigmoid),
+    ('hard_swish', hard_swish),
+    ('selu', selu),
+    ('lecun_tanh', lecun_tanh),
+    ('soft_sign', soft_sign),
+    ('soft_plus', soft_plus),
+    ('square_plus', square_plus),
+    ('hard_tanh', hard_tanh),
+    ('logit', logit),
+    ('log_log', log_log),
+    ('mish', mish),
+    ('hard_mish', hard_mish),
+    ('softmax', softmax),
+    ('log_softmax', log_softmax),
+    ('gelu', gelu),
+    ('gpt_gelu', gpt_gelu),
+    ('l2_normalize', l2_normalize),
+    ('ones_like', ones_like),
+    ('zeros_like', zeros_like),
+    ('eye_like', eye_like),
+    ('arange', arange),
+    ('make_onehot', make_onehot),
+    ('meshgrid', meshgrid),
+    ('reverse', reverse),
+    ('reshape', reshape),
+    ('transpose', transpose),
+    ('squeeze', squeeze),
+    ('expand_dims', expand_dims)
 ]
+
 for target_fun_name, source_fun in _FUN_NAMES:
     if not hasattr(Tensor, target_fun_name):
         setattr(Tensor, target_fun_name, source_fun)

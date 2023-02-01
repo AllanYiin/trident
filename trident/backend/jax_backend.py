@@ -1,10 +1,15 @@
+import itertools
+import sys
 import uuid
+import copy
 import warnings
 import weakref
 from collections import defaultdict, abc,namedtuple
 from types import MethodType
 from typing import List, Tuple, Optional, Union, Callable, Any, Iterable,Iterator,Mapping, TypeVar,overload,Dict,Set
 from functools import partial
+import builtins
+import numbers
 import numpy as np
 import gc
 import jax
@@ -17,6 +22,7 @@ from trident.backend.tensorspec import *
 from trident.backend import jax_ops as jops
 from trident.backend import dtype as Dtype
 from trident import context
+from trident.data.utils import pickle_it,unpickle
 from trident.context import split_path, make_dir_if_need, sanitize_path
 from trident.backend.jax_ops import *
 
@@ -24,6 +30,10 @@ ctx = context._context()
 _backend = ctx.get_backend()
 
 __all__ = ['get_device', 'set_device', 'Layer', 'Parameter', 'DTYPE_MAPPING']
+
+_int = builtins.int
+_float = builtins.float
+_bool = builtins.bool
 
 DTYPE_MAPPING = {
     jnp.bool_: Dtype.bool,
@@ -238,8 +248,8 @@ class RemovableHandle(object):
 
 
 
-def _is_not_trainable_variable(obj):
-    return module._is_variable(obj) and not getattr(obj, "trainable", False)
+# def _is_not_trainable_variable(obj):
+#     return module._is_variable(obj) and not getattr(obj, "trainable", False)
 
 
 # The internal graph maintained by Keras and used by the symbolic Keras APIs
@@ -893,7 +903,7 @@ class Layer(object):
             raise KeyError("buffer name can't be empty string \"\"")
         elif hasattr(self, name) and name not in self._buffers:
             raise KeyError("attribute '{}' already exists".format(name))
-        elif tensor is not None and not isinstance(tensor, tf.Tensor) and not is_tensor(tensor):
+        elif tensor is not None and not isinstance(tensor, Tensor) and not is_tensor(tensor):
             raise TypeError("cannot assign '{}' object to buffer '{}' "
                             "(tensorflow Tensor or None required)".format(type(tensor).__name__, name))
         else:
@@ -931,9 +941,9 @@ class Layer(object):
 
         if param is None:
             self._parameters[name] = None
-        elif not isinstance(param, tf.Variable):
+        elif not isinstance(param, Parameter):
             raise TypeError("cannot assign '{}' object to parameter '{}' "
-                            "(tf.Variable or None required)".format(type(param).__name__, name))
+                            "(Parameter or None required)".format(type(param).__name__, name))
         else:
             self._parameters[name] = param
 
@@ -964,13 +974,13 @@ class Layer(object):
                         if para is None:
                             module._parameters[name] = None
                         else:
-                            module._parameters[name].assign(tf.identity(cast(para.value(), dtype)))
+                            module._parameters[name].assign(identity(cast(para.value(), dtype)))
                 if module._buffers is not None and len(module._buffers) > 0:
                     for name, buff in module._buffers.items():
                         if buff is None:
                             module._buffers[name] = None
                         else:
-                            module._buffers[name] = tf.identity(cast(buff, dtype))
+                            module._buffers[name] = identity(cast(buff, dtype))
                 module._device = self._device
             except Exception as e:
                 print(e)
@@ -991,11 +1001,10 @@ class Layer(object):
             Module: self
         """
 
-        if tf.test.is_gpu_available:
-            if self.get_root()._device != '/gpu:0':
-                self.get_root()._device = '/gpu:0'
-                with tf.device(self._device):
-                    return self._apply(lambda t: tf.identity(t))
+        if is_gpu_available:
+            if self.get_root()._device != 'cuda:0':
+                self.get_root()._device = 'cuda:0'
+            return self._apply(lambda t: jax.device_put(t, device=jax.devices("gpu")[0]))
 
         else:
             sys.stderr.write('GPU is not available in this machone./n')
@@ -1006,10 +1015,9 @@ class Layer(object):
         Returns:
             Module: self
         """
-        if self.get_root()._device != '/cpu:0':
-            with tf.device('/cpu:0'):
-                self.get_root()._device = '/cpu:0'
-                return self._apply(lambda t: tf.identity(t))
+        if self.get_root()._device != 'cpu':
+            self.get_root()._device = 'cpu'
+        return self._apply(lambda t:jax.device_put(t, device=jax.devices("cpu")[0]))
 
     def gpu(self: T, device: Optional[Union[int, str]] = None) -> T:
         r"""Moves all model parameters and buffers to the GPU.
@@ -1026,12 +1034,10 @@ class Layer(object):
             Module: self
         """
 
-        if tf.test.is_gpu_available:
-            if self.get_root()._device != '/gpu:0':
-                self.get_root()._device = '/gpu:0'
-                with tf.device(self._device):
-                    return self._apply(lambda t: tf.identity(t))
-
+        if is_gpu_available:
+            if self.get_root()._device != 'cuda:0':
+                self.get_root()._device = 'cuda:0'
+            return self._apply(lambda t: jax.device_put(t, device=jax.devices("gpu")[0]))
         else:
             sys.stderr.write('GPU is not available in this machone./n')
 
@@ -1076,32 +1082,7 @@ class Layer(object):
         Returns:
             Module: self
 
-        Example::
 
-
-            >>> def init_weights(m):
-            >>>     print(m)
-            >>>     if type(m) == nn.Linear:
-            >>>         m.weight.fill_(1.0)
-            >>>         print(m.weight)
-            >>> net = nn.Sequential(nn.Linear(2, 2), nn.Linear(2, 2))
-            >>> net.apply(init_weights)
-            Linear(in_features=2, out_features=2, bias=True)
-            Parameter containing:
-            tensor([[ 1.,  1.],
-                    [ 1.,  1.]])
-            Linear(in_features=2, out_features=2, bias=True)
-            Parameter containing:
-            tensor([[ 1.,  1.],
-                    [ 1.,  1.]])
-            Sequential(
-              (0): Linear(in_features=2, out_features=2, bias=True)
-              (1): Linear(in_features=2, out_features=2, bias=True)
-            )
-            Sequential(
-              (0): Linear(in_features=2, out_features=2, bias=True)
-              (1): Linear(in_features=2, out_features=2, bias=True)
-            )
         """
         for module in self.children():
             module.apply(fn)
@@ -1138,7 +1119,8 @@ class Layer(object):
         if isinstance(value, str):
             self._device = value
             self.to(value)
-        elif isinstance(value, tf.device):
+
+        elif isinstance(value,  jax._src.lib.xla_client.Device):
             self._device = value.__str__()
             self.to(self._device)
         else:
@@ -1155,13 +1137,11 @@ class Layer(object):
     @input_shape.setter
     def input_shape(self, value):
 
-        if isinstance(value, tf.TensorShape):
-            value = TensorShape(value.as_list())
-        elif is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
+        if is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
             value = TensorShape([None, ] + to_list(to_numpy(value)))
         elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
             value = TensorShape((None,) + value)
-        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
+        elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == Dtype.int32 for item in value]):
             value = [TensorShape(to_list(to_numpy(sh))) for sh in value]
         elif isinstance(value, TensorShape):
             pass
@@ -1197,11 +1177,9 @@ class Layer(object):
         else:
             if is_tensor(value) and value.ndim == 1 and value.dtype == Dtype.int32:
                 value = TensorShape([None, ] + to_list(to_numpy(value)))
-            elif isinstance(value, tf.TensorShape):
-                value = TensorShape(value.as_list())
             elif isinstance(value, (list, tuple)) and len(value) > 0 and all([isinstance(item, numbers.Integral) for item in value]):
                 value = TensorShape((None,) + value)
-            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == tf.int32 for item in value]):
+            elif isinstance(value, (list, tuple)) and len(value) > 0 and all([is_tensor(item) and ndim(item) == 1 and item.dtype == Dtype.int32 for item in value]):
                 value = [TensorShape(to_list(to_numpy(sh))) for sh in value]
             elif isinstance(value, TensorShape):
                 pass
@@ -1376,21 +1354,21 @@ class Layer(object):
             ['bias', 'weight']
 
         """
-        with tf.device(self.get_root().device):
-            if destination is None:
-                destination = OrderedDict()
-                destination._metadata = OrderedDict()
-            destination._metadata[prefix[:-1]] = local_metadata = dict(version=self._version)
 
-            self._save_to_state_dict(destination, prefix, keep_vars)
-            for name, module in self._modules.items():
-                if module is not None:
-                    module.state_dict(destination, prefix + name + '.', keep_vars=keep_vars)
-            for hook in self._state_dict_hooks.values():
-                hook_result = hook(self, destination, prefix, local_metadata)
-                if hook_result is not None:
-                    destination = hook_result
-            return destination
+        if destination is None:
+            destination = OrderedDict()
+            destination._metadata = OrderedDict()
+        destination._metadata[prefix[:-1]] = local_metadata = dict(version=self._version)
+
+        self._save_to_state_dict(destination, prefix, keep_vars)
+        for name, module in self._modules.items():
+            if module is not None:
+                module.state_dict(destination, prefix + name + '.', keep_vars=keep_vars)
+        for hook in self._state_dict_hooks.values():
+            hook_result = hook(self, destination, prefix, local_metadata)
+            if hook_result is not None:
+                destination = hook_result
+        return destination
 
     def _register_load_state_dict_pre_hook(self, hook):
         r"""These hooks will be called with arguments: `state_dict`, `prefix`,
@@ -1494,40 +1472,40 @@ class Layer(object):
                 * **missing_keys** is a list of str containing the missing keys
                 * **unexpected_keys** is a list of str containing the unexpected keys
         """
-        with tf.device(self.get_root().device):
-            missing_keys = []
-            unexpected_keys = []
-            error_msgs = []
 
-            # copy state_dict so _load_from_state_dict can modify it
-            metadata = getattr(state_dict, '_metadata', None)
-            state_dict = state_dict.copy()
-            if metadata is not None:
-                state_dict._metadata = metadata
+        missing_keys = []
+        unexpected_keys = []
+        error_msgs = []
 
-            def load(module, prefix=''):
-                local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
-                module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys,
-                                             error_msgs)
-                for name, child in module._modules.items():
-                    if child is not None:
-                        load(child, prefix + name + '.')
+        # copy state_dict so _load_from_state_dict can modify it
+        metadata = getattr(state_dict, '_metadata', None)
+        state_dict = state_dict.copy()
+        if metadata is not None:
+            state_dict._metadata = metadata
 
-            load(self)
-            load = None  # break load->load reference cycle
+        def load(module, prefix=''):
+            local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
+            module._load_from_state_dict(state_dict, prefix, local_metadata, True, missing_keys, unexpected_keys,
+                                         error_msgs)
+            for name, child in module._modules.items():
+                if child is not None:
+                    load(child, prefix + name + '.')
 
-            if strict:
-                if len(unexpected_keys) > 0:
-                    error_msgs.insert(0, 'Unexpected key(s) in state_dict: {}. '.format(
-                        ', '.join('"{}"'.format(k) for k in unexpected_keys)))
-                if len(missing_keys) > 0:
-                    error_msgs.insert(0, 'Missing key(s) in state_dict: {}. '.format(
-                        ', '.join('"{}"'.format(k) for k in missing_keys)))
+        load(self)
+        load = None  # break load->load reference cycle
 
-            # if len(error_msgs) > 0:
-            #     raise RuntimeError(
-            #         'Error(s) in loading state_dict for {}:\n\t{}'.format(self.__class__.__name__, "\n\t".join(error_msgs)))
-            return _IncompatibleKeys(missing_keys, unexpected_keys)
+        if strict:
+            if len(unexpected_keys) > 0:
+                error_msgs.insert(0, 'Unexpected key(s) in state_dict: {}. '.format(
+                    ', '.join('"{}"'.format(k) for k in unexpected_keys)))
+            if len(missing_keys) > 0:
+                error_msgs.insert(0, 'Missing key(s) in state_dict: {}. '.format(
+                    ', '.join('"{}"'.format(k) for k in missing_keys)))
+
+        # if len(error_msgs) > 0:
+        #     raise RuntimeError(
+        #         'Error(s) in loading state_dict for {}:\n\t{}'.format(self.__class__.__name__, "\n\t".join(error_msgs)))
+        return _IncompatibleKeys(missing_keys, unexpected_keys)
 
     def save(self, file_path=''):
         # save({'state_dict': self.state_dict()}, file_path)
@@ -1614,9 +1592,9 @@ class Layer(object):
             self._built = True
 
         bw_hook = None
-        if full_backward_hooks:
-            bw_hook = hooks.BackwardHook(self, full_backward_hooks)
-            input = bw_hook.setup_input_hook(input)
+        # if full_backward_hooks:
+        #     bw_hook = hooks.BackwardHook(self, full_backward_hooks)
+        #     input = bw_hook.setup_input_hook(input)
 
 
         # don't use result = self.forward(i*nput, **kwargs) because EagerTensor will splited as a tuple....
@@ -1702,7 +1680,7 @@ class Layer(object):
                         d.discard(name)
 
         params = self.__dict__.get('_parameters')
-        if isinstance(value, tf.Variable):
+        if isinstance(value, Parameter):
             if params is None:
                 raise AttributeError(
                     "cannot assign parameters before Module.__init__() call")
@@ -1716,7 +1694,7 @@ class Layer(object):
             self.register_parameter(name, value)
         else:
             modules = self.__dict__.get('_modules')
-            if isinstance(value, tf.Module):
+            if isinstance(value, Layer):
                 if modules is None:
                     raise AttributeError(
                         "cannot assign module before Module.__init__() call")
@@ -1731,7 +1709,7 @@ class Layer(object):
             else:
                 buffers = self.__dict__.get('_buffers')
                 if buffers is not None and name in buffers:
-                    if value is not None and not isinstance(value, tf.Tensor):
+                    if value is not None and not isinstance(value, Tensor):
                         raise TypeError("cannot assign '{}' as buffer '{}' "
                                         "(torch.Tensor or None expected)"
                                         .format(value, name))
@@ -1990,7 +1968,7 @@ class Layer(object):
         return self.train(False)
 
     @property
-    def trainable_weights(self) -> List[tf.Variable]:
+    def trainable_weights(self) -> List[Parameter]:
         r"""The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
 
@@ -2003,7 +1981,7 @@ class Layer(object):
         return [x for x in self.parameters() if x.trainable]
 
     @property
-    def non_trainable_weights(self) -> List[tf.Variable]:
+    def non_trainable_weights(self) -> List[Parameter]:
         r"""The list of trainable variables (parameters) of the module.
         Parameters of this module and all its submodules are included.
         .. note::
