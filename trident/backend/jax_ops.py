@@ -1,18 +1,44 @@
-from typing import List, Tuple, Optional, Union, Callable, Any, Iterable, Iterator, Mapping, TypeVar, overload
-from functools import partial, wraps
+import os
+from typing import List, Tuple, Union, Sequence
+
+os.environ['TRIDENT_BACKEND'] = 'jax'
+from functools import wraps
 import numpy as np
 import numbers
 import collections
 import jax
 import jax.numpy as jnp
-from jax.lib import xla_bridge
 from trident.backend.common import to_list, unpack_singleton, epsilon, OrderedDict, get_function, get_session, \
-    TensorShape
+    TensorShape, get_session_value
 from trident.backend import dtype as Dtype
 from trident import context
 
+__all__ = ['Tensor', 'is_gpu_available', 'is_tpu_available', 'is_tensor', 'is_tensor_like', 'to_numpy', 'to_tensor',
+           'ndim', 'numel', 'cast', 'str2dtype', 'int_shape', 'logical_and', 'logical_or',
+           'logical_xor', 'logical_not', 'less', 'equal', 'greater',
+           'greater_equal', 'not_equal', 'less_equal', 'argmax', 'argmin', 'argsort', 'topk', 'maximum', 'minimum',
+           'floor',
+           'ceil', 'round', 'dot', 'sqrt', 'rsqrt', 'prod', 'square', 'abs', 'pow', 'log', 'exp', 'clip', 'add',
+           'subtract',
+           'true_divide', 'pi', 'matmul', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'where',
+           'reduce_mean', 'reduce_sum', 'reduce_max', 'reduce_min', 'mean', 'sum', 'max', 'min', 'reduce_logsumexp',
+           'reduce_prod', 'reduce_any', 'depth_to_space', 'space_to_depth', 'pad', 'identity', 'sigmoid', 'relu',
+           'relu6', 'leaky_relu', 'celu',
+           'leaky_relu6', 'smooth_relu', 'crelu', 'p_relu', 'swish', 'elu', 'hard_sigmoid', 'hard_swish', 'selu',
+           'silu', 'lecun_tanh',
+           'soft_sign', 'soft_plus', 'square_plus', 'hard_tanh', 'logit', 'log_log', 'mish', 'hard_mish', 'softmax',
+           'log_softmax', 'gelu', 'reverse',
+           'gpt_gelu', 'moments', 'norm', 'l2_normalize', 'broadcast_to', 'expand_as', 'ones',
+           'ones_like', 'zeros', 'zeros_like', 'eye', 'eye_like', 'make_onehot', 'arange', 'meshgrid', 'reshape',
+           'permute', 'transpose', 'squeeze', 'expand_dims', 'concate', 'stack', 'split', 'bbox_iou', 'bbox_diou']
+
+from math import e, nan, inf, pi
+
+__all__.extend(['e', 'pi', 'nan', 'inf'])
+
 jax.config.update('jax_array', True)
-Tensor = jax.Array
+
+Tensor = jnp.DeviceArray  # jax.Array
 
 ctx = context._context()
 
@@ -103,22 +129,41 @@ def numpy_compatible(func):
 
 
 def is_gpu_available():
-    devices = jax.devices()
-    if len(devices) == 1:
-        return False
-    for device in devices[1:]:
-        if device.platform == "gpu":
-            return True
+    """
+    Args:
+
+    Returns:
+        (Bool): is gpu available.
+    Examples:
+        >>> print(is_gpu_available())
+        True
+
+    """
+    # devices = jax.local_devices()
+    # print(devices)
+    _default_backend = jax.default_backend()
+    # print(_default_backend)
+    if 'gpu' in _default_backend:
+        return True
     return False
 
 
 def is_tpu_available():
-    try:
-        import torch_xla
-        import torch_xla.core.xla_model as xm
+    """
+     Args:
+
+     Returns:
+         (Bool): is gpu available.
+     Examples:
+         >>> print(is_tpu_available())
+         False
+
+     """
+    from jax.lib import xla_bridge
+    _default_backend = xla_bridge.get_backend().platform
+    if 'tpu' in _default_backend:
         return True
-    except:
-        return False
+    return False
 
 
 # def _get_device():
@@ -384,28 +429,20 @@ def to_tensor(x, dtype=None, device=None, requires_grad=None) -> Tensor:
         device = get_session().device
 
     if isinstance(x, Tensor):
-        if x is not None:
-            if input_dtype is None:
-                dtype = x.dtype
-            else:
-                x = x.type(dtype)
-            with jax.device(device):
-                return jax.identity(x)
+        if dtype is None:
+            return x
         else:
-            return None
+            return x.astype(dtype)
     elif isinstance(x, np.ndarray):
         npdtype = x.dtype
 
         if 'int' in str(npdtype):
-            with jax.device(device):
-                x = jax.convert_to_tensor(x, dtype=jax.int64)
+            x = jnp.array(x, dtype=jnp.int64)
         else:
-            with jax.device(device):
-                x = jax.convert_to_tensor(x, dtype=jax.float32)
+            x = jnp.array(x, dtype=jnp.float32)
         return x
     else:
-        with jax.device(device):
-            return jax.convert_to_tensor(x, dtype=dtype)
+        return jnp.array(x, dtype=jnp.float32)
 
 
 _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_enabled == True and get_session().device == 'cuda' else Dtype.float32
@@ -441,11 +478,11 @@ _float_dtype = Dtype.float16 if ctx.amp_available == True and ctx.is_autocast_en
 #         elif 'gpu' in args or 'cuda' in args:
 #             return cuda(x)
 #         elif 'float' in args:
-#             return cast(x,tf.float32)
+#             return cast(x, jnp.float32)
 #         elif 'long' in args:
-#             return cast(x,tf.int64)
+#             return cast(x, jnp.int64)
 #         elif 'int' in args:
-#             return cast(x,tf.int32)
+#             return cast(x, jnp.int32)
 #     elif isinstance(args,dtypes.DType):
 #         return cast(x, args)
 #     else:
@@ -461,7 +498,7 @@ def str2dtype(dtype_str: (str, jnp.dtype)):
         dtype
 
     >>> str2dtype('float16')
-    torch.float16
+     jnp.float16
 
     """
     if isinstance(dtype_str, jnp.dtype):
@@ -633,7 +670,7 @@ def logical_xor(left, right):
 
 
 ############################
-## compare operation
+# compare operation
 ###########################
 
 
@@ -736,7 +773,7 @@ def not_equal(left: Tensor, right: (Tensor, float, int)):
     return jnp.not_equal(left, right).astype(np.float32)
 
 
-def less_equal(left: Tensor, right: (np.Tensor, float, int)):
+def less_equal(left: Tensor, right: (Tensor, float, int)):
     """
     Elementwise 'less equal' comparison of two tensors. Result is 1 if left <= right else 0.
 
@@ -753,7 +790,7 @@ def less_equal(left: Tensor, right: (np.Tensor, float, int)):
         tensor([1., 1., 0.])
 
     """
-    return jnp.less_equal(left, right).astype(np.float32)
+    return jnp.less_equal(left, right)
 
 
 def argmax(x: Tensor, axis=1) -> Tensor:
@@ -815,7 +852,7 @@ def minimum(x: np.ndarray, other: (np.ndarray, int, float)) -> np.ndarray:
 
 
 ############################
-## basic math operation
+# basic math operation
 ###########################
 @numpy_compatible
 def add(x, y):
@@ -1047,7 +1084,7 @@ def ceil(x: (Tensor, float)):
 
 
 @numpy_compatible
-def round(x: (Tensor, float), digit: int = 0):
+def round(x: Tensor, digit: int = 0):
     """Rounds the values of a tensor to the nearest integer, element-wise.
 
     Rounds half to even.  Also known as bankers rounding. If you want to round
@@ -1177,7 +1214,7 @@ def square(x: Tensor):
 
     I.e., \\(y = x * x = x^2\\).
 
-    >>> math.square([-2., 0., 3.])
+    >>> square([-2., 0., 3.])
     <Tensor: shape=(3,), dtype=float32, numpy=array([4., 0., 9.], dtype=float32>
 
     Args:
@@ -1334,6 +1371,11 @@ def clip(x: Tensor, min=None, max=None):
 
     """
     return jnp.clip(x, a_min=min, a_max=max)
+
+
+############################
+# trigonometric functions
+###########################
 
 
 @numpy_compatible
@@ -1523,7 +1565,7 @@ def where(flag, value_if_true=None, value_if_false=None):
 
 
 ############################
-## reduce operation
+# reduce operation
 ###########################
 @numpy_compatible
 def reduce_mean(x: Tensor, axis=None, keepdims=False, **kwargs):
@@ -2170,7 +2212,7 @@ def hard_swish(x):
         https://arxiv.org/abs/1905.02244
 
     """
-    return x * hard_sigmoid(x)
+    return jnp.dot(x, hard_sigmoid(x))
 
 
 @numpy_compatible
@@ -2259,7 +2301,7 @@ def log_log(x):
 
 
     Examples:
-        >>> loglog(to_tensor([-3.0, -1.0, 0.0, 2.0]))
+        >>> log_log(to_tensor([-3.0, -1.0, 0.0, 2.0]))
         tensor([-1.4228e-01, -2.6894e-01, 0.0000e+00, 1.7616e+00])
 
     References:
@@ -2426,6 +2468,816 @@ def silu(x):
     return jax.nn.silu(x)
 
 
+############################
+# normalization operation
+###########################
+
+def moments(x: Tensor, axis, keepdims=True):
+    """
+
+    Args:
+        keepdims ():
+        x (Tensor): input tensor.
+        axis (int) :
+
+    Returns:
+        (Tensor): output tensor and get same shape with x.
+
+
+    """
+    _axes = list(axis)
+    norm_mean = reduce_mean(x, axis=_axes, keepdims=keepdims).detach()
+    norm_variance = reduce_mean(square(x - norm_mean), axis=_axes, keepdims=keepdims)
+    return norm_mean, norm_variance
+
+
+def norm(x: Tensor, order=None, axis=1, keepdims=False):
+    """
+
+    Args:
+
+        x (Tensor): The input tensor. If dim is None, x must be 1-D or 2-D, unless :attr:`ord`
+            is None. If both :attr:`dim` and :attr:`ord` are None, the 2-norm of the input flattened to 1-D
+            will be returned.
+
+        order (int, float, inf, -inf, 'fro', 'nuc', optional): The order of norm.
+            inf refers to :attr:`float('inf')`, numpy's :attr:`inf` object, or any equivalent object.
+            The following norms can be calculated:
+
+            =====  ============================  ==========================
+            ord    norm for matrices             norm for vectors
+            =====  ============================  ==========================
+            None   Frobenius norm                2-norm
+            'fro'  Frobenius norm                -- not supported --
+            'nuc'  nuclear norm                  -- not supported --
+            inf    max(sum(abs(x), dim=1))       max(abs(x))
+            -inf   min(sum(abs(x), dim=1))       min(abs(x))
+            0      -- not supported --           sum(x != 0)
+            1      max(sum(abs(x), dim=0))       as below
+            -1     min(sum(abs(x), dim=0))       as below
+            2      2-norm (the largest sing. value)  as below
+            -2     smallest singular value       as below
+            other  -- not supported --           sum(abs(x)**ord)**(1./ord)
+            =====  ============================  ==========================
+
+            Default: ``None``
+
+        axis (int, 2-tuple of ints, 2-list of ints, optional): If :attr:`dim` is an int,
+            vector norm will be calculated over the specified dimension. If :attr:`dim`
+            is a 2-tuple of ints, matrix norm will be calculated over the specified
+            dimensions. If :attr:`dim` is None, matrix norm will be calculated
+            when the input tensor has two dimensions, and vector norm will be
+            calculated when the input tensor has one dimension. Default: ``None``
+
+        keepdims (bool, optional): If set to True, the reduced dimensions are retained
+            in the result as dimensions with size one. Default: ``False``
+
+
+    Returns:
+
+    """
+    if ndim(x) == 1:
+        axis = 0
+    # if pt_version >= version1_7:
+    #     return  jnp.linalg.norm(x, ord=order,dim=axis, keepdim=keepdims)
+    # else:
+    return x.norm(p=order, dim=axis, keepdim=keepdims)
+
+
+@numpy_compatible
+def l2_normalize(x: Tensor, axis=-1, keepdims=True, eps=epsilon()):
+    """
+
+    Args:
+        eps ():
+        keepdims ():
+        axis ():
+        x (Tensor): input tensor.
+
+    Returns:
+        (Tensor): output tensor and get same shape with x.
+
+    Examples:
+        >>> a=to_tensor(np.arange(9)-4.0)
+        >>> b=a.reshape((3, 3))
+        >>> l2_normalize(a)
+
+        >>> l2_normalize(b)
+
+
+    """
+    return x / jnp.sqrt(jnp.maximum(jnp.sum(x ** 2, axis=axis, keepdims=keepdims), eps))
+
+
+# @numpy_compatible
+# def spectral_norm(module, n_iterations=1, axis=-1):
+#     return nn.utils.spectral_norm(module, n_power_iterations=n_iterations, dim=axis)
+
+
+############################
+# tensor shape operation
+###########################
+
+
+def broadcast_to(x: Tensor, shape: Union[(List, Tuple, jnp.shape, TensorShape)] = None) -> Tensor:
+    if shape is None:
+        return x
+    elif isinstance(shape, TensorShape):
+        shape = shape.dims
+    if len(shape) > 2 and int_shape(x)[-1] != shape[-1] and int_shape(x)[-1] == shape[1]:
+        shape = to_list(shape)
+        new_shape = shape[0:1] + shape[2:] + shape[1:2]
+        x = jnp.broadcast_to(x, new_shape)
+        return x.transpose(-1, 1)
+    else:
+        return jnp.broadcast_to(x, shape)
+
+
+def expand_as(left: Tensor, right: Tensor) -> Tensor:
+    left_shape = int_shape(left)
+    right_shape = int_shape(right)
+
+    if len(right_shape) > 2 and left_shape[-1] != right_shape[-1] and left_shape[-1] == right_shape[1]:
+        new_shape = right_shape[0:1] + right_shape[2:] + right_shape[1:2]
+        left = left.expand(new_shape)
+        return left.transpose(-1, 1)
+    else:
+        return left.expand_as(right)
+
+
+@numpy_compatible
+def reshape(x: Tensor, shape: Union[(List, Tuple, jnp.shape, TensorShape)] = None) -> Tensor:
+    """
+
+    Args:
+        x (Tensor): input tensor.
+        shape ():
+
+    Returns:
+
+    """
+    if shape is None:
+        return x
+    elif isinstance(shape, TensorShape):
+        shape = shape.dims
+
+    return jnp.reshape(x, shape)
+
+
+@numpy_compatible
+def transpose(x, dim0: int, dim1: int) -> Tensor:
+    """
+
+    Args:
+        x (Tensor): input tensor.
+        dim0 (int):the first dimension to be transposed
+        dim1 (int):the second dimension to be transposed
+
+    Returns:
+        transposed tensor
+
+    """
+    x = jnp.transpose(x, dim0, dim1)
+    if not x.is_contiguous():
+        return x.contiguous()
+    return x
+
+
+@numpy_compatible
+def permute(x, *dims) -> Tensor:
+    """
+
+    Args:
+        x (Tensor): input tensor.
+        dims ():
+
+    Returns:
+
+    """
+    x = jnp.permute(x, *dims)
+    if not x.is_contiguous():
+        return x.contiguous()
+    return x
+
+
+@numpy_compatible
+def squeeze(x: Tensor, axis=None):
+    """
+
+    Args:
+        x (Tensor): input tensor.
+        axis ():
+
+    Returns:
+
+    """
+    return x.squeeze(dim=axis)
+
+
+@numpy_compatible
+def expand_dims(x: Tensor, axis):
+    """
+
+    Args:
+        x (Tensor): input tensor.
+        axis ():
+
+    Returns:
+
+    """
+    return x.unsqueeze(axis)
+
+
+@numpy_compatible
+def depth_to_space(x: Tensor, block_size=2):
+    """
+    Rearranges elements in the input tensor from the depth dimension into spatial blocks.
+    The equivalent to Pixel-Shuffle
+
+    Args:
+        x (Tensor): input tensor.
+        block_size (int):
+
+    Returns: resized tensor
+
+    Examples:
+    >>> x = to_tensor(np.tile(np.array(np.reshape(range(8), (1, 1, 8)), dtype=np.float32), (2, 3, 1)))
+    >>> arr=depth_to_space(x,block_size=2)
+    >>> print(arr.shape)
+    (4, 6, 2)
+    >>> arr
+    Array([[[0.0000e+00, 1.0000e+00],
+            [2.0000e+00, 3.0000e+00],
+            [0.0000e+00, 1.0000e+00],
+            [2.0000e+00, 3.0000e+00],
+            [0.0000e+00, 1.0000e+00],
+            [2.0000e+00, 3.0000e+00]],
+    <BLANKLINE>
+           [[4.0000e+00, 5.0000e+00],
+            [6.0000e+00, 7.0000e+00],
+            [4.0000e+00, 5.0000e+00],
+            [6.0000e+00, 7.0000e+00],
+            [4.0000e+00, 5.0000e+00],
+            [6.0000e+00, 7.0000e+00]],
+    <BLANKLINE>
+           [[0.0000e+00, 1.0000e+00],
+            [2.0000e+00, 3.0000e+00],
+            [0.0000e+00, 1.0000e+00],
+            [2.0000e+00, 3.0000e+00],
+            [0.0000e+00, 1.0000e+00],
+            [2.0000e+00, 3.0000e+00]],
+    <BLANKLINE>
+           [[4.0000e+00, 5.0000e+00],
+            [6.0000e+00, 7.0000e+00],
+            [4.0000e+00, 5.0000e+00],
+            [6.0000e+00, 7.0000e+00],
+            [4.0000e+00, 5.0000e+00],
+            [6.0000e+00, 7.0000e+00]]], dtype=float32)
+
+    """
+    if x.ndim not in (3, 4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    if x.ndim == 4:  # Batched case.
+        return jax.vmap(depth_to_space, in_axes=(0, None))(x, block_size)
+
+    height, width, depth = x.shape
+    if depth % (block_size ** 2) != 0:
+        raise ValueError(
+            f'Number of channels {depth} must be divisible by block_size ** 2 {block_size ** 2}.'
+        )
+    new_depth = depth // (block_size ** 2)
+    outputs = jnp.reshape(x, [height, width, block_size, block_size, new_depth])
+    outputs = jnp.transpose(outputs, [0, 2, 1, 3, 4])
+    outputs = jnp.reshape(outputs, [height * block_size, width * block_size, new_depth])
+    return outputs
+
+
+@numpy_compatible
+def space_to_depth(x: Tensor, block_size=2):
+    """
+    Rearranges elements in the input tensor from the spatial dimensions to the depth dimension.
+
+    This is the reverse transformation of depth_to_space. This operation is useful for implementing and testing
+    sub-pixel convolution that is part of models for image super-resolution .
+    It rearranges elements of an input tensor of shape (N, C, H, W) to a tensor of shape (N, C*b*b, H/b, W/b),
+    where b is the block_size,
+    by rearranging non-overlapping spatial blocks of size block_size x block_size into the depth/channel dimension at
+    each location.
+
+    Args:
+        x (Tensor): input tensor.
+        block_size (int):
+
+    Returns: resized tensor
+    Examples:
+    >>> arr=space_to_depth(to_tensor([[[0., 1., 0., 1., 0., 1.],[2., 3., 2., 3., 2., 3.],[0., 1., 0., 1., 0., 1.],
+    [2., 3., 2., 3., 2., 3.]],[[4., 5., 4., 5., 4., 5.],[6., 7., 6., 7., 6., 7.], [4., 5., 4., 5., 4., 5.],[6., 7.,
+    6., 7., 6., 7.]]]),block_size=2)
+    >>> arr
+    tensor([[[0., 0., 0.],
+             [0., 0., 0.]],
+    <BLANKLINE>
+            [[1., 1., 1.],
+             [1., 1., 1.]],
+    <BLANKLINE>
+            [[2., 2., 2.],
+             [2., 2., 2.]],
+    <BLANKLINE>
+            [[3., 3., 3.],
+             [3., 3., 3.]],
+    <BLANKLINE>
+            [[4., 4., 4.],
+             [4., 4., 4.]],
+    <BLANKLINE>
+            [[5., 5., 5.],
+             [5., 5., 5.]],
+    <BLANKLINE>
+            [[6., 6., 6.],
+             [6., 6., 6.]],
+    <BLANKLINE>
+            [[7., 7., 7.],
+             [7., 7., 7.]]])
+    >>> print(arr.shape)
+     jnp.shape([8, 2, 3])
+    """
+    if x.ndim not in (3, 4):
+        raise ValueError('Input tensort length of shape should be 3 or 4 ')
+    if x.ndim == 4:  # Batched case.
+        return jax.vmap(space_to_depth, in_axes=(0, None))(x, block_size)
+
+    height, width, depth = x.shape
+    if height % block_size != 0:
+        raise ValueError(
+            f'Height {height} must be divisible by block size {block_size}.')
+    if width % block_size != 0:
+        raise ValueError(
+            f'Width {width} must be divisible by block size {block_size}.')
+    new_depth = depth * (block_size ** 2)
+    new_height = height // block_size
+    new_width = width // block_size
+    outputs = jnp.reshape(x,
+                          [new_height, block_size, new_width, block_size, depth])
+    outputs = jnp.transpose(outputs, [0, 2, 1, 3, 4])
+    outputs = jnp.reshape(outputs, [new_height, new_width, new_depth])
+    return outputs
+
+
+def pad(x: Tensor, paddings: Sequence[int], mode='constant', value=0):
+    r"""Pads tensor.
+
+    Padding size:
+        The padding size by which to pad some dimensions of :attr:`input`
+        are described starting from the last dimension and moving forward.
+        :math:`\left\lfloor\frac{\text{len(pad)}}{2}\right\rfloor` dimensions
+        of ``input`` will be padded.
+        For example, to pad only the last dimension of the input tensor, then
+        :attr:`pad` has the form
+        :math:`(\text{padding\_left}, \text{padding\_right})`;
+        to pad the last 2 dimensions of the input tensor, then use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom})`;
+        to pad the last 3 dimensions, use
+        :math:`(\text{padding\_left}, \text{padding\_right},`
+        :math:`\text{padding\_top}, \text{padding\_bottom}`
+        :math:`\text{padding\_front}, \text{padding\_back})`.
+
+    Padding mode:
+        See :class:` jnp.nn.ConstantPad2d`, :class:` jnp.nn.ReflectionPad2d`, and
+        :class:` jnp.nn.ReplicationPad2d` for concrete examples on how each of the
+        padding modes works. Constant padding is implemented for arbitrary dimensions.
+        Replicate padding is implemented for padding the last 3 dimensions of 5D input
+        tensor, or the last 2 dimensions of 4D input tensor, or the last dimension of
+        3D input tensor. Reflect padding is only implemented for padding the last 2
+        dimensions of 4D input tensor, or the last dimension of 3D input tensor.
+
+    Note:
+        When using the CUDA backend, this operation may induce nondeterministic
+        behaviour in its backward pass that is not easily switched off.
+        Please see the notes on :doc:`/notes/randomness` for background.
+
+    Args:
+        paddings ():
+        x (Tensor): N-dimensional tensor
+        pad (tuple): m-elements tuple, where
+            :math:`\frac{m}{2} \leq` input dimensions and :math:`m` is even.
+        mode: ``'constant'``, ``'reflect'``, ``'replicate'`` or ``'circular'``.
+            Default: ``'constant'``
+        value: fill value for ``'constant'`` padding. Default: ``0``
+
+    Examples::
+
+        >>> t4d =  jnp.empty(3, 3, 4, 2)
+        >>> p1d = (1, 1) # pad last dim by 1 on each side
+        >>> out = pad(t4d, p1d, "constant", 0)  # effectively zero padding
+        >>> print(out.size())
+         jnp.shape([3, 3, 4, 4])
+        >>> p2d = (1, 1, 2, 2) # pad last dim by (1, 1) and 2nd to last by (2, 2)
+        >>> out = pad(t4d, p2d, "constant", 0)
+        >>> print(out.size())
+         jnp.shape([3, 3, 8, 4])
+        >>> t4d =  jnp.empty(3, 3, 4, 2)
+        >>> p3d = (0, 1, 2, 1, 3, 3) # pad by (0, 1), (2, 1), and (3, 3)
+        >>> out = pad(t4d, p3d, "constant", 0)
+        >>> print(out.size())
+         jnp.shape([3, 9, 7, 3])
+
+    """
+    valid_items = ['constant', 'reflect', 'replicate', 'circular', 'symmetric', 'zero']
+    if mode not in valid_items:
+        raise ValueError('{0} is not valid for mode.'.format(mode))
+    if mode == 'zero':
+        mode = 'constant'
+        value = 0
+    if mode == 'symmetric':
+        mode = 'circular'
+    return jnp.pad(x, pad_width=paddings, mode=mode, value=value)
+
+
+############################
+# tensor generation
+###########################
+
+def ones(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=False):
+    """Instantiates an all-ones tensor and returns it.
+
+    Args
+        shape (Tuple of integers):  the  output shape
+        dtype (String):  data type
+        requires_grad (bool):  whether we need gradient
+
+    Returns
+        A tensor, filled with `1.0`.
+
+    Example
+        >>> ones((3,4))
+        tensor([[ 1.,  1.,  1.,  1.],
+               [ 1.,  1.,  1.,  1.],
+               [ 1.,  1.,  1.,  1.]])
+
+    {{np_implementation}}
+    """
+    if isinstance(shape, TensorShape):
+        shape = shape.dims
+    if dtype is None:
+        dtype = _float_dtype
+    return jnp.ones(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+
+
+@numpy_compatible
+def ones_like(a, dtype=None, requires_grad=False):
+    """Instantiates an all-ones variable of the same shape as another tensor.
+
+    Args
+        a (Tensor):  another tensor
+        dtype (String):  data type
+        requires_grad (bool):  whether we need gradient
+
+    Returns
+        A tensor, filled with `1.0` and shape is the same as another tensor.
+
+    Example
+        >>> ones_like( jnp.randn((3,4)))
+        array([[ 1.,  1.,  1.,  1.],
+               [ 1.,  1.,  1.,  1.],
+               [ 1.,  1.,  1.,  1.]], dtype=float32)
+
+    {{np_implementation}}
+    """
+    if dtype is None:
+        dtype = a.dtype
+    return jnp.ones(a.shape, dtype=dtype)
+
+
+def zeros(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=False):
+    """Instantiates an all-zeros tensor and returns it.
+
+    Args
+        shape (Tuple of integers):  the  output shape
+        dtype (String):  data type
+        requires_grad (bool):  whether we need gradient
+
+    Returns
+        A tensor, filled with `0.0`.
+
+    Example
+        >>> zeros((3,4))
+        tensor([[ 0.,  0.,  0.,  0.],
+               [ 0.,  0.,  0.,  0.],
+               [ 0.,  0.,  0.,  0.]], dtype=float32)
+
+    {{np_implementation}}
+    """
+    if isinstance(shape, TensorShape):
+        shape = shape.dims
+    if dtype is None:
+        dtype = _float_dtype
+    return jnp.zeros(shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+
+
+@numpy_compatible
+def zeros_like(a, dtype=None, requires_grad=False):
+    """Instantiates an all-zeros variable of the same shape as another tensor.
+
+    Args
+        a (Tensor):  another tensor
+        dtype (String):  data type
+        requires_grad (bool):  whether we need gradient
+
+    Returns
+        A tensor, filled with `0.0` and shape is the same as another tensor.
+
+    Example
+        >>> zeros_like(random_normal((3,4)))
+        array([[ 0.,  0.,  0.,  0.],
+               [ 0.,  0.,  0.,  0.],
+               [ 0.,  0.,  0.,  0.]], dtype=float32)
+
+    """
+    if dtype is None:
+        dtype = a.dtype
+    return jnp.zeros(a.shape, dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+
+
+def eye(shape: Union[(List, Tuple, jnp.shape, TensorShape)], dtype=None, requires_grad=None):
+    """Instantiate an identity matrix and returns it.
+
+    Args
+        shape (Tuple of integers):  the  output shape
+        dtype (String):  data type
+        requires_grad (bool):  whether we need gradient
+
+    Returns
+        an identity matrix.
+
+    Examples:
+        >>> eye((3,4))
+        tensor([[1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.]])
+
+    """
+    if isinstance(shape, TensorShape):
+        shape = shape.dims
+    if dtype is None:
+        dtype = _float_dtype
+
+    if len(shape) == 2:
+        return jnp.eye(shape[0], shape[1], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+    else:
+        raise ValueError('input tensor must have exactly two axe.')
+
+
+@numpy_compatible
+def eye_like(a, dtype=None, requires_grad=False):
+    """
+    Creates a matrix with diagonal set to 1s and of the same shape and the same dynamic axes as ``x``. To be a
+    matrix, ``x`` must have exactly two axes (counting both dynamic and static axes).
+
+    Args:
+        a (Tensor):  another tensor of rank 2
+        dtype (String):  data type
+        requires_grad (bool):  whether we need gradient
+
+    Returns
+        an identity matrix.
+
+    Examples:
+    >>> eye_like(Tensor(3,4))
+    tensor([[1., 0., 0., 0.],
+            [0., 1., 0., 0.],
+            [0., 0., 1., 0.]])
+
+    """
+    if dtype is None:
+        dtype = a.dtype
+    if a.ndim == 2:
+        return jnp.eye(a.shape[0], a.shape[1], dtype=dtype, requires_grad=requires_grad).to(
+            get_session_value('device'))
+    else:
+        raise ValueError('input tensor must have exactly two axe.')
+
+
+@numpy_compatible
+def make_onehot(label, num_classes, axis=-1):
+    """
+    Create one hot tensor based on the input tensor
+    Args:
+        label: input tensor, the value must be positive integer and less than num_class
+        num_classes: the number of class in one hot tensor
+        axis: The axis to fill (default: -1, a new innermost axis).
+    Returns:
+        :onehot tensor
+    Examples:
+    >>> make_onehot(to_tensor([[1, 2],[1, 3]]).long(), 4, axis=-1)
+    tensor([[[0., 1., 1., 0.],
+             [0., 1., 0., 1.]],
+    <BLANKLINE>
+            [[0., 0., 0., 0.],
+             [0., 0., 0., 0.]]])
+
+    """
+
+    onehot = jnp.nn.functional.one_hot(label.long(), num_classes).to(_float_dtype)
+    last_index = ndim(onehot) - 1
+    if axis < 0:
+        axis += ndim(onehot)
+    if axis is None or axis in [-1, last_index]:
+        return onehot
+    else:
+
+        axes = list(range(len(onehot.shape)))
+        axes.pop(-1)
+        axes.insert(axis, -1)
+
+        onehot = onehot.permute(axes)
+        return onehot
+
+
+def arange(*args, dtype=Dtype.int32, requires_grad=False):
+    """
+
+    Args:
+        *args (int): the start, end, step
+        dtype (dtype): dtype of the tensor
+        requires_grad (bool): whether we need gradient
+
+    Returns:
+
+    """
+    if len(args) == 1:
+        return jnp.arange(end=args[0], dtype=dtype, requires_grad=requires_grad).to(get_session_value('device'))
+    elif len(args) == 2:
+        return jnp.arange(start=args[0], end=args[1], dtype=dtype, requires_grad=requires_grad).to(
+            get_session_value('device'))
+    elif len(args) == 3:
+        return jnp.arange(start=args[0], end=args[1], step=args[2], dtype=dtype, requires_grad=requires_grad).to(
+            get_session_value('device'))
+    else:
+        raise ValueError('only maximum  3 args in arange function ')
+
+
+def meshgrid(x, y, normalized_coordinates=False, requires_grad=False):
+    """Return meshgrid in range x & y.
+
+    Args:
+      requires_grad ():
+      normalized_coordinates ():
+      x: (int) first dim range.
+      y: (int) second dim range.
+
+    Returns:
+      (tensor) meshgrid, sized [y,x,2]
+
+    Examples:
+    >>> grid=meshgrid(3,2)
+    >>> grid.cpu()
+    tensor([[[0., 0.],
+             [0., 1.]],
+    <BLANKLINE>
+            [[1., 0.],
+             [1., 1.]],
+    <BLANKLINE>
+            [[2., 0.],
+             [2., 1.]]])
+    >>> print(grid[0,0,:].cpu())
+     tensor([0., 0.])
+    >>> print(grid[:,0,0].cpu())
+    tensor([0., 1., 2.])
+    >>> print(grid.shape)
+     jnp.shape([3, 2, 2])
+
+
+    >>> grid1=meshgrid(3,2,normalized_coordinates=True)
+    >>> grid1.cpu()
+    tensor([[[0.0000, 0.0000],
+             [0.0000, 1.0000]],
+    <BLANKLINE>
+            [[0.5000, 0.0000],
+             [0.5000, 1.0000]],
+    <BLANKLINE>
+            [[1.0000, 0.0000],
+             [1.0000, 1.0000]]])
+    >>> grid1.shape
+     jnp.shape([3, 2, 2])
+    """
+    xs = jnp.linspace(0, int(x - 1), int(x), device=get_session_value('device'), dtype=_float_dtype,
+                      requires_grad=requires_grad)
+    ys = jnp.linspace(0, int(y - 1), int(y), device=get_session_value('device'), dtype=_float_dtype,
+                      requires_grad=requires_grad)
+    if normalized_coordinates:
+        xs = jnp.linspace(0, 1, int(x), device=get_session_value('device'), dtype=_float_dtype,
+                          requires_grad=requires_grad)
+        ys = jnp.linspace(0, 1, int(y), device=get_session_value('device'), dtype=_float_dtype,
+                          requires_grad=requires_grad)
+    grid_x, grid_y = jnp.meshgrid([xs, ys])
+
+    grid = jnp.stack([grid_y, grid_x], -1).to(get_session_value('device'))
+    return grid
+
+
+@numpy_compatible
+def reverse(x, axis):
+    """Reverse a tensor along the specified axes.
+
+    Arguments:
+        x: Tensor to reverse.
+        axis: Integer or iterable of integers.
+            Axes to reverse.
+
+    Returns:
+        A tensor.
+    """
+    if isinstance(axis, int):
+        axis = [axis]
+    return jnp.flip(x, dims=axis)
+
+
+############################
+# tensor manipulation
+###########################
+
+def concate(x: List[Tensor], axis=-1):
+    """
+
+    Args:
+        x ():
+        axis ():
+
+    Returns:
+
+    """
+    return jnp.cat(x, dim=axis)
+
+
+def stack(x: List[Tensor], axis=-1):
+    """
+
+    Args:
+        x ():
+        axis ():
+
+    Returns:
+
+    """
+    return jnp.stack(x, dim=axis)
+
+
+def split(x: Tensor, num_splits=2, axis=-1):
+    """Splits a tensor `value` into a list of sub tensors.
+
+      See also `unstack`.
+
+      If `num_or_size_splits` is an integer,  then `value` is split along the
+      dimension `axis` into `num_or_size_splits` smaller tensors. This requires that
+      `value.shape[axis]` is divisible by `num_or_size_splits`.
+
+      If `num_or_size_splits` is a 1-D Tensor (or list), then `value` is split into
+      `len(num_or_size_splits)` elements. The shape of the `i`-th
+      element has the same size as the `value` except along dimension `axis` where
+      the size is `num_or_size_splits[i]`.
+
+      For example:
+
+      >>> x = to_tensor(np.random.uniform([5, 30]))
+      >>>
+      >>> # Split `x` into 3 tensors along dimension 1
+      >>> s0, s1, s2 = split(x, num_splits=3, axis=-1)
+      >>> int_shape(s0)
+      array([ 5, 10], dtype=int32)
+      >>>
+      >>> # Split `x` into 3 tensors with sizes [4, 15, 11] along dimension 1
+      >>> split0, split1, split2 = split(x, [4, 15, 11], 1)
+      >>> int_shape(split0)
+      array([5, 4], dtype=int32)
+      >>> int_shape(split1)
+      array([ 5, 15], dtype=int32)
+      >>>int_shape(split2)
+      array([ 5, 11], dtype=int32)
+
+      Args:
+        x: The `Tensor` to split.
+        num_splits: Either an integer indicating the number of splits along
+          `axis` or a 1-D integer `Tensor` or Python list containing the sizes of
+          each output tensor along `axis`. If a scalar, then it must evenly divide
+          `value.shape[axis]`; otherwise the sum of sizes along the split axis
+          must match that of the `value`.
+        axis: An integer or scalar `int32` `Tensor`. The dimension along which to
+          split. Must be in the range `[-rank(value), rank(value)]`. Defaults to 0.
+
+
+      Returns:
+        if `num_or_size_splits` is a scalar returns a list of `num_or_size_splits`
+        `Tensor` objects; if `num_or_size_splits` is a 1-D Tensor returns
+        `num_or_size_splits.get_shape[0]` `Tensor` objects resulting from splitting
+        `value`.
+
+      Raises:
+        ValueError: If `num` is unspecified and cannot be inferred.
+      """
+
+    return jnp.chunk(x, dim=axis, chunks=num_splits)
+
+
 def make_onehot(label, num_classes, axis=-1):
     """
     Create a one-hot encoding of x of size k.
@@ -2474,8 +3326,8 @@ def bbox_iou(bboxes1: Tensor, bboxes2: Tensor):
     0.22655764
     """
 
-    b1_y1, b1_x1, b1_y2, b1_x2 = jnp.split(bboxes1, 4, axis=1)
-    b2_y1, b2_x1, b2_y2, b2_x2 = jnp.split(bboxes2, 4, axis=1)
+    b1_y1, b1_x1, b1_y2, b1_x2 = jnp.split(bboxes1, 4, axis=-1)
+    b2_y1, b2_x1, b2_y2, b2_x2 = jnp.split(bboxes2, 4, axis=-1)
 
     y1 = jnp.maximum(b1_y1, b2_y1)
     x1 = jnp.maximum(b1_x1, b2_x1)
@@ -2514,8 +3366,8 @@ def bbox_diou(bboxes1, bboxes2):
 
     """
 
-    b1_y1, b1_x1, b1_y2, b1_x2 = jnp.split(bboxes1, 4, axis=1)
-    b2_y1, b2_x1, b2_y2, b2_x2 = jnp.split(bboxes2, 4, axis=1)
+    b1_y1, b1_x1, b1_y2, b1_x2 = jnp.split(bboxes1, 4, axis=-1)
+    b2_y1, b2_x1, b2_y2, b2_x2 = jnp.split(bboxes2, 4, axis=-1)
     y1 = jnp.maximum(b1_y1, b2_y1)
     x1 = jnp.maximum(b1_x1, b2_x1)
     y2 = jnp.minimum(b1_y2, b2_y2)

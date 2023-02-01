@@ -56,7 +56,7 @@ if 'TRIDENT_BACKEND' in os.environ:
 
 
 
-if get_backend()== 'pytorch':
+if _session.backend== 'pytorch':
     stdout.write('Using Pytorch backend.\n')
     stdout.write('Image Data Format: channels_first.\n')
     stdout.write('Image Channel Order: rgb.\n')
@@ -119,6 +119,27 @@ elif _session.backend == 'tensorflow':
     from trident.backend.tensorflow_ops import *
     from trident.backend.tensorflow_backend import *
 
+elif _session.backend == 'jax':
+    stdout.write('Using Jax backend.\n')
+    stdout.write('Image Data Format: channels_last.\n')
+    stdout.write('Image Channel Order: rgb.\n')
+    _session.image_data_format = 'channels_last'
+    _session.image_channel_order = 'rgb'
+
+    import jax
+    from trident.backend.jax_ops import *
+
+    if is_gpu_available():
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        set_session('device','cuda')
+    elif is_tpu_available():
+        import torch_xla.core.xla_model as xm
+        set_session('device', 'tpu')
+        set_session('print', xm.master_print)
+    else:
+        set_session('device', 'cpu')
+    #from trident.backend.jax_backend import *
 
 
 elif _session.backend == 'onnx':
