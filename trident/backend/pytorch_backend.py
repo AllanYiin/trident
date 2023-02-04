@@ -584,7 +584,7 @@ def register_module_forward_hook(hook: Callable[..., None]) -> RemovableHandle:
 
 
 def register_module_backward_hook(
-    hook: Callable[['Module', _grad_t, _grad_t], Union[None, _grad_t]]
+    hook: Callable[[nn.Module, _grad_t, _grad_t], Union[None, _grad_t]]
 ) -> RemovableHandle:
     r"""Registers a backward hook common to all the modules.
 
@@ -611,7 +611,7 @@ def register_module_backward_hook(
 
 
 def register_module_full_backward_pre_hook(
-    hook: Callable[['Module', _grad_t], Union[None, _grad_t]]
+    hook: Callable[[nn.Module, _grad_t], Union[None, _grad_t]]
 ) -> RemovableHandle:
     r"""Registers a backward pre-hook common to all the modules.
 
@@ -648,7 +648,7 @@ def register_module_full_backward_pre_hook(
 
 
 def register_module_full_backward_hook(
-    hook: Callable[['Module', _grad_t, _grad_t], Union[None, _grad_t]]
+    hook: Callable[[nn.Module, _grad_t, _grad_t], Union[None, _grad_t]]
 ) -> RemovableHandle:
     r"""Registers a backward hook common to all the modules.
 
@@ -1713,8 +1713,7 @@ class Layer(nn.Module):
                             shape=to_tensor(self._output_shape[i]), name="output_{0}".format(i))
             else:
                 self._signature.outputs["output"] = TensorSpec(shape=None)
-        if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[
-            0] != inspect_args:
+        if isinstance(inspect_args, str) and len(self._signature.inputs) == 1 and self._signature.inputs.key_list[0] != inspect_args:
             self._signature.inputs[inspect_args] = self._signature.inputs.value_list[0]
             self._signature.inputs.pop(self._signature.inputs.key_list[0])
         elif isinstance(inspect_args, list) and len(self._signature.inputs) == len(inspect_args):
@@ -2130,14 +2129,14 @@ class Sequential(Layer):
                 ]))
     """
 
-    _modules: Dict[str, Module]  # type: ignore[assignment]
+    _modules: Dict[str, nn.Module]  # type: ignore[assignment]
 
     @overload
     def __init__(self, *args: Module) -> None:
         ...
 
     @overload
-    def __init__(self, arg: 'OrderedDict[str, Module]') -> None:
+    def __init__(self, arg: 'OrderedDict[str, nn.Module]') -> None:
         ...
 
     def __init__(self, *args, name=None):
@@ -2183,8 +2182,7 @@ class Sequential(Layer):
             module (Module): child module to be added to the module.
         """
 
-        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[
-            -1]._output_shape is not None:
+        if len(self._modules) > 0 and self._input_shape is not None and self[-1].built and self[-1]._output_shape is not None:
             last_output = self[-1]._output_shape
             dummay_input = to_tensor(last_output.get_dummy_tensor()).to(self.device)
             out = module(dummay_input)
@@ -2425,7 +2423,7 @@ class ModuleList(Layer):
     """
 
 
-    _modules: Dict[str, Module]  # type: ignore[assignment]
+    _modules: Dict[str, nn.Module]  # type: ignore[assignment]
     def __init__(self,  modules: Optional[Iterable[nn.Module]] = None, name=None, keep_output=False):
         super(ModuleList, self).__init__(name=name, keep_output=keep_output)
         self.uuid = uuid.uuid4().node
@@ -2574,7 +2572,7 @@ class ModuleDict(Layer):
                 return x
     """
 
-    _modules: Dict[str, Module]  # type: ignore[assignment]
+    _modules: Dict[str, nn.Module]  # type: ignore[assignment]
     def __init__(self, modules: Optional[Mapping[str, Layer]] = None, name=None, keep_output=False,
                  is_multicasting=False, **kwargs) -> None:
         super(ModuleDict, self).__init__(name=name, keep_output=keep_output, **kwargs)
@@ -2932,8 +2930,7 @@ def summary(model, input_specs, batch_size=1, inputs=None, device="cuda"):
                     summary[m_key][para_type][name] = list(int_shape(para))
                     num_params = np.prod(np.array(list(int_shape(para)), dtype=np.float64))
                     spatial_dims = np.prod(np.array(summary[m_key]["output_shape"][2:]).astype(np.float64))
-                    if module.relative_name if hasattr(module, 'relative_name') else module.name == m_key and \
-                                                                                     summary[m_key]["visits"] == 0:
+                    if module.relative_name if hasattr(module, 'relative_name') else module.name == m_key and summary[m_key]["visits"] == 0:
                         params += num_params
                         if para.requires_grad:
                             summary[m_key]["trainable"] += num_params
