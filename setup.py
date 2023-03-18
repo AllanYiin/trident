@@ -1,14 +1,7 @@
-from setuptools import setup, find_packages, Extension
+import pathlib
 
-
-
-from pkg_resources import get_distribution, DistributionNotFound
-import subprocess
-import distutils.command.clean
-import distutils.spawn
-import glob
-import shutil
-import os
+import pkg_resources
+from setuptools import setup, find_packages
 
 # with open("README.md", "r",encoding='utf-8-sig') as fh:
 #     long_description = fh.read()
@@ -21,31 +14,31 @@ DIR = '.'
 PACKAGES = find_packages(exclude= ["tests","tests.*","sphinx_docs","sphinx_docs.*", "examples","examples.*","internal_tool","internal_tool.*"])
 print(PACKAGES)
 
+
+
+
+with pathlib.Path('requirements.txt').open() as requirements_txt:
+    install_requires = [
+        str(requirement)
+        for requirement
+        in pkg_resources.parse_requirements(requirements_txt)
+    ]
+
+
+
+
 setup(name=NAME,
-      version='0.7.4',
+      version='0.7.6',
       description='Make pytorch and tensorflow two become one.',
       # long_description=long_description,
       # long_description_content_type="text/markdown",
-      long_description=open("README.md", encoding="utf8").read(),
+      long_description=open("README.md", encoding="utf-8").read(),
       long_description_content_type="text/markdown",
-      author= 'Allan Yiin',
-      author_email= 'allanyiin.ai@gmail.com',
-      download_url= 'https://test.pypi.org/project/tridentx',
+      author='Allan Yiin',
+      author_email='allanyiin.ai@gmail.com',
+      download_url='https://test.pypi.org/project/tridentx',
       license='MIT',
-      install_requires=['numpy>=1.18',
-                        'scikit-image >= 0.15',
-                        'pillow >= 4.1.1',
-                        'scipy>=1.2',
-                        'six>=1.13.0',
-                        'matplotlib>=3.0.2',
-                        'tensorboard>=1.15',
-                        'dill>=0.3.1',
-                        'opencv-python',
-                        'setuptools',
-                        'tqdm',
-                        'pyyaml',
-                        'h5py',
-                        'requests'],
+      install_requires=install_requires,
       extras_require={
           'visualize': ['pydot>=1.2.4',],
           'tests': ['pytest',

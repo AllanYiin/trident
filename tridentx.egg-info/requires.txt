@@ -1,12 +1,19 @@
-numpy>=1.13.3
-scikit-image>=0.14
+numpy>=1.18
+opencv-python
+six>=1.13.0
+scipy>=1.2.0
+scikit-image>=0.15.0
+scikit-learn
+matplotlib>=3.0.2
+ipython>=7.10.2
 pillow>=4.1.1
-scipy>=1.2
-six>=1.9.0
+setuptools>=42.0.1
+onnx>=1.4.1
+tensorboard>=1.15.0
+dill>=0.3.1
 tqdm
-pyyaml
-h5py
 requests
+h5py
 
 [tests]
 pytest
@@ -14,7 +21,6 @@ pytest-pep8
 pytest-xdist
 flaky
 pytest-cov
-pandas
 requests
 markdown
 

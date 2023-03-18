@@ -2,9 +2,9 @@
 **Make PyTorch and TensorFlow two become one.**
   
 
-| version| pytorch| tensorflow |
-|-------------|-------------|---------------|
-| [![version](https://img.shields.io/static/v1?label=&message=0.7.4&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.7.4&color=377EF0&style=for-the-badge) | ![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge)| ![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge) |
+| version                                                                                                                                                                                      | pytorch                                                                                           | tensorflow                                                                                             |
+|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------|
+| [![version](https://img.shields.io/static/v1?label=&message=0.7.6&color=377EF0&style=for-the-badge)](https://img.shields.io/static/v1?label=&message=0.7.5&color=377EF0&style=for-the-badge) | ![pytorch](https://img.shields.io/static/v1?label=&message=>1.4&color=377EF0&style=for-the-badge) | ![tensorflow](https://img.shields.io/static/v1?label=&message=>2.2.0&color=377EF0&style=for-the-badge) |
 
 **Trident** is a deep learning dynamic calculation graph api based on PyTorch and TensorFlow (pure Eager mode, no Keras dependency). Through Trident, not only can you use the same developer experience (more than 99% of the same code) within PyTorch and Tensorflow, it is also designed to simplify deep learning developers routine work. It's functions not only cover computing vision, natural language understanding and reinforcement learning, but also include a simpler network structure declaration, a more powerful but easier training process control, intuitive data access and data augmentation.
 
